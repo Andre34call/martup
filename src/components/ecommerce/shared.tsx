@@ -135,10 +135,18 @@ export function BottomNav() {
                     )}
                     {/* Profile role indicator - clickable to toggle role switcher */}
                     {isProfile && (
-                      <button
+                      <div
+                        role="button"
+                        tabIndex={0}
                         onClick={(e) => {
                           e.stopPropagation()
                           setShowRoleMenu(!showRoleMenu)
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.stopPropagation()
+                            setShowRoleMenu(!showRoleMenu)
+                          }
                         }}
                         className={`absolute -top-1.5 -right-1.5 w-3.5 h-3.5 rounded-full border-2 border-background ${roleColors[userRole]} hover:scale-125 transition-transform cursor-pointer`}
                         title="Switch Role"
