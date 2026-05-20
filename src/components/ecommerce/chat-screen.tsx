@@ -97,6 +97,43 @@ function ChatRoomItem({ room, onTap }: { room: ChatRoom; onTap: () => void }) {
   )
 }
 
+// ==================== CHAT ROOM SCREEN (Full-screen, no bottom nav) ====================
+export function ChatRoomScreen() {
+  const { chatRooms, selectedChatRoomId, setSelectedChatRoom, goBack, showToast } = useAppStore()
+  const room = chatRooms.find((r) => r.id === selectedChatRoomId) || null
+
+  if (!room) {
+    return (
+      <div className="flex flex-col h-dvh bg-background">
+        <div className="flex-shrink-0 z-40 glass">
+          <div className="flex items-center justify-between h-14 px-4">
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              onClick={goBack}
+              className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-muted transition-colors"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </motion.button>
+            <p className="text-sm font-semibold text-foreground">Chat</p>
+            <div className="w-9" />
+          </div>
+        </div>
+        <div className="flex-1 flex items-center justify-center">
+          <EmptyState
+            icon={<MessageCircle className="w-10 h-10 text-muted-foreground" />}
+            title="Chat Tidak Ditemukan"
+            subtitle="Kembali ke daftar chat"
+            actionLabel="Kembali"
+            onAction={goBack}
+          />
+        </div>
+      </div>
+    )
+  }
+
+  return <ChatRoomView room={room} onBack={() => { setSelectedChatRoom(null); goBack() }} />
+}
+
 // ==================== CHAT ROOM VIEW ====================
 function ChatRoomView({ room, onBack }: { room: ChatRoom; onBack: () => void }) {
   const { showToast } = useAppStore()
@@ -135,9 +172,9 @@ function ChatRoomView({ room, onBack }: { room: ChatRoom; onBack: () => void }) 
   const isMyMessage = (senderId: string) => senderId === "u1"
 
   return (
-    <div className="flex flex-col h-screen bg-background">
+    <div className="flex flex-col h-dvh bg-background">
       {/* Header */}
-      <div className="sticky top-0 z-40 glass">
+      <div className="flex-shrink-0 z-40 glass">
         <div className="flex items-center justify-between h-14 px-4">
           <div className="flex items-center gap-3">
             <motion.button
@@ -250,7 +287,7 @@ function ChatRoomView({ room, onBack }: { room: ChatRoom; onBack: () => void }) 
       )}
 
       {/* Input Bar */}
-      <div className="sticky bottom-0 bg-background border-t border-border/30 px-4 py-3 pb-safe">
+      <div className="flex-shrink-0 bg-background border-t border-border/30 px-4 py-3 pb-safe">
         <div className="flex items-center gap-2">
           <button
             className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-muted transition-colors flex-shrink-0"
@@ -294,14 +331,8 @@ function ChatRoomView({ room, onBack }: { room: ChatRoom; onBack: () => void }) 
 
 // ==================== CHAT SCREEN ====================
 export function ChatScreen() {
-  const { chatRooms } = useAppStore()
+  const { chatRooms, navigate, setSelectedChatRoom } = useAppStore()
   const [searchQuery, setSearchQuery] = useState("")
-  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null)
-
-  const selectedRoom = useMemo(() => {
-    if (!selectedRoomId) return null
-    return chatRooms.find((r) => r.id === selectedRoomId) || null
-  }, [chatRooms, selectedRoomId])
 
   const filteredRooms = useMemo(() => {
     if (!searchQuery.trim()) return chatRooms
@@ -314,16 +345,12 @@ export function ChatScreen() {
   }, [chatRooms, searchQuery])
 
   const handleRoomTap = useCallback((roomId: string) => {
-    setSelectedRoomId(roomId)
-  }, [])
+    setSelectedChatRoom(roomId)
+    navigate("chat-room")
+  }, [setSelectedChatRoom, navigate])
 
-  const handleBackFromRoom = useCallback(() => {
-    setSelectedRoomId(null)
-  }, [])
-
-  if (selectedRoom) {
-    return <ChatRoomView room={selectedRoom} onBack={handleBackFromRoom} />
-  }
+  // Room view is now handled by ChatRoomScreen as a separate screen
+  // This keeps the chat list always rendered when on "chat" screen
 
   return (
     <div className="flex flex-col min-h-screen bg-background">

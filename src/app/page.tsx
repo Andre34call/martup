@@ -17,7 +17,7 @@ import { CartScreen } from '@/components/ecommerce/cart-screen'
 import { CheckoutScreen } from '@/components/ecommerce/checkout-screen'
 import { OrderScreen } from '@/components/ecommerce/order-screen'
 import { WalletScreen } from '@/components/ecommerce/wallet-screen'
-import { ChatScreen } from '@/components/ecommerce/chat-screen'
+import { ChatScreen, ChatRoomScreen } from '@/components/ecommerce/chat-screen'
 import { NotificationScreen } from '@/components/ecommerce/notification-screen'
 import { ProfileScreen } from '@/components/ecommerce/profile-screen'
 import { WishlistScreen } from '@/components/ecommerce/wishlist-screen'
@@ -60,6 +60,7 @@ const SUB_SCREENS = [
   'product-detail', 'seller-shop', 'checkout', 'review', 'refund',
   'address', 'help', 'followed-stores', 'deposit', 'withdraw',
   'settings', 'voucher', 'order-tracking', 'seller-add-product',
+  'chat-room',
 ]
 
 // ==================== GLOBAL TOAST ====================
@@ -128,7 +129,7 @@ function ScreenRenderer() {
       case 'deposit': return <DepositScreen />
       case 'withdraw': return <WithdrawScreen />
       case 'chat': return <ChatScreen />
-      case 'chat-room': return <ChatScreen />
+      case 'chat-room': return <ChatRoomScreen />
       case 'notification': return <NotificationScreen />
       case 'profile': return <ProfileScreen />
       case 'settings': return <SettingsScreen />
