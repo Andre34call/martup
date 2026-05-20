@@ -5,13 +5,14 @@ import { useAppStore } from "@/lib/store"
 import { formatPrice } from "@/lib/mock-data"
 import { PageHeader, SectionHeader, EmptyState, SearchBar, WalletBalanceCard } from "./shared"
 import { useState, useRef, useCallback } from "react"
-import { Settings as SettingsIcon, Shield, Bell, Globe, Lock, Trash2, CreditCard, Ticket, Copy, Check, MapPin, Plus, Star, Camera, Send, RotateCcw, HelpCircle, ChevronDown, ChevronUp, MessageSquare, Phone, Heart, Store, Wallet, ArrowUpRight, Clock, Banknote, Edit, ChevronRight, Package, ImagePlus, Video, Play, X, Eye, ThumbsUp, ThumbsDown, Meh } from "lucide-react"
+import { Settings as SettingsIcon, Shield, Bell, Globe, Lock, Trash2, CreditCard, Ticket, Copy, Check, MapPin, Plus, Star, Camera, Send, RotateCcw, HelpCircle, ChevronDown, ChevronUp, MessageSquare, Phone, Heart, Store, Wallet, ArrowUpRight, Clock, Banknote, Edit, ChevronRight, Package, ImagePlus, Video, Play, X, Eye, EyeOff, KeyRound, ThumbsUp, ThumbsDown, Meh } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 
 const fadeIn = {
   initial: { opacity: 0, y: 16 },
@@ -29,11 +30,73 @@ const stagger = {
 
 // ==================== SETTINGS SCREEN ====================
 export function SettingsScreen() {
-  const { currentUser, showToast, logout } = useAppStore()
+  const { currentUser, showToast, logout, avatarUrl, updateAvatar, updateProfile } = useAppStore()
   const [twoFactor, setTwoFactor] = useState(false)
   const [pushNotif, setPushNotif] = useState(true)
   const [emailNotif, setEmailNotif] = useState(true)
   const [dataSharing, setDataSharing] = useState(false)
+  const [editField, setEditField] = useState<string | null>(null)
+  const [editValue, setEditValue] = useState("")
+  const [showPasswordDialog, setShowPasswordDialog] = useState(false)
+  const [currentPassword, setCurrentPassword] = useState("")
+  const [newPassword, setNewPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false)
+  const [showNewPassword, setShowNewPassword] = useState(false)
+  const avatarInputRef = useRef<HTMLInputElement>(null)
+
+  const handleEditField = (field: string, value: string) => {
+    setEditField(field)
+    setEditValue(value)
+  }
+
+  const handleSaveField = () => {
+    if (!editValue.trim()) {
+      showToast("Field tidak boleh kosong", "error")
+      return
+    }
+    updateProfile({ [editField!]: editValue.trim() })
+    showToast("Profil berhasil diperbarui!", "success")
+    setEditField(null)
+    setEditValue("")
+  }
+
+  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith("image/")) {
+      showToast("File harus berupa gambar", "error")
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      showToast("Ukuran foto maksimal 5MB", "error")
+      return
+    }
+    const url = URL.createObjectURL(file)
+    updateAvatar(url)
+    showToast("Foto profil berhasil diperbarui!", "success")
+    e.target.value = ""
+  }
+
+  const handleChangePassword = () => {
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      showToast("Semua field harus diisi", "error")
+      return
+    }
+    if (newPassword.length < 8) {
+      showToast("Password baru minimal 8 karakter", "error")
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      showToast("Konfirmasi password tidak cocok", "error")
+      return
+    }
+    showToast("Password berhasil diubah!", "success")
+    setShowPasswordDialog(false)
+    setCurrentPassword("")
+    setNewPassword("")
+    setConfirmPassword("")
+  }
 
   const handleDeleteAccount = () => {
     if (confirm("Apakah kamu yakin ingin menghapus akun? Tindakan ini tidak bisa dibatalkan.")) {
@@ -51,34 +114,123 @@ export function SettingsScreen() {
         <motion.div {...fadeIn}>
           <SectionHeader title="Akun" icon={<SettingsIcon className="w-4 h-4" />} />
           <Card className="mt-3 p-4 space-y-3">
+            {/* Avatar */}
+            <div className="flex items-center justify-center mb-4">
+              <input
+                ref={avatarInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleAvatarUpload}
+              />
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                onClick={() => avatarInputRef.current?.click()}
+                className="relative group"
+              >
+                {avatarUrl ? (
+                  <div className="w-20 h-20 rounded-full overflow-hidden shadow-md ring-2 ring-emerald-500/30">
+                    <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                  </div>
+                ) : (
+                  <div className="w-20 h-20 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 text-white font-bold flex items-center justify-center text-2xl shadow-md">
+                    {(currentUser?.name || "A").charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <div className="absolute bottom-0 right-0 w-7 h-7 bg-emerald-500 rounded-full flex items-center justify-center shadow-sm border-2 border-white dark:border-card group-hover:scale-110 transition-transform">
+                  <Camera className="w-3.5 h-3.5 text-white" />
+                </div>
+              </motion.button>
+            </div>
+
+            {/* Name Field */}
             <div className="flex items-center justify-between">
-              <div>
+              <div className="flex-1 min-w-0">
                 <p className="text-xs text-muted-foreground">Nama</p>
-                <p className="text-sm font-medium text-foreground">{currentUser?.name || "Ahmad Fauzi"}</p>
+                {editField === "name" ? (
+                  <div className="flex items-center gap-2 mt-1">
+                    <Input
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      className="h-8 text-sm rounded-lg"
+                      autoFocus
+                    />
+                    <Button size="sm" onClick={handleSaveField} className="h-8 px-3 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-[11px]">
+                      Simpan
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setEditField(null)} className="h-8 px-2 rounded-lg text-[11px]">
+                      Batal
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium text-foreground">{currentUser?.name || "Ahmad Fauzi"}</p>
+                    <Button variant="ghost" size="sm" className="h-7 text-[11px] rounded-lg text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20" onClick={() => handleEditField("name", currentUser?.name || "Ahmad Fauzi")}>
+                      <Edit className="w-3 h-3 mr-1" /> Edit
+                    </Button>
+                  </div>
+                )}
               </div>
-              <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg" onClick={() => showToast("Fitur edit segera hadir!", "info")}>
-                <Edit className="w-3 h-3 mr-1" /> Edit
-              </Button>
             </div>
             <Separator />
+            {/* Email Field */}
             <div className="flex items-center justify-between">
-              <div>
+              <div className="flex-1 min-w-0">
                 <p className="text-xs text-muted-foreground">Email</p>
-                <p className="text-sm font-medium text-foreground">{currentUser?.email || "ahmad@email.com"}</p>
+                {editField === "email" ? (
+                  <div className="flex items-center gap-2 mt-1">
+                    <Input
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      className="h-8 text-sm rounded-lg"
+                      autoFocus
+                    />
+                    <Button size="sm" onClick={handleSaveField} className="h-8 px-3 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-[11px]">
+                      Simpan
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setEditField(null)} className="h-8 px-2 rounded-lg text-[11px]">
+                      Batal
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium text-foreground">{currentUser?.email || "ahmad@email.com"}</p>
+                    <Button variant="ghost" size="sm" className="h-7 text-[11px] rounded-lg text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20" onClick={() => handleEditField("email", currentUser?.email || "ahmad@email.com")}>
+                      <Edit className="w-3 h-3 mr-1" /> Edit
+                    </Button>
+                  </div>
+                )}
               </div>
-              <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg" onClick={() => showToast("Fitur edit segera hadir!", "info")}>
-                <Edit className="w-3 h-3 mr-1" /> Edit
-              </Button>
             </div>
             <Separator />
+            {/* Phone Field */}
             <div className="flex items-center justify-between">
-              <div>
+              <div className="flex-1 min-w-0">
                 <p className="text-xs text-muted-foreground">No. Telepon</p>
-                <p className="text-sm font-medium text-foreground">{currentUser?.phone || "08123456789"}</p>
+                {editField === "phone" ? (
+                  <div className="flex items-center gap-2 mt-1">
+                    <Input
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      className="h-8 text-sm rounded-lg"
+                      autoFocus
+                    />
+                    <Button size="sm" onClick={handleSaveField} className="h-8 px-3 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-[11px]">
+                      Simpan
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setEditField(null)} className="h-8 px-2 rounded-lg text-[11px]">
+                      Batal
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium text-foreground">{currentUser?.phone || "08123456789"}</p>
+                    <Button variant="ghost" size="sm" className="h-7 text-[11px] rounded-lg text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20" onClick={() => handleEditField("phone", currentUser?.phone || "08123456789")}>
+                      <Edit className="w-3 h-3 mr-1" /> Edit
+                    </Button>
+                  </div>
+                )}
               </div>
-              <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg" onClick={() => showToast("Fitur edit segera hadir!", "info")}>
-                <Edit className="w-3 h-3 mr-1" /> Edit
-              </Button>
             </div>
           </Card>
         </motion.div>
@@ -87,7 +239,7 @@ export function SettingsScreen() {
         <motion.div {...fadeIn}>
           <SectionHeader title="Keamanan" icon={<Shield className="w-4 h-4" />} />
           <Card className="mt-3 p-4 space-y-3">
-            <button className="w-full flex items-center justify-between py-1" onClick={() => showToast("Fitur ubah password segera hadir!", "info")}>
+            <button className="w-full flex items-center justify-between py-1" onClick={() => setShowPasswordDialog(true)}>
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-amber-50 dark:bg-amber-900/30 flex items-center justify-center">
                   <Lock className="w-4 h-4 text-amber-600" />
@@ -202,6 +354,77 @@ export function SettingsScreen() {
           </Button>
         </motion.div>
       </div>
+
+      {/* Change Password Dialog */}
+      <Dialog open={showPasswordDialog} onOpenChange={setShowPasswordDialog}>
+        <DialogContent className="max-w-[340px] rounded-2xl p-5">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold">Ubah Password</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 mt-2">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-foreground">Password Saat Ini</label>
+              <div className="relative">
+                <Input
+                  type={showCurrentPassword ? "text" : "password"}
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  placeholder="Masukkan password saat ini"
+                  className="pr-10 rounded-xl h-10"
+                />
+                <button
+                  onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showCurrentPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-foreground">Password Baru</label>
+              <div className="relative">
+                <Input
+                  type={showNewPassword ? "text" : "password"}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Minimal 8 karakter"
+                  className="pr-10 rounded-xl h-10"
+                />
+                <button
+                  onClick={() => setShowNewPassword(!showNewPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              {newPassword && newPassword.length < 8 && (
+                <p className="text-[10px] text-red-500">Password minimal 8 karakter</p>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-foreground">Konfirmasi Password Baru</label>
+              <Input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Ulangi password baru"
+                className="rounded-xl h-10"
+              />
+              {confirmPassword && newPassword !== confirmPassword && (
+                <p className="text-[10px] text-red-500">Password tidak cocok</p>
+              )}
+            </div>
+          </div>
+          <DialogFooter className="mt-4 gap-2">
+            <Button variant="outline" onClick={() => setShowPasswordDialog(false)} className="rounded-xl h-10 flex-1">
+              Batal
+            </Button>
+            <Button onClick={handleChangePassword} className="bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-10 flex-1">
+              Ubah Password
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -1104,6 +1327,9 @@ export function RefundScreen() {
   const { showToast, goBack } = useAppStore()
   const [activeTab, setActiveTab] = useState("active")
   const [showForm, setShowForm] = useState(false)
+  const [evidenceImages, setEvidenceImages] = useState<{ id: string; url: string; file: File }[]>([])
+  const [previewImage, setPreviewImage] = useState<string | null>(null)
+  const evidenceInputRef = useRef<HTMLInputElement>(null)
 
   const activeRefunds = [
     { id: "rf1", orderNumber: "ORD-2024-201", product: "Lipstik Matte Velvet", reason: "Barang rusak", status: "Diproses", date: "20 Des 2024", timeline: ["Pengajuan diajukan", "Menunggu review seller", "Diproses admin"] },
@@ -1116,8 +1342,46 @@ export function RefundScreen() {
   ]
 
   const handleSubmitRefund = () => {
+    evidenceImages.forEach(img => URL.revokeObjectURL(img.url))
+    setEvidenceImages([])
     showToast("Pengajuan refund berhasil dikirim!", "success")
     goBack()
+  }
+
+  const handleEvidenceUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    if (!files.length) return
+    const remaining = 4 - evidenceImages.length
+    const filesToAdd = files.slice(0, remaining)
+    if (files.length > remaining) {
+      showToast(`Maksimal 4 foto bukti`, "error")
+    }
+    const newImages: { id: string; url: string; file: File }[] = []
+    for (const file of filesToAdd) {
+      if (file.size > 5 * 1024 * 1024) {
+        showToast(`Foto "${file.name}" melebihi 5MB`, "error")
+        continue
+      }
+      if (!file.type.startsWith("image/")) {
+        showToast(`"${file.name}" bukan file gambar`, "error")
+        continue
+      }
+      newImages.push({
+        id: `ev-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        url: URL.createObjectURL(file),
+        file,
+      })
+    }
+    setEvidenceImages(prev => [...prev, ...newImages])
+    e.target.value = ""
+  }
+
+  const handleRemoveEvidence = (imageId: string) => {
+    setEvidenceImages(prev => {
+      const img = prev.find(i => i.id === imageId)
+      if (img) URL.revokeObjectURL(img.url)
+      return prev.filter(i => i.id !== imageId)
+    })
   }
 
   return (
@@ -1211,6 +1475,46 @@ export function RefundScreen() {
                         className="w-full min-h-[60px] rounded-xl border border-input bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 resize-none"
                       />
                     </div>
+                    {/* Evidence Upload */}
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium text-foreground">Foto Bukti</label>
+                      <input
+                        ref={evidenceInputRef}
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        className="hidden"
+                        onChange={handleEvidenceUpload}
+                      />
+                      <div className="flex gap-2 flex-wrap">
+                        {evidenceImages.map((img) => (
+                          <div key={img.id} className="relative group">
+                            <div
+                              className="w-16 h-16 rounded-lg overflow-hidden border border-border/50 cursor-pointer"
+                              onClick={() => setPreviewImage(img.url)}
+                            >
+                              <img src={img.url} alt="Bukti" className="w-full h-full object-cover" />
+                            </div>
+                            <button
+                              onClick={() => handleRemoveEvidence(img.id)}
+                              className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              <X className="w-2.5 h-2.5" />
+                            </button>
+                          </div>
+                        ))}
+                        {evidenceImages.length < 4 && (
+                          <button
+                            onClick={() => evidenceInputRef.current?.click()}
+                            className="w-16 h-16 rounded-lg border-2 border-dashed border-border hover:border-emerald-400 bg-muted/30 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/20 flex flex-col items-center justify-center gap-0.5 transition-colors"
+                          >
+                            <ImagePlus className="w-4 h-4 text-muted-foreground" />
+                            <span className="text-[8px] text-muted-foreground">Tambah</span>
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">Maks 4 foto · JPG, PNG · Maks 5MB/foto</p>
+                    </div>
                     <Button onClick={handleSubmitRefund} className="w-full bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-10">
                       Kirim Pengajuan
                     </Button>
@@ -1241,6 +1545,35 @@ export function RefundScreen() {
           </div>
         )}
       </div>
+
+      {/* Image Preview Modal */}
+      <AnimatePresence>
+        {previewImage && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] bg-black/90 flex items-center justify-center p-4"
+            onClick={() => setPreviewImage(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.8, opacity: 0 }}
+              className="relative max-w-full max-h-full"
+              onClick={e => e.stopPropagation()}
+            >
+              <img src={previewImage} alt="Preview" className="max-w-[90vw] max-h-[80vh] rounded-xl object-contain" />
+              <button
+                onClick={() => setPreviewImage(null)}
+                className="absolute -top-3 -right-3 w-8 h-8 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center"
+              >
+                <X className="w-5 h-5 text-white" />
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

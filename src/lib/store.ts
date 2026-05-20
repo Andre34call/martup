@@ -86,6 +86,11 @@ interface AppState {
   setSearchQuery: (q: string) => void
   addSearchHistory: (q: string) => void
   clearSearchHistory: () => void
+
+  // Profile
+  avatarUrl: string | null
+  updateAvatar: (url: string | null) => void
+  updateProfile: (data: { name?: string; email?: string; phone?: string }) => void
 }
 
 let toastTimer: ReturnType<typeof setTimeout> | null = null
@@ -305,6 +310,15 @@ export const useAppStore = create<AppState>((set, get) => ({
     searchHistory: [q, ...state.searchHistory.filter(s => s !== q)].slice(0, 10)
   })),
   clearSearchHistory: () => set({ searchHistory: [] }),
+
+  // Profile
+  avatarUrl: null,
+  updateAvatar: (url) => set({ avatarUrl: url }),
+  updateProfile: (data) => set((state) => ({
+    currentUser: state.currentUser
+      ? { ...state.currentUser, ...data }
+      : null
+  })),
 }))
 
 // ==================== CART STORE ====================

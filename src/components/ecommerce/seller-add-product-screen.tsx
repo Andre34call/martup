@@ -1,6 +1,6 @@
 "use client"
 
-import { motion } from "framer-motion"
+import { motion, AnimatePresence } from "framer-motion"
 import { Plus, Minus, X, Camera, ChevronDown, Tag, Package, DollarSign, Upload, Image as ImageIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -8,7 +8,7 @@ import { Separator } from "@/components/ui/separator"
 import { useAppStore } from "@/lib/store"
 import { MOCK_CATEGORIES, formatPrice } from "@/lib/mock-data"
 import { PageHeader } from "./shared"
-import { useState } from "react"
+import { useState, useRef } from "react"
 
 // ==================== ANIMATION VARIANTS ====================
 const fadeIn = {
@@ -51,6 +51,9 @@ export function SellerAddProductScreen() {
   const [tags, setTags] = useState<string[]>([])
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false)
   const [variantInputValues, setVariantInputValues] = useState<Record<string, { name: string; value: string }>>({})
+  const [productImages, setProductImages] = useState<{ id: string; url: string; file: File }[]>([])
+  const [previewImage, setPreviewImage] = useState<string | null>(null)
+  const productImageInputRef = useRef<HTMLInputElement>(null)
 
   // Derived
   const selectedCategory = MOCK_CATEGORIES.find(c => c.id === category)
@@ -154,8 +157,56 @@ export function SellerAddProductScreen() {
     }
   }
 
+  // Image upload handlers
+  const MAX_PRODUCT_IMAGES = 5
+  const MAX_PRODUCT_IMAGE_SIZE_MB = 2
+
+  const handleProductImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    if (!files.length) return
+
+    const remainingSlots = MAX_PRODUCT_IMAGES - productImages.length
+    const filesToAdd = files.slice(0, remainingSlots)
+
+    if (files.length > remainingSlots) {
+      showToast(`Maksimal ${MAX_PRODUCT_IMAGES} foto per produk`, "error")
+    }
+
+    const newImages: { id: string; url: string; file: File }[] = []
+    for (const file of filesToAdd) {
+      if (file.size > MAX_PRODUCT_IMAGE_SIZE_MB * 1024 * 1024) {
+        showToast(`Foto "${file.name}" melebihi ${MAX_PRODUCT_IMAGE_SIZE_MB}MB`, "error")
+        continue
+      }
+      if (!file.type.startsWith("image/")) {
+        showToast(`"${file.name}" bukan file gambar`, "error")
+        continue
+      }
+      newImages.push({
+        id: `pimg-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        url: URL.createObjectURL(file),
+        file,
+      })
+    }
+
+    setProductImages(prev => [...prev, ...newImages])
+    e.target.value = ""
+  }
+
+  const handleRemoveProductImage = (imageId: string) => {
+    setProductImages(prev => {
+      const img = prev.find(i => i.id === imageId)
+      if (img) URL.revokeObjectURL(img.url)
+      return prev.filter(i => i.id !== imageId)
+    })
+  }
+
   // Submit handler
   const handleSubmit = () => {
+    if (productImages.length === 0) {
+      showToast("Upload minimal 1 foto produk", "error")
+      return
+    }
     if (!productName.trim()) {
       showToast("Nama produk harus diisi", "error")
       return
@@ -192,17 +243,57 @@ export function SellerAddProductScreen() {
             <div className="flex items-center gap-2">
               <ImageIcon className="w-4 h-4 text-emerald-500" />
               <h3 className="text-sm font-semibold text-foreground">Foto Produk</h3>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 font-medium">Wajib</span>
             </div>
             <p className="text-xs text-muted-foreground">Upload hingga 5 foto. Foto utama adalah foto pertama.</p>
+
+            {/* Hidden file input */}
+            <input
+              ref={productImageInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={handleProductImageUpload}
+            />
+
             <div className="grid grid-cols-5 gap-2">
-              {[0, 1, 2, 3, 4].map((idx) => (
+              {/* Uploaded images */}
+              {productImages.map((img, idx) => (
+                <motion.div
+                  key={img.id}
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="relative group aspect-square"
+                >
+                  <div
+                    className="w-full h-full rounded-xl overflow-hidden border border-border/50 cursor-pointer"
+                    onClick={() => setPreviewImage(img.url)}
+                  >
+                    <img src={img.url} alt={`Product ${idx + 1}`} className="w-full h-full object-cover" />
+                  </div>
+                  {idx === 0 && (
+                    <div className="absolute top-0.5 left-0.5 bg-emerald-500 text-white text-[7px] font-bold px-1 py-0.5 rounded-md">
+                      UTAMA
+                    </div>
+                  )}
+                  <button
+                    onClick={() => handleRemoveProductImage(img.id)}
+                    className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </motion.div>
+              ))}
+
+              {/* Empty slots / Add button */}
+              {productImages.length < MAX_PRODUCT_IMAGES && (
                 <motion.button
-                  key={idx}
                   whileTap={{ scale: 0.95 }}
-                  onClick={() => showToast("Fitur upload foto segera hadir!", "info")}
+                  onClick={() => productImageInputRef.current?.click()}
                   className="aspect-square rounded-xl border-2 border-dashed border-border hover:border-emerald-400 transition-colors flex flex-col items-center justify-center gap-1 bg-muted/20 hover:bg-emerald-50/50 dark:hover:bg-emerald-900/10"
                 >
-                  {idx === 0 ? (
+                  {productImages.length === 0 ? (
                     <>
                       <Camera className="w-5 h-5 text-muted-foreground" />
                       <span className="text-[9px] text-muted-foreground font-medium">Utama</span>
@@ -211,18 +302,20 @@ export function SellerAddProductScreen() {
                     <Plus className="w-5 h-5 text-muted-foreground" />
                   )}
                 </motion.button>
-              ))}
+              )}
             </div>
+
             <div className="flex items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
                 className="h-8 text-xs rounded-lg gap-1.5"
+                onClick={() => productImageInputRef.current?.click()}
               >
                 <Upload className="w-3.5 h-3.5" />
                 Upload Foto
               </Button>
-              <span className="text-[10px] text-muted-foreground">JPG, PNG, max 2MB</span>
+              <span className="text-[10px] text-muted-foreground">{productImages.length}/{MAX_PRODUCT_IMAGES} · JPG, PNG, max {MAX_PRODUCT_IMAGE_SIZE_MB}MB</span>
             </div>
           </div>
         </motion.div>
@@ -629,6 +722,35 @@ export function SellerAddProductScreen() {
         </motion.div>
       </div>
 
+
+      {/* Image Preview Modal */}
+      <AnimatePresence>
+        {previewImage && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] bg-black/90 flex items-center justify-center p-4"
+            onClick={() => setPreviewImage(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.8, opacity: 0 }}
+              className="relative max-w-full max-h-full"
+              onClick={e => e.stopPropagation()}
+            >
+              <img src={previewImage} alt="Preview" className="max-w-[90vw] max-h-[80vh] rounded-xl object-contain" />
+              <button
+                onClick={() => setPreviewImage(null)}
+                className="absolute -top-3 -right-3 w-8 h-8 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center"
+              >
+                <X className="w-5 h-5 text-white" />
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
     </div>
   )

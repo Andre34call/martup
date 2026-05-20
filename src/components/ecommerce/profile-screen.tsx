@@ -4,13 +4,14 @@ import { motion, AnimatePresence } from "framer-motion"
 import { useAppStore } from "@/lib/store"
 import { formatPrice } from "@/lib/mock-data"
 import { PageHeader, SectionHeader, RoleBadge } from "./shared"
-import { useState, useMemo } from "react"
+import { useState, useMemo, useRef } from "react"
 import { useTheme } from 'next-themes'
 import {
   ArrowLeft, User, Edit, Wallet, Coins, Ticket, Package, Truck,
   Star, MapPin, Heart, Store, HelpCircle, Settings as SettingsIcon,
   Shield, Bell, Globe, ChevronRight, LogOut, Moon, Sun,
-  CreditCard, Clock, Check, Store as StoreIcon, LayoutDashboard
+  CreditCard, Clock, Check, Store as StoreIcon, LayoutDashboard,
+  Camera, X
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -68,7 +69,25 @@ function MenuItem({
 
 // ==================== PROFILE SCREEN ====================
 export function ProfileScreen() {
-  const { currentUser, userRole, switchRole, orders, navigate, logout, showToast } = useAppStore()
+  const { currentUser, userRole, switchRole, orders, navigate, logout, showToast, avatarUrl, updateAvatar } = useAppStore()
+  const avatarInputRef = useRef<HTMLInputElement>(null)
+
+  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith("image/")) {
+      showToast("File harus berupa gambar", "error")
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      showToast("Ukuran foto maksimal 5MB", "error")
+      return
+    }
+    const url = URL.createObjectURL(file)
+    updateAvatar(url)
+    showToast("Foto profil berhasil diperbarui!", "success")
+    e.target.value = ""
+  }
   const { theme, setTheme } = useTheme()
   const isDarkMode = theme === 'dark'
 
@@ -113,9 +132,31 @@ export function ProfileScreen() {
           <div className="bg-card rounded-2xl border border-border/50 p-5">
             <div className="flex items-center gap-4">
               <div className="relative">
-                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 text-white font-bold flex items-center justify-center text-xl shadow-md">
-                  {userName.charAt(0).toUpperCase()}
-                </div>
+                <input
+                  ref={avatarInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleAvatarUpload}
+                />
+                <motion.button
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => avatarInputRef.current?.click()}
+                  className="relative group"
+                >
+                  {avatarUrl ? (
+                    <div className="w-16 h-16 rounded-full overflow-hidden shadow-md ring-2 ring-emerald-500/30">
+                      <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                    </div>
+                  ) : (
+                    <div className="w-16 h-16 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 text-white font-bold flex items-center justify-center text-xl shadow-md">
+                      {userName.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <div className="absolute bottom-0 right-0 w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center shadow-sm border-2 border-white dark:border-card">
+                    <Camera className="w-2.5 h-2.5 text-white" />
+                  </div>
+                </motion.button>
                 <div className="absolute -bottom-1 -right-1">
                   <RoleBadge role={userRole} size="sm" />
                 </div>

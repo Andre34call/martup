@@ -313,3 +313,41 @@ Stage Summary:
 - Notification screen: tap navigates by type; mark-all-read uses store method
 - OrderScreen uses store's selectedOrderId for cross-screen navigation (e.g., from notification tap)
 - Lint passes cleanly
+
+---
+Task ID: 6
+Agent: Main
+Task: Add avatar upload, edit profile, product image upload, change password, and refund evidence upload features
+
+Work Log:
+- Added `avatarUrl`, `updateAvatar`, `updateProfile` to AppStore (store.ts)
+- Updated ProfileScreen: avatar with camera overlay, click to upload image, file validation (image type, max 5MB), preview with URL.createObjectURL
+- Updated SettingsScreen: 
+  - Avatar upload section with large circle preview + camera button
+  - Inline edit for name/email/phone (click Edit → input appears → Save/Cancel)
+  - Change password dialog (Dialog component) with current/new/confirm fields, show/hide toggles, validation
+  - All previously "coming soon" features now fully functional
+- Updated SellerAddProductScreen: 
+  - Real image upload with file picker (max 5 images, 2MB each)
+  - Image thumbnail grid with preview, remove, "UTAMA" badge on first
+  - Image preview modal (fullscreen)
+  - Submit validation requires at least 1 image
+- Updated RefundScreen:
+  - Evidence image upload (max 4 photos, 5MB each)
+  - Thumbnail grid with preview and remove
+  - Image preview modal
+  - Cleanup on submit
+
+Files Modified:
+- `/home/z/my-project/src/lib/store.ts` — Added avatarUrl, updateAvatar, updateProfile
+- `/home/z/my-project/src/components/ecommerce/profile-screen.tsx` — Avatar upload with camera overlay
+- `/home/z/my-project/src/components/ecommerce/missing-screens.tsx` — SettingsScreen full edit + password dialog, RefundScreen evidence upload
+- `/home/z/my-project/src/components/ecommerce/seller-add-product-screen.tsx` — Real image upload functionality
+
+Stage Summary:
+- Avatar upload: Both ProfileScreen and SettingsScreen now support uploading avatar photos
+- Edit Profile: Name, email, phone can be edited inline in Settings
+- Change Password: Full dialog with validation (min 8 chars, confirm match)
+- Seller Product Images: Real file upload with preview, max 5 images, validation
+- Refund Evidence: Image upload with preview, max 4 photos
+- All lint passes, dev server compiles successfully
