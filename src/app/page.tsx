@@ -2,7 +2,7 @@
 
 import { AnimatePresence, motion } from 'framer-motion'
 import { useAppStore } from '@/lib/store'
-import { BottomNav } from '@/components/ecommerce/shared'
+import { BottomNav, AdminBottomNav, SellerBottomNav } from '@/components/ecommerce/shared'
 
 // Auth screens
 import { SplashScreen, OnboardingScreen, LoginScreen, RegisterScreen, OTPScreen, ForgotPasswordScreen } from '@/components/ecommerce/auth-screens'
@@ -20,6 +20,9 @@ import { ChatScreen } from '@/components/ecommerce/chat-screen'
 import { NotificationScreen } from '@/components/ecommerce/notification-screen'
 import { ProfileScreen } from '@/components/ecommerce/profile-screen'
 import { WishlistScreen } from '@/components/ecommerce/wishlist-screen'
+
+// Missing buyer screens
+import { SettingsScreen, VoucherScreen, AddressScreen, ReviewScreen, RefundScreen, HelpScreen, FollowedStoresScreen, DepositScreen, WithdrawScreen } from '@/components/ecommerce/missing-screens'
 
 // Seller screens
 import {
@@ -77,19 +80,19 @@ function ScreenRenderer() {
       case 'orders': return <OrderScreen />
       case 'order-tracking': return <OrderScreen />
       case 'wallet': return <WalletScreen />
-      case 'deposit': return <WalletScreen />
-      case 'withdraw': return <WalletScreen />
+      case 'deposit': return <DepositScreen />
+      case 'withdraw': return <WithdrawScreen />
       case 'chat': return <ChatScreen />
       case 'chat-room': return <ChatScreen />
       case 'notification': return <NotificationScreen />
       case 'profile': return <ProfileScreen />
-      case 'settings': return <ProfileScreen />
-      case 'voucher': return <ProfileScreen />
-      case 'review': return <ProfileScreen />
-      case 'refund': return <ProfileScreen />
-      case 'help': return <ProfileScreen />
-      case 'address': return <ProfileScreen />
-      case 'followed-stores': return <ProfileScreen />
+      case 'settings': return <SettingsScreen />
+      case 'voucher': return <VoucherScreen />
+      case 'review': return <ReviewScreen />
+      case 'refund': return <RefundScreen />
+      case 'help': return <HelpScreen />
+      case 'address': return <AddressScreen />
+      case 'followed-stores': return <FollowedStoresScreen />
       case 'wishlist': return <WishlistScreen />
 
       // Seller
@@ -139,13 +142,19 @@ export default function Home() {
   const isAuthScreen = AUTH_SCREENS.includes(currentScreen)
   const isSellerScreen = SELLER_SCREENS.includes(currentScreen)
   const isAdminScreen = ADMIN_SCREENS.includes(currentScreen)
-  const showBottomNav = !isAuthScreen && !isAdminScreen
+
+  const getBottomNav = () => {
+    if (isAuthScreen) return null
+    if (isAdminScreen) return <AdminBottomNav />
+    if (isSellerScreen) return <SellerBottomNav />
+    return <BottomNav />
+  }
 
   return (
     <div className="min-h-screen bg-background flex justify-center">
       <div className="app-container flex flex-col min-h-screen w-full">
         <ScreenRenderer />
-        {showBottomNav && <BottomNav />}
+        {getBottomNav()}
       </div>
     </div>
   )

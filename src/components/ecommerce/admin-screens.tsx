@@ -21,7 +21,8 @@ import { useAppStore } from "@/lib/store"
 import { MOCK_ADMIN_STATS, MOCK_PRODUCTS, formatPrice } from "@/lib/mock-data"
 import { PageHeader, SectionHeader, StatusBadge, SearchBar, EmptyState } from "./shared"
 import type { Order, OrderStatus } from "@/lib/types"
-import { useState } from "react"
+import { useState, useRef, useEffect } from "react"
+import { AnimatePresence } from "framer-motion"
 
 // ==================== ANIMATION VARIANTS ====================
 const fadeIn = {
@@ -115,8 +116,26 @@ const mockPaymentMethods = [
 
 // ==================== ADMIN DASHBOARD ====================
 export function AdminDashboard() {
-  const { navigate } = useAppStore()
+  const { navigate, switchRole, userRole } = useAppStore()
   const stats = MOCK_ADMIN_STATS
+  const [showRoleMenu, setShowRoleMenu] = useState(false)
+  const roleMenuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (roleMenuRef.current && !roleMenuRef.current.contains(event.target as Node)) {
+        setShowRoleMenu(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
+
+  const roleColors: Record<string, string> = {
+    buyer: "bg-emerald-500",
+    seller: "bg-orange-500",
+    admin: "bg-purple-500",
+  }
 
   return (
     <div className="pb-20">
@@ -141,6 +160,47 @@ export function AdminDashboard() {
             >
               <Settings className="w-5 h-5 text-muted-foreground" />
             </motion.button>
+            {/* Role Switcher */}
+            <div className="relative" ref={roleMenuRef}>
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setShowRoleMenu(!showRoleMenu)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+              >
+                <span className={`w-2 h-2 rounded-full ${roleColors[userRole]}`} />
+                <span className="text-[11px] font-medium text-foreground">Switch Role</span>
+              </motion.button>
+              <AnimatePresence>
+                {showRoleMenu && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -5, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -5, scale: 0.95 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute right-0 top-full mt-2 bg-card rounded-xl shadow-lg border border-border p-2 min-w-[160px] z-50"
+                  >
+                    <p className="text-xs text-muted-foreground px-3 py-1.5 font-medium">Switch Role</p>
+                    {(["buyer", "seller", "admin"] as const).map((role) => (
+                      <button
+                        key={role}
+                        onClick={() => { switchRole(role); setShowRoleMenu(false) }}
+                        className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
+                          userRole === role
+                            ? "bg-purple-50 text-purple-700 dark:bg-purple-950 dark:text-purple-300"
+                            : "hover:bg-muted text-foreground"
+                        }`}
+                      >
+                        <span className={`w-2.5 h-2.5 rounded-full ${roleColors[role]}`} />
+                        <span className="font-medium capitalize">{role}</span>
+                        {userRole === role && (
+                          <Check className="w-3.5 h-3.5 ml-auto text-purple-600" />
+                        )}
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
         </div>
       </motion.div>

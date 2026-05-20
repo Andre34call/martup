@@ -1,7 +1,7 @@
 "use client"
 
 import { motion, AnimatePresence } from "framer-motion"
-import { Heart, ShoppingCart, MessageCircle, User, Home, Grid3X3, Search, Star, Clock, ChevronRight, ArrowLeft, Bell, Settings, Plus, Minus, X, Check, Share2, Truck, Shield, RotateCcw, Zap, TrendingUp, Gift, Award, ChevronDown, Eye, Trash2, Edit, MoreVertical, Package, DollarSign, BarChart3, Users, Megaphone, Store, Wallet as WalletIcon } from "lucide-react"
+import { Heart, ShoppingCart, MessageCircle, User, Home, Grid3X3, Search, Star, Clock, ChevronRight, ArrowLeft, Bell, Settings, Plus, Minus, X, Check, Share2, Truck, Shield, RotateCcw, Zap, TrendingUp, Gift, Award, ChevronDown, Eye, Trash2, Edit, MoreVertical, Package, DollarSign, BarChart3, Users, Megaphone, Store } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
@@ -1369,79 +1369,5 @@ export function StoreCard({
       </div>
       <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
     </motion.div>
-  )
-}
-
-// ==================== ADMIN BOTTOM NAV ====================
-export function AdminBottomNav() {
-  const { currentScreen, navigate, switchRole } = useAppStore()
-  
-  const items = [
-    { key: "admin-dashboard", label: "Home", icon: BarChart3, screen: "admin-dashboard" as ScreenName },
-    { key: "admin-users", label: "Users", icon: Users, screen: "admin-users" as ScreenName },
-    { key: "admin-products", label: "Products", icon: Package, screen: "admin-products" as ScreenName },
-    { key: "admin-analytics", label: "Stats", icon: TrendingUp, screen: "admin-analytics" as ScreenName },
-    { key: "exit", label: "Exit", icon: ArrowLeft, screen: null },
-  ]
-
-  return (
-    <div className="fixed bottom-0 left-0 right-0 z-50">
-      <div className="app-container">
-        <div className="glass border-t border-border/50 pb-safe">
-          <nav className="flex items-center justify-around h-16">
-            {items.map((item) => {
-              const Icon = item.icon
-              const isActive = item.key !== "exit" && currentScreen === item.screen
-              return (
-                <motion.button key={item.key} whileTap={{ scale: 0.9 }}
-                  onClick={() => item.key === "exit" ? switchRole("buyer") : item.screen && navigate(item.screen)}
-                  className="flex flex-col items-center justify-center gap-0.5 w-16 h-full"
-                >
-                  <Icon className={`w-5 h-5 ${isActive ? "text-blue-600" : "text-muted-foreground"}`} strokeWidth={isActive ? 2.5 : 2} />
-                  <span className={`text-[10px] font-medium ${isActive ? "text-blue-600" : "text-muted-foreground"}`}>{item.label}</span>
-                </motion.button>
-              )
-            })}
-          </nav>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ==================== SELLER BOTTOM NAV ====================
-export function SellerBottomNav() {
-  const { currentScreen, navigate, switchRole } = useAppStore()
-  
-  const items = [
-    { key: "seller-dashboard", label: "Home", icon: BarChart3, screen: "seller-dashboard" as ScreenName },
-    { key: "seller-products", label: "Produk", icon: Package, screen: "seller-products" as ScreenName },
-    { key: "seller-orders", label: "Pesanan", icon: ShoppingCart, screen: "seller-orders" as ScreenName },
-    { key: "seller-chat", label: "Chat", icon: MessageCircle, screen: "seller-chat" as ScreenName },
-    { key: "exit", label: "Exit", icon: ArrowLeft, screen: null },
-  ]
-
-  return (
-    <div className="fixed bottom-0 left-0 right-0 z-50">
-      <div className="app-container">
-        <div className="glass border-t border-border/50 pb-safe">
-          <nav className="flex items-center justify-around h-16">
-            {items.map((item) => {
-              const Icon = item.icon
-              const isActive = item.key !== "exit" && currentScreen === item.screen
-              return (
-                <motion.button key={item.key} whileTap={{ scale: 0.9 }}
-                  onClick={() => item.key === "exit" ? switchRole("buyer") : item.screen && navigate(item.screen)}
-                  className="flex flex-col items-center justify-center gap-0.5 w-16 h-full"
-                >
-                  <Icon className={`w-5 h-5 ${isActive ? "text-orange-600" : "text-muted-foreground"}`} strokeWidth={isActive ? 2.5 : 2} />
-                  <span className={`text-[10px] font-medium ${isActive ? "text-orange-600" : "text-muted-foreground"}`}>{item.label}</span>
-                </motion.button>
-              )
-            })}
-          </nav>
-        </div>
-      </div>
-    </div>
   )
 }
