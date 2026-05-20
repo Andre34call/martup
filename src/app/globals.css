@@ -182,7 +182,6 @@
 .app-container {
   max-width: 430px;
   margin: 0 auto;
-  min-height: 100dvh;
   position: relative;
   overflow-x: hidden;
 }

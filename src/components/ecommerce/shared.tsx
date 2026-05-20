@@ -79,7 +79,7 @@ export function BottomNav() {
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50">
-      <div className="app-container">
+      <div className="mx-auto max-w-[430px] md:max-w-[480px]">
         <div className="glass border-t border-border/50 pb-safe">
           <nav className="relative flex items-center justify-around h-16">
             {/* Sliding indicator */}
@@ -1427,7 +1427,7 @@ export function AdminBottomNav() {
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50">
-      <div className="app-container relative">
+      <div className="mx-auto max-w-[430px] md:max-w-[480px] relative">
         <div className="glass border-t border-border/50 pb-safe">
           <nav className="flex items-center justify-around h-16">
             {items.map((item) => {
@@ -1530,7 +1530,7 @@ export function SellerBottomNav() {
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50">
-      <div className="app-container relative">
+      <div className="mx-auto max-w-[430px] md:max-w-[480px] relative">
         <div className="glass border-t border-border/50 pb-safe">
           <nav className="flex items-center justify-around h-16">
             {items.map((item) => {
