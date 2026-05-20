@@ -23,6 +23,8 @@ import { WishlistScreen } from '@/components/ecommerce/wishlist-screen'
 
 // Missing buyer screens
 import { SettingsScreen, VoucherScreen, AddressScreen, ReviewScreen, RefundScreen, HelpScreen, FollowedStoresScreen, DepositScreen, WithdrawScreen } from '@/components/ecommerce/missing-screens'
+import { SellerShopScreen } from '@/components/ecommerce/seller-shop-screen'
+import { SellerAddProductScreen } from '@/components/ecommerce/seller-add-product-screen'
 
 // Seller screens
 import {
@@ -46,6 +48,7 @@ import {
   AdminAnalytics,
   AdminComplaints,
 } from '@/components/ecommerce/admin-screens'
+import { AdminOrdersScreen } from '@/components/ecommerce/admin-orders-screen'
 
 const AUTH_SCREENS = ['splash', 'onboarding', 'login', 'register', 'otp', 'forgot-password']
 const SELLER_SCREENS = ['seller-dashboard', 'seller-products', 'seller-add-product', 'seller-orders', 'seller-analytics', 'seller-wallet', 'seller-chat', 'seller-settings', 'seller-campaign']
@@ -93,12 +96,13 @@ function ScreenRenderer() {
       case 'help': return <HelpScreen />
       case 'address': return <AddressScreen />
       case 'followed-stores': return <FollowedStoresScreen />
+      case 'seller-shop': return <SellerShopScreen />
       case 'wishlist': return <WishlistScreen />
 
       // Seller
       case 'seller-dashboard': return <SellerDashboard />
       case 'seller-products': return <SellerProducts />
-      case 'seller-add-product': return <SellerProducts />
+      case 'seller-add-product': return <SellerAddProductScreen />
       case 'seller-orders': return <SellerOrders />
       case 'seller-analytics': return <SellerAnalytics />
       case 'seller-wallet': return <SellerWallet />
@@ -110,7 +114,7 @@ function ScreenRenderer() {
       case 'admin-dashboard': return <AdminDashboard />
       case 'admin-users': return <AdminUsers />
       case 'admin-products': return <AdminProducts />
-      case 'admin-orders': return <AdminDashboard />
+      case 'admin-orders': return <AdminOrdersScreen />
       case 'admin-withdraw': return <AdminWithdraw />
       case 'admin-banner': return <AdminBanner />
       case 'admin-analytics': return <AdminAnalytics />

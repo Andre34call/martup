@@ -22,10 +22,12 @@ interface AppState {
   selectedCategoryId: string | null
   selectedOrderId: string | null
   selectedChatRoomId: string | null
+  selectedSellerId: string | null
   setSelectedProduct: (id: string | null) => void
   setSelectedCategory: (id: string | null) => void
   setSelectedOrder: (id: string | null) => void
   setSelectedChatRoom: (id: string | null) => void
+  setSelectedSeller: (id: string | null) => void
 
   // UI state
   isLoading: boolean
@@ -104,10 +106,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   selectedCategoryId: null,
   selectedOrderId: null,
   selectedChatRoomId: null,
+  selectedSellerId: null,
   setSelectedProduct: (id) => set({ selectedProductId: id }),
   setSelectedCategory: (id) => set({ selectedCategoryId: id }),
   setSelectedOrder: (id) => set({ selectedOrderId: id }),
   setSelectedChatRoom: (id) => set({ selectedChatRoomId: id }),
+  setSelectedSeller: (id) => set({ selectedSellerId: id }),
 
   // UI state
   isLoading: false,

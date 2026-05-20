@@ -218,7 +218,7 @@ function VariantSelector({
 
 // ==================== MAIN COMPONENT ====================
 export function ProductDetailScreen() {
-  const { selectedProductId, navigate, setSelectedProduct } = useAppStore()
+  const { selectedProductId, navigate, setSelectedProduct, setSelectedSeller } = useAppStore()
   const { addItem } = useCartStore()
   const { toggleWishlist, isWishlisted } = useWishlistStore()
 
@@ -507,7 +507,7 @@ export function ProductDetailScreen() {
                 variant="outline"
                 size="sm"
                 className="flex-1 h-9 text-xs rounded-lg"
-                onClick={() => navigate('chat-room')}
+                onClick={() => { setSelectedSeller(product.sellerId); navigate('seller-shop') }}
               >
                 <Award className="w-3.5 h-3.5 mr-1" />
                 Kunjungi Toko

@@ -48,8 +48,7 @@ export function BottomNav() {
 
   const handleTabPress = (idx: number) => {
     if (idx === 4) {
-      // Profile tab - show role menu
-      setShowRoleMenu(!showRoleMenu)
+      navigate("profile")
       return
     }
     const screenMap: Record<string, ScreenName> = {
