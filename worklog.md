@@ -136,3 +136,26 @@ Stage Summary:
 - Complete SPA with client-side navigation
 - Smooth page transitions with Framer Motion
 - Role-based navigation (Buyer, Seller, Admin)
+
+---
+Task ID: 1
+Agent: full-stack-developer
+Task: Fix navigation bugs in MartUp e-commerce app
+
+Work Log:
+- **Issue 1 (BottomNav overlaps with sub-screens)**: Added `SUB_SCREENS` array in `page.tsx` containing 14 sub-screens (product-detail, seller-shop, checkout, review, refund, address, help, followed-stores, deposit, withdraw, settings, voucher, order-tracking, seller-add-product). Modified `Home` component to check `isSubScreen` and skip rendering bottom nav when on a sub-screen. This prevents the ProductDetailScreen's sticky CTA bar from being hidden behind the BottomNav.
+- **Issue 2 (Buyer BottomNav missing role switcher trigger)**: Changed the profile tab's role indicator dot from a passive `<span>` to a clickable `<button>` element. Made the dot larger (w-3.5 h-3.5 instead of w-2.5 h-2.5), added `hover:scale-125 transition-transform cursor-pointer` styling, and added an `onClick` handler that calls `setShowRoleMenu(!showRoleMenu)` with `e.stopPropagation()` to prevent triggering the parent tab's navigation.
+- **Issue 3 (Admin BottomNav has no role switcher)**: Replaced the "Exit" tab with a "Switch" tab using the `Users` icon. Added a role menu dropdown (similar to Buyer BottomNav) with all three roles (Buyer, Seller, Admin). Added `showRoleMenu` state, `roleMenuRef`, click-outside handler, and `handleRoleSwitch` function. The Switch tab shows a colored role indicator dot and toggles the dropdown on tap. Active role is highlighted with blue accent styling.
+- **Issue 4 (Seller BottomNav has no role switcher)**: Same treatment as Admin BottomNav — replaced "Exit" with "Switch" tab and added full role switcher dropdown. Active role highlighted with orange accent styling to match Seller theme.
+- **Issue 5 (product-detail back navigation)**: Changed `handleBack` in `product-detail-screen.tsx` to use `goBack()` instead of `navigate('home')`. Added `goBack` to the destructured imports from `useAppStore`. This ensures pressing back returns to the previous screen (e.g., search) instead of always going to home.
+
+Files Modified:
+- `/home/z/my-project/src/app/page.tsx` — Added SUB_SCREENS array, isSubScreen check
+- `/home/z/my-project/src/components/ecommerce/shared.tsx` — BottomNav role dot clickable, AdminBottomNav + SellerBottomNav role switchers
+- `/home/z/my-project/src/components/ecommerce/product-detail-screen.tsx` — goBack() instead of navigate('home')
+
+Stage Summary:
+- All 4 navigation bugs fixed
+- Sub-screens now properly hide bottom nav to avoid overlap with sticky CTAs
+- Role switching is now accessible from all three nav bars (Buyer/Seller/Admin)
+- Product detail back button correctly returns to previous screen

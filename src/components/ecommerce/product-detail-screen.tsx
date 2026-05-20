@@ -218,7 +218,7 @@ function VariantSelector({
 
 // ==================== MAIN COMPONENT ====================
 export function ProductDetailScreen() {
-  const { selectedProductId, navigate, setSelectedProduct, setSelectedSeller } = useAppStore()
+  const { selectedProductId, navigate, goBack, setSelectedProduct, setSelectedSeller } = useAppStore()
   const { addItem } = useCartStore()
   const { toggleWishlist, isWishlisted } = useWishlistStore()
 
@@ -235,8 +235,8 @@ export function ProductDetailScreen() {
 
   const handleBack = useCallback(() => {
     setSelectedProduct(null)
-    navigate('home')
-  }, [setSelectedProduct, navigate])
+    goBack()
+  }, [setSelectedProduct, goBack])
 
   if (!product) {
     return (

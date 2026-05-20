@@ -133,10 +133,15 @@ export function BottomNav() {
                         {totalUnreadChats > 99 ? "99+" : totalUnreadChats}
                       </motion.span>
                     )}
-                    {/* Profile role indicator */}
+                    {/* Profile role indicator - clickable to toggle role switcher */}
                     {isProfile && (
-                      <span
-                        className={`absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full border-2 border-background ${roleColors[userRole]}`}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setShowRoleMenu(!showRoleMenu)
+                        }}
+                        className={`absolute -top-1.5 -right-1.5 w-3.5 h-3.5 rounded-full border-2 border-background ${roleColors[userRole]} hover:scale-125 transition-transform cursor-pointer`}
+                        title="Switch Role"
                       />
                     )}
                   </motion.div>
@@ -1373,36 +1378,102 @@ export function StoreCard({
 
 // ==================== ADMIN BOTTOM NAV ====================
 export function AdminBottomNav() {
-  const { currentScreen, navigate, switchRole } = useAppStore()
-  
+  const { currentScreen, navigate, userRole, switchRole } = useAppStore()
+  const [showRoleMenu, setShowRoleMenu] = useState(false)
+  const roleMenuRef = useRef<HTMLDivElement>(null)
+
   const items = [
     { key: "admin-dashboard", label: "Home", icon: BarChart3, screen: "admin-dashboard" as ScreenName },
     { key: "admin-users", label: "Users", icon: Users, screen: "admin-users" as ScreenName },
     { key: "admin-products", label: "Products", icon: Package, screen: "admin-products" as ScreenName },
     { key: "admin-analytics", label: "Stats", icon: TrendingUp, screen: "admin-analytics" as ScreenName },
-    { key: "exit", label: "Exit", icon: ArrowLeft, screen: null },
+    { key: "switch", label: "Switch", icon: Users, screen: null },
   ]
+
+  const roleColors: Record<string, string> = {
+    buyer: "bg-emerald-500",
+    seller: "bg-orange-500",
+    admin: "bg-purple-500",
+  }
+
+  const roleLabels: Record<string, string> = {
+    buyer: "Buyer",
+    seller: "Seller",
+    admin: "Admin",
+  }
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (roleMenuRef.current && !roleMenuRef.current.contains(event.target as Node)) {
+        setShowRoleMenu(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
+
+  const handleRoleSwitch = (role: "buyer" | "seller" | "admin") => {
+    switchRole(role)
+    setShowRoleMenu(false)
+  }
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50">
-      <div className="app-container">
+      <div className="app-container relative">
         <div className="glass border-t border-border/50 pb-safe">
           <nav className="flex items-center justify-around h-16">
             {items.map((item) => {
               const Icon = item.icon
-              const isActive = item.key !== "exit" && currentScreen === item.screen
+              const isActive = item.key !== "switch" && currentScreen === item.screen
               return (
                 <motion.button key={item.key} whileTap={{ scale: 0.9 }}
-                  onClick={() => item.key === "exit" ? switchRole("buyer") : item.screen && navigate(item.screen)}
-                  className="flex flex-col items-center justify-center gap-0.5 w-16 h-full"
+                  onClick={() => item.key === "switch" ? setShowRoleMenu(!showRoleMenu) : item.screen && navigate(item.screen)}
+                  className="relative flex flex-col items-center justify-center gap-0.5 w-16 h-full"
                 >
-                  <Icon className={`w-5 h-5 ${isActive ? "text-blue-600" : "text-muted-foreground"}`} strokeWidth={isActive ? 2.5 : 2} />
-                  <span className={`text-[10px] font-medium ${isActive ? "text-blue-600" : "text-muted-foreground"}`}>{item.label}</span>
+                  <Icon className={`w-5 h-5 ${isActive || item.key === "switch" ? "text-blue-600" : "text-muted-foreground"}`} strokeWidth={isActive ? 2.5 : 2} />
+                  {/* Role indicator dot on switch tab */}
+                  {item.key === "switch" && (
+                    <span className={`absolute top-2 right-3 w-2.5 h-2.5 rounded-full border border-background ${roleColors[userRole]}`} />
+                  )}
+                  <span className={`text-[10px] font-medium ${isActive || item.key === "switch" ? "text-blue-600" : "text-muted-foreground"}`}>{item.label}</span>
                 </motion.button>
               )
             })}
           </nav>
         </div>
+
+        {/* Role switcher popup */}
+        <AnimatePresence>
+          {showRoleMenu && (
+            <motion.div
+              ref={roleMenuRef}
+              initial={{ opacity: 0, y: 10, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.95 }}
+              transition={{ duration: 0.15 }}
+              className="absolute bottom-20 right-4 bg-card rounded-xl shadow-lg border border-border p-2 min-w-[160px]"
+            >
+              <p className="text-xs text-muted-foreground px-3 py-1.5 font-medium">Switch Role</p>
+              {(["buyer", "seller", "admin"] as const).map((role) => (
+                <button
+                  key={role}
+                  onClick={() => handleRoleSwitch(role)}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
+                    userRole === role
+                      ? "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300"
+                      : "hover:bg-muted text-foreground"
+                  }`}
+                >
+                  <span className={`w-2.5 h-2.5 rounded-full ${roleColors[role]}`} />
+                  <span className="font-medium">{roleLabels[role]}</span>
+                  {userRole === role && (
+                    <Check className="w-3.5 h-3.5 ml-auto text-blue-600" />
+                  )}
+                </button>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   )
@@ -1410,36 +1481,102 @@ export function AdminBottomNav() {
 
 // ==================== SELLER BOTTOM NAV ====================
 export function SellerBottomNav() {
-  const { currentScreen, navigate, switchRole } = useAppStore()
-  
+  const { currentScreen, navigate, userRole, switchRole } = useAppStore()
+  const [showRoleMenu, setShowRoleMenu] = useState(false)
+  const roleMenuRef = useRef<HTMLDivElement>(null)
+
   const items = [
     { key: "seller-dashboard", label: "Home", icon: BarChart3, screen: "seller-dashboard" as ScreenName },
     { key: "seller-products", label: "Produk", icon: Package, screen: "seller-products" as ScreenName },
     { key: "seller-orders", label: "Pesanan", icon: ShoppingCart, screen: "seller-orders" as ScreenName },
     { key: "seller-chat", label: "Chat", icon: MessageCircle, screen: "seller-chat" as ScreenName },
-    { key: "exit", label: "Exit", icon: ArrowLeft, screen: null },
+    { key: "switch", label: "Switch", icon: Users, screen: null },
   ]
+
+  const roleColors: Record<string, string> = {
+    buyer: "bg-emerald-500",
+    seller: "bg-orange-500",
+    admin: "bg-purple-500",
+  }
+
+  const roleLabels: Record<string, string> = {
+    buyer: "Buyer",
+    seller: "Seller",
+    admin: "Admin",
+  }
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (roleMenuRef.current && !roleMenuRef.current.contains(event.target as Node)) {
+        setShowRoleMenu(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
+
+  const handleRoleSwitch = (role: "buyer" | "seller" | "admin") => {
+    switchRole(role)
+    setShowRoleMenu(false)
+  }
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50">
-      <div className="app-container">
+      <div className="app-container relative">
         <div className="glass border-t border-border/50 pb-safe">
           <nav className="flex items-center justify-around h-16">
             {items.map((item) => {
               const Icon = item.icon
-              const isActive = item.key !== "exit" && currentScreen === item.screen
+              const isActive = item.key !== "switch" && currentScreen === item.screen
               return (
                 <motion.button key={item.key} whileTap={{ scale: 0.9 }}
-                  onClick={() => item.key === "exit" ? switchRole("buyer") : item.screen && navigate(item.screen)}
-                  className="flex flex-col items-center justify-center gap-0.5 w-16 h-full"
+                  onClick={() => item.key === "switch" ? setShowRoleMenu(!showRoleMenu) : item.screen && navigate(item.screen)}
+                  className="relative flex flex-col items-center justify-center gap-0.5 w-16 h-full"
                 >
-                  <Icon className={`w-5 h-5 ${isActive ? "text-orange-600" : "text-muted-foreground"}`} strokeWidth={isActive ? 2.5 : 2} />
-                  <span className={`text-[10px] font-medium ${isActive ? "text-orange-600" : "text-muted-foreground"}`}>{item.label}</span>
+                  <Icon className={`w-5 h-5 ${isActive || item.key === "switch" ? "text-orange-600" : "text-muted-foreground"}`} strokeWidth={isActive ? 2.5 : 2} />
+                  {/* Role indicator dot on switch tab */}
+                  {item.key === "switch" && (
+                    <span className={`absolute top-2 right-3 w-2.5 h-2.5 rounded-full border border-background ${roleColors[userRole]}`} />
+                  )}
+                  <span className={`text-[10px] font-medium ${isActive || item.key === "switch" ? "text-orange-600" : "text-muted-foreground"}`}>{item.label}</span>
                 </motion.button>
               )
             })}
           </nav>
         </div>
+
+        {/* Role switcher popup */}
+        <AnimatePresence>
+          {showRoleMenu && (
+            <motion.div
+              ref={roleMenuRef}
+              initial={{ opacity: 0, y: 10, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.95 }}
+              transition={{ duration: 0.15 }}
+              className="absolute bottom-20 right-4 bg-card rounded-xl shadow-lg border border-border p-2 min-w-[160px]"
+            >
+              <p className="text-xs text-muted-foreground px-3 py-1.5 font-medium">Switch Role</p>
+              {(["buyer", "seller", "admin"] as const).map((role) => (
+                <button
+                  key={role}
+                  onClick={() => handleRoleSwitch(role)}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
+                    userRole === role
+                      ? "bg-orange-50 text-orange-700 dark:bg-orange-950 dark:text-orange-300"
+                      : "hover:bg-muted text-foreground"
+                  }`}
+                >
+                  <span className={`w-2.5 h-2.5 rounded-full ${roleColors[role]}`} />
+                  <span className="font-medium">{roleLabels[role]}</span>
+                  {userRole === role && (
+                    <Check className="w-3.5 h-3.5 ml-auto text-orange-600" />
+                  )}
+                </button>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   )
