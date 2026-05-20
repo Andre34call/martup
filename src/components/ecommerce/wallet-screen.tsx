@@ -14,9 +14,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 
-const MOCK_BALANCE = 1190000
-const MOCK_HOLD_BALANCE = 50000
-const MOCK_COINS = 2500
+
 
 // ==================== QUICK ACTION BUTTON ====================
 function QuickAction({ icon, label, onClick }: { icon: React.ReactNode; label: string; onClick?: () => void }) {
@@ -71,7 +69,7 @@ function MutationItem({ mutation }: { mutation: WalletMutation }) {
 
 // ==================== WALLET SCREEN ====================
 export function WalletScreen() {
-  const { walletMutations } = useAppStore()
+  const { walletMutations, walletBalance, walletHoldBalance, walletCoins, showToast, navigate } = useAppStore()
   const [showBalance, setShowBalance] = useState(true)
   const [filterType, setFilterType] = useState<"all" | "credit" | "debit">("all")
 
@@ -95,7 +93,10 @@ export function WalletScreen() {
       <PageHeader
         title="MartUp Pay"
         rightAction={
-          <button className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-muted transition-colors">
+          <button
+            className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-muted transition-colors"
+            onClick={() => showToast("Scroll ke bawah untuk melihat riwayat", "info")}
+          >
             <History className="w-5 h-5 text-muted-foreground" />
           </button>
         }
@@ -131,17 +132,17 @@ export function WalletScreen() {
                 animate={{ y: 0, opacity: 1 }}
                 className="text-3xl font-bold mb-2"
               >
-                {showBalance ? formatPrice(MOCK_BALANCE) : "••••••••"}
+                {showBalance ? formatPrice(walletBalance) : "••••••••"}
               </motion.p>
 
               <div className="flex items-center gap-2 text-xs opacity-80">
                 <Shield className="w-3.5 h-3.5" />
-                <span>Hold: {showBalance ? formatPrice(MOCK_HOLD_BALANCE) : "•••••"}</span>
+                <span>Hold: {showBalance ? formatPrice(walletHoldBalance) : "•••••"}</span>
               </div>
 
               <div className="flex items-center gap-1.5 mt-1 text-xs opacity-80">
                 <Gift className="w-3.5 h-3.5" />
-                <span>{MOCK_COINS.toLocaleString()} Koin</span>
+                <span>{walletCoins.toLocaleString()} Koin</span>
               </div>
             </div>
           </div>
@@ -154,18 +155,22 @@ export function WalletScreen() {
               <QuickAction
                 icon={<Plus className="w-5 h-5 text-emerald-600" />}
                 label="Top Up"
+                onClick={() => navigate("deposit")}
               />
               <QuickAction
                 icon={<ArrowUpRight className="w-5 h-5 text-emerald-600" />}
                 label="Withdraw"
+                onClick={() => navigate("withdraw")}
               />
               <QuickAction
                 icon={<Send className="w-5 h-5 text-emerald-600" />}
                 label="Transfer"
+                onClick={() => showToast("Fitur Transfer segera hadir!", "info")}
               />
               <QuickAction
                 icon={<Clock className="w-5 h-5 text-emerald-600" />}
                 label="Riwayat"
+                onClick={() => showToast("Scroll ke bawah untuk melihat riwayat", "info")}
               />
             </div>
           </div>
@@ -254,11 +259,18 @@ export function WalletScreen() {
         {/* Bottom Action Buttons */}
         <div className="px-4 pt-4 pb-4">
           <div className="flex gap-3">
-            <Button className="flex-1 h-12 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold">
+            <Button
+              className="flex-1 h-12 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold"
+              onClick={() => navigate("deposit")}
+            >
               <Plus className="w-4 h-4 mr-2" />
               Top Up
             </Button>
-            <Button variant="outline" className="flex-1 h-12 rounded-xl text-sm font-semibold">
+            <Button
+              variant="outline"
+              className="flex-1 h-12 rounded-xl text-sm font-semibold"
+              onClick={() => navigate("withdraw")}
+            >
               <Banknote className="w-4 h-4 mr-2" />
               Tarik Dana
             </Button>

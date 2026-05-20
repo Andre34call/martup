@@ -5,6 +5,7 @@ import { useAppStore } from "@/lib/store"
 import { formatPrice } from "@/lib/mock-data"
 import { PageHeader, SectionHeader, RoleBadge } from "./shared"
 import { useState, useMemo } from "react"
+import { useTheme } from 'next-themes'
 import {
   ArrowLeft, User, Edit, Wallet, Coins, Ticket, Package, Truck,
   Star, MapPin, Heart, Store, HelpCircle, Settings as SettingsIcon,
@@ -67,8 +68,9 @@ function MenuItem({
 
 // ==================== PROFILE SCREEN ====================
 export function ProfileScreen() {
-  const { currentUser, userRole, switchRole, orders, navigate, logout } = useAppStore()
-  const [isDarkMode, setIsDarkMode] = useState(false)
+  const { currentUser, userRole, switchRole, orders, navigate, logout, showToast } = useAppStore()
+  const { theme, setTheme } = useTheme()
+  const isDarkMode = theme === 'dark'
 
   const user = currentUser || MOCK_USER
   const userName = user.name || MOCK_USER.name
@@ -83,12 +85,7 @@ export function ProfileScreen() {
   }), [orders])
 
   const handleDarkModeToggle = (checked: boolean) => {
-    setIsDarkMode(checked)
-    if (checked) {
-      document.documentElement.classList.add("dark")
-    } else {
-      document.documentElement.classList.remove("dark")
-    }
+    setTheme(checked ? 'dark' : 'light')
   }
 
   const handleRoleSwitch = (role: "buyer" | "seller" | "admin") => {
@@ -155,6 +152,7 @@ export function ProfileScreen() {
             </motion.button>
             <motion.button
               whileTap={{ scale: 0.97 }}
+              onClick={() => navigate("wallet")}
               className="bg-card rounded-xl border border-border/50 p-3 text-center"
             >
               <p className="text-sm font-bold text-amber-500">{MOCK_USER.coins}</p>
@@ -294,6 +292,7 @@ export function ProfileScreen() {
             <MenuItem
               icon={<Shield className="w-4 h-4" />}
               label="Keamanan"
+              onClick={() => { navigate("settings"); showToast("Halaman keamanan", "info") }}
             />
             <MenuItem
               icon={<Bell className="w-4 h-4" />}
@@ -304,6 +303,7 @@ export function ProfileScreen() {
               icon={<Globe className="w-4 h-4" />}
               label="Bahasa"
               value="Indonesia"
+              onClick={() => showToast("Fitur bahasa segera hadir!", "info")}
             />
           </div>
         </div>
@@ -335,7 +335,7 @@ export function ProfileScreen() {
         <div className="px-4 pb-4">
           <motion.button
             whileTap={{ scale: 0.98 }}
-            onClick={() => handleRoleSwitch("seller")}
+            onClick={() => { handleRoleSwitch("seller"); showToast("Beralih ke mode Seller", "info") }}
             className="w-full"
           >
             <div className="bg-gradient-to-r from-orange-500 to-amber-500 rounded-xl p-4 text-white text-left shadow-sm">

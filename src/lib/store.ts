@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { ScreenName, UserRole, User, CartItem, Product, ProductVariant, Notification as AppNotification, ChatRoom, Address, Voucher, Order, WalletMutation, SellerStats, AdminStats } from './types'
+import type { ScreenName, UserRole, User, CartItem, Product, ProductVariant, Notification as AppNotification, ChatRoom, Address, Voucher, Order, OrderStatus, WalletMutation } from './types'
 
 // ==================== APP STORE ====================
 interface AppState {
@@ -34,10 +34,16 @@ interface AppState {
   showSplash: boolean
   setShowSplash: (v: boolean) => void
 
+  // Toast
+  toast: { message: string; type: 'success' | 'error' | 'info' } | null
+  showToast: (message: string, type?: 'success' | 'error' | 'info') => void
+  hideToast: () => void
+
   // Notifications
   notifications: AppNotification[]
   unreadNotificationCount: number
   markNotificationRead: (id: string) => void
+  markAllNotificationsRead: () => void
 
   // Chat
   chatRooms: ChatRoom[]
@@ -45,17 +51,34 @@ interface AppState {
 
   // Orders
   orders: Order[]
+  addOrder: (order: Order) => void
+  updateOrderStatus: (orderId: string, status: OrderStatus) => void
 
   // Address
   addresses: Address[]
   selectedAddressId: string | null
+  addAddress: (address: Address) => void
+  updateAddress: (address: Address) => void
+  deleteAddress: (id: string) => void
+  setDefaultAddress: (id: string) => void
 
-  // Wallet mutations
+  // Wallet
+  walletBalance: number
+  walletHoldBalance: number
+  walletCoins: number
   walletMutations: WalletMutation[]
+  topUpWallet: (amount: number) => void
+  withdrawWallet: (amount: number, bankAccount: string) => void
 
   // Vouchers
   vouchers: Voucher[]
   selectedVoucher: Voucher | null
+  selectVoucher: (voucher: Voucher | null) => void
+
+  // Followed stores
+  followedStoreIds: string[]
+  toggleFollowStore: (storeId: string) => void
+  isFollowingStore: (storeId: string) => boolean
 
   // Search
   searchQuery: string
@@ -64,6 +87,8 @@ interface AppState {
   addSearchHistory: (q: string) => void
   clearSearchHistory: () => void
 }
+
+let toastTimer: ReturnType<typeof setTimeout> | null = null
 
 export const useAppStore = create<AppState>((set, get) => ({
   // Navigation
@@ -118,6 +143,15 @@ export const useAppStore = create<AppState>((set, get) => ({
   showSplash: true,
   setShowSplash: (v) => set({ showSplash: v }),
 
+  // Toast
+  toast: null,
+  showToast: (message, type = 'success') => {
+    if (toastTimer) clearTimeout(toastTimer)
+    set({ toast: { message, type } })
+    toastTimer = setTimeout(() => set({ toast: null }), 2500)
+  },
+  hideToast: () => set({ toast: null }),
+
   // Notifications
   notifications: [
     { id: '1', title: 'Pesanan Dikirim', content: 'Pesanan #ORD-2024-001 telah dikirim via JNE REG', type: 'order', isRead: false, createdAt: '2024-12-20T10:00:00Z' },
@@ -127,9 +161,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     { id: '5', title: 'Voucher Baru', content: 'Kamu mendapat voucher gratis ongkir!', type: 'promo', isRead: true, createdAt: '2024-12-18T08:00:00Z' },
   ],
   unreadNotificationCount: 3,
-  markNotificationRead: (id) => set((state) => ({
-    notifications: state.notifications.map(n => n.id === id ? { ...n, isRead: true } : n),
-    unreadNotificationCount: Math.max(0, state.unreadNotificationCount - 1)
+  markNotificationRead: (id) => set((state) => {
+    const notification = state.notifications.find(n => n.id === id)
+    if (!notification || notification.isRead) return state
+    return {
+      notifications: state.notifications.map(n => n.id === id ? { ...n, isRead: true } : n),
+      unreadNotificationCount: Math.max(0, state.unreadNotificationCount - 1)
+    }
+  }),
+  markAllNotificationsRead: () => set((state) => ({
+    notifications: state.notifications.map(n => ({ ...n, isRead: true })),
+    unreadNotificationCount: 0
   })),
 
   // Chat
@@ -176,6 +218,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       createdAt: '2024-12-20T08:00:00Z'
     }
   ],
+  addOrder: (order) => set((state) => ({ orders: [order, ...state.orders] })),
+  updateOrderStatus: (orderId, status) => set((state) => ({
+    orders: state.orders.map(o => o.id === orderId ? { ...o, status, ...(status === 'paid' ? { paymentStatus: 'paid', paidAt: new Date().toISOString() } : {}), ...(status === 'shipped' ? { shippedAt: new Date().toISOString() } : {}), ...(status === 'delivered' ? { deliveredAt: new Date().toISOString() } : {}) } : o)
+  })),
 
   // Address
   addresses: [
@@ -183,14 +229,54 @@ export const useAppStore = create<AppState>((set, get) => ({
     { id: 'a2', label: 'Kantor', recipient: 'Ahmad Fauzi', phone: '08123456789', address: 'Jl. Sudirman Kav. 52-53, Senayan', city: 'Jakarta Pusat', province: 'DKI Jakarta', postalCode: '12190', isDefault: false },
   ],
   selectedAddressId: 'a1',
+  addAddress: (address) => set((state) => {
+    const addresses = address.isDefault
+      ? state.addresses.map(a => ({ ...a, isDefault: false })).concat(address)
+      : [...state.addresses, address]
+    return { addresses, selectedAddressId: address.isDefault ? address.id : state.selectedAddressId }
+  }),
+  updateAddress: (address) => set((state) => ({
+    addresses: state.addresses.map(a => a.id === address.id ? address : a)
+  })),
+  deleteAddress: (id) => set((state) => ({
+    addresses: state.addresses.filter(a => a.id !== id)
+  })),
+  setDefaultAddress: (id) => set((state) => ({
+    addresses: state.addresses.map(a => ({ ...a, isDefault: a.id === id })),
+    selectedAddressId: id
+  })),
 
-  // Wallet mutations
+  // Wallet
+  walletBalance: 1500000,
+  walletHoldBalance: 200000,
+  walletCoins: 12500,
   walletMutations: [
     { id: 'wm1', type: 'credit', amount: 500000, balance: 1500000, description: 'Top up via GoPay', refType: 'deposit', createdAt: '2024-12-20T10:00:00Z' },
-    { id: 'wm2', type: 'debit', amount: 200000, description: 'Pembayaran Order #ORD-2024-002', refType: 'order', balance: 1000000, createdAt: '2024-12-15T14:05:00Z' },
+    { id: 'wm2', type: 'debit', amount: 200000, balance: 1000000, description: 'Pembayaran Order #ORD-2024-002', refType: 'order', createdAt: '2024-12-15T14:05:00Z' },
     { id: 'wm3', type: 'credit', amount: 10000, balance: 1200000, description: 'Cashback pembelian', refType: 'cashback', createdAt: '2024-12-17T11:00:00Z' },
     { id: 'wm4', type: 'debit', amount: 50000, balance: 1190000, description: 'Pembayaran Order #ORD-2024-003', refType: 'order', createdAt: '2024-12-20T08:00:00Z' },
   ],
+  topUpWallet: (amount) => set((state) => {
+    const newBalance = state.walletBalance + amount
+    return {
+      walletBalance: newBalance,
+      walletMutations: [{
+        id: `wm${Date.now()}`, type: 'credit', amount, balance: newBalance,
+        description: `Top up MartUp Pay`, refType: 'deposit', createdAt: new Date().toISOString()
+      }, ...state.walletMutations]
+    }
+  }),
+  withdrawWallet: (amount, bankAccount) => set((state) => {
+    if (amount > state.walletBalance) return state
+    const newBalance = state.walletBalance - amount
+    return {
+      walletBalance: newBalance,
+      walletMutations: [{
+        id: `wm${Date.now()}`, type: 'debit', amount, balance: newBalance,
+        description: `Tarik dana ke ${bankAccount}`, refType: 'withdrawal', createdAt: new Date().toISOString()
+      }, ...state.walletMutations]
+    }
+  }),
 
   // Vouchers
   vouchers: [
@@ -200,6 +286,16 @@ export const useAppStore = create<AppState>((set, get) => ({
     { id: 'v4', code: 'FLASH10', name: 'Flash Sale 10%', description: 'Diskon 10% untuk Flash Sale', type: 'percentage', value: 10, minPurchase: 0, maxDiscount: 30000, validUntil: '2024-12-31T23:59:59Z', isActive: true },
   ],
   selectedVoucher: null,
+  selectVoucher: (voucher) => set({ selectedVoucher: voucher }),
+
+  // Followed stores
+  followedStoreIds: ['s1', 's2'],
+  toggleFollowStore: (storeId) => set((state) => ({
+    followedStoreIds: state.followedStoreIds.includes(storeId)
+      ? state.followedStoreIds.filter(id => id !== storeId)
+      : [...state.followedStoreIds, storeId]
+  })),
+  isFollowingStore: (storeId) => get().followedStoreIds.includes(storeId),
 
   // Search
   searchQuery: '',
@@ -216,6 +312,7 @@ interface CartState {
   items: CartItem[]
   addItem: (product: Product, variant?: ProductVariant, quantity?: number) => void
   removeItem: (id: string) => void
+  removeItems: (ids: string[]) => void
   updateQuantity: (id: string, quantity: number) => void
   toggleCheck: (id: string) => void
   toggleAllCheck: (checked: boolean) => void
@@ -224,6 +321,7 @@ interface CartState {
   getTotal: () => number
   getCheckedTotal: () => number
   getCheckedCount: () => number
+  getTotalItemCount: () => number
 }
 
 export const useCartStore = create<CartState>((set, get) => ({
@@ -276,6 +374,7 @@ export const useCartStore = create<CartState>((set, get) => ({
     }
   }),
   removeItem: (id) => set((state) => ({ items: state.items.filter(i => i.id !== id) })),
+  removeItems: (ids) => set((state) => ({ items: state.items.filter(i => !ids.includes(i.id)) })),
   updateQuantity: (id, quantity) => set((state) => ({
     items: state.items.map(i => i.id === id ? { ...i, quantity: Math.max(1, quantity) } : i)
   })),
@@ -290,6 +389,7 @@ export const useCartStore = create<CartState>((set, get) => ({
   getTotal: () => get().items.reduce((sum, i) => sum + ((i.product.discountPrice || i.product.price) * i.quantity), 0),
   getCheckedTotal: () => get().items.filter(i => i.isChecked).reduce((sum, i) => sum + ((i.product.discountPrice || i.product.price) * i.quantity), 0),
   getCheckedCount: () => get().items.filter(i => i.isChecked).length,
+  getTotalItemCount: () => get().items.length,
 }))
 
 // ==================== WISHLIST STORE ====================

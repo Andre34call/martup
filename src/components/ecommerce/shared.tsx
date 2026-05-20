@@ -23,11 +23,11 @@ const navItems = [
 
 export function BottomNav() {
   const { currentScreen, navigate, userRole, switchRole, totalUnreadChats } = useAppStore()
-  const { getCheckedCount } = useCartStore()
+  const { getTotalItemCount } = useCartStore()
   const [showRoleMenu, setShowRoleMenu] = useState(false)
   const roleMenuRef = useRef<HTMLDivElement>(null)
 
-  const cartCount = getCheckedCount()
+  const cartCount = getTotalItemCount()
 
   const getActiveTab = (): number => {
     const idx = navItems.findIndex(item => item.screens.includes(currentScreen))

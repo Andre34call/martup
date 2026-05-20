@@ -55,10 +55,61 @@ const quickActionsRow2 = [
 
 // ==================== HOME SCREEN ====================
 export function HomeScreen() {
-  const { navigate, unreadNotificationCount, totalUnreadChats, setSelectedProduct } = useAppStore()
+  const { navigate, unreadNotificationCount, totalUnreadChats, setSelectedProduct, setSearchQuery, showToast } = useAppStore()
   const [currentBanner, setCurrentBanner] = useState(0)
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [showLoadingMore, setShowLoadingMore] = useState(false)
+
+  // Handle quick action button clicks
+  const handleQuickAction = useCallback((key: string) => {
+    switch (key) {
+      case "flash-sale":
+        setSearchQuery("Flash Sale")
+        navigate("search")
+        break
+      case "voucher":
+        navigate("voucher")
+        break
+      case "topup":
+        navigate("deposit")
+        break
+      case "free-ship":
+        setSearchQuery("Gratis Ongkir")
+        navigate("search")
+        break
+      case "coin":
+        navigate("wallet")
+        break
+      case "live":
+        showToast("Fitur Live Streaming segera hadir!", "info")
+        break
+      case "new":
+        setSearchQuery("Baru")
+        navigate("search")
+        break
+      case "local":
+        navigate("category")
+        break
+      case "promo":
+        navigate("voucher")
+        break
+      case "more":
+        showToast("Menu lainnya segera hadir!", "info")
+        break
+    }
+  }, [setSearchQuery, navigate, showToast])
+
+  // Handle banner click
+  const handleBannerClick = useCallback(() => {
+    if (currentBanner === 0 || currentBanner === 1) {
+      setSearchQuery("Flash Sale")
+      navigate("search")
+    } else if (currentBanner === 2) {
+      navigate("voucher")
+    } else if (currentBanner === 3) {
+      navigate("wallet")
+    }
+  }, [currentBanner, setSearchQuery, navigate])
 
   // Auto-play banner carousel
   useEffect(() => {
@@ -177,7 +228,8 @@ export function HomeScreen() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -50 }}
               transition={{ duration: 0.4 }}
-              className={`absolute inset-0 bg-gradient-to-r ${banners[currentBanner].gradient} flex flex-col items-center justify-center text-white`}
+              onClick={handleBannerClick}
+              className={`absolute inset-0 bg-gradient-to-r ${banners[currentBanner].gradient} flex flex-col items-center justify-center text-white cursor-pointer`}
             >
               <h2 className="text-2xl font-extrabold drop-shadow-sm">
                 {banners[currentBanner].title}
@@ -218,9 +270,7 @@ export function HomeScreen() {
             <motion.button
               key={action.key}
               whileTap={{ scale: 0.9 }}
-              onClick={() => {
-                if (action.key === "voucher") navigate("voucher")
-              }}
+              onClick={() => handleQuickAction(action.key)}
               className="flex flex-col items-center gap-1.5 py-2"
             >
               <span className="text-2xl">{action.icon}</span>
@@ -237,6 +287,7 @@ export function HomeScreen() {
             <motion.button
               key={action.key}
               whileTap={{ scale: 0.9 }}
+              onClick={() => handleQuickAction(action.key)}
               className="flex flex-col items-center gap-1.5 py-2"
             >
               <span className="text-2xl">{action.icon}</span>
@@ -262,7 +313,10 @@ export function HomeScreen() {
                 />
               </div>
               <button
-                onClick={() => navigate("search")}
+                onClick={() => {
+                  setSearchQuery("Flash Sale")
+                  navigate("search")
+                }}
                 className="flex items-center gap-0.5 text-xs font-medium text-emerald-600 hover:text-emerald-700 transition-colors"
               >
                 Lihat Semua
@@ -358,6 +412,8 @@ export function HomeScreen() {
         <SectionHeader
           title="Rekomendasi Untukmu"
           subtitle="Berdasarkan preferensimu"
+          onAction={() => navigate("search")}
+          actionLabel="Lihat Semua"
         />
 
         <div className="mt-3 grid grid-cols-2 gap-3">

@@ -24,15 +24,25 @@ const TRENDING_SEARCHES = [
 ]
 
 export function SearchScreen() {
-  const { searchHistory, addSearchHistory, clearSearchHistory, navigate, setSelectedProduct, setSelectedCategory } = useAppStore()
-  const [query, setQuery] = useState("")
-  const [debouncedQuery, setDebouncedQuery] = useState("")
+  const { searchHistory, addSearchHistory, clearSearchHistory, navigate, setSelectedProduct, setSelectedCategory, selectedCategoryId } = useAppStore()
+  // Read initial query from store (set by other screens before navigation)
+  const initialQuery = useRef(useAppStore.getState().searchQuery || "")
+  const [query, setQuery] = useState(initialQuery.current)
+  const [debouncedQuery, setDebouncedQuery] = useState(initialQuery.current)
   const [isFocused, setIsFocused] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
     inputRef.current?.focus()
+  }, [])
+
+  // Clear store's searchQuery after consuming it
+  useEffect(() => {
+    if (initialQuery.current) {
+      useAppStore.getState().setSearchQuery("")
+      initialQuery.current = ""
+    }
   }, [])
 
   const handleInputChange = useCallback((value: string) => {
@@ -79,16 +89,33 @@ export function SearchScreen() {
   }, [setSelectedCategory, navigate])
 
   const searchResults = useMemo(() => {
-    if (!debouncedQuery.trim()) return []
+    let results = MOCK_PRODUCTS
+
+    // Filter by selectedCategoryId if set (coming from category screen)
+    if (selectedCategoryId) {
+      results = results.filter(p => p.categoryId === selectedCategoryId)
+    }
+
+    if (!debouncedQuery.trim()) {
+      return selectedCategoryId ? results : []
+    }
+
     const q = debouncedQuery.toLowerCase()
-    return MOCK_PRODUCTS.filter(
-      (p) =>
+    const isFlashSaleSearch = q.includes("flash sale") || q.includes("flashsale")
+
+    return results.filter((p) => {
+      // If searching for flash sale, include all flash sale products
+      if (isFlashSaleSearch && p.isFlashSale) return true
+
+      // Normal search
+      return (
         p.name.toLowerCase().includes(q) ||
         p.category.name.toLowerCase().includes(q) ||
         p.tags?.some((t) => t.toLowerCase().includes(q)) ||
         p.seller.storeName.toLowerCase().includes(q)
-    )
-  }, [debouncedQuery])
+      )
+    })
+  }, [debouncedQuery, selectedCategoryId])
 
   const recentProducts = useMemo(() => MOCK_PRODUCTS.slice(0, 6), [])
 

@@ -207,20 +207,22 @@ function getOrderActions(status: AdminOrderStatus): { label: string; icon: React
 
 // ==================== COMPONENT ====================
 export function AdminOrdersScreen() {
+  const { updateOrderStatus, showToast, setSelectedOrder, navigate } = useAppStore()
   const [activeTab, setActiveTab] = useState("all")
+  const [orders, setOrders] = useState(mockAdminOrders)
 
   const filtered = activeTab === "all"
-    ? mockAdminOrders
-    : mockAdminOrders.filter((o) => o.status === activeTab)
+    ? orders
+    : orders.filter((o) => o.status === activeTab)
 
-  const pendingCount = mockAdminOrders.filter((o) => o.status === "pending").length
-  const processingCount = mockAdminOrders.filter((o) => o.status === "processing").length
-  const shippedCount = mockAdminOrders.filter((o) => o.status === "shipped").length
-  const deliveredCount = mockAdminOrders.filter((o) => o.status === "delivered").length
-  const cancelledCount = mockAdminOrders.filter((o) => o.status === "cancelled").length
+  const pendingCount = orders.filter((o) => o.status === "pending").length
+  const processingCount = orders.filter((o) => o.status === "processing").length
+  const shippedCount = orders.filter((o) => o.status === "shipped").length
+  const deliveredCount = orders.filter((o) => o.status === "delivered").length
+  const cancelledCount = orders.filter((o) => o.status === "cancelled").length
 
   const tabCounts: Record<string, number> = {
-    all: mockAdminOrders.length,
+    all: orders.length,
     pending: pendingCount,
     processing: processingCount,
     shipped: shippedCount,
@@ -345,6 +347,12 @@ export function AdminOrdersScreen() {
                             variant={action.variant}
                             size="sm"
                             className={`h-8 text-[11px] rounded-lg ${action.className}`}
+                            onClick={() => {
+                              if (action.label === 'Approve') { updateOrderStatus(order.id, 'paid'); showToast('Pesanan disetujui', 'success') }
+                              else if (action.label === 'Batalkan') { updateOrderStatus(order.id, 'cancelled'); setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: 'cancelled' as AdminOrderStatus } : o)); showToast('Pesanan dibatalkan', 'info') }
+                              else if (action.label === 'Kirim') { updateOrderStatus(order.id, 'shipped'); setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: 'shipped' as AdminOrderStatus } : o)); showToast('Pesanan dikirim', 'success') }
+                              else if (action.label === 'Selesai') { updateOrderStatus(order.id, 'delivered'); setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: 'delivered' as AdminOrderStatus } : o)); showToast('Pesanan selesai', 'success') }
+                            }}
                           >
                             {action.icon}
                             {action.label}
@@ -354,6 +362,7 @@ export function AdminOrdersScreen() {
                           variant="outline"
                           size="sm"
                           className="h-8 text-[11px] rounded-lg ml-auto"
+                          onClick={() => { setSelectedOrder(order.id); navigate('orders') }}
                         >
                           <Eye className="w-3 h-3 mr-1" />
                           Detail
@@ -362,6 +371,7 @@ export function AdminOrdersScreen() {
                           variant="outline"
                           size="sm"
                           className="h-8 text-[11px] rounded-lg"
+                          onClick={() => showToast("Invoice dicetak", "info")}
                         >
                           <Printer className="w-3 h-3" />
                         </Button>
@@ -375,6 +385,7 @@ export function AdminOrdersScreen() {
                           variant="outline"
                           size="sm"
                           className="h-8 text-[11px] rounded-lg ml-auto"
+                          onClick={() => { setSelectedOrder(order.id); navigate('orders') }}
                         >
                           <Eye className="w-3 h-3 mr-1" />
                           Detail
@@ -383,6 +394,7 @@ export function AdminOrdersScreen() {
                           variant="outline"
                           size="sm"
                           className="h-8 text-[11px] rounded-lg"
+                          onClick={() => showToast("Invoice dicetak", "info")}
                         >
                           <Printer className="w-3 h-3" />
                         </Button>

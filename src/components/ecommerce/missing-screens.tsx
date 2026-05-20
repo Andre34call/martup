@@ -29,11 +29,18 @@ const stagger = {
 
 // ==================== SETTINGS SCREEN ====================
 export function SettingsScreen() {
-  const { currentUser } = useAppStore()
+  const { currentUser, showToast, logout } = useAppStore()
   const [twoFactor, setTwoFactor] = useState(false)
   const [pushNotif, setPushNotif] = useState(true)
   const [emailNotif, setEmailNotif] = useState(true)
   const [dataSharing, setDataSharing] = useState(false)
+
+  const handleDeleteAccount = () => {
+    if (confirm("Apakah kamu yakin ingin menghapus akun? Tindakan ini tidak bisa dibatalkan.")) {
+      logout()
+      showToast("Akun berhasil dihapus", "success")
+    }
+  }
 
   return (
     <div className="pb-24">
@@ -49,7 +56,7 @@ export function SettingsScreen() {
                 <p className="text-xs text-muted-foreground">Nama</p>
                 <p className="text-sm font-medium text-foreground">{currentUser?.name || "Ahmad Fauzi"}</p>
               </div>
-              <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg">
+              <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg" onClick={() => showToast("Fitur edit segera hadir!", "info")}>
                 <Edit className="w-3 h-3 mr-1" /> Edit
               </Button>
             </div>
@@ -59,7 +66,7 @@ export function SettingsScreen() {
                 <p className="text-xs text-muted-foreground">Email</p>
                 <p className="text-sm font-medium text-foreground">{currentUser?.email || "ahmad@email.com"}</p>
               </div>
-              <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg">
+              <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg" onClick={() => showToast("Fitur edit segera hadir!", "info")}>
                 <Edit className="w-3 h-3 mr-1" /> Edit
               </Button>
             </div>
@@ -69,7 +76,7 @@ export function SettingsScreen() {
                 <p className="text-xs text-muted-foreground">No. Telepon</p>
                 <p className="text-sm font-medium text-foreground">{currentUser?.phone || "08123456789"}</p>
               </div>
-              <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg">
+              <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg" onClick={() => showToast("Fitur edit segera hadir!", "info")}>
                 <Edit className="w-3 h-3 mr-1" /> Edit
               </Button>
             </div>
@@ -80,7 +87,7 @@ export function SettingsScreen() {
         <motion.div {...fadeIn}>
           <SectionHeader title="Keamanan" icon={<Shield className="w-4 h-4" />} />
           <Card className="mt-3 p-4 space-y-3">
-            <button className="w-full flex items-center justify-between py-1">
+            <button className="w-full flex items-center justify-between py-1" onClick={() => showToast("Fitur ubah password segera hadir!", "info")}>
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-amber-50 dark:bg-amber-900/30 flex items-center justify-center">
                   <Lock className="w-4 h-4 text-amber-600" />
@@ -141,7 +148,7 @@ export function SettingsScreen() {
         <motion.div {...fadeIn}>
           <SectionHeader title="Preferensi" icon={<Globe className="w-4 h-4" />} />
           <Card className="mt-3 p-4 space-y-3">
-            <div className="flex items-center justify-between py-1">
+            <div className="flex items-center justify-between py-1 cursor-pointer" onClick={() => showToast("Fitur ini segera hadir!", "info")}>
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-cyan-50 dark:bg-cyan-900/30 flex items-center justify-center">
                   <Globe className="w-4 h-4 text-cyan-600" />
@@ -154,7 +161,7 @@ export function SettingsScreen() {
               <ChevronRight className="w-4 h-4 text-muted-foreground" />
             </div>
             <Separator />
-            <div className="flex items-center justify-between py-1">
+            <div className="flex items-center justify-between py-1 cursor-pointer" onClick={() => showToast("Fitur ini segera hadir!", "info")}>
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-orange-50 dark:bg-orange-900/30 flex items-center justify-center">
                   <MapPin className="w-4 h-4 text-orange-600" />
@@ -190,7 +197,7 @@ export function SettingsScreen() {
 
         {/* Delete Account */}
         <motion.div {...fadeIn} className="pt-2 pb-4">
-          <Button variant="outline" className="w-full h-11 rounded-xl text-red-500 border-red-200 dark:border-red-900/50 hover:bg-red-50 dark:hover:bg-red-900/20">
+          <Button variant="outline" onClick={handleDeleteAccount} className="w-full h-11 rounded-xl text-red-500 border-red-200 dark:border-red-900/50 hover:bg-red-50 dark:hover:bg-red-900/20">
             <Trash2 className="w-4 h-4 mr-2" /> Hapus Akun
           </Button>
         </motion.div>
@@ -201,7 +208,7 @@ export function SettingsScreen() {
 
 // ==================== VOUCHER SCREEN ====================
 export function VoucherScreen() {
-  const { vouchers } = useAppStore()
+  const { vouchers, selectVoucher, showToast, goBack } = useAppStore()
   const [activeTab, setActiveTab] = useState("available")
   const [code, setCode] = useState("")
   const [copiedId, setCopiedId] = useState<string | null>(null)
@@ -218,6 +225,28 @@ export function VoucherScreen() {
     setTimeout(() => setCopiedId(null), 2000)
   }
 
+  const handleUseCode = () => {
+    const trimmedCode = code.trim().toUpperCase()
+    if (!trimmedCode) {
+      showToast("Masukkan kode voucher terlebih dahulu", "error")
+      return
+    }
+    const found = vouchers.find(v => v.code.toUpperCase() === trimmedCode)
+    if (found) {
+      selectVoucher(found)
+      showToast(`Voucher "${found.name}" berhasil dipakai!`, "success")
+      goBack()
+    } else {
+      showToast("Kode voucher tidak valid", "error")
+    }
+  }
+
+  const handleUseVoucher = (voucher: typeof vouchers[0]) => {
+    selectVoucher(voucher)
+    showToast(`Voucher "${voucher.name}" berhasil dipakai!`, "success")
+    goBack()
+  }
+
   return (
     <div className="pb-24">
       <PageHeader title="Voucher Saya" />
@@ -231,7 +260,7 @@ export function VoucherScreen() {
             placeholder="Masukkan Kode"
             className="flex-1 rounded-xl h-10"
           />
-          <Button className="bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-10 px-5">
+          <Button onClick={handleUseCode} className="bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-10 px-5">
             Pakai
           </Button>
         </motion.div>
@@ -299,7 +328,7 @@ export function VoucherScreen() {
                         <span className="mx-1">·</span>
                         <span>s/d {new Date(voucher.validUntil).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}</span>
                       </div>
-                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white">
+                      <Button size="sm" onClick={() => handleUseVoucher(voucher)} className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white">
                         Gunakan
                       </Button>
                     </div>
@@ -316,17 +345,103 @@ export function VoucherScreen() {
 
 // ==================== ADDRESS SCREEN ====================
 export function AddressScreen() {
-  const { addresses } = useAppStore()
+  const { addresses, addAddress, updateAddress, deleteAddress, setDefaultAddress, showToast } = useAppStore()
   const [showAddForm, setShowAddForm] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [formLabel, setFormLabel] = useState("")
+  const [formRecipient, setFormRecipient] = useState("")
+  const [formPhone, setFormPhone] = useState("")
+  const [formAddress, setFormAddress] = useState("")
+  const [formCity, setFormCity] = useState("")
+  const [formProvince, setFormProvince] = useState("")
+  const [formPostalCode, setFormPostalCode] = useState("")
+
+  const resetForm = () => {
+    setFormLabel("")
+    setFormRecipient("")
+    setFormPhone("")
+    setFormAddress("")
+    setFormCity("")
+    setFormProvince("")
+    setFormPostalCode("")
+    setEditingId(null)
+  }
+
+  const handleEdit = (addr: typeof addresses[0]) => {
+    setEditingId(addr.id)
+    setFormLabel(addr.label)
+    setFormRecipient(addr.recipient)
+    setFormPhone(addr.phone)
+    setFormAddress(addr.address)
+    setFormCity(addr.city)
+    setFormProvince(addr.province)
+    setFormPostalCode(addr.postalCode)
+    setShowAddForm(true)
+  }
+
+  const handleSaveAddress = () => {
+    if (!formLabel.trim() || !formRecipient.trim() || !formPhone.trim() || !formAddress.trim() || !formCity.trim() || !formProvince.trim() || !formPostalCode.trim()) {
+      showToast("Semua field wajib diisi", "error")
+      return
+    }
+
+    if (editingId) {
+      const existingAddr = addresses.find(a => a.id === editingId)
+      updateAddress({
+        id: editingId,
+        label: formLabel,
+        recipient: formRecipient,
+        phone: formPhone,
+        address: formAddress,
+        city: formCity,
+        province: formProvince,
+        postalCode: formPostalCode,
+        isDefault: existingAddr?.isDefault || false,
+      })
+      showToast("Alamat berhasil diperbarui!", "success")
+    } else {
+      addAddress({
+        id: `a${Date.now()}`,
+        label: formLabel,
+        recipient: formRecipient,
+        phone: formPhone,
+        address: formAddress,
+        city: formCity,
+        province: formProvince,
+        postalCode: formPostalCode,
+        isDefault: addresses.length === 0,
+      })
+      showToast("Alamat berhasil ditambahkan!", "success")
+    }
+    resetForm()
+    setShowAddForm(false)
+  }
+
+  const handleSetDefault = (id: string) => {
+    setDefaultAddress(id)
+    showToast("Alamat utama berhasil diubah!", "success")
+  }
+
+  const handleDelete = (id: string) => {
+    deleteAddress(id)
+    showToast("Alamat berhasil dihapus", "success")
+  }
+
+  const handleToggleAddForm = () => {
+    if (showAddForm) {
+      resetForm()
+    }
+    setShowAddForm(!showAddForm)
+  }
 
   return (
     <div className="pb-24">
       <PageHeader title="Alamat" rightAction={
         <Button
-          onClick={() => setShowAddForm(!showAddForm)}
+          onClick={handleToggleAddForm}
           className="bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-9 text-xs"
         >
-          <Plus className="w-3.5 h-3.5 mr-1" /> Tambah
+          <Plus className="w-3.5 h-3.5 mr-1" /> {editingId ? "Edit" : "Tambah"}
         </Button>
       } />
 
@@ -350,16 +465,16 @@ export function AddressScreen() {
                 <p className="text-xs text-muted-foreground">{addr.phone}</p>
                 <p className="text-xs text-muted-foreground mt-1">{addr.address}, {addr.city}, {addr.province} {addr.postalCode}</p>
                 <div className="flex gap-2 mt-3 pt-3 border-t border-border/50">
-                  <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg">
+                  <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg" onClick={() => handleEdit(addr)}>
                     <Edit className="w-3 h-3 mr-1" /> Edit
                   </Button>
                   {!addr.isDefault && (
-                    <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-emerald-600">
+                    <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-emerald-600" onClick={() => handleSetDefault(addr.id)}>
                       Utamakan
                     </Button>
                   )}
                   {!addr.isDefault && (
-                    <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500">
+                    <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500" onClick={() => handleDelete(addr.id)}>
                       <Trash2 className="w-3 h-3" />
                     </Button>
                   )}
@@ -369,45 +484,45 @@ export function AddressScreen() {
           ))}
         </div>
 
-        {/* Add Address Form */}
+        {/* Add/Edit Address Form */}
         <AnimatePresence>
           {showAddForm && (
             <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}>
-              <SectionHeader title="Tambah Alamat Baru" icon={<Plus className="w-4 h-4" />} />
+              <SectionHeader title={editingId ? "Edit Alamat" : "Tambah Alamat Baru"} icon={<Plus className="w-4 h-4" />} />
               <Card className="mt-3 p-4 space-y-3">
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-foreground">Label</label>
-                    <Input placeholder="Rumah" className="rounded-xl h-9" />
+                    <Input value={formLabel} onChange={(e) => setFormLabel(e.target.value)} placeholder="Rumah" className="rounded-xl h-9" />
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-foreground">Penerima</label>
-                    <Input placeholder="Nama" className="rounded-xl h-9" />
+                    <Input value={formRecipient} onChange={(e) => setFormRecipient(e.target.value)} placeholder="Nama" className="rounded-xl h-9" />
                   </div>
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-foreground">No. Telepon</label>
-                  <Input placeholder="08123456789" className="rounded-xl h-9" />
+                  <Input value={formPhone} onChange={(e) => setFormPhone(e.target.value)} placeholder="08123456789" className="rounded-xl h-9" />
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-foreground">Alamat Lengkap</label>
-                  <Input placeholder="Jl. ..." className="rounded-xl h-9" />
+                  <Input value={formAddress} onChange={(e) => setFormAddress(e.target.value)} placeholder="Jl. ..." className="rounded-xl h-9" />
                 </div>
                 <div className="grid grid-cols-3 gap-3">
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-foreground">Kota</label>
-                    <Input placeholder="Jakarta" className="rounded-xl h-9" />
+                    <Input value={formCity} onChange={(e) => setFormCity(e.target.value)} placeholder="Jakarta" className="rounded-xl h-9" />
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-foreground">Provinsi</label>
-                    <Input placeholder="DKI Jakarta" className="rounded-xl h-9" />
+                    <Input value={formProvince} onChange={(e) => setFormProvince(e.target.value)} placeholder="DKI Jakarta" className="rounded-xl h-9" />
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-foreground">Kode Pos</label>
-                    <Input placeholder="12345" className="rounded-xl h-9" />
+                    <Input value={formPostalCode} onChange={(e) => setFormPostalCode(e.target.value)} placeholder="12345" className="rounded-xl h-9" />
                   </div>
                 </div>
-                <Button className="w-full bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-10">
+                <Button onClick={handleSaveAddress} className="w-full bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-10">
                   Simpan Alamat
                 </Button>
               </Card>
@@ -421,6 +536,7 @@ export function AddressScreen() {
 
 // ==================== REVIEW SCREEN ====================
 export function ReviewScreen() {
+  const { showToast, goBack } = useAppStore()
   const [ratings, setRatings] = useState<Record<string, number>>({})
   const [reviews, setReviews] = useState<Record<string, string>>({})
 
@@ -436,6 +552,11 @@ export function ReviewScreen() {
 
   const handleRating = (orderId: string, star: number) => {
     setRatings(prev => ({ ...prev, [orderId]: star }))
+  }
+
+  const handleSubmitReview = () => {
+    showToast("Ulasan berhasil dikirim!", "success")
+    goBack()
   }
 
   return (
@@ -490,13 +611,17 @@ export function ReviewScreen() {
 
                   {/* Photo placeholder */}
                   <div className="flex gap-2">
-                    <div className="w-16 h-16 rounded-lg bg-muted/50 border-2 border-dashed border-border flex items-center justify-center cursor-pointer hover:bg-muted transition-colors">
+                    <div
+                      className="w-16 h-16 rounded-lg bg-muted/50 border-2 border-dashed border-border flex items-center justify-center cursor-pointer hover:bg-muted transition-colors"
+                      onClick={() => showToast("Fitur upload foto segera hadir!", "info")}
+                    >
                       <Camera className="w-5 h-5 text-muted-foreground" />
                     </div>
                   </div>
 
                   <Button
                     disabled={!ratings[order.id]}
+                    onClick={handleSubmitReview}
                     className="w-full bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-9 disabled:opacity-40"
                   >
                     <Send className="w-3.5 h-3.5 mr-1" /> Kirim Ulasan
@@ -538,6 +663,7 @@ export function ReviewScreen() {
 
 // ==================== REFUND SCREEN ====================
 export function RefundScreen() {
+  const { showToast, goBack } = useAppStore()
   const [activeTab, setActiveTab] = useState("active")
   const [showForm, setShowForm] = useState(false)
 
@@ -550,6 +676,11 @@ export function RefundScreen() {
     { id: "rh1", orderNumber: "ORD-2024-100", product: "T-Shirt Premium", amount: 150000, status: "Selesai", date: "10 Nov 2024" },
     { id: "rh2", orderNumber: "ORD-2024-085", product: "Headset Bluetooth", amount: 350000, status: "Ditolak", date: "5 Okt 2024" },
   ]
+
+  const handleSubmitRefund = () => {
+    showToast("Pengajuan refund berhasil dikirim!", "success")
+    goBack()
+  }
 
   return (
     <div className="pb-24">
@@ -642,7 +773,7 @@ export function RefundScreen() {
                         className="w-full min-h-[60px] rounded-xl border border-input bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 resize-none"
                       />
                     </div>
-                    <Button className="w-full bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-10">
+                    <Button onClick={handleSubmitRefund} className="w-full bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-10">
                       Kirim Pengajuan
                     </Button>
                   </Card>
@@ -678,6 +809,7 @@ export function RefundScreen() {
 
 // ==================== HELP SCREEN ====================
 export function HelpScreen() {
+  const { showToast, navigate } = useAppStore()
   const [searchHelp, setSearchHelp] = useState("")
   const [openSection, setOpenSection] = useState<string | null>(null)
 
@@ -735,6 +867,21 @@ export function HelpScreen() {
     },
   ]
 
+  const filteredSections = searchHelp.trim()
+    ? faqSections.filter(section =>
+        section.title.toLowerCase().includes(searchHelp.toLowerCase()) ||
+        section.questions.some(q =>
+          q.q.toLowerCase().includes(searchHelp.toLowerCase()) ||
+          q.a.toLowerCase().includes(searchHelp.toLowerCase())
+        )
+      )
+    : faqSections
+
+  const handleContactCS = () => {
+    showToast("Menghubungi Customer Service...", "info")
+    navigate("chat")
+  }
+
   return (
     <div className="pb-24">
       <PageHeader title="Pusat Bantuan" />
@@ -743,7 +890,7 @@ export function HelpScreen() {
         <SearchBar value={searchHelp} onChange={setSearchHelp} placeholder="Cari pertanyaan..." />
 
         <div className="space-y-2">
-          {faqSections.map((section, i) => (
+          {filteredSections.map((section, i) => (
             <motion.div key={section.key} custom={i} variants={stagger} initial="initial" animate="animate">
               <Card className="overflow-hidden">
                 <button
@@ -760,7 +907,13 @@ export function HelpScreen() {
                 </button>
                 {openSection === section.key && (
                   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="px-4 pb-4 space-y-3">
-                    {section.questions.map((q, idx) => (
+                    {section.questions
+                      .filter(q =>
+                        !searchHelp.trim() ||
+                        q.q.toLowerCase().includes(searchHelp.toLowerCase()) ||
+                        q.a.toLowerCase().includes(searchHelp.toLowerCase())
+                      )
+                      .map((q, idx) => (
                       <div key={idx} className="pl-12">
                         <p className="text-sm font-medium text-foreground">{q.q}</p>
                         <p className="text-xs text-muted-foreground mt-1">{q.a}</p>
@@ -772,9 +925,16 @@ export function HelpScreen() {
               </Card>
             </motion.div>
           ))}
+          {filteredSections.length === 0 && (
+            <EmptyState
+              icon={<HelpCircle className="w-10 h-10 text-muted-foreground" />}
+              title="Tidak Ditemukan"
+              subtitle="Coba kata kunci lain untuk menemukan bantuan"
+            />
+          )}
         </div>
 
-        <Button className="w-full bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-11">
+        <Button onClick={handleContactCS} className="w-full bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-11">
           <Phone className="w-4 h-4 mr-2" /> Hubungi CS
         </Button>
       </div>
@@ -784,6 +944,7 @@ export function HelpScreen() {
 
 // ==================== FOLLOWED STORES SCREEN ====================
 export function FollowedStoresScreen() {
+  const { setSelectedSeller, navigate } = useAppStore()
   const [following, setFollowing] = useState<Record<string, boolean>>({
     s1: true, s2: true, s4: true, s5: true, s3: true
   })
@@ -797,6 +958,11 @@ export function FollowedStoresScreen() {
   ]
 
   const colors = ["bg-emerald-500", "bg-orange-500", "bg-pink-500", "bg-violet-500", "bg-cyan-500"]
+
+  const handleStoreClick = (storeId: string) => {
+    setSelectedSeller(storeId)
+    navigate("seller-shop")
+  }
 
   return (
     <div className="pb-24">
@@ -812,7 +978,7 @@ export function FollowedStoresScreen() {
         ) : (
           stores.map((store, i) => (
             <motion.div key={store.id} custom={i} variants={stagger} initial="initial" animate="animate">
-              <Card className="p-4">
+              <Card className="p-4 cursor-pointer" onClick={() => handleStoreClick(store.id)}>
                 <div className="flex items-center gap-3">
                   <div className={`w-12 h-12 rounded-xl ${colors[i % colors.length]} text-white font-bold flex items-center justify-center text-lg flex-shrink-0`}>
                     {store.name.charAt(0)}
@@ -832,7 +998,7 @@ export function FollowedStoresScreen() {
                   </div>
                   <motion.button
                     whileTap={{ scale: 0.95 }}
-                    onClick={() => setFollowing(prev => ({ ...prev, [store.id]: !prev[store.id] }))}
+                    onClick={(e) => { e.stopPropagation(); setFollowing(prev => ({ ...prev, [store.id]: !prev[store.id] })) }}
                     className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors border ${
                       following[store.id]
                         ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800"
@@ -853,7 +1019,7 @@ export function FollowedStoresScreen() {
 
 // ==================== DEPOSIT SCREEN ====================
 export function DepositScreen() {
-  const { currentUser } = useAppStore()
+  const { currentUser, walletBalance, topUpWallet, showToast, goBack } = useAppStore()
   const [selectedAmount, setSelectedAmount] = useState<number | null>(null)
   const [customAmount, setCustomAmount] = useState("")
   const [paymentMethod, setPaymentMethod] = useState("gopay")
@@ -873,6 +1039,17 @@ export function DepositScreen() {
     { key: "bank", label: "Bank Transfer", color: "bg-cyan-600" },
   ]
 
+  const handleTopUp = () => {
+    const amount = selectedAmount || Number(customAmount)
+    if (!amount || amount <= 0) {
+      showToast("Pilih nominal top up terlebih dahulu", "error")
+      return
+    }
+    topUpWallet(amount)
+    showToast(`Top up ${formatPrice(amount)} berhasil!`, "success")
+    goBack()
+  }
+
   return (
     <div className="pb-24">
       <PageHeader title="Top Up Saldo" />
@@ -881,7 +1058,7 @@ export function DepositScreen() {
         {/* Balance Card */}
         <motion.div {...fadeIn}>
           <WalletBalanceCard
-            balance={1200000}
+            balance={walletBalance}
             coins={currentUser?.coins || 500}
             onTopUp={() => {}}
             onWithdraw={() => {}}
@@ -952,6 +1129,7 @@ export function DepositScreen() {
         <motion.div {...fadeIn}>
           <Button
             disabled={!selectedAmount && !customAmount}
+            onClick={handleTopUp}
             className="w-full bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-11 disabled:opacity-40"
           >
             <Wallet className="w-4 h-4 mr-2" /> Top Up Sekarang
@@ -964,14 +1142,31 @@ export function DepositScreen() {
 
 // ==================== WITHDRAW SCREEN ====================
 export function WithdrawScreen() {
-  const { currentUser } = useAppStore()
+  const { currentUser, walletBalance, walletHoldBalance, withdrawWallet, showToast, goBack } = useAppStore()
   const [amount, setAmount] = useState("")
+
+  const bankAccount = "BCA ****1234 - Ahmad Fauzi"
 
   const withdrawHistory = [
     { id: "wh1", amount: 500000, bank: "BCA ****1234", status: "Berhasil", date: "15 Des 2024" },
     { id: "wh2", amount: 1000000, bank: "BCA ****1234", status: "Berhasil", date: "1 Des 2024" },
     { id: "wh3", amount: 300000, bank: "BCA ****1234", status: "Berhasil", date: "20 Nov 2024" },
   ]
+
+  const handleWithdraw = () => {
+    const withdrawAmount = Number(amount)
+    if (!withdrawAmount || withdrawAmount <= 0) {
+      showToast("Masukkan jumlah penarikan yang valid", "error")
+      return
+    }
+    if (withdrawAmount > walletBalance) {
+      showToast("Jumlah penarikan melebihi saldo tersedia", "error")
+      return
+    }
+    withdrawWallet(withdrawAmount, bankAccount)
+    showToast(`Penarikan ${formatPrice(withdrawAmount)} berhasil diajukan!`, "success")
+    goBack()
+  }
 
   return (
     <div className="pb-24">
@@ -983,8 +1178,8 @@ export function WithdrawScreen() {
           <div className="rounded-2xl p-5 bg-gradient-to-br from-emerald-500 to-emerald-700 text-white relative overflow-hidden">
             <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
             <p className="text-sm text-emerald-100 font-medium">Saldo Tersedia</p>
-            <p className="text-3xl font-bold mt-1">{formatPrice(1200000)}</p>
-            <p className="text-xs text-emerald-200 mt-1">Saldo tertahan: {formatPrice(200000)}</p>
+            <p className="text-3xl font-bold mt-1">{formatPrice(walletBalance)}</p>
+            <p className="text-xs text-emerald-200 mt-1">Saldo tertahan: {formatPrice(walletHoldBalance)}</p>
           </div>
         </motion.div>
 
@@ -1024,6 +1219,7 @@ export function WithdrawScreen() {
         <motion.div {...fadeIn}>
           <Button
             disabled={!amount || Number(amount) <= 0}
+            onClick={handleWithdraw}
             className="w-full bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-11 disabled:opacity-40"
           >
             <ArrowUpRight className="w-4 h-4 mr-2" /> Tarik Dana

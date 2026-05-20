@@ -19,7 +19,7 @@ import { useState, useMemo, useCallback } from "react"
 
 // ==================== MAIN COMPONENT ====================
 export function SellerShopScreen() {
-  const { selectedSellerId, navigate, setSelectedProduct } = useAppStore()
+  const { selectedSellerId, navigate, setSelectedProduct, toggleFollowStore, isFollowingStore, setSelectedChatRoom, chatRooms } = useAppStore()
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
   const [sortBy, setSortBy] = useState<"popular" | "newest" | "price-low" | "price-high">("popular")
 
@@ -146,18 +146,23 @@ export function SellerShopScreen() {
             {/* Action buttons */}
             <div className="flex items-center gap-2">
               <Button
-                variant="outline"
+                variant={isFollowingStore(selectedSellerId || '') ? "default" : "outline"}
                 size="sm"
-                className="flex-1 h-9 text-xs rounded-lg border-emerald-500 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+                className={isFollowingStore(selectedSellerId || '') ? "flex-1 h-9 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" : "flex-1 h-9 text-xs rounded-lg border-emerald-500 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"}
+                onClick={() => toggleFollowStore(selectedSellerId || '')}
               >
                 <Check className="w-3.5 h-3.5 mr-1" />
-                Follow
+                {isFollowingStore(selectedSellerId || '') ? 'Following' : 'Follow'}
               </Button>
               <Button
                 variant="outline"
                 size="sm"
                 className="flex-1 h-9 text-xs rounded-lg"
-                onClick={() => navigate('chat-room')}
+                onClick={() => {
+                  const chatRoom = chatRooms.find(r => r.seller.id === selectedSellerId)
+                  if (chatRoom) setSelectedChatRoom(chatRoom.id)
+                  navigate('chat-room')
+                }}
               >
                 <MessageCircle className="w-3.5 h-3.5 mr-1" />
                 Chat

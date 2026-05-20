@@ -2,7 +2,7 @@
 
 import { motion, AnimatePresence } from "framer-motion"
 import { useAppStore } from "@/lib/store"
-import { formatRelativeTime } from "@/lib/mock-data"
+import { formatPrice, formatRelativeTime } from "@/lib/mock-data"
 import { PageHeader, EmptyState, SearchBar } from "./shared"
 import type { ChatRoom, ChatMessage } from "@/lib/types"
 import { useState, useMemo, useCallback, useRef, useEffect } from "react"
@@ -99,6 +99,7 @@ function ChatRoomItem({ room, onTap }: { room: ChatRoom; onTap: () => void }) {
 
 // ==================== CHAT ROOM VIEW ====================
 function ChatRoomView({ room, onBack }: { room: ChatRoom; onBack: () => void }) {
+  const { showToast } = useAppStore()
   const [message, setMessage] = useState("")
   const [messages, setMessages] = useState<ChatMessage[]>(MOCK_MESSAGES[room.id] || [])
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -157,10 +158,16 @@ function ChatRoomView({ room, onBack }: { room: ChatRoom; onBack: () => void }) 
             </div>
           </div>
           <div className="flex items-center gap-1">
-            <button className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-muted transition-colors">
+            <button
+              className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-muted transition-colors"
+              onClick={() => showToast("Fitur panggilan segera hadir!", "info")}
+            >
               <Phone className="w-4.5 h-4.5 text-muted-foreground" />
             </button>
-            <button className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-muted transition-colors">
+            <button
+              className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-muted transition-colors"
+              onClick={() => showToast("Opsi lainnya", "info")}
+            >
               <MoreVertical className="w-4.5 h-4.5 text-muted-foreground" />
             </button>
           </div>
@@ -236,7 +243,7 @@ function ChatRoomView({ room, onBack }: { room: ChatRoom; onBack: () => void }) 
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs font-medium text-foreground truncate">{room.product.name}</p>
-              <p className="text-[10px] text-emerald-600 font-semibold">{formatRelativeTime(room.lastMessageTime)}</p>
+              <p className="text-[10px] text-emerald-600 font-semibold">{formatPrice(room.product.price)}</p>
             </div>
           </div>
         </div>
@@ -245,7 +252,10 @@ function ChatRoomView({ room, onBack }: { room: ChatRoom; onBack: () => void }) 
       {/* Input Bar */}
       <div className="sticky bottom-0 bg-background border-t border-border/30 px-4 py-3 pb-safe">
         <div className="flex items-center gap-2">
-          <button className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-muted transition-colors flex-shrink-0">
+          <button
+            className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-muted transition-colors flex-shrink-0"
+            onClick={() => showToast("Fitur lampiran segera hadir!", "info")}
+          >
             <Paperclip className="w-5 h-5 text-muted-foreground" />
           </button>
           <div className="flex-1 relative">
@@ -257,7 +267,10 @@ function ChatRoomView({ room, onBack }: { room: ChatRoom; onBack: () => void }) 
               placeholder="Ketik pesan..."
               className="h-10 rounded-full bg-muted/50 border-border/50 pr-10 focus:border-emerald-500 focus:ring-emerald-500/20"
             />
-            <button className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 flex items-center justify-center rounded-full hover:bg-muted transition-colors">
+            <button
+              className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 flex items-center justify-center rounded-full hover:bg-muted transition-colors"
+              onClick={() => showToast("Emoji segera hadir!", "info")}
+            >
               <Smile className="w-4 h-4 text-muted-foreground" />
             </button>
           </div>

@@ -34,7 +34,7 @@ interface VariantGroup {
 
 // ==================== SELLER ADD PRODUCT SCREEN ====================
 export function SellerAddProductScreen() {
-  const { navigate } = useAppStore()
+  const { navigate, showToast } = useAppStore()
 
   // Form state
   const [productName, setProductName] = useState("")
@@ -50,7 +50,6 @@ export function SellerAddProductScreen() {
   const [tagInput, setTagInput] = useState("")
   const [tags, setTags] = useState<string[]>([])
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false)
-  const [showToast, setShowToast] = useState(false)
   const [variantInputValues, setVariantInputValues] = useState<Record<string, { name: string; value: string }>>({})
 
   // Derived
@@ -157,11 +156,29 @@ export function SellerAddProductScreen() {
 
   // Submit handler
   const handleSubmit = () => {
-    setShowToast(true)
-    setTimeout(() => {
-      setShowToast(false)
-      navigate("seller-products")
-    }, 2000)
+    if (!productName.trim()) {
+      showToast("Nama produk harus diisi", "error")
+      return
+    }
+    if (!priceNumber || priceNumber <= 0) {
+      showToast("Harga harus diisi", "error")
+      return
+    }
+    if (!category) {
+      showToast("Kategori harus dipilih", "error")
+      return
+    }
+    if (!stock || parseInt(stock) <= 0) {
+      showToast("Stok harus diisi", "error")
+      return
+    }
+    showToast("Produk berhasil dipublikasikan! 🎉", "success")
+    setTimeout(() => navigate("seller-products"), 1500)
+  }
+
+  const handleDraft = () => {
+    showToast("Produk disimpan sebagai draft", "info")
+    setTimeout(() => navigate("seller-products"), 1000)
   }
 
   return (
@@ -182,6 +199,7 @@ export function SellerAddProductScreen() {
                 <motion.button
                   key={idx}
                   whileTap={{ scale: 0.95 }}
+                  onClick={() => showToast("Fitur upload foto segera hadir!", "info")}
                   className="aspect-square rounded-xl border-2 border-dashed border-border hover:border-emerald-400 transition-colors flex flex-col items-center justify-center gap-1 bg-muted/20 hover:bg-emerald-50/50 dark:hover:bg-emerald-900/10"
                 >
                   {idx === 0 ? (
@@ -604,32 +622,14 @@ export function SellerAddProductScreen() {
           <Button
             variant="outline"
             className="w-full h-10 rounded-xl text-sm"
-            onClick={() => navigate("seller-products")}
+            onClick={handleDraft}
           >
             Simpan sebagai Draft
           </Button>
         </motion.div>
       </div>
 
-      {/* ============ Toast Notification ============ */}
-      {showToast && (
-        <motion.div
-          initial={{ opacity: 0, y: 50, scale: 0.9 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: 50, scale: 0.9 }}
-          className="fixed bottom-24 left-4 right-4 z-50"
-        >
-          <div className="bg-emerald-600 text-white rounded-2xl p-4 shadow-xl flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
-              <Package className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-sm font-bold">Produk Berhasil Dipublikasikan! 🎉</p>
-              <p className="text-xs text-emerald-100">Produk kamu sudah live dan bisa dilihat pembeli</p>
-            </div>
-          </div>
-        </motion.div>
-      )}
+
     </div>
   )
 }

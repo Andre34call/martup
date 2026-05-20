@@ -1,6 +1,7 @@
 'use client'
 
 import { AnimatePresence, motion } from 'framer-motion'
+import { Check, X, Info } from 'lucide-react'
 import { useAppStore } from '@/lib/store'
 import { BottomNav, AdminBottomNav, SellerBottomNav } from '@/components/ecommerce/shared'
 
@@ -60,6 +61,40 @@ const SUB_SCREENS = [
   'address', 'help', 'followed-stores', 'deposit', 'withdraw',
   'settings', 'voucher', 'order-tracking', 'seller-add-product',
 ]
+
+// ==================== GLOBAL TOAST ====================
+function GlobalToast() {
+  const toast = useAppStore((s) => s.toast)
+  const hideToast = useAppStore((s) => s.hideToast)
+
+  return (
+    <AnimatePresence>
+      {toast && (
+        <motion.div
+          initial={{ opacity: 0, y: -60, scale: 0.95 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: -60, scale: 0.95 }}
+          transition={{ duration: 0.25, ease: 'easeOut' }}
+          className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] max-w-[400px] w-[90%]"
+        >
+          <div className={`flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-lg border ${
+            toast.type === 'success' ? 'bg-emerald-600 text-white border-emerald-500' :
+            toast.type === 'error' ? 'bg-red-600 text-white border-red-500' :
+            'bg-card text-foreground border-border'
+          }`}>
+            {toast.type === 'success' && <Check className="w-5 h-5 flex-shrink-0" />}
+            {toast.type === 'error' && <X className="w-5 h-5 flex-shrink-0" />}
+            {toast.type === 'info' && <Info className="w-5 h-5 flex-shrink-0" />}
+            <span className="text-sm font-medium flex-1">{toast.message}</span>
+            <button onClick={hideToast} className="ml-2 opacity-70 hover:opacity-100">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+}
 
 function ScreenRenderer() {
   const currentScreen = useAppStore((s) => s.currentScreen)
@@ -165,6 +200,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-background flex justify-center">
       <div className="app-container flex flex-col min-h-screen w-full">
+        <GlobalToast />
         <ScreenRenderer />
         {getBottomNav()}
       </div>

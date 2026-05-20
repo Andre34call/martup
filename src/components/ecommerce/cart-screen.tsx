@@ -121,7 +121,7 @@ function CartItemCard({
 
 // ==================== MAIN COMPONENT ====================
 export function CartScreen() {
-  const { navigate, setSelectedProduct, selectedVoucher } = useAppStore()
+  const { navigate, setSelectedProduct, setSelectedSeller, selectedVoucher } = useAppStore()
   const {
     items, removeItem, updateQuantity, toggleCheck, toggleAllCheck,
     getCheckedTotal, getCheckedCount
@@ -257,7 +257,7 @@ export function CartScreen() {
                     </Badge>
                   )}
                 </div>
-                <button className="text-xs text-emerald-600 font-medium flex items-center gap-0.5">
+                <button className="text-xs text-emerald-600 font-medium flex items-center gap-0.5" onClick={() => { setSelectedSeller(group.seller.id); navigate('seller-shop') }}>
                   Kunjungi
                   <ChevronRight className="w-3 h-3" />
                 </button>

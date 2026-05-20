@@ -356,10 +356,11 @@ export function SellerDashboard() {
 
 // ==================== SELLER PRODUCTS ====================
 export function SellerProducts() {
-  const { navigate } = useAppStore()
+  const { navigate, showToast } = useAppStore()
   const [search, setSearch] = useState("")
+  const [products, setProducts] = useState(mockSellerProducts)
 
-  const filtered = mockSellerProducts.filter(p =>
+  const filtered = products.filter(p =>
     p.name.toLowerCase().includes(search.toLowerCase())
   )
 
@@ -419,7 +420,10 @@ export function SellerProducts() {
                     <Button variant="outline" size="sm" className="flex-1 h-8 text-xs rounded-lg" onClick={() => navigate("seller-add-product")}>
                       <Edit className="w-3 h-3 mr-1" /> Edit
                     </Button>
-                    <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20">
+                    <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20" onClick={() => {
+                      showToast("Produk dihapus", "info")
+                      setProducts(prev => prev.filter(p => p.id !== product.id))
+                    }}>
                       <Trash2 className="w-3 h-3" />
                     </Button>
                   </div>
@@ -435,7 +439,7 @@ export function SellerProducts() {
 
 // ==================== SELLER ORDERS ====================
 export function SellerOrders() {
-  const { navigate } = useAppStore()
+  const { navigate, updateOrderStatus, showToast } = useAppStore()
   const [activeTab, setActiveTab] = useState("all")
 
   const tabs = [
@@ -507,16 +511,16 @@ export function SellerOrders() {
                     <p className="text-base font-bold text-foreground">{formatPrice(order.amount)}</p>
                     <div className="flex gap-2">
                       {order.status === "paid" && (
-                        <Button size="sm" className="h-8 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white">
+                        <Button size="sm" className="h-8 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={() => { updateOrderStatus(order.id, 'processing'); showToast("Pesanan sedang diproses", "success") }}>
                           <Package className="w-3 h-3 mr-1" /> Proses
                         </Button>
                       )}
                       {order.status === "processing" && (
-                        <Button size="sm" className="h-8 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white">
+                        <Button size="sm" className="h-8 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={() => { updateOrderStatus(order.id, 'shipped'); showToast("Pesanan sedang dikirim", "success") }}>
                           <Truck className="w-3 h-3 mr-1" /> Kirim
                         </Button>
                       )}
-                      <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg">
+                      <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg" onClick={() => showToast("Invoice dicetak", "info")}>
                         <Printer className="w-3 h-3 mr-1" /> Invoice
                       </Button>
                     </div>
@@ -640,6 +644,8 @@ export function SellerAnalytics() {
 // ==================== SELLER WALLET ====================
 export function SellerWallet() {
   const [showWithdraw, setShowWithdraw] = useState(false)
+  const { showToast, withdrawWallet } = useAppStore()
+  const [withdrawAmount, setWithdrawAmount] = useState("")
 
   return (
     <div className="pb-20">
@@ -660,6 +666,41 @@ export function SellerWallet() {
               >
                 <ArrowUpRight className="w-3.5 h-3.5 mr-1" /> Tarik Dana
               </Button>
+              {showWithdraw && (
+                <div className="mt-2 bg-white/10 rounded-xl p-3 space-y-2">
+                  <Input
+                    type="number"
+                    placeholder="Jumlah penarikan"
+                    value={withdrawAmount}
+                    onChange={(e) => setWithdrawAmount(e.target.value)}
+                    className="bg-white/20 border-white/30 text-white placeholder:text-white/60 rounded-xl h-9"
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      className="flex-1 bg-emerald-400 hover:bg-emerald-300 text-emerald-900 rounded-lg h-8 text-xs font-bold"
+                      onClick={() => {
+                        const amount = parseInt(withdrawAmount) || 0
+                        if (amount <= 0) { showToast("Masukkan jumlah yang valid", "error"); return }
+                        withdrawWallet(amount, 'BCA - ****1234')
+                        showToast("Penarikan berhasil diproses", "success")
+                        setWithdrawAmount("")
+                        setShowWithdraw(false)
+                      }}
+                    >
+                      Konfirmasi
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 border-white/30 text-white hover:bg-white/10 rounded-lg h-8 text-xs"
+                      onClick={() => setShowWithdraw(false)}
+                    >
+                      Batal
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </motion.div>
@@ -738,7 +779,7 @@ export function SellerWallet() {
 
 // ==================== SELLER CHAT ====================
 export function SellerChat() {
-  const { navigate } = useAppStore()
+  const { navigate, setSelectedChatRoom, chatRooms } = useAppStore()
   const [autoReply, setAutoReply] = useState(false)
 
   return (
@@ -770,7 +811,11 @@ export function SellerChat() {
           <div className="space-y-2 mt-3">
             {mockChatBuyers.map((buyer, i) => (
               <motion.div key={buyer.id} custom={i} variants={stagger} initial="initial" animate="animate">
-                <Card className="p-3 cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => navigate("chat-room")}>
+                <Card className="p-3 cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => {
+                  const chatRoom = chatRooms[i]
+                  if (chatRoom) setSelectedChatRoom(chatRoom.id)
+                  navigate("chat-room")
+                }}>
                   <div className="flex items-center gap-3">
                     <div className="relative">
                       <div className="w-10 h-10 rounded-full bg-emerald-500 text-white font-bold flex items-center justify-center">
@@ -802,6 +847,7 @@ export function SellerChat() {
 
 // ==================== SELLER SETTINGS ====================
 export function SellerSettings() {
+  const { showToast } = useAppStore()
   const [storeName, setStoreName] = useState("Gadget Pro Store")
   const [storeDesc, setStoreDesc] = useState("Toko gadget terpercaya dengan produk berkualitas")
   const [autoReplyMsg, setAutoReplyMsg] = useState("Terima kasih sudah menghubungi kami. Kami akan membalas pesan Anda secepatnya.")
@@ -888,7 +934,7 @@ export function SellerSettings() {
 
         {/* Save Button */}
         <motion.div {...fadeIn}>
-          <Button className="w-full bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-11">
+          <Button className="w-full bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-11" onClick={() => showToast("Pengaturan berhasil disimpan!", "success")}>
             Simpan Pengaturan
           </Button>
         </motion.div>

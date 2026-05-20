@@ -160,12 +160,13 @@ function ShippingSelector({
 
 // ==================== MAIN COMPONENT ====================
 export function CheckoutScreen() {
-  const { navigate, addresses, selectedAddressId, selectedVoucher } = useAppStore()
+  const { navigate, addresses, selectedAddressId, selectedVoucher, addOrder, showToast, walletBalance } = useAppStore()
   const { items, getCheckedItems, getCheckedTotal, getCheckedCount, clearCart } = useCartStore()
 
-  const [selectedPayment, setSelectedPayment] = useState("wallet")
+  const [selectedPayment, setSelectedPayment] = useState<string | null>(null)
   const [shippingBySeller, setShippingBySeller] = useState<Record<string, ShippingOption>>({})
   const [showSuccessModal, setShowSuccessModal] = useState(false)
+  const [orderNumber, setOrderNumber] = useState('')
 
   const checkedItems = getCheckedItems()
   const checkedTotal = getCheckedTotal()
@@ -213,6 +214,72 @@ export function CheckoutScreen() {
   }
 
   const handlePay = () => {
+    if (!selectedPayment) {
+      showToast("Pilih metode pembayaran terlebih dahulu", "error")
+      return
+    }
+    if (!defaultAddress) {
+      showToast("Tambahkan alamat pengiriman terlebih dahulu", "error")
+      return
+    }
+    if (Object.keys(shippingBySeller).length < groupedBySeller.length) {
+      showToast("Pilih metode pengiriman untuk semua toko", "error")
+      return
+    }
+    if (selectedPayment === 'wallet' && walletBalance < totalAmount) {
+      showToast("Saldo wallet tidak mencukupi", "error")
+      return
+    }
+
+    const newOrderNumber = `ORD-${Date.now()}`
+    setOrderNumber(newOrderNumber)
+
+    // Create one order per seller
+    groupedBySeller.forEach((group) => {
+      const sellerShipping = shippingBySeller[group.seller.id]
+      const groupSubtotal = group.items.reduce((sum, i) => sum + ((i.product.discountPrice || i.product.price) * i.quantity), 0)
+      const groupShipping = sellerShipping?.price || 0
+      const groupTotal = groupSubtotal + groupShipping + platformFee
+
+      const order = {
+        id: `o${Date.now()}-${group.seller.id}`,
+        orderNumber: newOrderNumber,
+        userId: 'u1',
+        sellerId: group.seller.id,
+        status: 'paid' as const,
+        subtotal: groupSubtotal,
+        shippingCost: groupShipping,
+        discountAmount: voucherDiscount,
+        taxAmount: 0,
+        platformFee,
+        totalAmount: groupTotal,
+        paymentMethod: PAYMENT_METHODS.find(m => m.id === selectedPayment)?.name || selectedPayment,
+        paymentStatus: 'paid',
+        items: group.items.map((item) => ({
+          id: `oi${Date.now()}-${item.id}`,
+          productId: item.productId,
+          productName: item.product.name,
+          variantName: item.variant ? `${item.variant.name}: ${item.variant.value}` : undefined,
+          price: item.product.discountPrice || item.product.price,
+          quantity: item.quantity,
+          subtotal: (item.product.discountPrice || item.product.price) * item.quantity,
+          image: item.product.images?.[0]
+        })),
+        shipping: {
+          id: `sh${Date.now()}-${group.seller.id}`,
+          provider: sellerShipping?.provider || 'JNE',
+          service: sellerShipping?.service || 'REG',
+          estimatedDays: sellerShipping?.estimatedDays,
+          status: 'pending'
+        },
+        address: defaultAddress,
+        seller: group.seller,
+        createdAt: new Date().toISOString(),
+        paidAt: new Date().toISOString()
+      }
+      addOrder(order)
+    })
+
     setShowSuccessModal(true)
     setTimeout(() => {
       clearCart()
@@ -472,7 +539,7 @@ export function CheckoutScreen() {
           </div>
           <Button
             className="h-11 px-8 text-sm font-bold rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white disabled:opacity-50"
-            disabled={checkedCount === 0 || Object.keys(shippingBySeller).length < groupedBySeller.length}
+            disabled={checkedCount === 0 || Object.keys(shippingBySeller).length < groupedBySeller.length || !selectedPayment}
             onClick={handlePay}
           >
             Bayar
@@ -521,7 +588,7 @@ export function CheckoutScreen() {
               <div className="bg-muted/30 rounded-xl p-3 space-y-1">
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-muted-foreground">No. Pesanan</span>
-                  <span className="font-medium">ORD-2024-{Math.floor(Math.random() * 900 + 100)}</span>
+                  <span className="font-medium">{orderNumber}</span>
                 </div>
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-muted-foreground">Total</span>

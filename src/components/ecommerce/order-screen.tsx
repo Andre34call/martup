@@ -1,8 +1,8 @@
 "use client"
 
 import { motion, AnimatePresence } from "framer-motion"
-import { useAppStore } from "@/lib/store"
-import { formatPrice, formatRelativeTime } from "@/lib/mock-data"
+import { useAppStore, useCartStore } from "@/lib/store"
+import { MOCK_PRODUCTS, formatPrice, formatRelativeTime } from "@/lib/mock-data"
 import { PageHeader, EmptyState, StatusBadge, TabBar } from "./shared"
 import type { Order, OrderStatus } from "@/lib/types"
 import { useState, useMemo, useCallback } from "react"
@@ -78,6 +78,8 @@ function getSecondaryButton(order: Order): { label: string } | null {
 
 // ==================== ORDER CARD ====================
 function OrderCard({ order, onTap }: { order: Order; onTap: () => void }) {
+  const { showToast, updateOrderStatus, setSelectedOrder, navigate } = useAppStore()
+  const { addItem } = useCartStore()
   const primaryBtn = getActionButton(order)
   const secondaryBtn = getSecondaryButton(order)
 
@@ -140,7 +142,21 @@ function OrderCard({ order, onTap }: { order: Order; onTap: () => void }) {
               size="sm"
               variant="outline"
               className="h-8 text-xs rounded-lg"
-              onClick={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation()
+                if (order.status === "shipped") {
+                  updateOrderStatus(order.id, "delivered")
+                  showToast("Pesanan dikonfirmasi diterima!", "success")
+                } else if (order.status === "delivered") {
+                  const product = MOCK_PRODUCTS.find(p => p.id === order.items[0]?.productId)
+                  if (product) {
+                    addItem(product)
+                    showToast("Produk ditambahkan ke keranjang", "success")
+                  } else {
+                    showToast("Produk tidak ditemukan", "error")
+                  }
+                }
+              }}
             >
               {secondaryBtn.label}
             </Button>
@@ -150,7 +166,17 @@ function OrderCard({ order, onTap }: { order: Order; onTap: () => void }) {
               size="sm"
               variant={primaryBtn.variant}
               className="h-8 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white"
-              onClick={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation()
+                if (order.status === "pending") {
+                  showToast("Pembayaran sedang diproses", "info")
+                } else if (order.status === "shipped") {
+                  onTap()
+                } else if (order.status === "delivered") {
+                  setSelectedOrder(order.id)
+                  navigate("review")
+                }
+              }}
             >
               {primaryBtn.icon}
               <span className="ml-1">{primaryBtn.label}</span>
@@ -164,6 +190,8 @@ function OrderCard({ order, onTap }: { order: Order; onTap: () => void }) {
 
 // ==================== ORDER DETAIL ====================
 function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
+  const { showToast, updateOrderStatus, setSelectedOrder, navigate, setSelectedChatRoom, chatRooms } = useAppStore()
+  const { addItem } = useCartStore()
   const activeStep = getActiveStep(order)
 
   return (
@@ -172,7 +200,14 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
         title={`Pesanan ${order.orderNumber}`}
         onBack={onBack}
         rightAction={
-          <button className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-muted transition-colors">
+          <button
+            className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-muted transition-colors"
+            onClick={() => {
+              const room = chatRooms.find(r => r.seller.id === order.sellerId)
+              if (room) { setSelectedChatRoom(room.id); navigate("chat-room") }
+              else { showToast("Chat belum tersedia", "info") }
+            }}
+          >
             <MessageCircle className="w-5 h-5 text-muted-foreground" />
           </button>
         }
@@ -309,7 +344,14 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
                 <Store className="w-4 h-4 text-emerald-500" />
                 {order.seller.storeName}
               </h3>
-              <button className="text-xs text-emerald-600 font-medium flex items-center gap-0.5">
+              <button
+                className="text-xs text-emerald-600 font-medium flex items-center gap-0.5"
+                onClick={() => {
+                  const room = chatRooms.find(r => r.seller.id === order.sellerId)
+                  if (room) { setSelectedChatRoom(room.id); navigate("chat-room") }
+                  else { showToast("Chat belum tersedia", "info") }
+                }}
+              >
                 <MessageCircle className="w-3 h-3" />
                 Chat
               </button>
@@ -419,24 +461,43 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
         {/* Action Button */}
         <div className="px-4 pb-4">
           {order.status === "pending" && (
-            <Button className="w-full h-12 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold">
+            <Button
+              className="w-full h-12 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold"
+              onClick={() => showToast("Pembayaran sedang diproses", "info")}
+            >
               <CreditCard className="w-4 h-4 mr-2" />
               Bayar Sekarang
             </Button>
           )}
           {order.status === "shipped" && (
-            <Button className="w-full h-12 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold">
+            <Button
+              className="w-full h-12 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold"
+              onClick={() => { updateOrderStatus(order.id, "delivered"); showToast("Pesanan dikonfirmasi diterima!", "success") }}
+            >
               <CheckCircle2 className="w-4 h-4 mr-2" />
               Konfirmasi Diterima
             </Button>
           )}
           {order.status === "delivered" && (
             <div className="flex gap-3">
-              <Button variant="outline" className="flex-1 h-12 rounded-xl text-sm font-semibold">
+              <Button
+                variant="outline"
+                className="flex-1 h-12 rounded-xl text-sm font-semibold"
+                onClick={() => {
+                  order.items.forEach(item => {
+                    const product = MOCK_PRODUCTS.find(p => p.id === item.productId)
+                    if (product) addItem(product)
+                  })
+                  showToast("Produk ditambahkan ke keranjang", "success")
+                }}
+              >
                 <RotateCcw className="w-4 h-4 mr-2" />
                 Beli Lagi
               </Button>
-              <Button className="flex-1 h-12 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold">
+              <Button
+                className="flex-1 h-12 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold"
+                onClick={() => { setSelectedOrder(order.id); navigate("review") }}
+              >
                 <Star className="w-4 h-4 mr-2" />
                 Beri Rating
               </Button>
@@ -450,9 +511,8 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
 
 // ==================== ORDER SCREEN ====================
 export function OrderScreen() {
-  const { orders, navigate } = useAppStore()
+  const { orders, navigate, selectedOrderId, setSelectedOrder } = useAppStore()
   const [activeTab, setActiveTab] = useState("all")
-  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null)
 
   const filteredOrders = useMemo(() => {
     const statuses = tabStatusMap[activeTab]
@@ -479,12 +539,12 @@ export function OrderScreen() {
   }))
 
   const handleOrderTap = useCallback((orderId: string) => {
-    setSelectedOrderId(orderId)
-  }, [])
+    setSelectedOrder(orderId)
+  }, [setSelectedOrder])
 
   const handleBackFromDetail = useCallback(() => {
-    setSelectedOrderId(null)
-  }, [])
+    setSelectedOrder(null)
+  }, [setSelectedOrder])
 
   if (selectedOrder) {
     return <OrderDetail order={selectedOrder} onBack={handleBackFromDetail} />

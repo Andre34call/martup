@@ -108,7 +108,7 @@ const SUB_CATEGORIES: Record<string, Category[]> = {
 
 // ==================== CATEGORY SCREEN ====================
 export function CategoryScreen() {
-  const { navigate, setSelectedCategory } = useAppStore()
+  const { navigate, setSelectedCategory, setSearchQuery: setStoreSearchQuery } = useAppStore()
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null)
 
@@ -142,8 +142,9 @@ export function CategoryScreen() {
 
   const handleSubCategoryTap = useCallback((subCat: Category) => {
     setSelectedCategory(subCat.id)
+    setStoreSearchQuery(subCat.name)
     navigate("search")
-  }, [setSelectedCategory, navigate])
+  }, [setSelectedCategory, setStoreSearchQuery, navigate])
 
   const handleBackFromSub = useCallback(() => {
     setSelectedCategoryId(null)

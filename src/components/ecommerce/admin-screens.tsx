@@ -116,7 +116,7 @@ const mockPaymentMethods = [
 
 // ==================== ADMIN DASHBOARD ====================
 export function AdminDashboard() {
-  const { navigate, switchRole, userRole } = useAppStore()
+  const { navigate, switchRole, userRole, showToast } = useAppStore()
   const stats = MOCK_ADMIN_STATS
   const [showRoleMenu, setShowRoleMenu] = useState(false)
   const roleMenuRef = useRef<HTMLDivElement>(null)
@@ -149,6 +149,7 @@ export function AdminDashboard() {
           <div className="flex items-center gap-2">
             <motion.button
               whileTap={{ scale: 0.9 }}
+              onClick={() => navigate('notification')}
               className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-muted transition-colors"
             >
               <Bell className="w-5 h-5 text-muted-foreground" />
@@ -358,10 +359,12 @@ export function AdminDashboard() {
 
 // ==================== ADMIN USERS ====================
 export function AdminUsers() {
+  const { showToast } = useAppStore()
   const [search, setSearch] = useState("")
   const [roleFilter, setRoleFilter] = useState("all")
+  const [users, setUsers] = useState(mockAdminUsers)
 
-  const filtered = mockAdminUsers.filter(u => {
+  const filtered = users.filter(u => {
     const matchesSearch = u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase())
     const matchesRole = roleFilter === "all" || u.role === roleFilter
     return matchesSearch && matchesRole
@@ -436,21 +439,33 @@ export function AdminUsers() {
                   </div>
                   <div className="flex gap-2 mt-3 pt-3 border-t border-border/50">
                     {user.status === "pending" && (
-                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white">
+                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={() => {
+                        setUsers(prev => prev.map(u => u.id === user.id ? { ...u, status: "active" } : u))
+                        showToast("User berhasil diverifikasi", "success")
+                      }}>
                         <Check className="w-3 h-3 mr-0.5" /> Verify
                       </Button>
                     )}
                     {user.status === "active" && (
-                      <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-amber-600">
+                      <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-amber-600" onClick={() => {
+                        setUsers(prev => prev.map(u => u.id === user.id ? { ...u, status: "blocked" } : u))
+                        showToast("User diblokir", "info")
+                      }}>
                         <Ban className="w-3 h-3 mr-0.5" /> Block
                       </Button>
                     )}
                     {user.status === "blocked" && (
-                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-blue-500 hover:bg-blue-600 text-white">
+                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-blue-500 hover:bg-blue-600 text-white" onClick={() => {
+                        setUsers(prev => prev.map(u => u.id === user.id ? { ...u, status: "active" } : u))
+                        showToast("User dibuka kembali", "success")
+                      }}>
                         <Check className="w-3 h-3 mr-0.5" /> Unblock
                       </Button>
                     )}
-                    <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20">
+                    <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20" onClick={() => {
+                      setUsers(prev => prev.filter(u => u.id !== user.id))
+                      showToast("User dihapus", "info")
+                    }}>
                       <Trash2 className="w-3 h-3" />
                     </Button>
                   </div>
@@ -466,16 +481,18 @@ export function AdminUsers() {
 
 // ==================== ADMIN PRODUCTS ====================
 export function AdminProducts() {
+  const { showToast } = useAppStore()
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
+  const [products, setProducts] = useState(mockAdminProducts)
 
-  const filtered = mockAdminProducts.filter(p => {
+  const filtered = products.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) || p.seller.toLowerCase().includes(search.toLowerCase())
     const matchesStatus = statusFilter === "all" || p.status === statusFilter
     return matchesSearch && matchesStatus
   })
 
-  const flaggedProducts = mockAdminProducts.filter(p => p.status === "blocked")
+  const flaggedProducts = products.filter(p => p.status === "blocked")
 
   return (
     <div className="pb-20">
@@ -527,10 +544,16 @@ export function AdminProducts() {
                       </div>
                     </div>
                     <div className="flex gap-2 mt-3 pt-2 border-t border-red-100 dark:border-red-900/30">
-                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white">
+                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={() => {
+                        setProducts(prev => prev.map(p => p.id === product.id ? { ...p, status: "active" as const } : p))
+                        showToast("Produk diapprove", "success")
+                      }}>
                         <Check className="w-3 h-3 mr-0.5" /> Approve
                       </Button>
-                      <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500">
+                      <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500" onClick={() => {
+                        setProducts(prev => prev.filter(p => p.id !== product.id))
+                        showToast("Produk dihapus", "info")
+                      }}>
                         <Trash2 className="w-3 h-3 mr-0.5" /> Delete
                       </Button>
                     </div>
@@ -572,15 +595,24 @@ export function AdminProducts() {
                   </div>
                   <div className="flex gap-2 mt-3 pt-2 border-t border-border/50">
                     {product.status === "blocked" ? (
-                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white">
+                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={() => {
+                        setProducts(prev => prev.map(p => p.id === product.id ? { ...p, status: "active" as const } : p))
+                        showToast("Produk diapprove", "success")
+                      }}>
                         <Check className="w-3 h-3 mr-0.5" /> Approve
                       </Button>
                     ) : (
-                      <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500">
+                      <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500" onClick={() => {
+                        setProducts(prev => prev.map(p => p.id === product.id ? { ...p, status: "blocked" as const } : p))
+                        showToast("Produk diblokir", "info")
+                      }}>
                         <Ban className="w-3 h-3 mr-0.5" /> Block
                       </Button>
                     )}
-                    <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500">
+                    <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500" onClick={() => {
+                      setProducts(prev => prev.filter(p => p.id !== product.id))
+                      showToast("Produk dihapus", "info")
+                    }}>
                       <Trash2 className="w-3 h-3" />
                     </Button>
                   </div>
@@ -596,10 +628,12 @@ export function AdminProducts() {
 
 // ==================== ADMIN WITHDRAW ====================
 export function AdminWithdraw() {
+  const { showToast } = useAppStore()
   const [activeTab, setActiveTab] = useState("pending")
+  const [withdrawals, setWithdrawals] = useState(mockWithdrawals)
 
-  const pendingWithdrawals = mockWithdrawals.filter(w => w.status === "pending")
-  const historyWithdrawals = mockWithdrawals.filter(w => w.status !== "pending")
+  const pendingWithdrawals = withdrawals.filter(w => w.status === "pending")
+  const historyWithdrawals = withdrawals.filter(w => w.status !== "pending")
 
   const displayed = activeTab === "pending" ? pendingWithdrawals : historyWithdrawals
 
@@ -672,10 +706,16 @@ export function AdminWithdraw() {
                   </div>
                   {withdrawal.status === "pending" && (
                     <div className="flex gap-2 mt-3 pt-3 border-t border-border/50">
-                      <Button size="sm" className="flex-1 h-8 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white">
+                      <Button size="sm" className="flex-1 h-8 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={() => {
+                        setWithdrawals(prev => prev.map(w => w.id === withdrawal.id ? { ...w, status: "approved" as const } : w))
+                        showToast("Penarikan disetujui", "success")
+                      }}>
                         <Check className="w-3 h-3 mr-1" /> Approve
                       </Button>
-                      <Button variant="outline" size="sm" className="flex-1 h-8 text-xs rounded-lg text-red-500">
+                      <Button variant="outline" size="sm" className="flex-1 h-8 text-xs rounded-lg text-red-500" onClick={() => {
+                        setWithdrawals(prev => prev.map(w => w.id === withdrawal.id ? { ...w, status: "rejected" as const } : w))
+                        showToast("Penarikan ditolak", "info")
+                      }}>
                         <X className="w-3 h-3 mr-1" /> Reject
                       </Button>
                     </div>
@@ -692,7 +732,9 @@ export function AdminWithdraw() {
 
 // ==================== ADMIN BANNER ====================
 export function AdminBanner() {
+  const { showToast } = useAppStore()
   const [showAdd, setShowAdd] = useState(false)
+  const [banners, setBanners] = useState(mockBanners)
 
   return (
     <div className="pb-20">
@@ -710,7 +752,7 @@ export function AdminBanner() {
         <motion.div {...fadeIn}>
           <SectionHeader title="Banner Aktif" icon={<ImageIcon className="w-4 h-4" />} />
           <div className="space-y-2 mt-3">
-            {mockBanners.map((banner, i) => (
+            {banners.map((banner, i) => (
               <motion.div key={banner.id} custom={i} variants={stagger} initial="initial" animate="animate">
                 <Card className="p-4">
                   <div className="flex items-center justify-between">
@@ -723,7 +765,10 @@ export function AdminBanner() {
                         <p className="text-xs text-muted-foreground">{banner.position}</p>
                       </div>
                     </div>
-                    <Switch checked={banner.isActive} />
+                    <Switch checked={banner.isActive} onCheckedChange={(checked) => {
+                      setBanners(prev => prev.map(b => b.id === banner.id ? { ...b, isActive: checked } : b))
+                      showToast(checked ? "Banner diaktifkan" : "Banner dinonaktifkan", "success")
+                    }} />
                   </div>
                 </Card>
               </motion.div>

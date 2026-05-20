@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { useAppStore, useCartStore, useWishlistStore } from "@/lib/store"
-import { MOCK_PRODUCTS, formatPrice } from "@/lib/mock-data"
+import { MOCK_PRODUCTS, MOCK_SHIPPING_OPTIONS, formatPrice } from "@/lib/mock-data"
 import {
   PageHeader, QuantitySelector, PriceDisplay, ProductCard, EmptyState,
   FlashSaleTimer, RatingStars, AvatarWithName, SellerBadge
@@ -218,13 +218,14 @@ function VariantSelector({
 
 // ==================== MAIN COMPONENT ====================
 export function ProductDetailScreen() {
-  const { selectedProductId, navigate, goBack, setSelectedProduct, setSelectedSeller } = useAppStore()
+  const { selectedProductId, navigate, goBack, setSelectedProduct, setSelectedSeller, setSelectedChatRoom, showToast, toggleFollowStore, isFollowingStore, chatRooms } = useAppStore()
   const { addItem } = useCartStore()
   const { toggleWishlist, isWishlisted } = useWishlistStore()
 
   const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null)
   const [quantity, setQuantity] = useState(1)
   const [showAddedToast, setShowAddedToast] = useState(false)
+  const [showShippingModal, setShowShippingModal] = useState(false)
 
   const product = MOCK_PRODUCTS.find(p => p.id === selectedProductId)
 
@@ -288,16 +289,29 @@ export function ProductDetailScreen() {
         title="Detail Produk"
         onBack={handleBack}
         rightAction={
-          <motion.button
-            whileTap={{ scale: 0.9 }}
-            onClick={() => {
-              setSelectedProduct(null)
-              navigate('cart')
-            }}
-            className="relative w-9 h-9 flex items-center justify-center rounded-xl hover:bg-muted transition-colors"
-          >
-            <ShoppingCart className="w-5 h-5" />
-          </motion.button>
+          <div className="flex items-center gap-1">
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              onClick={() => {
+                if (navigator.share) {
+                  navigator.share({ title: product.name, url: window.location.href }).catch(() => {})
+                } else {
+                  navigator.clipboard?.writeText(window.location.href)
+                  showToast("Link produk disalin!", "success")
+                }
+              }}
+              className="relative w-9 h-9 flex items-center justify-center rounded-xl hover:bg-muted transition-colors"
+            >
+              <Share2 className="w-5 h-5" />
+            </motion.button>
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              onClick={() => navigate('cart')}
+              className="relative w-9 h-9 flex items-center justify-center rounded-xl hover:bg-muted transition-colors"
+            >
+              <ShoppingCart className="w-5 h-5" />
+            </motion.button>
+          </div>
         }
       />
 
@@ -462,7 +476,7 @@ export function ProductDetailScreen() {
                 <MapPin className="w-4 h-4" />
                 <span>Estimasi tiba 2-3 hari</span>
               </div>
-              <Button variant="outline" size="sm" className="text-xs h-8 rounded-lg">
+              <Button variant="outline" size="sm" className="text-xs h-8 rounded-lg" onClick={() => { setShowShippingModal(true); showToast("Estimasi ongkir diperlihatkan", "info") }}>
                 Cek Ongkir
               </Button>
             </div>
@@ -499,9 +513,13 @@ export function ProductDetailScreen() {
                 variant="outline"
                 size="sm"
                 className="flex-1 h-9 text-xs rounded-lg border-emerald-500 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+                onClick={() => {
+                  toggleFollowStore(product.sellerId)
+                  showToast(isFollowingStore(product.sellerId) ? "Berhenti mengikuti toko" : "Berhasil mengikuti toko!", "success")
+                }}
               >
                 <Check className="w-3.5 h-3.5 mr-1" />
-                Follow
+                {isFollowingStore(product.sellerId) ? "Mengikuti" : "Follow"}
               </Button>
               <Button
                 variant="outline"
@@ -571,7 +589,7 @@ export function ProductDetailScreen() {
           >
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold">Ulasan Pembeli</h3>
-              <button className="text-xs text-emerald-600 font-medium flex items-center gap-0.5">
+              <button className="text-xs text-emerald-600 font-medium flex items-center gap-0.5" onClick={() => showToast("Semua ulasan ditampilkan", "info")}>
                 Lihat Semua
                 <ChevronRight className="w-3.5 h-3.5" />
               </button>
@@ -677,6 +695,47 @@ export function ProductDetailScreen() {
         )}
       </AnimatePresence>
 
+      {/* Shipping Cost Modal */}
+      <AnimatePresence>
+        {showShippingModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/50 flex items-end justify-center"
+            onClick={() => setShowShippingModal(false)}
+          >
+            <motion.div
+              initial={{ y: 300 }}
+              animate={{ y: 0 }}
+              exit={{ y: 300 }}
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-card rounded-t-2xl p-5 w-full max-w-lg space-y-3"
+            >
+              <div className="flex items-center justify-between">
+                <h3 className="text-base font-bold">Estimasi Ongkos Kirim</h3>
+                <button onClick={() => setShowShippingModal(false)} className="text-muted-foreground text-lg font-bold">✕</button>
+              </div>
+              <div className="space-y-2 max-h-72 overflow-y-auto">
+                {MOCK_SHIPPING_OPTIONS.map((opt) => (
+                  <div key={`${opt.provider}-${opt.service}`} className="flex items-center justify-between p-3 bg-muted/30 rounded-xl">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xl">{opt.logo}</span>
+                      <div>
+                        <p className="text-sm font-medium">{opt.name}</p>
+                        <p className="text-[10px] text-muted-foreground">Estimasi {opt.estimatedDays}</p>
+                      </div>
+                    </div>
+                    <span className="text-sm font-bold">{opt.price === 0 ? 'Gratis' : formatPrice(opt.price)}</span>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* 9. Sticky Bottom CTA */}
       <div className="fixed bottom-0 left-0 right-0 z-40 glass border-t border-border/50 pb-safe">
         <div className="flex items-center gap-2 px-4 py-3">
@@ -692,7 +751,11 @@ export function ProductDetailScreen() {
 
           <motion.button
             whileTap={{ scale: 0.95 }}
-            onClick={() => navigate('chat-room')}
+            onClick={() => {
+              const room = chatRooms.find(r => r.seller.id === product.sellerId)
+              if (room) setSelectedChatRoom(room.id)
+              navigate('chat-room')
+            }}
             className="w-11 h-11 flex items-center justify-center rounded-xl border border-border bg-card"
           >
             <MessageCircle className="w-5 h-5 text-muted-foreground" />

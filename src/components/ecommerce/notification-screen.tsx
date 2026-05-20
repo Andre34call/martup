@@ -20,7 +20,7 @@ const NOTIFICATION_TABS = [
 
 // ==================== NOTIFICATION SCREEN ====================
 export function NotificationScreen() {
-  const { notifications, markNotificationRead } = useAppStore()
+  const { notifications, markNotificationRead, markAllNotificationsRead, setSelectedOrder, navigate } = useAppStore()
   const [activeTab, setActiveTab] = useState("all")
 
   const filteredNotifications = useMemo(() => {
@@ -46,14 +46,22 @@ export function NotificationScreen() {
   }))
 
   const handleNotificationTap = useCallback((id: string) => {
+    const notification = notifications.find(n => n.id === id)
+    if (!notification) return
     markNotificationRead(id)
-  }, [markNotificationRead])
+    if (notification.type === 'order') {
+      setSelectedOrder(id)
+      navigate('orders')
+    } else if (notification.type === 'promo') {
+      navigate('voucher')
+    } else if (notification.type === 'chat') {
+      navigate('chat')
+    }
+  }, [notifications, markNotificationRead, setSelectedOrder, navigate])
 
   const handleMarkAllRead = useCallback(() => {
-    notifications.forEach((n) => {
-      if (!n.isRead) markNotificationRead(n.id)
-    })
-  }, [notifications, markNotificationRead])
+    markAllNotificationsRead()
+  }, [markAllNotificationsRead])
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
