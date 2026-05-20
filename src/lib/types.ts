@@ -8,7 +8,7 @@ export type ScreenName =
   | 'wallet' | 'deposit' | 'withdraw' | 'chat' | 'chat-room'
   | 'notification' | 'profile' | 'settings' | 'voucher' | 'review'
   | 'refund' | 'help' | 'address' | 'followed-stores'
-  | 'seller-shop'
+  | 'seller-shop' | 'category-detail'
   | 'seller-dashboard' | 'seller-products' | 'seller-add-product'
   | 'seller-orders' | 'seller-analytics' | 'seller-chat' | 'seller-settings'
   | 'seller-campaign' | 'seller-wallet'

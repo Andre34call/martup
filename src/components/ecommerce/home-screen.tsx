@@ -55,9 +55,8 @@ const quickActionsRow2 = [
 
 // ==================== HOME SCREEN ====================
 export function HomeScreen() {
-  const { navigate, unreadNotificationCount, totalUnreadChats, setSelectedProduct, setSearchQuery, showToast } = useAppStore()
+  const { navigate, unreadNotificationCount, totalUnreadChats, setSelectedProduct, setSelectedCategory, setSearchQuery, showToast } = useAppStore()
   const [currentBanner, setCurrentBanner] = useState(0)
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [showLoadingMore, setShowLoadingMore] = useState(false)
 
   // Handle quick action button clicks
@@ -122,11 +121,6 @@ export function HomeScreen() {
   // Filter products for flash sale
   const flashSaleProducts = MOCK_PRODUCTS.filter((p) => p.isFlashSale)
 
-  // Filter products by category for the feed
-  const filteredProducts = selectedCategory
-    ? MOCK_PRODUCTS.filter((p) => p.categoryId === selectedCategory)
-    : MOCK_PRODUCTS
-
   // Handle product click
   const handleProductClick = useCallback(
     (product: Product) => {
@@ -153,7 +147,7 @@ export function HomeScreen() {
     if (sentinelEl) observer.observe(sentinelEl)
 
     return () => observer.disconnect()
-  }, [filteredProducts])
+  }, [MOCK_PRODUCTS])
 
   return (
     <motion.div
@@ -398,10 +392,10 @@ export function HomeScreen() {
               id={cat.id}
               name={cat.name}
               icon={cat.icon}
-              isActive={selectedCategory === cat.id}
-              onClick={() =>
-                setSelectedCategory(selectedCategory === cat.id ? null : cat.id)
-              }
+              onClick={() => {
+                setSelectedCategory(cat.id)
+                navigate("category-detail")
+              }}
             />
           ))}
         </div>
@@ -417,7 +411,7 @@ export function HomeScreen() {
         />
 
         <div className="mt-3 grid grid-cols-2 gap-3">
-          {filteredProducts.map((product, idx) => (
+          {MOCK_PRODUCTS.map((product, idx) => (
             <motion.div
               key={product.id}
               initial={{ opacity: 0, y: 20 }}

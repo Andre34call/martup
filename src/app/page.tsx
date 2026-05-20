@@ -11,7 +11,7 @@ import { SplashScreen, OnboardingScreen, LoginScreen, RegisterScreen, OTPScreen,
 // Buyer screens
 import { HomeScreen } from '@/components/ecommerce/home-screen'
 import { SearchScreen } from '@/components/ecommerce/search-screen'
-import { CategoryScreen } from '@/components/ecommerce/category-screen'
+import { CategoryScreen, CategoryDetailScreen } from '@/components/ecommerce/category-screen'
 import { ProductDetailScreen } from '@/components/ecommerce/product-detail-screen'
 import { CartScreen } from '@/components/ecommerce/cart-screen'
 import { CheckoutScreen } from '@/components/ecommerce/checkout-screen'
@@ -60,7 +60,7 @@ const SUB_SCREENS = [
   'product-detail', 'seller-shop', 'checkout', 'review', 'refund',
   'address', 'help', 'followed-stores', 'deposit', 'withdraw',
   'settings', 'voucher', 'order-tracking', 'seller-add-product',
-  'chat-room',
+  'chat-room', 'category-detail',
 ]
 
 // ==================== GLOBAL TOAST ====================
@@ -120,6 +120,7 @@ function ScreenRenderer() {
       case 'home': return <HomeScreen />
       case 'search': return <SearchScreen />
       case 'category': return <CategoryScreen />
+      case 'category-detail': return <CategoryDetailScreen />
       case 'product-detail': return <ProductDetailScreen />
       case 'cart': return <CartScreen />
       case 'checkout': return <CheckoutScreen />

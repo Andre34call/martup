@@ -1,13 +1,13 @@
 "use client"
 
-import { motion, AnimatePresence } from "framer-motion"
+import { motion } from "framer-motion"
 import { useAppStore } from "@/lib/store"
 import { MOCK_CATEGORIES, MOCK_PRODUCTS } from "@/lib/mock-data"
-import { PageHeader, SearchBar, EmptyState, ProductCard, SectionHeader } from "./shared"
+import { PageHeader, SearchBar, EmptyState, ProductCard } from "./shared"
 import type { Category, Product } from "@/lib/types"
-import { useState, useMemo, useCallback, useRef, useEffect } from "react"
+import { useState, useMemo, useCallback } from "react"
 import {
-  Grid3X3, ChevronDown, ChevronRight, Package,
+  Grid3X3, ChevronRight, Package,
   SlidersHorizontal
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -110,222 +110,10 @@ const SUB_CATEGORIES: Record<string, Category[]> = {
 
 type SortOption = "popular" | "newest" | "price-low" | "price-high"
 
-// ==================== CATEGORY ITEM WITH INLINE EXPANSION ====================
-function CategoryItem({
-  category,
-  isExpanded,
-  onToggle,
-  products,
-  selectedSubCategory,
-  onSelectSub,
-  onProductClick,
-  sortOption,
-  onSortChange,
-}: {
-  category: Category
-  isExpanded: boolean
-  onToggle: () => void
-  products: Product[]
-  selectedSubCategory: string | null
-  onSelectSub: (subId: string | null) => void
-  onProductClick: (product: Product) => void
-  sortOption: SortOption
-  onSortChange: (opt: SortOption) => void
-}) {
-  const subCategories = SUB_CATEGORIES[category.id] || []
-
-  // Filter products by sub-category if selected
-  const displayedProducts = useMemo(() => {
-    let filtered = products
-    if (selectedSubCategory) {
-      // In a real app, we'd filter by sub-category. Here we show all for the parent category
-      filtered = products
-    }
-    // Sort
-    switch (sortOption) {
-      case "price-low":
-        return [...filtered].sort((a, b) => (a.discountPrice || a.price) - (b.discountPrice || b.price))
-      case "price-high":
-        return [...filtered].sort((a, b) => (b.discountPrice || b.price) - (a.discountPrice || a.price))
-      case "newest":
-        return [...filtered]
-      case "popular":
-      default:
-        return [...filtered].sort((a, b) => b.sold - a.sold)
-    }
-  }, [products, selectedSubCategory, sortOption])
-
-  return (
-    <div className="border-b border-border/30 last:border-0">
-      {/* Category Header - Clickable to expand/collapse */}
-      <motion.button
-      whileTap={{ scale: 0.995 }}
-      onClick={onToggle}
-      className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-muted/20 transition-colors"
-    >
-      <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-lg flex-shrink-0 ${
-        isExpanded
-          ? "bg-emerald-100 dark:bg-emerald-900/40"
-          : "bg-muted"
-      }`}>
-        {category.icon || "📦"}
-      </div>
-      <div className="flex-1 min-w-0 text-left">
-        <div className="flex items-center gap-2">
-          <p className={`text-sm font-semibold truncate ${isExpanded ? "text-emerald-700 dark:text-emerald-300" : "text-foreground"}`}>
-            {category.name}
-          </p>
-          {isExpanded && (
-            <Badge className="text-[9px] h-4 bg-emerald-500 text-white border-0">
-              {products.length} produk
-            </Badge>
-          )}
-        </div>
-        {category.productCount && (
-          <p className="text-[11px] text-muted-foreground mt-0.5">
-            {category.productCount.toLocaleString()} produk
-          </p>
-        )}
-      </div>
-      <motion.div
-        animate={{ rotate: isExpanded ? 180 : 0 }}
-        transition={{ duration: 0.2 }}
-        className="flex-shrink-0"
-      >
-        <ChevronDown className={`w-5 h-5 ${isExpanded ? "text-emerald-600" : "text-muted-foreground"}`} />
-      </motion.div>
-    </motion.button>
-
-      {/* Expanded Content */}
-      <AnimatePresence>
-        {isExpanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.3, ease: "easeInOut" }}
-            className="overflow-hidden"
-          >
-            <div className="pb-4">
-              {/* Sub-categories horizontal scroll */}
-              {subCategories.length > 0 && (
-                <div className="px-4 pb-3">
-                  <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
-                    <motion.button
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => onSelectSub(null)}
-                      className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors border ${
-                        !selectedSubCategory
-                          ? "bg-emerald-500 text-white border-emerald-500"
-                          : "bg-card text-foreground border-border hover:bg-muted"
-                      }`}
-                    >
-                      <span>Semua</span>
-                    </motion.button>
-                    {subCategories.map((sub) => (
-                      <motion.button
-                        key={sub.id}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => onSelectSub(sub.id)}
-                        className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors border ${
-                          selectedSubCategory === sub.id
-                            ? "bg-emerald-500 text-white border-emerald-500"
-                            : "bg-card text-foreground border-border hover:bg-muted"
-                        }`}
-                      >
-                        <span className="text-sm">{sub.icon}</span>
-                        <span>{sub.name}</span>
-                      </motion.button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Sort options */}
-              <div className="px-4 pb-3">
-                <div className="flex items-center gap-2">
-                  <SlidersHorizontal className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-                  <div className="flex gap-1.5">
-                    {([
-                      { key: "popular" as const, label: "Terlaris" },
-                      { key: "newest" as const, label: "Terbaru" },
-                      { key: "price-low" as const, label: "Harga ↓" },
-                      { key: "price-high" as const, label: "Harga ↑" },
-                    ]).map((opt) => (
-                      <button
-                        key={opt.key}
-                        onClick={() => onSortChange(opt.key)}
-                        className={`px-2.5 py-1 rounded-md text-[10px] font-medium transition-colors ${
-                          sortOption === opt.key
-                            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"
-                            : "bg-muted/50 text-muted-foreground hover:text-foreground"
-                        }`}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Products Grid */}
-              {displayedProducts.length > 0 ? (
-                <div className="px-4 grid grid-cols-2 gap-3">
-                  {displayedProducts.map((product, idx) => (
-                    <motion.div
-                      key={product.id}
-                      initial={{ opacity: 0, y: 15 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.25, delay: Math.min(idx * 0.04, 0.2) }}
-                    >
-                      <ProductCard
-                        product={product}
-                        onClick={() => onProductClick(product)}
-                        layout="grid"
-                      />
-                    </motion.div>
-                  ))}
-                </div>
-              ) : (
-                <div className="px-4">
-                  <div className="flex flex-col items-center justify-center py-8 text-center">
-                    <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center mb-3">
-                      <Package className="w-7 h-7 text-muted-foreground" />
-                    </div>
-                    <p className="text-sm font-medium text-foreground">Belum Ada Produk</p>
-                    <p className="text-xs text-muted-foreground mt-1">Produk di kategori ini segera hadir</p>
-                  </div>
-                </div>
-              )}
-
-              {/* See All in Search button */}
-              {displayedProducts.length > 0 && (
-                <div className="px-4 pt-3">
-                  <Button
-                    variant="outline"
-                    className="w-full h-9 text-xs rounded-xl border-emerald-200 text-emerald-600 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-950/30"
-                    onClick={() => onProductClick(displayedProducts[0])}
-                  >
-                    Lihat Semua Produk {category.name}
-                    <ChevronRight className="w-3.5 h-3.5 ml-1" />
-                  </Button>
-                </div>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  )
-}
-
-// ==================== CATEGORY SCREEN ====================
+// ==================== CATEGORY SCREEN (GRID LAYOUT) ====================
 export function CategoryScreen() {
-  const { navigate, setSelectedProduct, setSearchQuery: setStoreSearchQuery } = useAppStore()
+  const { navigate, setSelectedCategory } = useAppStore()
   const [searchQuery, setSearchQuery] = useState("")
-  const [expandedCategoryId, setExpandedCategoryId] = useState<string | null>(null)
-  const [selectedSubCategories, setSelectedSubCategories] = useState<Record<string, string | null>>({})
-  const [sortOptions, setSortOptions] = useState<Record<string, SortOption>>({})
 
   const filteredCategories = useMemo(() => {
     if (!searchQuery.trim()) return MOCK_CATEGORIES
@@ -337,38 +125,10 @@ export function CategoryScreen() {
     )
   }, [searchQuery])
 
-  const handleToggleCategory = useCallback((categoryId: string) => {
-    setExpandedCategoryId((prev) => prev === categoryId ? null : categoryId)
-  }, [])
-
-  const handleSelectSubCategory = useCallback((categoryId: string, subId: string | null) => {
-    setSelectedSubCategories((prev) => ({ ...prev, [categoryId]: subId }))
-  }, [])
-
-  const handleSortChange = useCallback((categoryId: string, opt: SortOption) => {
-    setSortOptions((prev) => ({ ...prev, [categoryId]: opt }))
-  }, [])
-
-  const handleProductClick = useCallback((product: Product) => {
-    setSelectedProduct(product.id)
-    navigate("product-detail")
-  }, [setSelectedProduct, navigate])
-
-  // Get products for a specific category
-  const getProductsForCategory = useCallback((categoryId: string) => {
-    return MOCK_PRODUCTS.filter((p) => p.categoryId === categoryId)
-  }, [])
-
-  // Auto-scroll expanded category into view
-  const expandedRef = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (expandedCategoryId && expandedRef.current) {
-      // Small delay to let animation start
-      setTimeout(() => {
-        expandedRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" })
-      }, 100)
-    }
-  }, [expandedCategoryId])
+  const handleCategoryClick = useCallback((categoryId: string) => {
+    setSelectedCategory(categoryId)
+    navigate("category-detail")
+  }, [setSelectedCategory, navigate])
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
@@ -379,7 +139,7 @@ export function CategoryScreen() {
 
       <div className="flex-1 pb-20">
         {/* Search Bar */}
-        <div className="px-4 pb-3">
+        <div className="px-4 pb-4">
           <SearchBar
             value={searchQuery}
             onChange={setSearchQuery}
@@ -387,35 +147,34 @@ export function CategoryScreen() {
           />
         </div>
 
-        {/* Category List with Inline Expansion */}
+        {/* Category Grid */}
         {filteredCategories.length > 0 ? (
-          <div className="bg-card rounded-xl border border-border/50 mx-4 overflow-hidden">
-            {filteredCategories.map((category, idx) => {
-              const isExpanded = expandedCategoryId === category.id
-              const products = getProductsForCategory(category.id)
-
-              return (
-                <div key={category.id} ref={isExpanded ? expandedRef : undefined}>
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: Math.min(idx * 0.03, 0.3) }}
-                  >
-                    <CategoryItem
-                      category={category}
-                      isExpanded={isExpanded}
-                      onToggle={() => handleToggleCategory(category.id)}
-                      products={products}
-                      selectedSubCategory={selectedSubCategories[category.id] || null}
-                      onSelectSub={(subId) => handleSelectSubCategory(category.id, subId)}
-                      onProductClick={handleProductClick}
-                      sortOption={sortOptions[category.id] || "popular"}
-                      onSortChange={(opt) => handleSortChange(category.id, opt)}
-                    />
-                  </motion.div>
-                </div>
-              )
-            })}
+          <div className="px-4">
+            <div className="grid grid-cols-4 gap-2.5">
+              {filteredCategories.map((cat, idx) => (
+                <motion.button
+                  key={cat.id}
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: Math.min(idx * 0.02, 0.2) }}
+                  whileTap={{ scale: 0.93 }}
+                  onClick={() => handleCategoryClick(cat.id)}
+                  className="flex flex-col items-center gap-1.5 py-3 px-1.5 rounded-xl bg-card border border-border/50 hover:bg-muted/20 active:bg-muted/30 transition-colors"
+                >
+                  <div className="w-11 h-11 rounded-xl bg-muted flex items-center justify-center text-xl">
+                    {cat.icon || "📦"}
+                  </div>
+                  <span className="text-[10px] font-medium text-center leading-tight line-clamp-2 text-foreground">
+                    {cat.name}
+                  </span>
+                  {cat.productCount && (
+                    <span className="text-[8px] text-muted-foreground">
+                      {cat.productCount.toLocaleString()} produk
+                    </span>
+                  )}
+                </motion.button>
+              ))}
+            </div>
           </div>
         ) : (
           <EmptyState
@@ -424,32 +183,208 @@ export function CategoryScreen() {
             subtitle="Coba kata kunci lain untuk mencari kategori"
           />
         )}
+      </div>
+    </div>
+  )
+}
 
-        {/* Popular Categories Quick Access */}
-        {!searchQuery && !expandedCategoryId && (
-          <div className="px-4 pt-6">
-            <SectionHeader title="Kategori Populer" />
-            <div className="mt-3 grid grid-cols-4 gap-2.5">
-              {MOCK_CATEGORIES.slice(0, 8).map((cat, idx) => (
+// ==================== CATEGORY DETAIL SCREEN ====================
+export function CategoryDetailScreen() {
+  const { navigate, goBack, selectedCategoryId, setSelectedProduct } = useAppStore()
+  const [selectedSubCategory, setSelectedSubCategory] = useState<string | null>(null)
+  const [sortOption, setSortOption] = useState<SortOption>("popular")
+
+  // Find the selected category
+  const category = useMemo(
+    () => MOCK_CATEGORIES.find((c) => c.id === selectedCategoryId),
+    [selectedCategoryId]
+  )
+
+  // Get sub-categories
+  const subCategories = useMemo(
+    () => (category ? SUB_CATEGORIES[category.id] || [] : []),
+    [category]
+  )
+
+  // Get products for this category
+  const products = useMemo(
+    () => (category ? MOCK_PRODUCTS.filter((p) => p.categoryId === category.id) : []),
+    [category]
+  )
+
+  // Sort products
+  const displayedProducts = useMemo(() => {
+    let sorted = [...products]
+    switch (sortOption) {
+      case "price-low":
+        return sorted.sort((a, b) => (a.discountPrice || a.price) - (b.discountPrice || b.price))
+      case "price-high":
+        return sorted.sort((a, b) => (b.discountPrice || b.price) - (a.discountPrice || a.price))
+      case "newest":
+        return sorted
+      case "popular":
+      default:
+        return sorted.sort((a, b) => b.sold - a.sold)
+    }
+  }, [products, sortOption])
+
+  const handleProductClick = useCallback((product: Product) => {
+    setSelectedProduct(product.id)
+    navigate("product-detail")
+  }, [setSelectedProduct, navigate])
+
+  if (!category) {
+    return (
+      <div className="flex flex-col min-h-screen bg-background">
+        <PageHeader title="Kategori" onAction={() => goBack()} />
+        <div className="flex-1 flex items-center justify-center">
+          <EmptyState
+            icon={<Grid3X3 className="w-10 h-10 text-muted-foreground" />}
+            title="Kategori Tidak Ditemukan"
+            subtitle="Kembali dan pilih kategori lain"
+            actionLabel="Kembali"
+            onAction={() => goBack()}
+          />
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col min-h-screen bg-background">
+      {/* Header with category info */}
+      <div className="sticky top-0 z-40">
+        <div className="glass">
+          <div className="flex items-center gap-3 h-14 px-4">
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              onClick={goBack}
+              className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-muted transition-colors"
+            >
+              <ChevronRight className="w-5 h-5 rotate-180" />
+            </motion.button>
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <span className="text-xl">{category.icon}</span>
+              <div className="min-w-0">
+                <h1 className="text-base font-bold text-foreground truncate">{category.name}</h1>
+              </div>
+            </div>
+            <Badge className="text-[9px] h-5 bg-emerald-500 text-white border-0 flex-shrink-0">
+              {category.productCount?.toLocaleString() || products.length} produk
+            </Badge>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 pb-20">
+        {/* Sub-categories grid */}
+        {subCategories.length > 0 && (
+          <div className="px-4 pt-4 pb-2">
+            <div className="grid grid-cols-4 gap-2">
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setSelectedSubCategory(null)}
+                className={`flex flex-col items-center gap-1.5 py-2.5 px-1.5 rounded-xl border transition-colors ${
+                  !selectedSubCategory
+                    ? "bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800"
+                    : "bg-card border-border/50 hover:bg-muted/20"
+                }`}
+              >
+                <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-sm ${
+                  !selectedSubCategory
+                    ? "bg-emerald-100 dark:bg-emerald-900/50"
+                    : "bg-muted"
+                }`}>
+                  🏷️
+                </div>
+                <span className={`text-[10px] font-medium text-center leading-tight ${
+                  !selectedSubCategory ? "text-emerald-700 dark:text-emerald-300" : "text-foreground"
+                }`}>
+                  Semua
+                </span>
+              </motion.button>
+              {subCategories.map((sub) => (
                 <motion.button
-                  key={cat.id}
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: idx * 0.03 }}
-                  whileTap={{ scale: 0.93 }}
-                  onClick={() => {
-                    setExpandedCategoryId(cat.id)
-                  }}
-                  className="flex flex-col items-center gap-1.5 py-2.5 px-1.5 rounded-xl bg-card border border-border/50 hover:bg-muted/20 transition-colors"
+                  key={sub.id}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => setSelectedSubCategory(sub.id === selectedSubCategory ? null : sub.id)}
+                  className={`flex flex-col items-center gap-1.5 py-2.5 px-1.5 rounded-xl border transition-colors ${
+                    selectedSubCategory === sub.id
+                      ? "bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800"
+                      : "bg-card border-border/50 hover:bg-muted/20"
+                  }`}
                 >
-                  <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center text-base">
-                    {cat.icon || "📦"}
+                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-sm ${
+                    selectedSubCategory === sub.id
+                      ? "bg-emerald-100 dark:bg-emerald-900/50"
+                      : "bg-muted"
+                  }`}>
+                    {sub.icon || "📦"}
                   </div>
-                  <span className="text-[10px] font-medium text-center leading-tight line-clamp-2 text-foreground">
-                    {cat.name}
+                  <span className={`text-[10px] font-medium text-center leading-tight line-clamp-2 ${
+                    selectedSubCategory === sub.id ? "text-emerald-700 dark:text-emerald-300" : "text-foreground"
+                  }`}>
+                    {sub.name}
                   </span>
                 </motion.button>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* Sort options */}
+        <div className="px-4 py-3">
+          <div className="flex items-center gap-2">
+            <SlidersHorizontal className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+            <div className="flex gap-1.5">
+              {([
+                { key: "popular" as const, label: "Terlaris" },
+                { key: "newest" as const, label: "Terbaru" },
+                { key: "price-low" as const, label: "Harga ↓" },
+                { key: "price-high" as const, label: "Harga ↑" },
+              ]).map((opt) => (
+                <button
+                  key={opt.key}
+                  onClick={() => setSortOption(opt.key)}
+                  className={`px-3 py-1.5 rounded-lg text-[11px] font-medium transition-colors ${
+                    sortOption === opt.key
+                      ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"
+                      : "bg-muted/50 text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Products Grid */}
+        {displayedProducts.length > 0 ? (
+          <div className="px-4 grid grid-cols-2 gap-3">
+            {displayedProducts.map((product, idx) => (
+              <motion.div
+                key={product.id}
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.25, delay: Math.min(idx * 0.04, 0.2) }}
+              >
+                <ProductCard
+                  product={product}
+                  onClick={() => handleProductClick(product)}
+                  layout="grid"
+                />
+              </motion.div>
+            ))}
+          </div>
+        ) : (
+          <div className="px-4">
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mb-3">
+                <Package className="w-8 h-8 text-muted-foreground" />
+              </div>
+              <p className="text-sm font-semibold text-foreground">Belum Ada Produk</p>
+              <p className="text-xs text-muted-foreground mt-1">Produk di kategori ini segera hadir</p>
             </div>
           </div>
         )}
