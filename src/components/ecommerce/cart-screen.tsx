@@ -3,7 +3,7 @@
 import { motion, AnimatePresence } from "framer-motion"
 import {
   ShoppingCart, Trash2, ChevronRight, Minus,
-  Check, Ticket
+  Check, Ticket, ArrowRight, AlertTriangle
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -22,16 +22,17 @@ function CartItemCard({
   onToggleCheck,
   onUpdateQuantity,
   onRemove,
+  onRemoveConfirm,
   onItemClick,
 }: {
   item: CartItem
   onToggleCheck: () => void
   onUpdateQuantity: (qty: number) => void
   onRemove: () => void
+  onRemoveConfirm: () => void
   onItemClick: () => void
 }) {
   const price = item.product.discountPrice || item.product.price
-  const originalPrice = item.product.discountPrice ? item.product.price : undefined
 
   const colors = [
     "bg-emerald-100 dark:bg-emerald-900/30",
@@ -39,6 +40,14 @@ function CartItemCard({
     "bg-pink-100 dark:bg-pink-900/30",
   ]
   const colorIndex = item.product.id.charCodeAt(0) % colors.length
+
+  const handleQuantityChange = (qty: number) => {
+    if (qty < 1) {
+      onRemoveConfirm()
+      return
+    }
+    onUpdateQuantity(qty)
+  }
 
   return (
     <motion.div
@@ -80,6 +89,11 @@ function CartItemCard({
             <span className="text-lg font-bold text-emerald-600">{item.product.name.charAt(0)}</span>
           </div>
         )}
+        {item.product.discountPrice && (
+          <div className="absolute top-0.5 left-0.5 bg-red-500 text-white text-[8px] font-bold px-1 py-0.5 rounded">
+            -{Math.round(((item.product.price - item.product.discountPrice) / item.product.price) * 100)}%
+          </div>
+        )}
       </div>
 
       {/* Product info */}
@@ -108,8 +122,8 @@ function CartItemCard({
           </div>
           <QuantitySelector
             value={item.quantity}
-            onChange={onUpdateQuantity}
-            min={1}
+            onChange={handleQuantityChange}
+            min={0}
             max={item.variant ? item.variant.stock : item.product.stock}
             size="sm"
           />
@@ -119,15 +133,76 @@ function CartItemCard({
   )
 }
 
+// ==================== REMOVE ITEM CONFIRMATION ====================
+function RemoveItemModal({
+  isOpen,
+  onClose,
+  onConfirm,
+  itemName,
+}: {
+  isOpen: boolean
+  onClose: () => void
+  onConfirm: () => void
+  itemName: string
+}) {
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-6"
+          onClick={onClose}
+        >
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.9, opacity: 0 }}
+            onClick={(e) => e.stopPropagation()}
+            className="bg-card rounded-2xl p-6 w-full max-w-sm space-y-4 shadow-xl"
+          >
+            <div className="text-center space-y-2">
+              <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mx-auto">
+                <AlertTriangle className="w-6 h-6 text-red-500" />
+              </div>
+              <h3 className="text-base font-bold">Hapus Produk?</h3>
+              <p className="text-sm text-muted-foreground">
+                Hapus <span className="font-semibold text-foreground">{itemName}</span> dari keranjang?
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                className="flex-1 h-10 rounded-xl"
+                onClick={onClose}
+              >
+                Batal
+              </Button>
+              <Button
+                className="flex-1 h-10 rounded-xl bg-red-500 hover:bg-red-600 text-white"
+                onClick={onConfirm}
+              >
+                Hapus
+              </Button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+}
+
 // ==================== MAIN COMPONENT ====================
 export function CartScreen() {
-  const { navigate, setSelectedProduct, setSelectedSeller, selectedVoucher } = useAppStore()
+  const { navigate, setSelectedProduct, setSelectedSeller, selectedVoucher, showToast } = useAppStore()
   const {
     items, removeItem, updateQuantity, toggleCheck, toggleAllCheck,
     getCheckedTotal, getCheckedCount
   } = useCartStore()
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [removeTarget, setRemoveTarget] = useState<{ id: string; name: string } | null>(null)
 
   // Group items by seller
   const groupedBySeller = useMemo(() => {
@@ -172,6 +247,8 @@ export function CartScreen() {
   const handleCheckout = () => {
     if (checkedCount > 0) {
       navigate('checkout')
+    } else {
+      showToast("Pilih produk terlebih dahulu", "error")
     }
   }
 
@@ -179,12 +256,21 @@ export function CartScreen() {
     const checkedItems = items.filter(i => i.isChecked)
     checkedItems.forEach(item => removeItem(item.id))
     setShowDeleteConfirm(false)
+    showToast(`${checkedItems.length} produk dihapus dari keranjang`, "success")
+  }
+
+  const handleRemoveItemConfirm = () => {
+    if (removeTarget) {
+      removeItem(removeTarget.id)
+      showToast("Produk dihapus dari keranjang", "success")
+      setRemoveTarget(null)
+    }
   }
 
   if (items.length === 0) {
     return (
       <div className="min-h-screen bg-background">
-        <PageHeader title="Keranjang" rightAction={
+        <PageHeader title="Keranjang" showBack={false} rightAction={
           <span className="text-xs text-muted-foreground">0 item</span>
         } />
         <EmptyState
@@ -199,9 +285,10 @@ export function CartScreen() {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-40">
+    <div className="min-h-screen bg-background pb-56">
       <PageHeader
         title="Keranjang"
+        showBack={false}
         rightAction={
           <span className="text-xs text-muted-foreground">{items.length} item</span>
         }
@@ -273,6 +360,7 @@ export function CartScreen() {
                       onToggleCheck={() => toggleCheck(item.id)}
                       onUpdateQuantity={(qty) => updateQuantity(item.id, qty)}
                       onRemove={() => removeItem(item.id)}
+                      onRemoveConfirm={() => setRemoveTarget({ id: item.id, name: item.product.name })}
                       onItemClick={() => handleItemClick(item.product)}
                     />
                   ))}
@@ -298,7 +386,7 @@ export function CartScreen() {
                 {selectedVoucher ? (
                   <>
                     <p className="text-sm font-medium text-foreground">{selectedVoucher.name}</p>
-                    <p className="text-[10px] text-muted-foreground">Hemat {formatPrice(voucherDiscount)}</p>
+                    <p className="text-[10px] text-emerald-600">Hemat {formatPrice(voucherDiscount)}</p>
                   </>
                 ) : (
                   <>
@@ -355,61 +443,64 @@ export function CartScreen() {
         </motion.div>
       </motion.div>
 
-      {/* Select All Bar + Sticky Bottom CTA */}
-      <div className="fixed bottom-0 left-0 right-0 z-40">
-        {/* Select all bar */}
-        <div className="bg-card border-t border-border/50 px-4 py-2.5 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <motion.button
-              whileTap={{ scale: 0.9 }}
-              onClick={() => toggleAllCheck(!allChecked)}
-            >
-              <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${
-                allChecked
-                  ? "bg-emerald-500 border-emerald-500"
-                  : someChecked
-                    ? "bg-emerald-500/50 border-emerald-500"
-                    : "border-gray-300 dark:border-gray-600 bg-background"
-              }`}>
-                {allChecked && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
-                {someChecked && !allChecked && <Minus className="w-3 h-3 text-white" strokeWidth={3} />}
-              </div>
-            </motion.button>
-            <span className="text-sm font-medium">Pilih Semua</span>
+      {/* FIXED BOTTOM BAR - positioned above BottomNav (h-16 = 64px) */}
+      <div className="fixed bottom-16 left-0 right-0 z-40">
+        <div className="mx-auto max-w-[430px] md:max-w-[480px]">
+          {/* Select all bar */}
+          <div className="bg-card border-t border-border/50 px-4 py-2.5 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <motion.button
+                whileTap={{ scale: 0.9 }}
+                onClick={() => toggleAllCheck(!allChecked)}
+              >
+                <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${
+                  allChecked
+                    ? "bg-emerald-500 border-emerald-500"
+                    : someChecked
+                      ? "bg-emerald-500/50 border-emerald-500"
+                      : "border-gray-300 dark:border-gray-600 bg-background"
+                }`}>
+                  {allChecked && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
+                  {someChecked && !allChecked && <Minus className="w-3 h-3 text-white" strokeWidth={3} />}
+                </div>
+              </motion.button>
+              <span className="text-sm font-medium">Pilih Semua</span>
+            </div>
+
+            {someChecked && (
+              <motion.button
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                onClick={() => setShowDeleteConfirm(true)}
+                className="text-xs text-red-500 font-medium flex items-center gap-1"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Hapus ({checkedCount})
+              </motion.button>
+            )}
           </div>
 
-          {someChecked && (
-            <motion.button
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              onClick={() => setShowDeleteConfirm(true)}
-              className="text-xs text-red-500 font-medium flex items-center gap-1"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              Hapus ({checkedCount})
-            </motion.button>
-          )}
-        </div>
-
-        {/* CTA bar */}
-        <div className="glass border-t border-border/50 pb-safe">
-          <div className="flex items-center justify-between px-4 py-3">
-            <div>
-              <p className="text-xs text-muted-foreground">Total Harga</p>
-              <p className="text-lg font-bold text-emerald-600">{formatPrice(Math.max(0, totalAmount))}</p>
+          {/* CTA bar */}
+          <div className="glass border-t border-border/50">
+            <div className="flex items-center justify-between px-4 py-3">
+              <div>
+                <p className="text-xs text-muted-foreground">Total Harga</p>
+                <p className="text-lg font-bold text-emerald-600">{formatPrice(Math.max(0, totalAmount))}</p>
+              </div>
+              <Button
+                className="h-11 px-6 text-sm font-bold rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white disabled:opacity-50 gap-1.5"
+                disabled={checkedCount === 0}
+                onClick={handleCheckout}
+              >
+                Checkout ({checkedCount})
+                <ArrowRight className="w-4 h-4" />
+              </Button>
             </div>
-            <Button
-              className="h-11 px-8 text-sm font-bold rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white disabled:opacity-50"
-              disabled={checkedCount === 0}
-              onClick={handleCheckout}
-            >
-              Checkout ({checkedCount})
-            </Button>
           </div>
         </div>
       </div>
 
-      {/* Delete confirmation */}
+      {/* Delete selected confirmation */}
       <AnimatePresence>
         {showDeleteConfirm && (
           <motion.div
@@ -454,6 +545,14 @@ export function CartScreen() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Remove single item confirmation */}
+      <RemoveItemModal
+        isOpen={!!removeTarget}
+        onClose={() => setRemoveTarget(null)}
+        onConfirm={handleRemoveItemConfirm}
+        itemName={removeTarget?.name || ''}
+      />
     </div>
   )
 }

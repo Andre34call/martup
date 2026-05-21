@@ -269,12 +269,21 @@ export function ProductDetailScreen() {
 
   const handleAddToCart = () => {
     addItem(product, effectiveVariant || undefined, quantity)
-    setShowAddedToast(true)
-    setTimeout(() => setShowAddedToast(false), 2000)
+    showToast("Ditambahkan ke keranjang!", "success")
   }
 
   const handleBuyNow = () => {
     addItem(product, effectiveVariant || undefined, quantity)
+    // Uncheck other items, only check the newly added one for checkout
+    const { items, toggleAllCheck, toggleCheck } = useCartStore.getState()
+    toggleAllCheck(false)
+    // Find the just-added/updated item
+    const targetItem = items.find(i =>
+      i.productId === product.id && i.variantId === (effectiveVariant?.id || undefined)
+    )
+    if (targetItem) {
+      toggleCheck(targetItem.id)
+    }
     navigate('checkout')
   }
 

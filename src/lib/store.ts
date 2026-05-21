@@ -371,7 +371,7 @@ export const useCartStore = create<CartState>((set, get) => ({
     if (existing) {
       return {
         items: state.items.map(i =>
-          i.id === existing.id ? { ...i, quantity: i.quantity + quantity } : i
+          i.id === existing.id ? { ...i, quantity: i.quantity + quantity, isChecked: true } : i
         )
       }
     }
