@@ -3,7 +3,7 @@
 import { motion, AnimatePresence } from "framer-motion"
 import { Search, Bell, MessageCircle, ChevronRight, Zap } from "lucide-react"
 import { useAppStore, useCartStore } from "@/lib/store"
-import { MOCK_PRODUCTS, MOCK_CATEGORIES } from "@/lib/mock-data"
+import { MOCK_CATEGORIES } from "@/lib/mock-data"
 import { ProductCard, FlashSaleTimer, CategoryPill, SectionHeader } from "./shared"
 import type { Product } from "@/lib/types"
 import { useState, useEffect, useCallback, useRef } from "react"
@@ -55,7 +55,7 @@ const quickActionsRow2 = [
 
 // ==================== HOME SCREEN ====================
 export function HomeScreen() {
-  const { navigate, unreadNotificationCount, totalUnreadChats, setSelectedProduct, setSelectedCategory, setSearchQuery, showToast } = useAppStore()
+  const { navigate, unreadNotificationCount, totalUnreadChats, setSelectedProduct, setSelectedCategory, setSearchQuery, showToast, products } = useAppStore()
   const [currentBanner, setCurrentBanner] = useState(0)
   const [showLoadingMore, setShowLoadingMore] = useState(false)
 
@@ -119,7 +119,7 @@ export function HomeScreen() {
   }, [])
 
   // Filter products for flash sale
-  const flashSaleProducts = MOCK_PRODUCTS.filter((p) => p.isFlashSale)
+  const flashSaleProducts = products.filter((p) => p.isFlashSale)
 
   // Handle product click
   const handleProductClick = useCallback(
@@ -147,7 +147,7 @@ export function HomeScreen() {
     if (sentinelEl) observer.observe(sentinelEl)
 
     return () => observer.disconnect()
-  }, [MOCK_PRODUCTS])
+  }, [products])
 
   return (
     <motion.div
@@ -411,7 +411,7 @@ export function HomeScreen() {
         />
 
         <div className="mt-3 grid grid-cols-2 gap-3">
-          {MOCK_PRODUCTS.map((product, idx) => (
+          {products.map((product, idx) => (
             <motion.div
               key={product.id}
               initial={{ opacity: 0, y: 20 }}

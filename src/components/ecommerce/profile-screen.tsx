@@ -69,7 +69,7 @@ function MenuItem({
 
 // ==================== PROFILE SCREEN ====================
 export function ProfileScreen() {
-  const { currentUser, userRole, switchRole, orders, navigate, logout, showToast, avatarUrl, updateAvatar } = useAppStore()
+  const { currentUser, userRole, switchRole, orders, navigate, logout, showToast, avatarUrl, updateAvatar, walletBalance, walletCoins, vouchers } = useAppStore()
   const avatarInputRef = useRef<HTMLInputElement>(null)
 
   const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -77,10 +77,6 @@ export function ProfileScreen() {
     if (!file) return
     if (!file.type.startsWith("image/")) {
       showToast("File harus berupa gambar", "error")
-      return
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      showToast("Ukuran foto maksimal 5MB", "error")
       return
     }
     const url = URL.createObjectURL(file)
@@ -188,7 +184,7 @@ export function ProfileScreen() {
               onClick={() => navigate("wallet")}
               className="bg-card rounded-xl border border-border/50 p-3 text-center"
             >
-              <p className="text-sm font-bold text-emerald-600">{formatPrice(MOCK_USER.balance)}</p>
+              <p className="text-sm font-bold text-emerald-600">{formatPrice(walletBalance)}</p>
               <p className="text-[10px] text-muted-foreground mt-0.5">Saldo</p>
             </motion.button>
             <motion.button
@@ -196,7 +192,7 @@ export function ProfileScreen() {
               onClick={() => navigate("wallet")}
               className="bg-card rounded-xl border border-border/50 p-3 text-center"
             >
-              <p className="text-sm font-bold text-amber-500">{MOCK_USER.coins}</p>
+              <p className="text-sm font-bold text-amber-500">{walletCoins.toLocaleString()}</p>
               <p className="text-[10px] text-muted-foreground mt-0.5">Koin</p>
             </motion.button>
             <motion.button
@@ -204,7 +200,7 @@ export function ProfileScreen() {
               onClick={() => navigate("voucher")}
               className="bg-card rounded-xl border border-border/50 p-3 text-center"
             >
-              <p className="text-sm font-bold text-orange-500">{MOCK_USER.coupons}</p>
+              <p className="text-sm font-bold text-orange-500">{vouchers.filter(v => v.isActive).length}</p>
               <p className="text-[10px] text-muted-foreground mt-0.5">Kupon</p>
             </motion.button>
           </div>
@@ -300,7 +296,7 @@ export function ProfileScreen() {
             <MenuItem
               icon={<Ticket className="w-4 h-4" />}
               label="Voucher Saya"
-              badge={MOCK_USER.coupons}
+              badge={vouchers.filter(v => v.isActive).length}
               onClick={() => navigate("voucher")}
             />
             <MenuItem

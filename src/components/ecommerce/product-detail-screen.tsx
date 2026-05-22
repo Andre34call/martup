@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { useAppStore, useCartStore, useWishlistStore } from "@/lib/store"
-import { MOCK_PRODUCTS, MOCK_SHIPPING_OPTIONS, formatPrice } from "@/lib/mock-data"
+import { MOCK_SHIPPING_OPTIONS, formatPrice } from "@/lib/mock-data"
 import {
   PageHeader, QuantitySelector, PriceDisplay, ProductCard, EmptyState,
   FlashSaleTimer, RatingStars, AvatarWithName, SellerBadge
@@ -218,7 +218,7 @@ function VariantSelector({
 
 // ==================== MAIN COMPONENT ====================
 export function ProductDetailScreen() {
-  const { selectedProductId, navigate, goBack, setSelectedProduct, setSelectedSeller, setSelectedChatRoom, showToast, toggleFollowStore, isFollowingStore, chatRooms } = useAppStore()
+  const { selectedProductId, navigate, goBack, setSelectedProduct, setSelectedSeller, setSelectedChatRoom, showToast, toggleFollowStore, isFollowingStore, chatRooms, products } = useAppStore()
   const { addItem } = useCartStore()
   const { toggleWishlist, isWishlisted } = useWishlistStore()
 
@@ -227,7 +227,7 @@ export function ProductDetailScreen() {
   const [showAddedToast, setShowAddedToast] = useState(false)
   const [showShippingModal, setShowShippingModal] = useState(false)
 
-  const product = MOCK_PRODUCTS.find(p => p.id === selectedProductId)
+  const product = products.find(p => p.id === selectedProductId)
 
   // Derive effective variant - if selected variant doesn't belong to current product, treat as null
   const effectiveVariant = selectedVariant && product?.variants.some(v => v.id === selectedVariant.id)
@@ -263,7 +263,7 @@ export function ProductDetailScreen() {
     ? Math.round(((product.price - product.discountPrice) / product.price) * 100)
     : 0
 
-  const relatedProducts = MOCK_PRODUCTS.filter(
+  const relatedProducts = products.filter(
     p => p.id !== product.id && p.categoryId === product.categoryId
   ).slice(0, 6)
 

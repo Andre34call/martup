@@ -15,10 +15,10 @@ import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { useAppStore } from "@/lib/store"
-import { MOCK_SELLER_STATS, MOCK_PRODUCTS, formatPrice } from "@/lib/mock-data"
+import { MOCK_SELLER_STATS, formatPrice } from "@/lib/mock-data"
 import { PageHeader, SectionHeader, StatusBadge, SearchBar, EmptyState, WalletBalanceCard } from "./shared"
 import type { Order, OrderStatus } from "@/lib/types"
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useMemo } from "react"
 import { AnimatePresence } from "framer-motion"
 
 // ==================== ANIMATION VARIANTS ====================
@@ -50,10 +50,7 @@ const mockRecentOrders: {
   { orderNumber: "ORD-2024-104", buyerName: "Dewi Lestari", product: "PS5 Slim Digital Edition", amount: 5799000, status: "pending" },
 ]
 
-const mockSellerProducts = MOCK_PRODUCTS.slice(0, 6).map(p => ({
-  ...p,
-  sellerId: "s1"
-}))
+
 
 const mockChatBuyers = [
   { id: "cb1", name: "Ahmad Fauzi", lastMessage: "Apakah ready stock kak?", time: "10:30", unread: 2 },
@@ -78,11 +75,23 @@ const mockCampaigns = [
 
 // ==================== SELLER DASHBOARD ====================
 export function SellerDashboard() {
-  const { navigate, unreadNotificationCount, switchRole, userRole, orders, sellerBalance } = useAppStore()
+  const { navigate, unreadNotificationCount, switchRole, userRole, orders, sellerBalance, currentUser } = useAppStore()
   const stats = MOCK_SELLER_STATS
 
-  // Compute real stats from store data for sellerId 's1'
-  const sellerOrders = orders.filter(o => o.sellerId === 's1')
+  // Derive sellerId from currentUser
+  const sellerId = useMemo(() => {
+    const sellerMapping: Record<string, string> = {
+      'u2': 's1', // Gadget Pro Store
+      'u3': 's2', // Fashion Hub
+      'u4': 's3', // Beauty Corner
+      'u5': 's4', // Home Living ID
+      'u6': 's5', // Sport Zone
+    }
+    return sellerMapping[currentUser?.id || ''] || 's1'
+  }, [currentUser])
+
+  // Compute real stats from store data for current seller
+  const sellerOrders = orders.filter(o => o.sellerId === sellerId)
   const totalRevenue = sellerOrders
     .filter(o => o.status === 'paid' || o.status === 'delivered')
     .reduce((sum, o) => sum + o.subtotal * 0.95, 0)
@@ -351,11 +360,12 @@ export function SellerDashboard() {
 
 // ==================== SELLER PRODUCTS ====================
 export function SellerProducts() {
-  const { navigate, showToast } = useAppStore()
+  const { navigate, showToast, products, removeProduct, setSelectedProduct } = useAppStore()
   const [search, setSearch] = useState("")
-  const [products, setProducts] = useState(mockSellerProducts)
 
-  const filtered = products.filter(p =>
+  // Filter products for current seller (s1)
+  const sellerProducts = products.filter(p => p.sellerId === "s1")
+  const filtered = sellerProducts.filter(p =>
     p.name.toLowerCase().includes(search.toLowerCase())
   )
 
@@ -412,12 +422,15 @@ export function SellerProducts() {
                     </div>
                   </div>
                   <div className="flex gap-2 mt-3 pt-3 border-t border-border/50">
-                    <Button variant="outline" size="sm" className="flex-1 h-8 text-xs rounded-lg" onClick={() => navigate("seller-add-product")}>
+                    <Button variant="outline" size="sm" className="flex-1 h-8 text-xs rounded-lg" onClick={() => {
+                      setSelectedProduct(product.id)
+                      navigate("seller-add-product")
+                    }}>
                       <Edit className="w-3 h-3 mr-1" /> Edit
                     </Button>
                     <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20" onClick={() => {
                       showToast("Produk dihapus", "info")
-                      setProducts(prev => prev.filter(p => p.id !== product.id))
+                      removeProduct(product.id)
                     }}>
                       <Trash2 className="w-3 h-3" />
                     </Button>
@@ -434,12 +447,24 @@ export function SellerProducts() {
 
 // ==================== SELLER ORDERS ====================
 export function SellerOrders() {
-  const { navigate, updateOrderStatus, showToast, orders } = useAppStore()
+  const { navigate, updateOrderStatus, showToast, orders, currentUser } = useAppStore()
   const [activeTab, setActiveTab] = useState("all")
 
-  // Map real store orders for sellerId 's1' to display format
+  // Derive sellerId from currentUser
+  const sellerId = useMemo(() => {
+    const sellerMapping: Record<string, string> = {
+      'u2': 's1', // Gadget Pro Store
+      'u3': 's2', // Fashion Hub
+      'u4': 's3', // Beauty Corner
+      'u5': 's4', // Home Living ID
+      'u6': 's5', // Sport Zone
+    }
+    return sellerMapping[currentUser?.id || ''] || 's1'
+  }, [currentUser])
+
+  // Map real store orders for current seller to display format
   const sellerOrders = orders
-    .filter(o => o.sellerId === 's1')
+    .filter(o => o.sellerId === sellerId)
     .map(o => ({
       id: o.id,
       orderNumber: o.orderNumber,
@@ -651,10 +676,22 @@ export function SellerAnalytics() {
 
 // ==================== SELLER WALLET ====================
 export function SellerWallet() {
-  const { navigate, showToast, sellerBalance, sellerBankAccounts, withdrawRequests } = useAppStore()
+  const { navigate, showToast, sellerBalance, sellerBankAccounts, withdrawRequests, currentUser } = useAppStore()
+
+  // Derive sellerId from currentUser
+  const sellerId = useMemo(() => {
+    const sellerMapping: Record<string, string> = {
+      'u2': 's1', // Gadget Pro Store
+      'u3': 's2', // Fashion Hub
+      'u4': 's3', // Beauty Corner
+      'u5': 's4', // Home Living ID
+      'u6': 's5', // Sport Zone
+    }
+    return sellerMapping[currentUser?.id || ''] || 's1'
+  }, [currentUser])
 
   // Current seller's withdraw requests
-  const myWithdrawRequests = withdrawRequests.filter(w => w.sellerId === 's1')
+  const myWithdrawRequests = withdrawRequests.filter(w => w.sellerId === sellerId)
   const pendingWithdraws = myWithdrawRequests.filter(w => w.status === 'pending')
   const recentWithdraws = myWithdrawRequests.slice(0, 3)
 

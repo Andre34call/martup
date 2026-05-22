@@ -8,6 +8,7 @@ import { Separator } from "@/components/ui/separator"
 import { useAppStore } from "@/lib/store"
 import { MOCK_CATEGORIES, formatPrice } from "@/lib/mock-data"
 import { PageHeader } from "./shared"
+import type { Product } from "@/lib/types"
 import { useState, useRef } from "react"
 
 // ==================== ANIMATION VARIANTS ====================
@@ -34,21 +35,34 @@ interface VariantGroup {
 
 // ==================== SELLER ADD PRODUCT SCREEN ====================
 export function SellerAddProductScreen() {
-  const { navigate, showToast } = useAppStore()
+  const { navigate, showToast, addProduct, selectedProductId, products } = useAppStore()
+
+  // Pre-fill form if editing an existing product
+  const editingProduct = selectedProductId ? products.find(p => p.id === selectedProductId) : null
 
   // Form state
-  const [productName, setProductName] = useState("")
-  const [category, setCategory] = useState("")
-  const [description, setDescription] = useState("")
-  const [price, setPrice] = useState("")
-  const [discountPrice, setDiscountPrice] = useState("")
-  const [stock, setStock] = useState("")
-  const [minOrder, setMinOrder] = useState("1")
-  const [weight, setWeight] = useState("")
-  const [condition, setCondition] = useState<"new" | "used">("new")
-  const [variants, setVariants] = useState<VariantGroup[]>([])
+  const [productName, setProductName] = useState(editingProduct?.name || "")
+  const [category, setCategory] = useState(editingProduct?.categoryId || "")
+  const [description, setDescription] = useState(editingProduct?.description || "")
+  const [price, setPrice] = useState(editingProduct?.price?.toString() || "")
+  const [discountPrice, setDiscountPrice] = useState(editingProduct?.discountPrice?.toString() || "")
+  const [stock, setStock] = useState(editingProduct?.stock?.toString() || "")
+  const [minOrder, setMinOrder] = useState(editingProduct?.minOrder?.toString() || "1")
+  const [weight, setWeight] = useState(editingProduct?.weight?.toString() || "")
+  const [condition, setCondition] = useState<"new" | "used">(editingProduct?.condition || "new")
+  const [variants, setVariants] = useState<VariantGroup[]>(editingProduct?.variants ? Object.entries(
+    editingProduct.variants.reduce((acc, v) => {
+      if (!acc[v.name]) acc[v.name] = []
+      acc[v.name].push(v.value)
+      return acc
+    }, {} as Record<string, string[]>)
+  ).map(([name, values], idx) => ({
+    id: `var_existing_${idx}`,
+    name,
+    values
+  })) : [])
   const [tagInput, setTagInput] = useState("")
-  const [tags, setTags] = useState<string[]>([])
+  const [tags, setTags] = useState<string[]>(editingProduct?.tags || [])
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false)
   const [variantInputValues, setVariantInputValues] = useState<Record<string, { name: string; value: string }>>({})
   const [productImages, setProductImages] = useState<{ id: string; url: string; file: File }[]>([])
@@ -203,7 +217,7 @@ export function SellerAddProductScreen() {
 
   // Submit handler
   const handleSubmit = () => {
-    if (productImages.length === 0) {
+    if (productImages.length === 0 && !editingProduct?.images?.length) {
       showToast("Upload minimal 1 foto produk", "error")
       return
     }
@@ -223,7 +237,62 @@ export function SellerAddProductScreen() {
       showToast("Stok harus diisi", "error")
       return
     }
-    showToast("Produk berhasil dipublikasikan! 🎉", "success")
+
+    const selectedCategoryObj = MOCK_CATEGORIES.find(c => c.id === category)
+    const productImages2 = productImages.length > 0
+      ? productImages.map(img => img.url)
+      : (editingProduct?.images || [])
+
+    // Build ProductVariant[] from variant groups
+    const productVariants = variants.flatMap(v =>
+      v.values.map(val => ({
+        id: `pv_${Date.now()}_${v.name}_${val}`,
+        productId: editingProduct?.id || `p_${Date.now()}`,
+        name: v.name,
+        value: val,
+        stock: Math.floor(parseInt(stock) / (v.values.length || 1)),
+      }))
+    )
+
+    const newProduct: Product = {
+      id: editingProduct?.id || `p_${Date.now()}`,
+      sellerId: 's1',
+      categoryId: category,
+      name: productName.trim(),
+      slug: productName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+      description: description.trim(),
+      price: priceNumber,
+      ...(discountPriceNumber > 0 && discountPriceNumber < priceNumber ? { discountPrice: discountPriceNumber } : {}),
+      images: productImages2,
+      stock: parseInt(stock),
+      sold: editingProduct?.sold || 0,
+      minOrder: parseInt(minOrder) || 1,
+      weight: parseInt(weight) || 100,
+      condition,
+      status: 'active',
+      rating: editingProduct?.rating || 0,
+      reviewCount: editingProduct?.reviewCount || 0,
+      isFeatured: editingProduct?.isFeatured || false,
+      isFlashSale: false,
+      variants: productVariants,
+      seller: {
+        id: 's1',
+        userId: 'u2',
+        storeName: 'Gadget Pro Store',
+        storeSlug: 'gadget-pro',
+        storeAvatar: '',
+        isVerified: true,
+        isPremium: true,
+        rating: 4.9,
+        totalSales: 15000,
+        totalProducts: 250,
+      },
+      category: selectedCategoryObj ? { id: selectedCategoryObj.id, name: selectedCategoryObj.name, slug: selectedCategoryObj.slug } : { id: category, name: category, slug: category },
+      ...(tags.length > 0 ? { tags } : {}),
+    }
+
+    addProduct(newProduct)
+    showToast(editingProduct ? "Produk berhasil diperbarui! 🎉" : "Produk berhasil dipublikasikan! 🎉", "success")
     setTimeout(() => navigate("seller-products"), 1500)
   }
 
@@ -234,7 +303,7 @@ export function SellerAddProductScreen() {
 
   return (
     <div className="pb-24">
-      <PageHeader title="Tambah Produk" />
+      <PageHeader title={editingProduct ? "Edit Produk" : "Tambah Produk"} />
 
       <div className="px-4 space-y-4">
         {/* ============ Product Images Section ============ */}

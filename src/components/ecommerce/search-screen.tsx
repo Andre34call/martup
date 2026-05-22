@@ -2,7 +2,7 @@
 
 import { motion, AnimatePresence } from "framer-motion"
 import { useAppStore, useWishlistStore } from "@/lib/store"
-import { MOCK_PRODUCTS, MOCK_CATEGORIES, formatPrice, formatRelativeTime } from "@/lib/mock-data"
+import { MOCK_CATEGORIES, formatPrice, formatRelativeTime } from "@/lib/mock-data"
 import { PageHeader, ProductCard, EmptyState, SearchBar, SectionHeader } from "./shared"
 import type { Product } from "@/lib/types"
 import { useState, useEffect, useRef, useMemo, useCallback } from "react"
@@ -24,7 +24,7 @@ const TRENDING_SEARCHES = [
 ]
 
 export function SearchScreen() {
-  const { searchHistory, addSearchHistory, clearSearchHistory, navigate, setSelectedProduct, setSelectedCategory, selectedCategoryId } = useAppStore()
+  const { searchHistory, addSearchHistory, clearSearchHistory, navigate, setSelectedProduct, setSelectedCategory, selectedCategoryId, products } = useAppStore()
   // Read initial query from store (set by other screens before navigation)
   const initialQuery = useRef(useAppStore.getState().searchQuery || "")
   const [query, setQuery] = useState(initialQuery.current)
@@ -89,7 +89,7 @@ export function SearchScreen() {
   }, [setSelectedCategory, navigate])
 
   const searchResults = useMemo(() => {
-    let results = MOCK_PRODUCTS
+    let results = products
 
     // Filter by selectedCategoryId if set (coming from category screen)
     if (selectedCategoryId) {
@@ -115,9 +115,9 @@ export function SearchScreen() {
         p.seller.storeName.toLowerCase().includes(q)
       )
     })
-  }, [debouncedQuery, selectedCategoryId])
+  }, [debouncedQuery, selectedCategoryId, products])
 
-  const recentProducts = useMemo(() => MOCK_PRODUCTS.slice(0, 6), [])
+  const recentProducts = useMemo(() => products.slice(0, 6), [products])
 
   const isSearching = debouncedQuery.trim().length > 0
 
