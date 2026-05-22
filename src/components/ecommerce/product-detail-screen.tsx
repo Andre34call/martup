@@ -15,7 +15,7 @@ import {
   FlashSaleTimer, RatingStars, AvatarWithName, SellerBadge
 } from "./shared"
 import type { Product, ProductVariant } from "@/lib/types"
-import { useState, useRef, useCallback } from "react"
+import { useState, useRef, useCallback, useMemo } from "react"
 
 // ==================== MOCK REVIEWS (fallback) ====================
 const FALLBACK_REVIEWS = [
@@ -36,13 +36,7 @@ const FALLBACK_REVIEWS = [
   },
 ]
 
-const RATING_DISTRIBUTION = [
-  { stars: 5, count: 2450, percent: 70 },
-  { stars: 4, count: 680, percent: 19 },
-  { stars: 3, count: 245, percent: 7 },
-  { stars: 2, count: 70, percent: 2 },
-  { stars: 1, count: 75, percent: 2 },
-]
+// Rating distribution is now computed dynamically from store reviews
 
 // ==================== IMAGE GALLERY ====================
 function ImageGallery({ images, isFlashSale }: { images: string[]; isFlashSale: boolean }) {
@@ -238,6 +232,15 @@ export function ProductDetailScreen() {
     setSelectedProduct(null)
     goBack()
   }, [setSelectedProduct, goBack])
+
+  const ratingDistribution = useMemo(() => {
+    const productReviews = storeReviews.filter(r => r.productId === selectedProductId)
+    const total = productReviews.length || 1
+    return [5, 4, 3, 2, 1].map(stars => {
+      const count = productReviews.filter(r => r.rating === stars).length
+      return { stars, count, percent: Math.round((count / total) * 100) }
+    })
+  }, [storeReviews, selectedProductId])
 
   if (!product) {
     return (
@@ -616,7 +619,7 @@ export function ProductDetailScreen() {
 
               {/* Star distribution bars */}
               <div className="flex-1 space-y-1.5">
-                {RATING_DISTRIBUTION.map((item) => (
+                {ratingDistribution.map((item) => (
                   <div key={item.stars} className="flex items-center gap-2">
                     <span className="text-xs text-muted-foreground w-3">{item.stars}</span>
                     <Star className="w-3 h-3 fill-amber-400 text-amber-400" />

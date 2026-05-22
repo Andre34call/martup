@@ -136,11 +136,15 @@ export function ChatRoomScreen() {
 
 // ==================== CHAT ROOM VIEW ====================
 function ChatRoomView({ room, onBack }: { room: ChatRoom; onBack: () => void }) {
-  const { showToast, chatMessages, addChatMessage, currentUser } = useAppStore()
+  const { showToast, chatMessages, addChatMessage, currentUser, markChatRead } = useAppStore()
   const [message, setMessage] = useState("")
   const messages = chatMessages[room.id] || []
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    markChatRead(room.id)
+  }, [room.id, markChatRead])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })

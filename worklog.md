@@ -179,3 +179,43 @@ Stage Summary:
 - Admin Products panel now properly synced with store
 - All product-related screens (wishlist, category, seller products) use store data instead of mock
 - Draft products are properly saved with 'draft' status
+
+---
+Task ID: production-readiness-fix
+Agent: Main Agent
+Task: Implement all production-critical features and fixes for MartUp e-commerce app
+
+Work Log:
+- Comprehensive audit of all CRUD operations, data persistence, validation, and error handling
+- Added cancelOrder action with seller balance reversal and buyer wallet refund
+- Added markChatRead action to properly clear unread count and message isRead status
+- Added updateOrderTracking action for seller tracking number updates
+- Added usedVoucherIds and useVoucher for voucher usage tracking
+- Added settings state with updateSettings for persistence of toggles
+- Fixed addOrder to decrement product stock on order creation
+- Added deleteAccount action that properly clears all user data
+- Added deleteReview and updateReview actions with product rating recalculation
+- Fixed voucher discount duplication (now split proportionally per seller)
+- Added stock validation before checkout payment
+- Added address phone validation warning
+- Added cancel order button in OrderScreen for pending orders
+- Fixed chat room to mark messages as read when opened
+- Fixed settings screen to use store-persisted settings instead of local state
+- Fixed delete account to use store's deleteAccount action
+- Made rating distribution dynamic (computed from real reviews instead of hardcoded)
+- Added tracking number input dialog for seller shipping
+- Added input validation on Login (email/phone format, password min 6 chars)
+- Added input validation on Register (name min 3, email regex, phone Indonesian format, password strength)
+- Added ErrorBoundary component wrapping the app
+- Fixed VoucherScreen to show used vouchers from store
+- Moved admin data (users, banners, complaints) from local state to Zustand store with persistence
+
+Stage Summary:
+- 14+ critical production issues fixed
+- All CRUD operations now complete for: Products, Orders, Reviews, Users, Withdraw, Cart, Wishlist, Chat, Vouchers
+- localStorage persistence now covers: auth, orders, products, reviews, settings, admin data, vouchers usage
+- Input validation added to all auth forms
+- Error boundary added for crash recovery
+- Dynamic rating calculation replaces hardcoded data
+- Admin data now persists across navigation
+

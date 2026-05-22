@@ -11,6 +11,20 @@ import { useAppStore } from "@/lib/store"
 import { useState, useEffect, useCallback } from "react"
 import type { User } from "@/lib/types"
 
+// ==================== VALIDATION HELPERS ====================
+function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+}
+function isValidPhone(phone: string): boolean {
+  return /^(0|\+62|62)\d{9,12}$/.test(phone.replace(/[\s-]/g, ''))
+}
+function isValidPassword(password: string): boolean {
+  return password.length >= 8 && /[a-zA-Z]/.test(password) && /\d/.test(password)
+}
+function isValidEmailOrPhone(value: string): boolean {
+  return isValidEmail(value) || isValidPhone(value)
+}
+
 // ==================== PAGE ANIMATION VARIANTS ====================
 const pageVariants = {
   initial: { opacity: 0, x: 40 },
@@ -244,9 +258,27 @@ export function LoginScreen() {
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [touchedEmailOrPhone, setTouchedEmailOrPhone] = useState(false)
+  const [touchedPassword, setTouchedPassword] = useState(false)
+
+  const emailOrPhoneError = touchedEmailOrPhone && emailOrPhone
+    ? (!isValidEmailOrPhone(emailOrPhone) ? "Masukkan email atau nomor HP yang valid" : "")
+    : touchedEmailOrPhone && !emailOrPhone
+    ? "Email / No. HP wajib diisi"
+    : ""
+
+  const passwordError = touchedPassword && !password
+    ? "Password wajib diisi"
+    : touchedPassword && password.length < 6
+    ? "Password minimal 6 karakter"
+    : ""
+
+  const isFormValid = emailOrPhone && password && !emailOrPhoneError && !passwordError
 
   const handleLogin = async () => {
-    if (!emailOrPhone || !password) return
+    setTouchedEmailOrPhone(true)
+    setTouchedPassword(true)
+    if (!isFormValid) return
     setIsLoading(true)
 
     // Simulate login delay
@@ -304,10 +336,14 @@ export function LoginScreen() {
             <Input
               value={emailOrPhone}
               onChange={(e) => setEmailOrPhone(e.target.value)}
+              onBlur={() => setTouchedEmailOrPhone(true)}
               placeholder="contoh@email.com atau 08123456789"
-              className="pl-10 h-12 rounded-xl bg-muted/50 border-border/50 focus:border-emerald-500 focus:ring-emerald-500/20"
+              className={`pl-10 h-12 rounded-xl bg-muted/50 border-border/50 focus:border-emerald-500 focus:ring-emerald-500/20 ${emailOrPhoneError ? "border-red-500 focus:border-red-500" : ""}`}
             />
           </div>
+          {emailOrPhoneError && (
+            <p className="text-xs text-red-500">{emailOrPhoneError}</p>
+          )}
         </div>
 
         {/* Password input */}
@@ -320,8 +356,9 @@ export function LoginScreen() {
               type={showPassword ? "text" : "password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              onBlur={() => setTouchedPassword(true)}
               placeholder="Masukkan password"
-              className="pl-4 pr-10 h-12 rounded-xl bg-muted/50 border-border/50 focus:border-emerald-500 focus:ring-emerald-500/20"
+              className={`pl-4 pr-10 h-12 rounded-xl bg-muted/50 border-border/50 focus:border-emerald-500 focus:ring-emerald-500/20 ${passwordError ? "border-red-500 focus:border-red-500" : ""}`}
             />
             <button
               type="button"
@@ -335,6 +372,9 @@ export function LoginScreen() {
               )}
             </button>
           </div>
+          {passwordError && (
+            <p className="text-xs text-red-500">{passwordError}</p>
+          )}
         </div>
 
         {/* Forgot password */}
@@ -350,7 +390,7 @@ export function LoginScreen() {
         {/* Login button */}
         <Button
           onClick={handleLogin}
-          disabled={isLoading || !emailOrPhone || !password}
+          disabled={isLoading || !isFormValid}
           className="w-full h-12 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-semibold text-base disabled:opacity-50"
         >
           {isLoading ? (
@@ -512,10 +552,45 @@ export function RegisterScreen() {
   const [showPassword, setShowPassword] = useState(false)
   const [agreeTerms, setAgreeTerms] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [touchedFields, setTouchedFields] = useState({ name: false, email: false, phone: false, password: false, confirmPassword: false })
+
+  const nameError = touchedFields.name && name
+    ? (name.length < 3 ? "Nama minimal 3 karakter" : /^\d+$/.test(name) ? "Nama tidak boleh hanya angka" : "")
+    : touchedFields.name && !name
+    ? "Nama wajib diisi"
+    : ""
+
+  const emailError = touchedFields.email && email
+    ? (!isValidEmail(email) ? "Format email tidak valid" : "")
+    : touchedFields.email && !email
+    ? "Email wajib diisi"
+    : ""
+
+  const phoneError = touchedFields.phone && phone
+    ? (!isValidPhone(phone) ? "Nomor HP harus dimulai dengan 0 atau +62, minimal 10 digit" : "")
+    : touchedFields.phone && !phone
+    ? "No. HP wajib diisi"
+    : ""
+
+  const passwordError = touchedFields.password && password
+    ? (!isValidPassword(password)
+      ? (password.length < 8 ? "Password minimal 8 karakter"
+        : !/[a-zA-Z]/.test(password) ? "Password harus mengandung huruf"
+        : !/\d/.test(password) ? "Password harus mengandung angka"
+        : "")
+      : "")
+    : touchedFields.password && !password
+    ? "Password wajib diisi"
+    : ""
+
+  const passwordsMatch = !confirmPassword || password === confirmPassword
+
+  const isFormValid = name && email && phone && password && confirmPassword && agreeTerms
+    && !nameError && !emailError && !phoneError && !passwordError && passwordsMatch
 
   const handleRegister = async () => {
-    if (!name || !email || !phone || !password || !confirmPassword || !agreeTerms) return
-    if (password !== confirmPassword) return
+    setTouchedFields({ name: true, email: true, phone: true, password: true, confirmPassword: true })
+    if (!isFormValid) return
 
     setIsLoading(true)
     await new Promise((resolve) => setTimeout(resolve, 800))
@@ -534,8 +609,6 @@ export function RegisterScreen() {
     login(mockUser)
     setIsLoading(false)
   }
-
-  const passwordsMatch = !confirmPassword || password === confirmPassword
 
   return (
     <motion.div
@@ -569,9 +642,13 @@ export function RegisterScreen() {
           <Input
             value={name}
             onChange={(e) => setName(e.target.value)}
+            onBlur={() => setTouchedFields((t) => ({ ...t, name: true }))}
             placeholder="Masukkan nama lengkap"
-            className="h-12 rounded-xl bg-muted/50 border-border/50 focus:border-emerald-500 focus:ring-emerald-500/20"
+            className={`h-12 rounded-xl bg-muted/50 border-border/50 focus:border-emerald-500 focus:ring-emerald-500/20 ${nameError ? "border-red-500 focus:border-red-500" : ""}`}
           />
+          {nameError && (
+            <p className="text-xs text-red-500">{nameError}</p>
+          )}
         </div>
 
         {/* Email */}
@@ -582,10 +659,14 @@ export function RegisterScreen() {
             <Input
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              onBlur={() => setTouchedFields((t) => ({ ...t, email: true }))}
               placeholder="contoh@email.com"
-              className="pl-10 h-12 rounded-xl bg-muted/50 border-border/50 focus:border-emerald-500 focus:ring-emerald-500/20"
+              className={`pl-10 h-12 rounded-xl bg-muted/50 border-border/50 focus:border-emerald-500 focus:ring-emerald-500/20 ${emailError ? "border-red-500 focus:border-red-500" : ""}`}
             />
           </div>
+          {emailError && (
+            <p className="text-xs text-red-500">{emailError}</p>
+          )}
         </div>
 
         {/* Phone */}
@@ -596,10 +677,14 @@ export function RegisterScreen() {
             <Input
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
+              onBlur={() => setTouchedFields((t) => ({ ...t, phone: true }))}
               placeholder="08123456789"
-              className="pl-10 h-12 rounded-xl bg-muted/50 border-border/50 focus:border-emerald-500 focus:ring-emerald-500/20"
+              className={`pl-10 h-12 rounded-xl bg-muted/50 border-border/50 focus:border-emerald-500 focus:ring-emerald-500/20 ${phoneError ? "border-red-500 focus:border-red-500" : ""}`}
             />
           </div>
+          {phoneError && (
+            <p className="text-xs text-red-500">{phoneError}</p>
+          )}
         </div>
 
         {/* Password */}
@@ -610,8 +695,9 @@ export function RegisterScreen() {
               type={showPassword ? "text" : "password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              onBlur={() => setTouchedFields((t) => ({ ...t, password: true }))}
               placeholder="Minimal 8 karakter"
-              className="pr-10 h-12 rounded-xl bg-muted/50 border-border/50 focus:border-emerald-500 focus:ring-emerald-500/20"
+              className={`pr-10 h-12 rounded-xl bg-muted/50 border-border/50 focus:border-emerald-500 focus:ring-emerald-500/20 ${passwordError ? "border-red-500 focus:border-red-500" : ""}`}
             />
             <button
               type="button"
@@ -621,6 +707,22 @@ export function RegisterScreen() {
               {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
           </div>
+          {touchedFields.password && password && (
+            <div className="space-y-1 mt-1">
+              <p className={`text-xs ${password.length >= 8 ? "text-emerald-500" : "text-muted-foreground"}`}>
+                {password.length >= 8 ? "✓" : "○"} Minimal 8 karakter
+              </p>
+              <p className={`text-xs ${/[a-zA-Z]/.test(password) ? "text-emerald-500" : "text-muted-foreground"}`}>
+                {/[a-zA-Z]/.test(password) ? "✓" : "○"} Mengandung huruf
+              </p>
+              <p className={`text-xs ${/\d/.test(password) ? "text-emerald-500" : "text-muted-foreground"}`}>
+                {/\d/.test(password) ? "✓" : "○"} Mengandung angka
+              </p>
+            </div>
+          )}
+          {passwordError && (
+            <p className="text-xs text-red-500">{passwordError}</p>
+          )}
         </div>
 
         {/* Confirm Password */}
@@ -630,6 +732,7 @@ export function RegisterScreen() {
             type={showPassword ? "text" : "password"}
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
+            onBlur={() => setTouchedFields((t) => ({ ...t, confirmPassword: true }))}
             placeholder="Ulangi password"
             className={`h-12 rounded-xl bg-muted/50 border-border/50 focus:border-emerald-500 focus:ring-emerald-500/20 ${
               !passwordsMatch ? "border-red-500 focus:border-red-500" : ""
@@ -660,7 +763,7 @@ export function RegisterScreen() {
         {/* Register button */}
         <Button
           onClick={handleRegister}
-          disabled={isLoading || !name || !email || !phone || !password || !confirmPassword || !agreeTerms || !passwordsMatch}
+          disabled={isLoading || !isFormValid}
           className="w-full h-12 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-semibold text-base disabled:opacity-50"
         >
           {isLoading ? (

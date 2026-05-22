@@ -30,11 +30,7 @@ const stagger = {
 
 // ==================== SETTINGS SCREEN ====================
 export function SettingsScreen() {
-  const { currentUser, showToast, logout, avatarUrl, updateAvatar, updateProfile } = useAppStore()
-  const [twoFactor, setTwoFactor] = useState(false)
-  const [pushNotif, setPushNotif] = useState(true)
-  const [emailNotif, setEmailNotif] = useState(true)
-  const [dataSharing, setDataSharing] = useState(false)
+  const { currentUser, showToast, logout, avatarUrl, updateAvatar, updateProfile, settings, updateSettings, deleteAccount } = useAppStore()
   const [editField, setEditField] = useState<string | null>(null)
   const [editValue, setEditValue] = useState("")
   const [showPasswordDialog, setShowPasswordDialog] = useState(false)
@@ -100,7 +96,7 @@ export function SettingsScreen() {
 
   const handleDeleteAccount = () => {
     if (confirm("Apakah kamu yakin ingin menghapus akun? Tindakan ini tidak bisa dibatalkan.")) {
-      logout()
+      deleteAccount()
       showToast("Akun berhasil dihapus", "success")
     }
   }
@@ -259,7 +255,7 @@ export function SettingsScreen() {
                   <p className="text-xs text-muted-foreground">Keamanan ekstra untuk akun</p>
                 </div>
               </div>
-              <Switch checked={twoFactor} onCheckedChange={setTwoFactor} />
+              <Switch checked={settings.twoFactor} onCheckedChange={() => updateSettings({ twoFactor: !settings.twoFactor })} />
             </div>
           </Card>
         </motion.div>
@@ -278,7 +274,7 @@ export function SettingsScreen() {
                   <p className="text-xs text-muted-foreground">Notifikasi di perangkat</p>
                 </div>
               </div>
-              <Switch checked={pushNotif} onCheckedChange={setPushNotif} />
+              <Switch checked={settings.pushNotif} onCheckedChange={() => updateSettings({ pushNotif: !settings.pushNotif })} />
             </div>
             <Separator />
             <div className="flex items-center justify-between py-1">
@@ -291,7 +287,7 @@ export function SettingsScreen() {
                   <p className="text-xs text-muted-foreground">Notifikasi via email</p>
                 </div>
               </div>
-              <Switch checked={emailNotif} onCheckedChange={setEmailNotif} />
+              <Switch checked={settings.emailNotif} onCheckedChange={() => updateSettings({ emailNotif: !settings.emailNotif })} />
             </div>
           </Card>
         </motion.div>
@@ -342,7 +338,7 @@ export function SettingsScreen() {
                   <p className="text-xs text-muted-foreground">Izinkan berbagi data untuk analitik</p>
                 </div>
               </div>
-              <Switch checked={dataSharing} onCheckedChange={setDataSharing} />
+              <Switch checked={settings.dataSharing} onCheckedChange={() => updateSettings({ dataSharing: !settings.dataSharing })} />
             </div>
           </Card>
         </motion.div>
@@ -431,13 +427,13 @@ export function SettingsScreen() {
 
 // ==================== VOUCHER SCREEN ====================
 export function VoucherScreen() {
-  const { vouchers, selectVoucher, showToast, goBack } = useAppStore()
+  const { vouchers, selectVoucher, showToast, goBack, usedVoucherIds } = useAppStore()
   const [activeTab, setActiveTab] = useState("available")
   const [code, setCode] = useState("")
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
-  const availableVouchers = vouchers.filter(v => v.isActive && new Date(v.validUntil) > new Date())
-  const usedVouchers: typeof vouchers = []
+  const availableVouchers = vouchers.filter(v => v.isActive && new Date(v.validUntil) > new Date() && !usedVoucherIds.includes(v.id))
+  const usedVouchers = vouchers.filter(v => usedVoucherIds.includes(v.id))
   const expiredVouchers = vouchers.filter(v => new Date(v.validUntil) <= new Date())
 
   const displayed = activeTab === "available" ? availableVouchers : activeTab === "used" ? usedVouchers : expiredVouchers

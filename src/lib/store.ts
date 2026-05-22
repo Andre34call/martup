@@ -53,12 +53,15 @@ interface AppState {
   totalUnreadChats: number
   addChatMessage: (roomId: string, message: ChatMessage) => void
   addChatRoom: (room: ChatRoom) => void
+  markChatRead: (roomId: string) => void
 
   // Orders
   orders: Order[]
   addOrder: (order: Order) => void
   updateOrderStatus: (orderId: string, status: OrderStatus) => void
   payForOrder: (orderId: string) => void
+  cancelOrder: (orderId: string) => void
+  updateOrderTracking: (orderId: string, trackingNumber: string) => void
 
   // Address
   addresses: Address[]
@@ -81,6 +84,8 @@ interface AppState {
   vouchers: Voucher[]
   selectedVoucher: Voucher | null
   selectVoucher: (voucher: Voucher | null) => void
+  usedVoucherIds: string[]
+  useVoucher: (voucherId: string) => void
 
   // Followed stores
   followedStoreIds: string[]
@@ -120,6 +125,65 @@ interface AppState {
   reviews: Review[]
   reviewedOrderIds: string[]
   addReview: (review: Review, orderId: string) => void
+  deleteReview: (reviewId: string) => void
+  updateReview: (reviewId: string, updates: Partial<Review>) => void
+
+  // Admin Users
+  adminUsers: Array<{
+    id: string
+    name: string
+    email: string
+    phone: string
+    role: string
+    isVerified: boolean
+    isBlocked: boolean
+    joinDate: string
+    totalSpent: number
+    totalOrders: number
+  }>
+  updateAdminUser: (userId: string, updates: Record<string, any>) => void
+  deleteAdminUser: (userId: string) => void
+
+  // Admin Banners
+  adminBanners: Array<{
+    id: string
+    title: string
+    image: string
+    link: string
+    position: string
+    isActive: boolean
+  }>
+  addAdminBanner: (banner: any) => void
+  updateAdminBanner: (bannerId: string, updates: Record<string, any>) => void
+  deleteAdminBanner: (bannerId: string) => void
+
+  // Admin Complaints
+  adminComplaints: Array<{
+    id: string
+    userId: string
+    userName: string
+    type: string
+    description: string
+    status: string
+    createdAt: string
+    response?: string
+    orderId?: string
+    buyer?: string
+    seller?: string
+  }>
+  updateAdminComplaint: (complaintId: string, updates: Record<string, any>) => void
+
+  // Settings
+  settings: {
+    twoFactor: boolean
+    pushNotif: boolean
+    emailNotif: boolean
+    dataSharing: boolean
+  }
+  updateSettings: (settings: Partial<AppState['settings']>) => void
+
+  // Account
+  deleteAccount: () => void
 }
 
 let toastTimer: ReturnType<typeof setTimeout> | null = null
@@ -251,6 +315,30 @@ export const useAppStore = create<AppState>()(
       addChatRoom: (room) => set((state) => ({
         chatRooms: [room, ...state.chatRooms],
       })),
+      markChatRead: (roomId) => set((state) => {
+        // Mark all unread messages in that room as read
+        const roomMessages = state.chatMessages[roomId]
+        if (!roomMessages) return state
+
+        const updatedMessages = {
+          ...state.chatMessages,
+          [roomId]: roomMessages.map(m => ({ ...m, isRead: true })),
+        }
+
+        // Set the chatRoom's unreadCount to 0
+        const updatedRooms = state.chatRooms.map(r =>
+          r.id === roomId ? { ...r, unreadCount: 0 } : r
+        )
+
+        // Recalculate totalUnreadChats from all rooms
+        const totalUnreadChats = updatedRooms.reduce((sum, r) => sum + r.unreadCount, 0)
+
+        return {
+          chatMessages: updatedMessages,
+          chatRooms: updatedRooms,
+          totalUnreadChats,
+        }
+      }),
 
       // Orders
       orders: [
@@ -297,9 +385,28 @@ export const useAppStore = create<AppState>()(
               totalBalance: state.sellerBalance.availableBalance + state.sellerBalance.pendingBalance + sellerCredit + state.sellerBalance.holdBalance,
             }
           : state.sellerBalance
+
+        // Decrement product stock for each order item
+        const updatedProducts = state.products.map(p => {
+          const orderItem = order.items.find(item => item.productId === p.id)
+          if (!orderItem) return p
+
+          const newStock = p.stock - orderItem.quantity
+
+          // Also decrement variant stock if variantId exists
+          const updatedVariants = p.variants.map(v => {
+            const variantItem = order.items.find(item => item.variantId === v.id)
+            if (!variantItem) return v
+            return { ...v, stock: v.stock - variantItem.quantity }
+          })
+
+          return { ...p, stock: Math.max(0, newStock), variants: updatedVariants }
+        })
+
         return {
           orders: [order, ...state.orders],
           sellerBalance: newSellerBalance,
+          products: updatedProducts,
         }
       }),
       updateOrderStatus: (orderId, status) => set((state) => {
@@ -367,6 +474,49 @@ export const useAppStore = create<AppState>()(
           sellerBalance: newSellerBalance,
         }
       }),
+      cancelOrder: (orderId) => set((state) => {
+        const order = state.orders.find(o => o.id === orderId)
+        if (!order) return state
+
+        const wasPaid = order.paymentStatus === 'paid' || order.status === 'paid' || order.status === 'processing' || order.status === 'shipped'
+        const sellerCredit = order.subtotal * 0.95
+
+        let newSellerBalance = { ...state.sellerBalance }
+        let newWalletBalance = state.walletBalance
+        let newWalletMutations = [...state.walletMutations]
+
+        // If the order was paid, reverse the seller's pending balance
+        if (wasPaid) {
+          newSellerBalance.pendingBalance -= sellerCredit
+        }
+
+        // If payment was via wallet, refund the buyer's walletBalance
+        if (order.paymentMethod?.toLowerCase() === 'wallet' && wasPaid) {
+          newWalletBalance = state.walletBalance + order.totalAmount
+          newWalletMutations = [{
+            id: `wm${Date.now()}`, type: 'credit' as const, amount: order.totalAmount, balance: newWalletBalance,
+            description: `Refund Order #${order.orderNumber}`, refType: 'refund', createdAt: new Date().toISOString()
+          }, ...state.walletMutations]
+        }
+
+        // Recalculate sellerBalance.totalBalance
+        newSellerBalance.totalBalance = newSellerBalance.availableBalance + newSellerBalance.pendingBalance + newSellerBalance.holdBalance
+
+        return {
+          orders: state.orders.map(o => o.id === orderId ? {
+            ...o, status: 'cancelled' as OrderStatus, paymentStatus: 'refunded',
+          } : o),
+          sellerBalance: newSellerBalance,
+          walletBalance: newWalletBalance,
+          walletMutations: newWalletMutations,
+        }
+      }),
+      updateOrderTracking: (orderId, trackingNumber) => set((state) => ({
+        orders: state.orders.map(o => o.id === orderId ? {
+          ...o,
+          shipping: o.shipping ? { ...o.shipping, trackingNumber } : undefined,
+        } : o),
+      })),
 
       // Address
       addresses: [
@@ -443,6 +593,12 @@ export const useAppStore = create<AppState>()(
       ],
       selectedVoucher: null,
       selectVoucher: (voucher) => set({ selectedVoucher: voucher }),
+      usedVoucherIds: [],
+      useVoucher: (voucherId) => set((state) => ({
+        usedVoucherIds: state.usedVoucherIds.includes(voucherId)
+          ? state.usedVoucherIds
+          : [...state.usedVoucherIds, voucherId],
+      })),
 
       // Followed stores
       followedStoreIds: ['s1', 's2'],
@@ -646,6 +802,147 @@ export const useAppStore = create<AppState>()(
           products: updatedProducts,
         }
       }),
+      deleteReview: (reviewId) => set((state) => {
+        const review = state.reviews.find(r => r.id === reviewId)
+        if (!review) return state
+
+        // Recalculate product rating and decrement reviewCount
+        const remainingReviews = state.reviews.filter(r => r.id !== reviewId)
+        const updatedProducts = state.products.map(p => {
+          if (p.id !== review.productId) return p
+          const productReviews = remainingReviews.filter(r => r.productId === p.id)
+          const avgRating = productReviews.length > 0
+            ? productReviews.reduce((sum, r) => sum + r.rating, 0) / productReviews.length
+            : 0
+          return {
+            ...p,
+            rating: Math.round(avgRating * 10) / 10,
+            reviewCount: Math.max(0, p.reviewCount - 1),
+          }
+        })
+
+        return {
+          reviews: state.reviews.filter(r => r.id !== reviewId),
+          products: updatedProducts,
+        }
+      }),
+      updateReview: (reviewId, updates) => set((state) => {
+        const review = state.reviews.find(r => r.id === reviewId)
+        if (!review) return state
+
+        const updatedReviews = state.reviews.map(r =>
+          r.id === reviewId ? { ...r, ...updates } : r
+        )
+
+        // Recalculate product rating
+        const productId = review.productId
+        const updatedProducts = state.products.map(p => {
+          if (p.id !== productId) return p
+          const productReviews = updatedReviews.filter(r => r.productId === p.id)
+          const avgRating = productReviews.length > 0
+            ? productReviews.reduce((sum, r) => sum + r.rating, 0) / productReviews.length
+            : 0
+          return { ...p, rating: Math.round(avgRating * 10) / 10 }
+        })
+
+        return {
+          reviews: updatedReviews,
+          products: updatedProducts,
+        }
+      }),
+
+      // Admin Users
+      adminUsers: [
+        { id: "u1", name: "Ahmad Fauzi", email: "ahmad@email.com", phone: "081234567890", role: "buyer", isVerified: true, isBlocked: false, joinDate: "15 Jan 2024", totalSpent: 2500000, totalOrders: 12 },
+        { id: "u2", name: "Gadget Pro Store", email: "gadget@email.com", phone: "081234567891", role: "seller", isVerified: true, isBlocked: false, joinDate: "20 Feb 2024", totalSpent: 0, totalOrders: 0 },
+        { id: "u3", name: "Fashion Hub", email: "fashion@email.com", phone: "081234567892", role: "seller", isVerified: true, isBlocked: false, joinDate: "5 Mar 2024", totalSpent: 0, totalOrders: 0 },
+        { id: "u4", name: "Beauty Corner", email: "beauty@email.com", phone: "081234567893", role: "seller", isVerified: false, isBlocked: false, joinDate: "10 Apr 2024", totalSpent: 0, totalOrders: 0 },
+        { id: "u5", name: "Siti Nurhaliza", email: "siti@email.com", phone: "081234567894", role: "buyer", isVerified: true, isBlocked: false, joinDate: "1 Mei 2024", totalSpent: 890000, totalOrders: 5 },
+        { id: "u6", name: "Budi Santoso", email: "budi@email.com", phone: "081234567895", role: "buyer", isVerified: true, isBlocked: true, joinDate: "12 Jun 2024", totalSpent: 150000, totalOrders: 2 },
+        { id: "u7", name: "Home Living ID", email: "home@email.com", phone: "081234567896", role: "seller", isVerified: true, isBlocked: false, joinDate: "8 Jul 2024", totalSpent: 0, totalOrders: 0 },
+        { id: "u8", name: "Sport Zone", email: "sport@email.com", phone: "081234567897", role: "seller", isVerified: true, isBlocked: false, joinDate: "22 Agu 2024", totalSpent: 0, totalOrders: 0 },
+        { id: "u9", name: "Dewi Lestari", email: "dewi@email.com", phone: "081234567898", role: "buyer", isVerified: true, isBlocked: false, joinDate: "15 Sep 2024", totalSpent: 320000, totalOrders: 3 },
+        { id: "u10", name: "Rudi Hartono", email: "rudi@email.com", phone: "081234567899", role: "buyer", isVerified: true, isBlocked: false, joinDate: "3 Okt 2024", totalSpent: 750000, totalOrders: 4 },
+        { id: "u11", name: "Maya Putri", email: "maya@email.com", phone: "081234567800", role: "buyer", isVerified: true, isBlocked: false, joinDate: "18 Nov 2024", totalSpent: 180000, totalOrders: 1 },
+        { id: "u12", name: "Tech World", email: "tech@email.com", phone: "081234567801", role: "seller", isVerified: false, isBlocked: false, joinDate: "1 Des 2024", totalSpent: 0, totalOrders: 0 },
+      ],
+      updateAdminUser: (userId, updates) => set((state) => ({
+        adminUsers: state.adminUsers.map(u => u.id === userId ? { ...u, ...updates } : u)
+      })),
+      deleteAdminUser: (userId) => set((state) => ({
+        adminUsers: state.adminUsers.filter(u => u.id !== userId)
+      })),
+
+      // Admin Banners
+      adminBanners: [
+        { id: "b1", title: "Flash Sale Akhir Tahun", image: "", link: "", position: "Home Top", isActive: true },
+        { id: "b2", title: "Diskon Elektronik 50%", image: "", link: "", position: "Category - Elektronik", isActive: true },
+        { id: "b3", title: "Gratis Ongkir Minimal Belanja 100K", image: "", link: "", position: "Home Middle", isActive: false },
+      ],
+      addAdminBanner: (banner) => set((state) => ({
+        adminBanners: [...state.adminBanners, banner]
+      })),
+      updateAdminBanner: (bannerId, updates) => set((state) => ({
+        adminBanners: state.adminBanners.map(b => b.id === bannerId ? { ...b, ...updates } : b)
+      })),
+      deleteAdminBanner: (bannerId) => set((state) => ({
+        adminBanners: state.adminBanners.filter(b => b.id !== bannerId)
+      })),
+
+      // Admin Complaints
+      adminComplaints: [
+        { id: "c1", userId: "u1", userName: "Ahmad Fauzi", type: "Barang Tidak Sesuai", description: "iPhone yang dikirim warna berbeda dari pesanan", status: "open", createdAt: "2024-12-18T10:00:00Z", orderId: "ORD-2024-201", buyer: "Ahmad Fauzi", seller: "Gadget Pro Store" },
+        { id: "c2", userId: "u5", userName: "Siti Nurhaliza", type: "Pengiriman Lambat", description: "Sudah 7 hari belum dikirim", status: "open", createdAt: "2024-12-19T08:00:00Z", orderId: "ORD-2024-202", buyer: "Siti Nurhaliza", seller: "Fashion Hub" },
+        { id: "c3", userId: "u6", userName: "Budi Santoso", type: "Produk Palsu", description: "Skincare yang diterima bukan original", status: "processing", createdAt: "2024-12-17T14:00:00Z", orderId: "ORD-2024-203", buyer: "Budi Santoso", seller: "Beauty Corner" },
+        { id: "c4", userId: "u9", userName: "Dewi Lestari", type: "Barang Rusak", description: "Diffuser diterima dalam keadaan pecah", status: "open", createdAt: "2024-12-20T09:00:00Z", orderId: "ORD-2024-204", buyer: "Dewi Lestari", seller: "Home Living ID" },
+        { id: "c5", userId: "u10", userName: "Rudi Hartono", type: "Refund Ditolak", description: "Seller menolak refund tanpa alasan jelas", status: "resolved", createdAt: "2024-12-16T11:00:00Z", orderId: "ORD-2024-205", buyer: "Rudi Hartono", seller: "Sport Zone" },
+      ],
+      updateAdminComplaint: (complaintId, updates) => set((state) => ({
+        adminComplaints: state.adminComplaints.map(c => c.id === complaintId ? { ...c, ...updates } : c)
+      })),
+
+      // Settings
+      settings: {
+        twoFactor: false,
+        pushNotif: true,
+        emailNotif: true,
+        dataSharing: false,
+      },
+      updateSettings: (settingsUpdate) => set((state) => ({
+        settings: { ...state.settings, ...settingsUpdate }
+      })),
+
+      // Account
+      deleteAccount: () => {
+        set((state) => ({
+          orders: [],
+          reviews: [],
+          chatMessages: {},
+          chatRooms: [],
+          walletMutations: [],
+          addresses: [],
+          walletBalance: 0,
+          walletHoldBalance: 0,
+          walletCoins: 0,
+          sellerBalance: {
+            availableBalance: 0,
+            pendingBalance: 0,
+            holdBalance: 0,
+            totalBalance: 0,
+            totalWithdrawn: 0,
+          },
+          selectedProductId: null,
+          selectedCategoryId: null,
+          selectedOrderId: null,
+          selectedChatRoomId: null,
+          selectedSellerId: null,
+          selectedAddressId: null,
+          usedVoucherIds: [],
+          followedStoreIds: [],
+        }))
+        // Call logout at the end
+        get().logout()
+      },
     }),
     {
       name: 'martup-app-store',
@@ -683,6 +980,7 @@ export const useAppStore = create<AppState>()(
         // Vouchers
         vouchers: state.vouchers,
         selectedVoucher: state.selectedVoucher,
+        usedVoucherIds: state.usedVoucherIds,
         // Followed stores
         followedStoreIds: state.followedStoreIds,
         // Search
@@ -699,6 +997,12 @@ export const useAppStore = create<AppState>()(
         // Reviews
         reviews: state.reviews,
         reviewedOrderIds: state.reviewedOrderIds,
+        // Settings
+        settings: state.settings,
+        // Admin
+        adminUsers: state.adminUsers,
+        adminBanners: state.adminBanners,
+        adminComplaints: state.adminComplaints,
       }),
       skipHydration: true,
     }

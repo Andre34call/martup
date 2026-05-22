@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import {
   MapPin, ChevronRight, Truck, Ticket, CreditCard, Wallet,
   Package, Check, ShoppingBag, Clock, BadgeCheck, ArrowRight,
-  ShieldCheck, Info, Banknote, Smartphone
+  ShieldCheck, Info, Banknote, Smartphone, AlertTriangle
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -111,7 +111,15 @@ function AddressCard({ address, onChange }: { address: Address | null; onChange:
                 {address.label}
               </Badge>
             </div>
-            <p className="text-xs text-muted-foreground">{address.phone}</p>
+            <div className="space-y-0.5">
+              <p className="text-xs text-muted-foreground">{address.phone}</p>
+              {address.phone && !address.phone.startsWith('0') && !address.phone.startsWith('+') && (
+                <div className="flex items-center gap-1 text-amber-500">
+                  <AlertTriangle className="w-3 h-3 flex-shrink-0" />
+                  <span className="text-[10px]">Nomor telepon harus diawali dengan "0" atau "+"</span>
+                </div>
+              )}
+            </div>
             <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
               {address.address}, {address.city}, {address.province} {address.postalCode}
             </p>
@@ -220,7 +228,7 @@ function ShippingSelector({
 
 // ==================== MAIN COMPONENT ====================
 export function CheckoutScreen() {
-  const { navigate, addresses, selectedAddressId, selectedVoucher, addOrder, showToast, walletBalance, deductWallet } = useAppStore()
+  const { navigate, addresses, selectedAddressId, selectedVoucher, addOrder, showToast, walletBalance, deductWallet, useVoucher: markVoucherUsed } = useAppStore()
   const { items, getCheckedItems, getCheckedTotal, getCheckedCount, clearCart, removeItems } = useCartStore()
 
   const [selectedPayment, setSelectedPayment] = useState<string | null>(null)
@@ -309,6 +317,13 @@ export function CheckoutScreen() {
       return
     }
 
+    // Stock validation
+    const outOfStockItem = checkedItems.find(item => item.quantity > item.product.stock)
+    if (outOfStockItem) {
+      showToast(`Stok "${outOfStockItem.product.name}" tidak mencukupi (tersedia: ${outOfStockItem.product.stock})`, "error")
+      return
+    }
+
     setIsProcessing(true)
 
     const newOrderNumber = `ORD-${Date.now()}`
@@ -321,7 +336,8 @@ export function CheckoutScreen() {
         const sellerShipping = shippingBySeller[group.seller.id]
         const groupSubtotal = group.items.reduce((sum, i) => sum + ((i.product.discountPrice || i.product.price) * i.quantity), 0)
         const groupShipping = sellerShipping?.price || 0
-        const groupTotal = groupSubtotal + groupShipping + platformFee
+        const groupDiscount = subtotal > 0 ? Math.round(voucherDiscount * (groupSubtotal / subtotal)) : 0
+        const groupTotal = groupSubtotal + groupShipping - groupDiscount + platformFee
 
         const order = {
           id: `o${Date.now()}-${group.seller.id}`,
@@ -331,7 +347,7 @@ export function CheckoutScreen() {
           status: 'paid' as const,
           subtotal: groupSubtotal,
           shippingCost: groupShipping,
-          discountAmount: voucherDiscount,
+          discountAmount: groupDiscount,
           taxAmount: 0,
           platformFee,
           totalAmount: groupTotal,
@@ -369,6 +385,11 @@ export function CheckoutScreen() {
       // Deduct wallet balance if paying with MartUp Pay
       if (selectedPayment === 'wallet') {
         deductWallet(totalAmount, 'Pembayaran Order #' + newOrderNumber)
+      }
+
+      // Mark voucher as used
+      if (selectedVoucher) {
+        markVoucherUsed(selectedVoucher.id)
       }
 
       setIsProcessing(false)
@@ -654,6 +675,19 @@ export function CheckoutScreen() {
           <div className="flex items-center gap-1.5 pt-1">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
             <span className="text-[10px] text-muted-foreground">Transaksi aman & terenkripsi</span>
+          </div>
+
+          {/* Cancel order link */}
+          <div className="flex justify-center pt-2">
+            <button
+              onClick={() => {
+                setSelectedPayment(null)
+                navigate('cart')
+              }}
+              className="text-xs text-muted-foreground hover:text-red-500 transition-colors underline underline-offset-2"
+            >
+              Batalkan Pesanan
+            </button>
           </div>
         </motion.div>
 

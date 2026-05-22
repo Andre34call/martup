@@ -40,54 +40,6 @@ const stagger = {
 }
 
 // ==================== MOCK DATA ====================
-const mockAdminUsers = [
-  { id: "u1", name: "Ahmad Fauzi", email: "ahmad@email.com", role: "buyer" as const, status: "active", joined: "15 Jan 2024" },
-  { id: "u2", name: "Gadget Pro Store", email: "gadget@email.com", role: "seller" as const, status: "active", joined: "20 Feb 2024" },
-  { id: "u3", name: "Fashion Hub", email: "fashion@email.com", role: "seller" as const, status: "active", joined: "5 Mar 2024" },
-  { id: "u4", name: "Beauty Corner", email: "beauty@email.com", role: "seller" as const, status: "pending", joined: "10 Apr 2024" },
-  { id: "u5", name: "Siti Nurhaliza", email: "siti@email.com", role: "buyer" as const, status: "active", joined: "1 Mei 2024" },
-  { id: "u6", name: "Budi Santoso", email: "budi@email.com", role: "buyer" as const, status: "blocked", joined: "12 Jun 2024" },
-  { id: "u7", name: "Home Living ID", email: "home@email.com", role: "seller" as const, status: "active", joined: "8 Jul 2024" },
-  { id: "u8", name: "Sport Zone", email: "sport@email.com", role: "seller" as const, status: "active", joined: "22 Agu 2024" },
-  { id: "u9", name: "Dewi Lestari", email: "dewi@email.com", role: "buyer" as const, status: "active", joined: "15 Sep 2024" },
-  { id: "u10", name: "Rudi Hartono", email: "rudi@email.com", role: "buyer" as const, status: "active", joined: "3 Okt 2024" },
-  { id: "u11", name: "Maya Putri", email: "maya@email.com", role: "buyer" as const, status: "active", joined: "18 Nov 2024" },
-  { id: "u12", name: "Tech World", email: "tech@email.com", role: "seller" as const, status: "pending", joined: "1 Des 2024" },
-]
-
-const mockAdminProducts = [
-  { id: "p1", name: "iPhone 15 Pro Max", seller: "Gadget Pro Store", price: 21999000, status: "active" as const },
-  { id: "p2", name: "Samsung Galaxy S24 Ultra", seller: "Gadget Pro Store", price: 17999000, status: "active" as const },
-  { id: "p3", name: "Kemeja Flannel Premium", seller: "Fashion Hub", price: 149000, status: "active" as const },
-  { id: "p4", name: "Gaun Midi Elegant", seller: "Fashion Hub", price: 359000, status: "active" as const },
-  { id: "p5", name: "Sneakers Nike Air Max 90", seller: "Sport Zone", price: 999000, status: "active" as const },
-  { id: "p6", name: "Lipstik Matte Velvet", seller: "Beauty Corner", price: 55000, status: "blocked" as const },
-  { id: "p7", name: "Skincare Set Glowing", seller: "Beauty Corner", price: 245000, status: "active" as const },
-  { id: "p8", name: "Produk Ilegal XXX", seller: "Bad Seller", price: 500000, status: "blocked" as const },
-]
-
-const mockWithdrawals = [
-  { id: "w1", sellerName: "Gadget Pro Store", amount: 25000000, bank: "BCA - ****1234", requestDate: "20 Des 2024", status: "pending" as const },
-  { id: "w2", sellerName: "Fashion Hub", amount: 15000000, bank: "Mandiri - ****5678", requestDate: "20 Des 2024", status: "pending" as const },
-  { id: "w3", sellerName: "Home Living ID", amount: 8000000, bank: "BNI - ****9012", requestDate: "19 Des 2024", status: "pending" as const },
-  { id: "w4", sellerName: "Sport Zone", amount: 5500000, bank: "BRI - ****3456", requestDate: "19 Des 2024", status: "pending" as const },
-  { id: "w5", sellerName: "Beauty Corner", amount: 3200000, bank: "BCA - ****7890", requestDate: "18 Des 2024", status: "approved" as const },
-]
-
-const mockBanners = [
-  { id: "b1", title: "Flash Sale Akhir Tahun", position: "Home Top", isActive: true },
-  { id: "b2", title: "Diskon Elektronik 50%", position: "Category - Elektronik", isActive: true },
-  { id: "b3", title: "Gratis Ongkir Minimal Belanja 100K", position: "Home Middle", isActive: false },
-]
-
-const mockComplaints = [
-  { id: "c1", orderId: "ORD-2024-201", buyer: "Ahmad Fauzi", seller: "Gadget Pro Store", type: "Barang Tidak Sesuai", description: "iPhone yang dikirim warna berbeda dari pesanan", status: "open" as const },
-  { id: "c2", orderId: "ORD-2024-202", buyer: "Siti Nurhaliza", seller: "Fashion Hub", type: "Pengiriman Lambat", description: "Sudah 7 hari belum dikirim", status: "open" as const },
-  { id: "c3", orderId: "ORD-2024-203", buyer: "Budi Santoso", seller: "Beauty Corner", type: "Produk Palsu", description: "Skincare yang diterima bukan original", status: "processing" as const },
-  { id: "c4", orderId: "ORD-2024-204", buyer: "Dewi Lestari", seller: "Home Living ID", type: "Barang Rusak", description: "Diffuser diterima dalam keadaan pecah", status: "open" as const },
-  { id: "c5", orderId: "ORD-2024-205", buyer: "Rudi Hartono", seller: "Sport Zone", type: "Refund Ditolak", description: "Seller menolak refund tanpa alasan jelas", status: "resolved" as const },
-]
-
 const mockTopSellers = [
   { name: "Gadget Pro Store", revenue: 4500000000, orders: 15000, rating: 4.9 },
   { name: "Home Living ID", revenue: 2800000000, orders: 12000, rating: 4.8 },
@@ -359,10 +311,16 @@ export function AdminDashboard() {
 
 // ==================== ADMIN USERS ====================
 export function AdminUsers() {
-  const { showToast } = useAppStore()
+  const { showToast, adminUsers, updateAdminUser, deleteAdminUser } = useAppStore()
   const [search, setSearch] = useState("")
   const [roleFilter, setRoleFilter] = useState("all")
-  const [users, setUsers] = useState(mockAdminUsers)
+
+  // Derive status from store fields for UI compatibility
+  const users = adminUsers.map(u => ({
+    ...u,
+    status: u.isBlocked ? "blocked" : u.isVerified ? "active" : "pending" as string,
+    joined: u.joinDate,
+  }))
 
   const filtered = users.filter(u => {
     const matchesSearch = u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase())
@@ -440,7 +398,7 @@ export function AdminUsers() {
                   <div className="flex gap-2 mt-3 pt-3 border-t border-border/50">
                     {user.status === "pending" && (
                       <Button size="sm" className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={() => {
-                        setUsers(prev => prev.map(u => u.id === user.id ? { ...u, status: "active" } : u))
+                        updateAdminUser(user.id, { isVerified: true })
                         showToast("User berhasil diverifikasi", "success")
                       }}>
                         <Check className="w-3 h-3 mr-0.5" /> Verify
@@ -448,7 +406,7 @@ export function AdminUsers() {
                     )}
                     {user.status === "active" && (
                       <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-amber-600" onClick={() => {
-                        setUsers(prev => prev.map(u => u.id === user.id ? { ...u, status: "blocked" } : u))
+                        updateAdminUser(user.id, { isBlocked: true })
                         showToast("User diblokir", "info")
                       }}>
                         <Ban className="w-3 h-3 mr-0.5" /> Block
@@ -456,14 +414,14 @@ export function AdminUsers() {
                     )}
                     {user.status === "blocked" && (
                       <Button size="sm" className="h-7 text-[11px] rounded-lg bg-blue-500 hover:bg-blue-600 text-white" onClick={() => {
-                        setUsers(prev => prev.map(u => u.id === user.id ? { ...u, status: "active" } : u))
+                        updateAdminUser(user.id, { isBlocked: false })
                         showToast("User dibuka kembali", "success")
                       }}>
                         <Check className="w-3 h-3 mr-0.5" /> Unblock
                       </Button>
                     )}
                     <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20" onClick={() => {
-                      setUsers(prev => prev.filter(u => u.id !== user.id))
+                      deleteAdminUser(user.id)
                       showToast("User dihapus", "info")
                     }}>
                       <Trash2 className="w-3 h-3" />
@@ -868,9 +826,8 @@ export function AdminWithdraw() {
 
 // ==================== ADMIN BANNER ====================
 export function AdminBanner() {
-  const { showToast } = useAppStore()
+  const { showToast, adminBanners, addAdminBanner, updateAdminBanner, deleteAdminBanner } = useAppStore()
   const [showAdd, setShowAdd] = useState(false)
-  const [banners, setBanners] = useState(mockBanners)
 
   return (
     <div className="pb-20">
@@ -888,7 +845,7 @@ export function AdminBanner() {
         <motion.div {...fadeIn}>
           <SectionHeader title="Banner Aktif" icon={<ImageIcon className="w-4 h-4" />} />
           <div className="space-y-2 mt-3">
-            {banners.map((banner, i) => (
+            {adminBanners.map((banner, i) => (
               <motion.div key={banner.id} custom={i} variants={stagger} initial="initial" animate="animate">
                 <Card className="p-4">
                   <div className="flex items-center justify-between">
@@ -902,7 +859,7 @@ export function AdminBanner() {
                       </div>
                     </div>
                     <Switch checked={banner.isActive} onCheckedChange={(checked) => {
-                      setBanners(prev => prev.map(b => b.id === banner.id ? { ...b, isActive: checked } : b))
+                      updateAdminBanner(banner.id, { isActive: checked })
                       showToast(checked ? "Banner diaktifkan" : "Banner dinonaktifkan", "success")
                     }} />
                   </div>
@@ -1100,11 +1057,12 @@ export function AdminAnalytics() {
 
 // ==================== ADMIN COMPLAINTS ====================
 export function AdminComplaints() {
+  const { showToast, adminComplaints, updateAdminComplaint } = useAppStore()
   const [activeTab, setActiveTab] = useState("open")
 
   const filtered = activeTab === "all"
-    ? mockComplaints
-    : mockComplaints.filter(c => c.status === activeTab)
+    ? adminComplaints
+    : adminComplaints.filter(c => c.status === activeTab)
 
   const statusLabel: Record<string, string> = {
     open: "Terbuka",
@@ -1167,7 +1125,7 @@ export function AdminComplaints() {
                   <div className="flex items-center gap-4 mb-2">
                     <div>
                       <p className="text-[10px] text-muted-foreground">Pembeli</p>
-                      <p className="text-xs font-medium text-foreground">{complaint.buyer}</p>
+                      <p className="text-xs font-medium text-foreground">{complaint.buyer || complaint.userName}</p>
                     </div>
                     <div>
                       <p className="text-[10px] text-muted-foreground">Seller</p>
@@ -1184,14 +1142,23 @@ export function AdminComplaints() {
                   {complaint.status !== "resolved" && (
                     <div className="flex gap-2 mt-3 pt-3 border-t border-border/50">
                       {complaint.status === "open" && (
-                        <Button size="sm" className="h-7 text-[11px] rounded-lg bg-amber-500 hover:bg-amber-600 text-white">
+                        <Button size="sm" className="h-7 text-[11px] rounded-lg bg-amber-500 hover:bg-amber-600 text-white" onClick={() => {
+                          updateAdminComplaint(complaint.id, { status: "processing" })
+                          showToast("Keluhan sedang diproses", "info")
+                        }}>
                           <Clock className="w-3 h-3 mr-0.5" /> Proses
                         </Button>
                       )}
-                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white">
+                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={() => {
+                        updateAdminComplaint(complaint.id, { status: "resolved" })
+                        showToast("Keluhan diselesaikan", "success")
+                      }}>
                         <Check className="w-3 h-3 mr-0.5" /> Resolve
                       </Button>
-                      <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500">
+                      <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500" onClick={() => {
+                        updateAdminComplaint(complaint.id, { status: "rejected" })
+                        showToast("Keluhan ditolak", "info")
+                      }}>
                         <X className="w-3 h-3 mr-0.5" /> Reject
                       </Button>
                     </div>

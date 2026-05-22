@@ -2,6 +2,7 @@
 
 import { motion, AnimatePresence } from "framer-motion"
 import { useAppStore, useCartStore } from "@/lib/store"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { MOCK_PRODUCTS, formatPrice, formatRelativeTime } from "@/lib/mock-data"
 import { PageHeader, EmptyState, StatusBadge, TabBar } from "./shared"
 import type { Order, OrderStatus } from "@/lib/types"
@@ -78,7 +79,8 @@ function getSecondaryButton(order: Order): { label: string } | null {
 
 // ==================== ORDER CARD ====================
 function OrderCard({ order, onTap }: { order: Order; onTap: () => void }) {
-  const { showToast, updateOrderStatus, setSelectedOrder, navigate, payForOrder } = useAppStore()
+  const { showToast, updateOrderStatus, setSelectedOrder, navigate, payForOrder, cancelOrder } = useAppStore()
+  const [showCancelDialog, setShowCancelDialog] = useState(false)
   const { addItem } = useCartStore()
   const primaryBtn = getActionButton(order)
   const secondaryBtn = getSecondaryButton(order)
@@ -135,8 +137,21 @@ function OrderCard({ order, onTap }: { order: Order; onTap: () => void }) {
       </div>
 
       {/* Actions */}
-      {(primaryBtn || secondaryBtn) && (
+      {(primaryBtn || secondaryBtn || order.status === "pending") && (
         <div className="px-4 py-3 border-t border-border/30 flex items-center justify-end gap-2">
+          {order.status === "pending" && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs rounded-lg text-red-500 border-red-200 dark:border-red-900/50 hover:bg-red-50 dark:hover:bg-red-900/20"
+              onClick={(e) => {
+                e.stopPropagation()
+                setShowCancelDialog(true)
+              }}
+            >
+              Batalkan
+            </Button>
+          )}
           {secondaryBtn && (
             <Button
               size="sm"
@@ -185,13 +200,39 @@ function OrderCard({ order, onTap }: { order: Order; onTap: () => void }) {
           )}
         </div>
       )}
+
+      {/* Cancel Confirmation Dialog */}
+      <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
+        <DialogContent className="max-w-[320px] rounded-2xl p-5">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold">Batalkan Pesanan?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">Apakah kamu yakin ingin membatalkan pesanan {order.orderNumber}?</p>
+          <DialogFooter className="mt-3 gap-2">
+            <Button variant="outline" onClick={() => setShowCancelDialog(false)} className="rounded-xl h-10 flex-1">
+              Tidak
+            </Button>
+            <Button
+              onClick={() => {
+                cancelOrder(order.id)
+                showToast("Pesanan berhasil dibatalkan", "success")
+                setShowCancelDialog(false)
+              }}
+              className="bg-red-500 hover:bg-red-600 text-white rounded-xl h-10 flex-1"
+            >
+              Ya, Batalkan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </motion.div>
   )
 }
 
 // ==================== ORDER DETAIL ====================
 function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
-  const { showToast, updateOrderStatus, setSelectedOrder, navigate, setSelectedChatRoom, chatRooms, payForOrder } = useAppStore()
+  const { showToast, updateOrderStatus, setSelectedOrder, navigate, setSelectedChatRoom, chatRooms, payForOrder, cancelOrder } = useAppStore()
+  const [showCancelDialog, setShowCancelDialog] = useState(false)
   const { addItem } = useCartStore()
   const activeStep = getActiveStep(order)
 
@@ -460,15 +501,24 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
         </div>
 
         {/* Action Button */}
-        <div className="px-4 pb-4">
+        <div className="px-4 pb-4 space-y-3">
           {order.status === "pending" && (
-            <Button
-              className="w-full h-12 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold"
-              onClick={() => { payForOrder(order.id); showToast("Pembayaran berhasil diproses!", "success") }}
-            >
-              <CreditCard className="w-4 h-4 mr-2" />
-              Bayar Sekarang
-            </Button>
+            <>
+              <Button
+                className="w-full h-12 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold"
+                onClick={() => { payForOrder(order.id); showToast("Pembayaran berhasil diproses!", "success") }}
+              >
+                <CreditCard className="w-4 h-4 mr-2" />
+                Bayar Sekarang
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full h-12 rounded-xl text-red-500 border-red-200 dark:border-red-900/50 hover:bg-red-50 dark:hover:bg-red-900/20 text-sm font-semibold"
+                onClick={() => setShowCancelDialog(true)}
+              >
+                Batalkan Pesanan
+              </Button>
+            </>
           )}
           {order.status === "shipped" && (
             <Button
@@ -506,6 +556,31 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
           )}
         </div>
       </div>
+
+      {/* Cancel Confirmation Dialog */}
+      <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
+        <DialogContent className="max-w-[320px] rounded-2xl p-5">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold">Batalkan Pesanan?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">Apakah kamu yakin ingin membatalkan pesanan {order.orderNumber}?</p>
+          <DialogFooter className="mt-3 gap-2">
+            <Button variant="outline" onClick={() => setShowCancelDialog(false)} className="rounded-xl h-10 flex-1">
+              Tidak
+            </Button>
+            <Button
+              onClick={() => {
+                cancelOrder(order.id)
+                showToast("Pesanan berhasil dibatalkan", "success")
+                setShowCancelDialog(false)
+              }}
+              className="bg-red-500 hover:bg-red-600 text-white rounded-xl h-10 flex-1"
+            >
+              Ya, Batalkan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

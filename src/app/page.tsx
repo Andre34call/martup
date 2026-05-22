@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { Check, X, Info } from 'lucide-react'
 import { useAppStore } from '@/lib/store'
 import { BottomNav, AdminBottomNav, SellerBottomNav } from '@/components/ecommerce/shared'
+import { ErrorBoundary } from '@/components/error-boundary'
 
 // Auth screens
 import { SplashScreen, OnboardingScreen, LoginScreen, RegisterScreen, OTPScreen, ForgotPasswordScreen } from '@/components/ecommerce/auth-screens'
@@ -206,7 +207,9 @@ export default function Home() {
     <div className="min-h-screen bg-background flex justify-center">
       <div className="app-container flex flex-col min-h-screen w-full">
         <GlobalToast />
-        <ScreenRenderer />
+        <ErrorBoundary>
+          <ScreenRenderer />
+        </ErrorBoundary>
         {getBottomNav()}
       </div>
     </div>

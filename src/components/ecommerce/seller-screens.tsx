@@ -14,6 +14,7 @@ import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { useAppStore } from "@/lib/store"
 import { MOCK_SELLER_STATS, formatPrice } from "@/lib/mock-data"
 import { PageHeader, SectionHeader, StatusBadge, SearchBar, EmptyState, WalletBalanceCard } from "./shared"
@@ -451,8 +452,11 @@ export function SellerProducts() {
 
 // ==================== SELLER ORDERS ====================
 export function SellerOrders() {
-  const { navigate, updateOrderStatus, showToast, orders, currentUser } = useAppStore()
+  const { navigate, updateOrderStatus, showToast, orders, currentUser, updateOrderTracking } = useAppStore()
   const [activeTab, setActiveTab] = useState("all")
+  const [showTrackingDialog, setShowTrackingDialog] = useState(false)
+  const [trackingOrderId, setTrackingOrderId] = useState<string | null>(null)
+  const [trackingNumber, setTrackingNumber] = useState("")
 
   // Derive sellerId from currentUser
   const sellerId = useMemo(() => {
@@ -553,7 +557,11 @@ export function SellerOrders() {
                         </Button>
                       )}
                       {order.status === "processing" && (
-                        <Button size="sm" className="h-8 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={() => { updateOrderStatus(order.id, 'shipped'); showToast("Pesanan sedang dikirim", "success") }}>
+                        <Button size="sm" className="h-8 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={() => {
+                          setTrackingOrderId(order.id)
+                          setTrackingNumber("")
+                          setShowTrackingDialog(true)
+                        }}>
                           <Truck className="w-3 h-3 mr-1" /> Kirim
                         </Button>
                       )}
@@ -568,6 +576,49 @@ export function SellerOrders() {
           )}
         </div>
       </div>
+
+      {/* Tracking Number Dialog */}
+      <Dialog open={showTrackingDialog} onOpenChange={setShowTrackingDialog}>
+        <DialogContent className="max-w-[340px] rounded-2xl p-5">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold">Masukkan Nomor Resi</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 mt-2">
+            <label className="text-xs font-medium text-foreground">No. Resi Pengiriman</label>
+            <Input
+              value={trackingNumber}
+              onChange={(e) => setTrackingNumber(e.target.value)}
+              placeholder="Contoh: JNE1234567890"
+              className="rounded-xl h-10"
+              autoFocus
+            />
+          </div>
+          <DialogFooter className="mt-4 gap-2">
+            <Button variant="outline" onClick={() => setShowTrackingDialog(false)} className="rounded-xl h-10 flex-1">
+              Batal
+            </Button>
+            <Button
+              onClick={() => {
+                if (!trackingNumber.trim()) {
+                  showToast("Masukkan nomor resi", "error")
+                  return
+                }
+                if (trackingOrderId) {
+                  updateOrderTracking(trackingOrderId, trackingNumber.trim())
+                  updateOrderStatus(trackingOrderId, 'shipped')
+                  showToast("Pesanan sedang dikirim", "success")
+                }
+                setShowTrackingDialog(false)
+                setTrackingOrderId(null)
+                setTrackingNumber("")
+              }}
+              className="bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-10 flex-1"
+            >
+              Kirim Pesanan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
