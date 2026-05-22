@@ -220,7 +220,7 @@ function ShippingSelector({
 
 // ==================== MAIN COMPONENT ====================
 export function CheckoutScreen() {
-  const { navigate, addresses, selectedAddressId, selectedVoucher, addOrder, showToast, walletBalance } = useAppStore()
+  const { navigate, addresses, selectedAddressId, selectedVoucher, addOrder, showToast, walletBalance, deductWallet } = useAppStore()
   const { items, getCheckedItems, getCheckedTotal, getCheckedCount, clearCart, removeItems } = useCartStore()
 
   const [selectedPayment, setSelectedPayment] = useState<string | null>(null)
@@ -365,6 +365,11 @@ export function CheckoutScreen() {
       // Remove checked items from cart
       const checkedItemIds = checkedItems.map(i => i.id)
       removeItems(checkedItemIds)
+
+      // Deduct wallet balance if paying with MartUp Pay
+      if (selectedPayment === 'wallet') {
+        deductWallet(totalAmount, 'Pembayaran Order #' + newOrderNumber)
+      }
 
       setIsProcessing(false)
       setShowSuccessModal(true)

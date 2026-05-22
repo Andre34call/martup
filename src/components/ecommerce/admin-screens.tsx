@@ -116,7 +116,7 @@ const mockPaymentMethods = [
 
 // ==================== ADMIN DASHBOARD ====================
 export function AdminDashboard() {
-  const { navigate, switchRole, userRole, showToast } = useAppStore()
+  const { navigate, switchRole, userRole, showToast, withdrawRequests } = useAppStore()
   const stats = MOCK_ADMIN_STATS
   const [showRoleMenu, setShowRoleMenu] = useState(false)
   const roleMenuRef = useRef<HTMLDivElement>(null)
@@ -294,7 +294,7 @@ export function AdminDashboard() {
           <SectionHeader title="Tindakan Diperlukan" icon={<AlertTriangle className="w-4 h-4" />} />
           <div className="space-y-2 mt-3">
             {[
-              { label: "Permintaan Penarikan", count: 23, icon: DollarSign, color: "text-amber-600 bg-amber-50 dark:bg-amber-900/30", screen: "admin-withdraw" as const },
+              { label: "Permintaan Penarikan", count: withdrawRequests.filter(w => w.status === 'pending').length, icon: DollarSign, color: "text-amber-600 bg-amber-50 dark:bg-amber-900/30", screen: "admin-withdraw" as const },
               { label: "Verifikasi Seller", count: 5, icon: Shield, color: "text-blue-600 bg-blue-50 dark:bg-blue-900/30", screen: "admin-users" as const },
               { label: "Laporan Produk", count: 3, icon: Eye, color: "text-red-600 bg-red-50 dark:bg-red-900/30", screen: "admin-products" as const },
               { label: "Keluhan Terbuka", count: 8, icon: MessageSquare, color: "text-orange-600 bg-orange-50 dark:bg-orange-900/30", screen: "admin-complaints" as const },

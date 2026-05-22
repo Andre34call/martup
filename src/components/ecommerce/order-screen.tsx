@@ -78,7 +78,7 @@ function getSecondaryButton(order: Order): { label: string } | null {
 
 // ==================== ORDER CARD ====================
 function OrderCard({ order, onTap }: { order: Order; onTap: () => void }) {
-  const { showToast, updateOrderStatus, setSelectedOrder, navigate } = useAppStore()
+  const { showToast, updateOrderStatus, setSelectedOrder, navigate, payForOrder } = useAppStore()
   const { addItem } = useCartStore()
   const primaryBtn = getActionButton(order)
   const secondaryBtn = getSecondaryButton(order)
@@ -169,7 +169,8 @@ function OrderCard({ order, onTap }: { order: Order; onTap: () => void }) {
               onClick={(e) => {
                 e.stopPropagation()
                 if (order.status === "pending") {
-                  showToast("Pembayaran sedang diproses", "info")
+                  payForOrder(order.id)
+                  showToast("Pembayaran berhasil diproses!", "success")
                 } else if (order.status === "shipped") {
                   onTap()
                 } else if (order.status === "delivered") {
@@ -190,7 +191,7 @@ function OrderCard({ order, onTap }: { order: Order; onTap: () => void }) {
 
 // ==================== ORDER DETAIL ====================
 function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
-  const { showToast, updateOrderStatus, setSelectedOrder, navigate, setSelectedChatRoom, chatRooms } = useAppStore()
+  const { showToast, updateOrderStatus, setSelectedOrder, navigate, setSelectedChatRoom, chatRooms, payForOrder } = useAppStore()
   const { addItem } = useCartStore()
   const activeStep = getActiveStep(order)
 
@@ -463,7 +464,7 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
           {order.status === "pending" && (
             <Button
               className="w-full h-12 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold"
-              onClick={() => showToast("Pembayaran sedang diproses", "info")}
+              onClick={() => { payForOrder(order.id); showToast("Pembayaran berhasil diproses!", "success") }}
             >
               <CreditCard className="w-4 h-4 mr-2" />
               Bayar Sekarang

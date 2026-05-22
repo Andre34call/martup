@@ -55,23 +55,6 @@ const mockSellerProducts = MOCK_PRODUCTS.slice(0, 6).map(p => ({
   sellerId: "s1"
 }))
 
-const mockSellerOrders: {
-  id: string
-  orderNumber: string
-  buyerName: string
-  items: string
-  amount: number
-  status: OrderStatus
-  date: string
-}[] = [
-  { id: "so1", orderNumber: "ORD-2024-101", buyerName: "Ahmad Fauzi", items: "iPhone 15 Pro Max x1", amount: 21999000, status: "paid", date: "20 Des 2024" },
-  { id: "so2", orderNumber: "ORD-2024-102", buyerName: "Siti Nurhaliza", items: "Samsung Galaxy S24 x1", amount: 17999000, status: "processing", date: "20 Des 2024" },
-  { id: "so3", orderNumber: "ORD-2024-103", buyerName: "Budi Santoso", items: "MacBook Pro M3 x1", amount: 25999000, status: "shipped", date: "19 Des 2024" },
-  { id: "so4", orderNumber: "ORD-2024-104", buyerName: "Dewi Lestari", items: "PS5 Slim Digital x2", amount: 11598000, status: "delivered", date: "18 Des 2024" },
-  { id: "so5", orderNumber: "ORD-2024-105", buyerName: "Rudi Hartono", items: "iPhone 15 Pro Max x1", amount: 21999000, status: "pending", date: "18 Des 2024" },
-  { id: "so6", orderNumber: "ORD-2024-106", buyerName: "Maya Putri", items: "Samsung Galaxy S24 x1, PS5 x1", amount: 23798000, status: "processing", date: "17 Des 2024" },
-]
-
 const mockChatBuyers = [
   { id: "cb1", name: "Ahmad Fauzi", lastMessage: "Apakah ready stock kak?", time: "10:30", unread: 2 },
   { id: "cb2", name: "Siti Nurhaliza", lastMessage: "Terima kasih sudah kirim 🙏", time: "09:15", unread: 0 },
@@ -95,8 +78,20 @@ const mockCampaigns = [
 
 // ==================== SELLER DASHBOARD ====================
 export function SellerDashboard() {
-  const { navigate, unreadNotificationCount, switchRole, userRole } = useAppStore()
+  const { navigate, unreadNotificationCount, switchRole, userRole, orders, sellerBalance } = useAppStore()
   const stats = MOCK_SELLER_STATS
+
+  // Compute real stats from store data for sellerId 's1'
+  const sellerOrders = orders.filter(o => o.sellerId === 's1')
+  const totalRevenue = sellerOrders
+    .filter(o => o.status === 'paid' || o.status === 'delivered')
+    .reduce((sum, o) => sum + o.subtotal * 0.95, 0)
+  const totalOrders = sellerOrders.length
+  const pendingOrders = sellerOrders.filter(o => o.status === 'pending' || o.status === 'paid').length
+  const needToShip = sellerOrders.filter(o => o.status === 'paid' || o.status === 'processing').length
+  const recentOrders = [...sellerOrders]
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, 4)
   const [showRoleMenu, setShowRoleMenu] = useState(false)
   const roleMenuRef = useRef<HTMLDivElement>(null)
 
@@ -199,7 +194,7 @@ export function SellerDashboard() {
             <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/2" />
             <div className="relative z-10">
               <p className="text-sm text-emerald-100 font-medium">Pendapatan Bulan Ini</p>
-              <p className="text-3xl font-bold mt-1">{formatPrice(stats.totalRevenue)}</p>
+              <p className="text-3xl font-bold mt-1">{formatPrice(sellerBalance.availableBalance + sellerBalance.pendingBalance)}</p>
               <div className="flex items-center gap-1 mt-2">
                 <TrendingUp className="w-4 h-4 text-emerald-200" />
                 <span className="text-sm text-emerald-100 font-medium">+23% dari bulan lalu</span>
@@ -208,11 +203,11 @@ export function SellerDashboard() {
               <div className="flex gap-6">
                 <div>
                   <p className="text-xs text-emerald-200">Pesanan Baru</p>
-                  <p className="text-lg font-bold">12</p>
+                  <p className="text-lg font-bold">{pendingOrders}</p>
                 </div>
                 <div>
                   <p className="text-xs text-emerald-200">Perlu Dikirim</p>
-                  <p className="text-lg font-bold">5</p>
+                  <p className="text-lg font-bold">{needToShip}</p>
                 </div>
               </div>
             </div>
@@ -222,7 +217,7 @@ export function SellerDashboard() {
         {/* Quick Stats Grid */}
         <motion.div {...fadeIn} className="grid grid-cols-2 gap-3">
           {[
-            { label: "Total Pesanan", value: stats.totalOrders.toLocaleString(), icon: Package, color: "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 dark:text-emerald-400" },
+            { label: "Total Pesanan", value: totalOrders.toLocaleString(), icon: Package, color: "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 dark:text-emerald-400" },
             { label: "Total Produk", value: stats.totalProducts.toLocaleString(), icon: Box, color: "text-orange-600 bg-orange-50 dark:bg-orange-900/30 dark:text-orange-400" },
             { label: "Pengunjung", value: "12.5K", icon: Eye, color: "text-cyan-600 bg-cyan-50 dark:bg-cyan-900/30 dark:text-cyan-400" },
             { label: "Rating", value: "4.9", icon: Star, color: "text-amber-600 bg-amber-50 dark:bg-amber-900/30 dark:text-amber-400" },
@@ -303,8 +298,8 @@ export function SellerDashboard() {
             onAction={() => navigate("seller-orders")}
           />
           <div className="space-y-2 mt-3">
-            {mockRecentOrders.map((order, i) => (
-              <motion.div key={order.orderNumber} custom={i} variants={stagger} initial="initial" animate="animate">
+            {recentOrders.map((order, i) => (
+              <motion.div key={order.id} custom={i} variants={stagger} initial="initial" animate="animate">
                 <Card className="p-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
@@ -312,10 +307,10 @@ export function SellerDashboard() {
                         <p className="text-xs font-mono text-muted-foreground">{order.orderNumber}</p>
                         <StatusBadge status={order.status} size="sm" />
                       </div>
-                      <p className="text-sm font-medium text-foreground mt-1 truncate">{order.buyerName}</p>
-                      <p className="text-xs text-muted-foreground truncate">{order.product}</p>
+                      <p className="text-sm font-medium text-foreground mt-1 truncate">{order.address.recipient}</p>
+                      <p className="text-xs text-muted-foreground truncate">{order.items.map(it => it.productName).join(', ')}</p>
                     </div>
-                    <p className="text-sm font-bold text-emerald-600 flex-shrink-0">{formatPrice(order.amount)}</p>
+                    <p className="text-sm font-bold text-emerald-600 flex-shrink-0">{formatPrice(order.totalAmount)}</p>
                   </div>
                 </Card>
               </motion.div>
@@ -439,23 +434,36 @@ export function SellerProducts() {
 
 // ==================== SELLER ORDERS ====================
 export function SellerOrders() {
-  const { navigate, updateOrderStatus, showToast } = useAppStore()
+  const { navigate, updateOrderStatus, showToast, orders } = useAppStore()
   const [activeTab, setActiveTab] = useState("all")
 
+  // Map real store orders for sellerId 's1' to display format
+  const sellerOrders = orders
+    .filter(o => o.sellerId === 's1')
+    .map(o => ({
+      id: o.id,
+      orderNumber: o.orderNumber,
+      buyerName: o.address.recipient,
+      items: o.items.map(i => `${i.productName} x${i.quantity}`).join(', '),
+      amount: o.totalAmount,
+      status: o.status,
+      date: new Date(o.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }),
+    }))
+
   const tabs = [
-    { key: "all", label: "Semua", count: mockSellerOrders.length },
-    { key: "processing", label: "Perlu Diproses", count: mockSellerOrders.filter(o => o.status === "paid" || o.status === "processing").length },
-    { key: "shipped", label: "Dikirim", count: mockSellerOrders.filter(o => o.status === "shipped").length },
-    { key: "delivered", label: "Selesai", count: mockSellerOrders.filter(o => o.status === "delivered").length },
+    { key: "all", label: "Semua", count: sellerOrders.length },
+    { key: "processing", label: "Perlu Diproses", count: sellerOrders.filter(o => o.status === "paid" || o.status === "processing").length },
+    { key: "shipped", label: "Dikirim", count: sellerOrders.filter(o => o.status === "shipped").length },
+    { key: "delivered", label: "Selesai", count: sellerOrders.filter(o => o.status === "delivered").length },
   ]
 
   const filtered = activeTab === "all"
-    ? mockSellerOrders
+    ? sellerOrders
     : activeTab === "processing"
-      ? mockSellerOrders.filter(o => o.status === "paid" || o.status === "processing" || o.status === "pending")
+      ? sellerOrders.filter(o => o.status === "paid" || o.status === "processing" || o.status === "pending")
       : activeTab === "shipped"
-        ? mockSellerOrders.filter(o => o.status === "shipped")
-        : mockSellerOrders.filter(o => o.status === "delivered")
+        ? sellerOrders.filter(o => o.status === "shipped")
+        : sellerOrders.filter(o => o.status === "delivered")
 
   return (
     <div className="pb-20">
@@ -748,7 +756,7 @@ export function SellerWallet() {
               <TrendingUp className="w-4 h-4 text-emerald-500" />
               <span className="text-xs text-muted-foreground">Total Penjualan</span>
             </div>
-            <p className="text-base font-bold text-foreground">{formatPrice(92380000)}</p>
+            <p className="text-base font-bold text-foreground">{formatPrice(sellerBalance.totalBalance)}</p>
           </Card>
           <Card className="p-4">
             <div className="flex items-center gap-2 mb-1">

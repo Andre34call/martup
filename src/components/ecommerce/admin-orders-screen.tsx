@@ -7,10 +7,10 @@ import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { useAppStore } from "@/lib/store"
-import { formatPrice } from "@/lib/mock-data"
+import { formatPrice, formatDate } from "@/lib/mock-data"
 import { PageHeader, StatusBadge, EmptyState } from "./shared"
-import type { OrderStatus } from "@/lib/types"
-import { useState } from "react"
+import type { OrderStatus, Order } from "@/lib/types"
+import { useState, useMemo } from "react"
 
 // ==================== ANIMATION VARIANTS ====================
 const fadeIn = {
@@ -27,7 +27,7 @@ const stagger = {
   })
 }
 
-// ==================== MOCK DATA ====================
+// ==================== TYPES ====================
 type AdminOrderStatus = "pending" | "processing" | "shipped" | "delivered" | "cancelled"
 
 interface AdminOrder {
@@ -41,108 +41,31 @@ interface AdminOrder {
   paymentMethod: string
 }
 
-const mockAdminOrders: AdminOrder[] = [
-  {
-    id: "ao1",
-    orderNumber: "ORD-2024-301",
-    buyerName: "Ahmad Fauzi",
-    items: [{ name: "iPhone 15 Pro Max 256GB", quantity: 1 }, { name: "Case Silicone Premium", quantity: 2 }],
-    totalAmount: 22499000,
-    status: "pending",
-    date: "20 Des 2024",
-    paymentMethod: "Midtrans",
-  },
-  {
-    id: "ao2",
-    orderNumber: "ORD-2024-302",
-    buyerName: "Siti Nurhaliza",
-    items: [{ name: "Gaun Midi Elegant - Party Wear", quantity: 1 }],
-    totalAmount: 359000,
-    status: "pending",
-    date: "20 Des 2024",
-    paymentMethod: "GoPay",
-  },
-  {
-    id: "ao3",
-    orderNumber: "ORD-2024-303",
-    buyerName: "Budi Santoso",
-    items: [{ name: "MacBook Pro M3 14 inch", quantity: 1 }, { name: "Magic Mouse", quantity: 1 }],
-    totalAmount: 28799000,
-    status: "processing",
-    date: "19 Des 2024",
-    paymentMethod: "Transfer Bank",
-  },
-  {
-    id: "ao4",
-    orderNumber: "ORD-2024-304",
-    buyerName: "Dewi Lestari",
-    items: [{ name: "Skincare Set Glowing Package", quantity: 2 }],
-    totalAmount: 490000,
-    status: "processing",
-    date: "19 Des 2024",
-    paymentMethod: "OVO",
-  },
-  {
-    id: "ao5",
-    orderNumber: "ORD-2024-305",
-    buyerName: "Rudi Hartono",
-    items: [{ name: "Sneakers Nike Air Max 90", quantity: 1 }],
-    totalAmount: 999000,
-    status: "shipped",
-    date: "18 Des 2024",
-    paymentMethod: "DANA",
-  },
-  {
-    id: "ao6",
-    orderNumber: "ORD-2024-306",
-    buyerName: "Maya Putri",
-    items: [{ name: "Diffuser Aromatherapy Minimalis", quantity: 1 }, { name: "Essential Oil Lavender 100ml", quantity: 3 }],
-    totalAmount: 497000,
-    status: "shipped",
-    date: "17 Des 2024",
-    paymentMethod: "Midtrans",
-  },
-  {
-    id: "ao7",
-    orderNumber: "ORD-2024-307",
-    buyerName: "Agus Prasetyo",
-    items: [{ name: "Smart LED TV 43 inch 4K UHD", quantity: 1 }],
-    totalAmount: 2899000,
-    status: "delivered",
-    date: "15 Des 2024",
-    paymentMethod: "Transfer Bank",
-  },
-  {
-    id: "ao8",
-    orderNumber: "ORD-2024-308",
-    buyerName: "Rina Wulandari",
-    items: [{ name: "Kemeja Flannel Premium Cotton", quantity: 3 }],
-    totalAmount: 447000,
-    status: "delivered",
-    date: "14 Des 2024",
-    paymentMethod: "GoPay",
-  },
-  {
-    id: "ao9",
-    orderNumber: "ORD-2024-309",
-    buyerName: "Hendra Gunawan",
-    items: [{ name: "PS5 Slim Digital Edition", quantity: 1 }],
-    totalAmount: 5799000,
-    status: "cancelled",
-    date: "16 Des 2024",
-    paymentMethod: "COD",
-  },
-  {
-    id: "ao10",
-    orderNumber: "ORD-2024-310",
-    buyerName: "Lina Susanti",
-    items: [{ name: "Lipstik Matte Velvet Long Lasting", quantity: 5 }],
-    totalAmount: 275000,
-    status: "cancelled",
-    date: "13 Des 2024",
-    paymentMethod: "OVO",
-  },
-]
+// ==================== ORDER STATUS MAPPING ====================
+function mapToAdminStatus(status: OrderStatus): AdminOrderStatus {
+  switch (status) {
+    case 'pending': return 'pending'
+    case 'paid': return 'processing'
+    case 'processing': return 'processing'
+    case 'shipped': return 'shipped'
+    case 'delivered': return 'delivered'
+    case 'cancelled': return 'cancelled'
+    case 'refunded': return 'cancelled'
+  }
+}
+
+function mapStoreOrderToAdminOrder(order: Order): AdminOrder {
+  return {
+    id: order.id,
+    orderNumber: order.orderNumber,
+    buyerName: 'Buyer',
+    items: order.items.map(i => ({ name: i.productName, quantity: i.quantity })),
+    totalAmount: order.totalAmount,
+    status: mapToAdminStatus(order.status),
+    date: formatDate(order.createdAt),
+    paymentMethod: order.paymentMethod || 'COD',
+  }
+}
 
 // ==================== TAB CONFIG ====================
 const orderTabs: { key: string; label: string }[] = [
@@ -207,9 +130,10 @@ function getOrderActions(status: AdminOrderStatus): { label: string; icon: React
 
 // ==================== COMPONENT ====================
 export function AdminOrdersScreen() {
-  const { updateOrderStatus, showToast, setSelectedOrder, navigate } = useAppStore()
+  const { orders: storeOrders, updateOrderStatus, showToast, setSelectedOrder, navigate } = useAppStore()
   const [activeTab, setActiveTab] = useState("all")
-  const [orders, setOrders] = useState(mockAdminOrders)
+
+  const orders = useMemo(() => storeOrders.map(mapStoreOrderToAdminOrder), [storeOrders])
 
   const filtered = activeTab === "all"
     ? orders
@@ -349,9 +273,9 @@ export function AdminOrdersScreen() {
                             className={`h-8 text-[11px] rounded-lg ${action.className}`}
                             onClick={() => {
                               if (action.label === 'Approve') { updateOrderStatus(order.id, 'paid'); showToast('Pesanan disetujui', 'success') }
-                              else if (action.label === 'Batalkan') { updateOrderStatus(order.id, 'cancelled'); setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: 'cancelled' as AdminOrderStatus } : o)); showToast('Pesanan dibatalkan', 'info') }
-                              else if (action.label === 'Kirim') { updateOrderStatus(order.id, 'shipped'); setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: 'shipped' as AdminOrderStatus } : o)); showToast('Pesanan dikirim', 'success') }
-                              else if (action.label === 'Selesai') { updateOrderStatus(order.id, 'delivered'); setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: 'delivered' as AdminOrderStatus } : o)); showToast('Pesanan selesai', 'success') }
+                              else if (action.label === 'Batalkan') { updateOrderStatus(order.id, 'cancelled'); showToast('Pesanan dibatalkan', 'info') }
+                              else if (action.label === 'Kirim') { updateOrderStatus(order.id, 'shipped'); showToast('Pesanan dikirim', 'success') }
+                              else if (action.label === 'Selesai') { updateOrderStatus(order.id, 'delivered'); showToast('Pesanan selesai', 'success') }
                             }}
                           >
                             {action.icon}

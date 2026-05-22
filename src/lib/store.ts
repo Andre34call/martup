@@ -53,6 +53,7 @@ interface AppState {
   orders: Order[]
   addOrder: (order: Order) => void
   updateOrderStatus: (orderId: string, status: OrderStatus) => void
+  payForOrder: (orderId: string) => void
 
   // Address
   addresses: Address[]
@@ -69,6 +70,7 @@ interface AppState {
   walletMutations: WalletMutation[]
   topUpWallet: (amount: number) => void
   withdrawWallet: (amount: number, bankAccount: string) => void
+  deductWallet: (amount: number, description: string) => void
 
   // Vouchers
   vouchers: Voucher[]
@@ -234,10 +236,85 @@ export const useAppStore = create<AppState>((set, get) => ({
       createdAt: '2024-12-20T08:00:00Z'
     }
   ],
-  addOrder: (order) => set((state) => ({ orders: [order, ...state.orders] })),
-  updateOrderStatus: (orderId, status) => set((state) => ({
-    orders: state.orders.map(o => o.id === orderId ? { ...o, status, ...(status === 'paid' ? { paymentStatus: 'paid', paidAt: new Date().toISOString() } : {}), ...(status === 'shipped' ? { shippedAt: new Date().toISOString() } : {}), ...(status === 'delivered' ? { deliveredAt: new Date().toISOString() } : {}) } : o)
-  })),
+  addOrder: (order) => set((state) => {
+    const sellerCredit = order.status === 'paid' ? order.subtotal * 0.95 : 0
+    const newSellerBalance = sellerCredit > 0
+      ? {
+          ...state.sellerBalance,
+          pendingBalance: state.sellerBalance.pendingBalance + sellerCredit,
+          totalBalance: state.sellerBalance.availableBalance + state.sellerBalance.pendingBalance + sellerCredit + state.sellerBalance.holdBalance,
+        }
+      : state.sellerBalance
+    return {
+      orders: [order, ...state.orders],
+      sellerBalance: newSellerBalance,
+    }
+  }),
+  updateOrderStatus: (orderId, status) => set((state) => {
+    const order = state.orders.find(o => o.id === orderId)
+    if (!order) return state
+    const prevStatus = order.status
+    const sellerCredit = order.subtotal * 0.95
+    let newSellerBalance = { ...state.sellerBalance }
+
+    if (status === 'paid' && prevStatus !== 'paid') {
+      // Credit seller's pendingBalance
+      newSellerBalance.pendingBalance += sellerCredit
+    } else if (status === 'delivered') {
+      // Move from pendingBalance to availableBalance
+      newSellerBalance.pendingBalance -= sellerCredit
+      newSellerBalance.availableBalance += sellerCredit
+    } else if (status === 'cancelled' && (prevStatus === 'paid' || prevStatus === 'processing' || prevStatus === 'shipped')) {
+      // Reverse the pending balance that was previously added
+      newSellerBalance.pendingBalance -= sellerCredit
+    }
+
+    // Always recalculate totalBalance
+    newSellerBalance.totalBalance = newSellerBalance.availableBalance + newSellerBalance.pendingBalance + newSellerBalance.holdBalance
+
+    return {
+      orders: state.orders.map(o => o.id === orderId ? {
+        ...o, status,
+        ...(status === 'paid' ? { paymentStatus: 'paid', paidAt: new Date().toISOString() } : {}),
+        ...(status === 'shipped' ? { shippedAt: new Date().toISOString() } : {}),
+        ...(status === 'delivered' ? { deliveredAt: new Date().toISOString() } : {}),
+      } : o),
+      sellerBalance: newSellerBalance,
+    }
+  }),
+  payForOrder: (orderId) => set((state) => {
+    const order = state.orders.find(o => o.id === orderId)
+    if (!order || order.status !== 'pending') return state
+
+    const sellerCredit = order.subtotal * 0.95
+    let newWalletBalance = state.walletBalance
+    let newWalletMutations = [...state.walletMutations]
+
+    // If payment method is wallet, deduct from buyer's wallet
+    if (order.paymentMethod?.toLowerCase() === 'wallet') {
+      if (order.totalAmount > state.walletBalance) return state // Insufficient balance
+      newWalletBalance = state.walletBalance - order.totalAmount
+      newWalletMutations = [{
+        id: `wm${Date.now()}`, type: 'debit' as const, amount: order.totalAmount, balance: newWalletBalance,
+        description: `Pembayaran Order #${order.orderNumber}`, refType: 'order', createdAt: new Date().toISOString()
+      }, ...state.walletMutations]
+    }
+
+    const newSellerBalance = {
+      ...state.sellerBalance,
+      pendingBalance: state.sellerBalance.pendingBalance + sellerCredit,
+      totalBalance: state.sellerBalance.availableBalance + state.sellerBalance.pendingBalance + sellerCredit + state.sellerBalance.holdBalance,
+    }
+
+    return {
+      orders: state.orders.map(o => o.id === orderId ? {
+        ...o, status: 'paid' as OrderStatus, paymentStatus: 'paid', paidAt: new Date().toISOString(),
+      } : o),
+      walletBalance: newWalletBalance,
+      walletMutations: newWalletMutations,
+      sellerBalance: newSellerBalance,
+    }
+  }),
 
   // Address
   addresses: [
@@ -290,6 +367,17 @@ export const useAppStore = create<AppState>((set, get) => ({
       walletMutations: [{
         id: `wm${Date.now()}`, type: 'debit', amount, balance: newBalance,
         description: `Tarik dana ke ${bankAccount}`, refType: 'withdrawal', createdAt: new Date().toISOString()
+      }, ...state.walletMutations]
+    }
+  }),
+  deductWallet: (amount, description) => set((state) => {
+    if (amount > state.walletBalance) return state
+    const newBalance = state.walletBalance - amount
+    return {
+      walletBalance: newBalance,
+      walletMutations: [{
+        id: `wm${Date.now()}`, type: 'debit', amount, balance: newBalance,
+        description, refType: 'order', createdAt: new Date().toISOString()
       }, ...state.walletMutations]
     }
   }),
@@ -400,10 +488,16 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (amount > state.sellerBalance.availableBalance) return state
     const adminFee = 1000
     const netAmount = amount - adminFee
+    // Derive seller info from currentUser
+    const sellerName = state.currentUser?.name || 'Unknown Seller'
+    // Find sellerId by matching currentUser.id to seller.userId in chatRooms or orders
+    const chatSeller = state.chatRooms.find(c => c.seller.userId === state.currentUser?.id)?.seller
+    const orderSeller = state.orders.find(o => o.seller.userId === state.currentUser?.id)?.seller
+    const sellerId = chatSeller?.id || orderSeller?.id || state.currentUser?.id || 'unknown'
     const newRequest: WithdrawRequest = {
       id: `wd${Date.now()}`,
-      sellerId: 's1',
-      sellerName: 'Gadget Pro Store',
+      sellerId,
+      sellerName,
       amount,
       adminFee,
       netAmount,
@@ -412,13 +506,15 @@ export const useAppStore = create<AppState>((set, get) => ({
       requestDate: new Date().toISOString(),
       estimatedArrival: '1-2 hari kerja',
     }
+    const newAvailable = state.sellerBalance.availableBalance - amount
+    const newHold = state.sellerBalance.holdBalance + amount
     return {
       withdrawRequests: [newRequest, ...state.withdrawRequests],
       sellerBalance: {
         ...state.sellerBalance,
-        availableBalance: state.sellerBalance.availableBalance - amount,
-        holdBalance: state.sellerBalance.holdBalance + amount,
-        totalBalance: state.sellerBalance.availableBalance - amount + state.sellerBalance.pendingBalance + state.sellerBalance.holdBalance + amount,
+        availableBalance: newAvailable,
+        holdBalance: newHold,
+        totalBalance: newAvailable + state.sellerBalance.pendingBalance + newHold,
       }
     }
   }),
@@ -451,6 +547,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       newBalance.totalWithdrawn += wd.amount
       newBalance.lastWithdrawDate = now
     }
+    // Always recalculate totalBalance
+    newBalance.totalBalance = newBalance.availableBalance + newBalance.pendingBalance + newBalance.holdBalance
     return {
       withdrawRequests: updatedRequests,
       sellerBalance: newBalance,
