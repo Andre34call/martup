@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { ScreenName, UserRole, User, CartItem, Product, ProductVariant, Notification as AppNotification, ChatRoom, Address, Voucher, Order, OrderStatus, WalletMutation } from './types'
+import type { ScreenName, UserRole, User, CartItem, Product, ProductVariant, Notification as AppNotification, ChatRoom, Address, Voucher, Order, OrderStatus, WalletMutation, BankAccount, WithdrawRequest, WithdrawStatus, SellerBalance } from './types'
 
 // ==================== APP STORE ====================
 interface AppState {
@@ -91,6 +91,17 @@ interface AppState {
   avatarUrl: string | null
   updateAvatar: (url: string | null) => void
   updateProfile: (data: { name?: string; email?: string; phone?: string }) => void
+
+  // Seller Financial
+  sellerBalance: SellerBalance
+  sellerBankAccounts: BankAccount[]
+  withdrawRequests: WithdrawRequest[]
+  addBankAccount: (account: BankAccount) => void
+  removeBankAccount: (id: string) => void
+  setDefaultBankAccount: (id: string) => void
+  requestWithdraw: (amount: number, bankAccountId: string) => void
+  updateWithdrawStatus: (id: string, status: WithdrawStatus, rejectionReason?: string) => void
+  getSellerAvailableForWithdraw: () => number
 }
 
 let toastTimer: ReturnType<typeof setTimeout> | null = null
@@ -319,6 +330,133 @@ export const useAppStore = create<AppState>((set, get) => ({
       ? { ...state.currentUser, ...data }
       : null
   })),
+
+  // Seller Financial
+  sellerBalance: {
+    availableBalance: 85680000,
+    pendingBalance: 5200000,
+    holdBalance: 1500000,
+    totalBalance: 92380000,
+    totalWithdrawn: 250000000,
+    lastWithdrawDate: '2024-12-18T10:00:00Z',
+  },
+  sellerBankAccounts: [
+    { id: 'ba1', bankName: 'BCA', accountNumber: '1234567890', accountHolder: 'Ahmad Fauzi', isDefault: true },
+    { id: 'ba2', bankName: 'Mandiri', accountNumber: '0987654321', accountHolder: 'Ahmad Fauzi', isDefault: false },
+  ],
+  withdrawRequests: [
+    {
+      id: 'wd1', sellerId: 's1', sellerName: 'Gadget Pro Store',
+      amount: 25000000, adminFee: 1000, netAmount: 24999000,
+      bankAccount: { id: 'ba1', bankName: 'BCA', accountNumber: '1234567890', accountHolder: 'Ahmad Fauzi', isDefault: true },
+      status: 'pending', requestDate: '2024-12-20T10:00:00Z',
+      estimatedArrival: '1-2 hari kerja'
+    },
+    {
+      id: 'wd2', sellerId: 's1', sellerName: 'Gadget Pro Store',
+      amount: 20000000, adminFee: 1000, netAmount: 19999000,
+      bankAccount: { id: 'ba1', bankName: 'BCA', accountNumber: '1234567890', accountHolder: 'Ahmad Fauzi', isDefault: true },
+      status: 'completed', requestDate: '2024-12-15T08:00:00Z',
+      processedDate: '2024-12-16T10:00:00Z', completedDate: '2024-12-17T14:00:00Z',
+    },
+    {
+      id: 'wd3', sellerId: 's1', sellerName: 'Gadget Pro Store',
+      amount: 15000000, adminFee: 1000, netAmount: 14999000,
+      bankAccount: { id: 'ba2', bankName: 'Mandiri', accountNumber: '0987654321', accountHolder: 'Ahmad Fauzi', isDefault: false },
+      status: 'rejected', requestDate: '2024-12-12T09:00:00Z',
+      processedDate: '2024-12-13T11:00:00Z', rejectionReason: 'Data rekening tidak sesuai'
+    },
+    {
+      id: 'wd4', sellerId: 's2', sellerName: 'Fashion Hub',
+      amount: 15000000, adminFee: 1000, netAmount: 14999000,
+      bankAccount: { id: 'ba-x', bankName: 'Mandiri', accountNumber: '56781234', accountHolder: 'Siti Nurhaliza', isDefault: true },
+      status: 'pending', requestDate: '2024-12-20T11:00:00Z',
+      estimatedArrival: '1-2 hari kerja'
+    },
+    {
+      id: 'wd5', sellerId: 's3', sellerName: 'Beauty Corner',
+      amount: 3200000, adminFee: 1000, netAmount: 3199000,
+      bankAccount: { id: 'ba-y', bankName: 'BCA', accountNumber: '78901234', accountHolder: 'Dewi Lestari', isDefault: true },
+      status: 'approved', requestDate: '2024-12-18T14:00:00Z',
+      processedDate: '2024-12-19T09:00:00Z',
+      estimatedArrival: '1-2 hari kerja'
+    },
+  ],
+  addBankAccount: (account) => set((state) => {
+    const accounts = account.isDefault
+      ? state.sellerBankAccounts.map(a => ({ ...a, isDefault: false })).concat(account)
+      : [...state.sellerBankAccounts, account]
+    return { sellerBankAccounts: accounts }
+  }),
+  removeBankAccount: (id) => set((state) => ({
+    sellerBankAccounts: state.sellerBankAccounts.filter(a => a.id !== id)
+  })),
+  setDefaultBankAccount: (id) => set((state) => ({
+    sellerBankAccounts: state.sellerBankAccounts.map(a => ({ ...a, isDefault: a.id === id }))
+  })),
+  requestWithdraw: (amount, bankAccountId) => set((state) => {
+    const bankAccount = state.sellerBankAccounts.find(a => a.id === bankAccountId)
+    if (!bankAccount) return state
+    if (amount > state.sellerBalance.availableBalance) return state
+    const adminFee = 1000
+    const netAmount = amount - adminFee
+    const newRequest: WithdrawRequest = {
+      id: `wd${Date.now()}`,
+      sellerId: 's1',
+      sellerName: 'Gadget Pro Store',
+      amount,
+      adminFee,
+      netAmount,
+      bankAccount,
+      status: 'pending',
+      requestDate: new Date().toISOString(),
+      estimatedArrival: '1-2 hari kerja',
+    }
+    return {
+      withdrawRequests: [newRequest, ...state.withdrawRequests],
+      sellerBalance: {
+        ...state.sellerBalance,
+        availableBalance: state.sellerBalance.availableBalance - amount,
+        holdBalance: state.sellerBalance.holdBalance + amount,
+        totalBalance: state.sellerBalance.availableBalance - amount + state.sellerBalance.pendingBalance + state.sellerBalance.holdBalance + amount,
+      }
+    }
+  }),
+  updateWithdrawStatus: (id, status, rejectionReason) => set((state) => {
+    const wd = state.withdrawRequests.find(w => w.id === id)
+    if (!wd) return state
+    const now = new Date().toISOString()
+    const updatedRequests = state.withdrawRequests.map(w => {
+      if (w.id !== id) return w
+      return {
+        ...w,
+        status,
+        processedDate: status === 'approved' || status === 'rejected' ? now : w.processedDate,
+        completedDate: status === 'completed' ? now : w.completedDate,
+        rejectionReason: rejectionReason || w.rejectionReason,
+      }
+    })
+    // If approved, deduct from hold balance
+    let newBalance = { ...state.sellerBalance }
+    if (status === 'approved') {
+      newBalance.holdBalance = Math.max(0, newBalance.holdBalance - wd.amount)
+    }
+    // If rejected, return to available balance
+    if (status === 'rejected') {
+      newBalance.availableBalance += wd.amount
+      newBalance.holdBalance = Math.max(0, newBalance.holdBalance - wd.amount)
+    }
+    // If completed, update total withdrawn
+    if (status === 'completed') {
+      newBalance.totalWithdrawn += wd.amount
+      newBalance.lastWithdrawDate = now
+    }
+    return {
+      withdrawRequests: updatedRequests,
+      sellerBalance: newBalance,
+    }
+  }),
+  getSellerAvailableForWithdraw: () => get().sellerBalance.availableBalance,
 }))
 
 // ==================== CART STORE ====================

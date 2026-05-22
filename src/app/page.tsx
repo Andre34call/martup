@@ -38,6 +38,7 @@ import {
   SellerSettings,
   SellerCampaign,
 } from '@/components/ecommerce/seller-screens'
+import { SellerWithdrawScreen, SellerWithdrawHistoryScreen } from '@/components/ecommerce/seller-withdraw-screens'
 
 // Admin screens
 import {
@@ -52,7 +53,7 @@ import {
 import { AdminOrdersScreen } from '@/components/ecommerce/admin-orders-screen'
 
 const AUTH_SCREENS = ['splash', 'onboarding', 'login', 'register', 'otp', 'forgot-password']
-const SELLER_SCREENS = ['seller-dashboard', 'seller-products', 'seller-add-product', 'seller-orders', 'seller-analytics', 'seller-wallet', 'seller-chat', 'seller-settings', 'seller-campaign']
+const SELLER_SCREENS = ['seller-dashboard', 'seller-products', 'seller-add-product', 'seller-orders', 'seller-analytics', 'seller-wallet', 'seller-chat', 'seller-settings', 'seller-campaign', 'seller-withdraw', 'seller-withdraw-history']
 const ADMIN_SCREENS = ['admin-dashboard', 'admin-users', 'admin-products', 'admin-orders', 'admin-withdraw', 'admin-banner', 'admin-analytics', 'admin-complaints']
 
 // Sub-screens that should hide the bottom nav (they have their own back navigation headers)
@@ -60,7 +61,7 @@ const SUB_SCREENS = [
   'product-detail', 'seller-shop', 'checkout', 'review', 'refund',
   'address', 'help', 'followed-stores', 'deposit', 'withdraw',
   'settings', 'voucher', 'order-tracking', 'seller-add-product',
-  'chat-room', 'category-detail',
+  'chat-room', 'category-detail', 'seller-withdraw', 'seller-withdraw-history',
 ]
 
 // ==================== GLOBAL TOAST ====================
@@ -153,6 +154,8 @@ function ScreenRenderer() {
       case 'seller-chat': return <SellerChat />
       case 'seller-settings': return <SellerSettings />
       case 'seller-campaign': return <SellerCampaign />
+      case 'seller-withdraw': return <SellerWithdrawScreen />
+      case 'seller-withdraw-history': return <SellerWithdrawHistoryScreen />
 
       // Admin
       case 'admin-dashboard': return <AdminDashboard />

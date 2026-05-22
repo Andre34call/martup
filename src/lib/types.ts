@@ -11,7 +11,7 @@ export type ScreenName =
   | 'seller-shop' | 'category-detail'
   | 'seller-dashboard' | 'seller-products' | 'seller-add-product'
   | 'seller-orders' | 'seller-analytics' | 'seller-chat' | 'seller-settings'
-  | 'seller-campaign' | 'seller-wallet'
+  | 'seller-campaign' | 'seller-wallet' | 'seller-withdraw' | 'seller-withdraw-history'
   | 'admin-dashboard' | 'admin-users' | 'admin-products' | 'admin-orders'
   | 'admin-withdraw' | 'admin-banner' | 'admin-analytics' | 'admin-complaints'
 
@@ -275,4 +275,40 @@ export interface AdminStats {
   activeProducts: number
   revenueChart: { date: string; revenue: number }[]
   userGrowth: { date: string; users: number }[]
+}
+
+// ==================== SELLER FINANCIAL TYPES ====================
+export type WithdrawStatus = 'pending' | 'approved' | 'rejected' | 'processing' | 'completed'
+
+export interface BankAccount {
+  id: string
+  bankName: string
+  accountNumber: string
+  accountHolder: string
+  isDefault: boolean
+}
+
+export interface WithdrawRequest {
+  id: string
+  sellerId: string
+  sellerName: string
+  amount: number
+  adminFee: number
+  netAmount: number
+  bankAccount: BankAccount
+  status: WithdrawStatus
+  requestDate: string
+  processedDate?: string
+  completedDate?: string
+  rejectionReason?: string
+  estimatedArrival?: string
+}
+
+export interface SellerBalance {
+  availableBalance: number  // Can be withdrawn
+  pendingBalance: number    // From orders not yet completed
+  holdBalance: number       // Under dispute / processing
+  totalBalance: number      // All balances combined
+  totalWithdrawn: number    // Historical total withdrawn
+  lastWithdrawDate?: string
 }
