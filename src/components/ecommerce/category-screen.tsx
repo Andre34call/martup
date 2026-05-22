@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion"
 import { useAppStore } from "@/lib/store"
-import { MOCK_CATEGORIES, MOCK_PRODUCTS } from "@/lib/mock-data"
+import { MOCK_CATEGORIES } from "@/lib/mock-data"
 import { PageHeader, SearchBar, EmptyState, ProductCard } from "./shared"
 import type { Category, Product } from "@/lib/types"
 import { useState, useMemo, useCallback } from "react"
@@ -190,7 +190,7 @@ export function CategoryScreen() {
 
 // ==================== CATEGORY DETAIL SCREEN ====================
 export function CategoryDetailScreen() {
-  const { navigate, goBack, selectedCategoryId, setSelectedProduct } = useAppStore()
+  const { navigate, goBack, selectedCategoryId, setSelectedProduct, products } = useAppStore()
   const [selectedSubCategory, setSelectedSubCategory] = useState<string | null>(null)
   const [sortOption, setSortOption] = useState<SortOption>("popular")
 
@@ -206,15 +206,15 @@ export function CategoryDetailScreen() {
     [category]
   )
 
-  // Get products for this category
-  const products = useMemo(
-    () => (category ? MOCK_PRODUCTS.filter((p) => p.categoryId === category.id) : []),
-    [category]
+  // Get products for this category from store
+  const categoryProducts = useMemo(
+    () => (category ? products.filter((p) => p.categoryId === category.id) : []),
+    [category, products]
   )
 
   // Sort products
   const displayedProducts = useMemo(() => {
-    let sorted = [...products]
+    let sorted = [...categoryProducts]
     switch (sortOption) {
       case "price-low":
         return sorted.sort((a, b) => (a.discountPrice || a.price) - (b.discountPrice || b.price))
@@ -226,7 +226,7 @@ export function CategoryDetailScreen() {
       default:
         return sorted.sort((a, b) => b.sold - a.sold)
     }
-  }, [products, sortOption])
+  }, [categoryProducts, sortOption])
 
   const handleProductClick = useCallback((product: Product) => {
     setSelectedProduct(product.id)
@@ -270,7 +270,7 @@ export function CategoryDetailScreen() {
               </div>
             </div>
             <Badge className="text-[9px] h-5 bg-emerald-500 text-white border-0 flex-shrink-0">
-              {category.productCount?.toLocaleString() || products.length} produk
+              {category.productCount?.toLocaleString() || categoryProducts.length} produk
             </Badge>
           </div>
         </div>

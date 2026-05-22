@@ -35,7 +35,19 @@ interface VariantGroup {
 
 // ==================== SELLER ADD PRODUCT SCREEN ====================
 export function SellerAddProductScreen() {
-  const { navigate, showToast, addProduct, selectedProductId, products } = useAppStore()
+  const { navigate, showToast, addProduct, updateProduct, selectedProductId, products, currentUser } = useAppStore()
+
+  // Derive sellerId and seller info from currentUser
+  const sellerIdMap: Record<string, string> = { 'u2': 's1', 'u3': 's2', 'u4': 's3', 'u5': 's4', 'u6': 's5' }
+  const sellerId = sellerIdMap[currentUser?.id || ''] || 's1'
+  const sellerInfoMap: Record<string, { id: string; userId: string; storeName: string; storeSlug: string; storeAvatar: string; isVerified: boolean; isPremium: boolean; rating: number; totalSales: number; totalProducts: number }> = {
+    's1': { id: 's1', userId: 'u2', storeName: 'Gadget Pro Store', storeSlug: 'gadget-pro', storeAvatar: '', isVerified: true, isPremium: true, rating: 4.9, totalSales: 15000, totalProducts: 250 },
+    's2': { id: 's2', userId: 'u3', storeName: 'Fashion Hub', storeSlug: 'fashion-hub', storeAvatar: '', isVerified: true, isPremium: false, rating: 4.7, totalSales: 8000, totalProducts: 120 },
+    's3': { id: 's3', userId: 'u4', storeName: 'Beauty Corner', storeSlug: 'beauty-corner', storeAvatar: '', isVerified: false, isPremium: false, rating: 4.5, totalSales: 3000, totalProducts: 80 },
+    's4': { id: 's4', userId: 'u5', storeName: 'Home Living ID', storeSlug: 'home-living', storeAvatar: '', isVerified: true, isPremium: true, rating: 4.8, totalSales: 12000, totalProducts: 180 },
+    's5': { id: 's5', userId: 'u6', storeName: 'Sport Zone', storeSlug: 'sport-zone', storeAvatar: '', isVerified: true, isPremium: false, rating: 4.6, totalSales: 6000, totalProducts: 95 },
+  }
+  const sellerInfo = sellerInfoMap[sellerId] || sellerInfoMap['s1']
 
   // Pre-fill form if editing an existing product
   const editingProduct = selectedProductId ? products.find(p => p.id === selectedProductId) : null
@@ -256,7 +268,7 @@ export function SellerAddProductScreen() {
 
     const newProduct: Product = {
       id: editingProduct?.id || `p_${Date.now()}`,
-      sellerId: 's1',
+      sellerId: sellerId,
       categoryId: category,
       name: productName.trim(),
       slug: productName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
@@ -275,28 +287,72 @@ export function SellerAddProductScreen() {
       isFeatured: editingProduct?.isFeatured || false,
       isFlashSale: false,
       variants: productVariants,
-      seller: {
-        id: 's1',
-        userId: 'u2',
-        storeName: 'Gadget Pro Store',
-        storeSlug: 'gadget-pro',
-        storeAvatar: '',
-        isVerified: true,
-        isPremium: true,
-        rating: 4.9,
-        totalSales: 15000,
-        totalProducts: 250,
-      },
+      seller: sellerInfo,
       category: selectedCategoryObj ? { id: selectedCategoryObj.id, name: selectedCategoryObj.name, slug: selectedCategoryObj.slug } : { id: category, name: category, slug: category },
       ...(tags.length > 0 ? { tags } : {}),
     }
 
-    addProduct(newProduct)
+    if (editingProduct) {
+      updateProduct(newProduct)
+    } else {
+      addProduct(newProduct)
+    }
     showToast(editingProduct ? "Produk berhasil diperbarui! 🎉" : "Produk berhasil dipublikasikan! 🎉", "success")
     setTimeout(() => navigate("seller-products"), 1500)
   }
 
   const handleDraft = () => {
+    if (!productName.trim()) {
+      showToast("Nama produk harus diisi", "error")
+      return
+    }
+
+    const selectedCategoryObj = MOCK_CATEGORIES.find(c => c.id === category)
+    const productImages2 = productImages.length > 0
+      ? productImages.map(img => img.url)
+      : (editingProduct?.images || [])
+
+    const productVariants = variants.flatMap(v =>
+      v.values.map(val => ({
+        id: `pv_${Date.now()}_${v.name}_${val}`,
+        productId: editingProduct?.id || `p_${Date.now()}`,
+        name: v.name,
+        value: val,
+        stock: Math.floor(parseInt(stock || '0') / (v.values.length || 1)),
+      }))
+    )
+
+    const draftProduct: Product = {
+      id: editingProduct?.id || `p_${Date.now()}`,
+      sellerId: sellerId,
+      categoryId: category || editingProduct?.categoryId || '',
+      name: productName.trim(),
+      slug: productName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+      description: description.trim(),
+      price: priceNumber || editingProduct?.price || 0,
+      ...(discountPriceNumber > 0 && discountPriceNumber < priceNumber ? { discountPrice: discountPriceNumber } : {}),
+      images: productImages2,
+      stock: parseInt(stock) || editingProduct?.stock || 0,
+      sold: editingProduct?.sold || 0,
+      minOrder: parseInt(minOrder) || 1,
+      weight: parseInt(weight) || 100,
+      condition,
+      status: 'draft',
+      rating: editingProduct?.rating || 0,
+      reviewCount: editingProduct?.reviewCount || 0,
+      isFeatured: editingProduct?.isFeatured || false,
+      isFlashSale: false,
+      variants: productVariants,
+      seller: sellerInfo,
+      category: selectedCategoryObj ? { id: selectedCategoryObj.id, name: selectedCategoryObj.name, slug: selectedCategoryObj.slug } : (editingProduct?.category || { id: category || '', name: category || '', slug: category || '' }),
+      ...(tags.length > 0 ? { tags } : {}),
+    }
+
+    if (editingProduct) {
+      updateProduct(draftProduct)
+    } else {
+      addProduct(draftProduct)
+    }
     showToast("Produk disimpan sebagai draft", "info")
     setTimeout(() => navigate("seller-products"), 1000)
   }

@@ -360,11 +360,15 @@ export function SellerDashboard() {
 
 // ==================== SELLER PRODUCTS ====================
 export function SellerProducts() {
-  const { navigate, showToast, products, removeProduct, setSelectedProduct } = useAppStore()
+  const { navigate, showToast, products, removeProduct, setSelectedProduct, currentUser } = useAppStore()
   const [search, setSearch] = useState("")
 
-  // Filter products for current seller (s1)
-  const sellerProducts = products.filter(p => p.sellerId === "s1")
+  // Derive sellerId from currentUser
+  const sellerIdMap: Record<string, string> = { 'u2': 's1', 'u3': 's2', 'u4': 's3', 'u5': 's4', 'u6': 's5' }
+  const sellerId = sellerIdMap[currentUser?.id || ''] || 's1'
+
+  // Filter products for current seller
+  const sellerProducts = products.filter(p => p.sellerId === sellerId)
   const filtered = sellerProducts.filter(p =>
     p.name.toLowerCase().includes(search.toLowerCase())
   )

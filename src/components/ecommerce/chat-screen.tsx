@@ -136,9 +136,9 @@ export function ChatRoomScreen() {
 
 // ==================== CHAT ROOM VIEW ====================
 function ChatRoomView({ room, onBack }: { room: ChatRoom; onBack: () => void }) {
-  const { showToast } = useAppStore()
+  const { showToast, chatMessages, addChatMessage, currentUser } = useAppStore()
   const [message, setMessage] = useState("")
-  const [messages, setMessages] = useState<ChatMessage[]>(MOCK_MESSAGES[room.id] || [])
+  const messages = chatMessages[room.id] || []
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -151,16 +151,16 @@ function ChatRoomView({ room, onBack }: { room: ChatRoom; onBack: () => void }) 
     const newMsg: ChatMessage = {
       id: `m-${Date.now()}`,
       roomId: room.id,
-      senderId: "u1",
+      senderId: currentUser?.id || "u1",
       content: message.trim(),
       type: "text",
       isRead: false,
       createdAt: new Date().toISOString(),
     }
-    setMessages((prev) => [...prev, newMsg])
+    addChatMessage(room.id, newMsg)
     setMessage("")
     inputRef.current?.focus()
-  }, [message, room.id])
+  }, [message, room.id, currentUser, addChatMessage])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -169,7 +169,7 @@ function ChatRoomView({ room, onBack }: { room: ChatRoom; onBack: () => void }) 
     }
   }, [handleSend])
 
-  const isMyMessage = (senderId: string) => senderId === "u1"
+  const isMyMessage = (senderId: string) => senderId === (currentUser?.id || "u1")
 
   return (
     <div className="flex flex-col h-dvh bg-background">

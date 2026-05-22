@@ -18,7 +18,7 @@ import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { useAppStore } from "@/lib/store"
-import { MOCK_ADMIN_STATS, MOCK_PRODUCTS, formatPrice, formatRelativeTime } from "@/lib/mock-data"
+import { MOCK_ADMIN_STATS, formatPrice, formatRelativeTime } from "@/lib/mock-data"
 import { PageHeader, SectionHeader, StatusBadge, SearchBar, EmptyState } from "./shared"
 import type { Order, OrderStatus, WithdrawStatus } from "@/lib/types"
 import { useState, useRef, useEffect } from "react"
@@ -481,18 +481,26 @@ export function AdminUsers() {
 
 // ==================== ADMIN PRODUCTS ====================
 export function AdminProducts() {
-  const { showToast } = useAppStore()
+  const { showToast, products, updateProduct, removeProduct } = useAppStore()
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
-  const [products, setProducts] = useState(mockAdminProducts)
 
-  const filtered = products.filter(p => {
+  // Derive admin product list from store products
+  const adminProducts = products.map(p => ({
+    id: p.id,
+    name: p.name,
+    seller: p.seller.storeName,
+    price: p.price,
+    status: p.status as 'active' | 'blocked' | 'draft',
+  }))
+
+  const filtered = adminProducts.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) || p.seller.toLowerCase().includes(search.toLowerCase())
     const matchesStatus = statusFilter === "all" || p.status === statusFilter
     return matchesSearch && matchesStatus
   })
 
-  const flaggedProducts = products.filter(p => p.status === "blocked")
+  const flaggedProducts = adminProducts.filter(p => p.status === "blocked")
 
   return (
     <div className="pb-20">
@@ -545,13 +553,14 @@ export function AdminProducts() {
                     </div>
                     <div className="flex gap-2 mt-3 pt-2 border-t border-red-100 dark:border-red-900/30">
                       <Button size="sm" className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={() => {
-                        setProducts(prev => prev.map(p => p.id === product.id ? { ...p, status: "active" as const } : p))
+                        const storeProduct = products.find(sp => sp.id === product.id)
+                        if (storeProduct) updateProduct({ ...storeProduct, status: 'active' })
                         showToast("Produk diapprove", "success")
                       }}>
                         <Check className="w-3 h-3 mr-0.5" /> Approve
                       </Button>
                       <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500" onClick={() => {
-                        setProducts(prev => prev.filter(p => p.id !== product.id))
+                        removeProduct(product.id)
                         showToast("Produk dihapus", "info")
                       }}>
                         <Trash2 className="w-3 h-3 mr-0.5" /> Delete
@@ -596,21 +605,23 @@ export function AdminProducts() {
                   <div className="flex gap-2 mt-3 pt-2 border-t border-border/50">
                     {product.status === "blocked" ? (
                       <Button size="sm" className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={() => {
-                        setProducts(prev => prev.map(p => p.id === product.id ? { ...p, status: "active" as const } : p))
+                        const storeProduct = products.find(sp => sp.id === product.id)
+                        if (storeProduct) updateProduct({ ...storeProduct, status: 'active' })
                         showToast("Produk diapprove", "success")
                       }}>
                         <Check className="w-3 h-3 mr-0.5" /> Approve
                       </Button>
                     ) : (
                       <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500" onClick={() => {
-                        setProducts(prev => prev.map(p => p.id === product.id ? { ...p, status: "blocked" as const } : p))
+                        const storeProduct = products.find(sp => sp.id === product.id)
+                        if (storeProduct) updateProduct({ ...storeProduct, status: 'blocked' })
                         showToast("Produk diblokir", "info")
                       }}>
                         <Ban className="w-3 h-3 mr-0.5" /> Block
                       </Button>
                     )}
                     <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500" onClick={() => {
-                      setProducts(prev => prev.filter(p => p.id !== product.id))
+                      removeProduct(product.id)
                       showToast("Produk dihapus", "info")
                     }}>
                       <Trash2 className="w-3 h-3" />

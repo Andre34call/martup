@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { MOCK_PRODUCTS } from './mock-data'
-import type { ScreenName, UserRole, User, CartItem, Product, ProductVariant, Notification as AppNotification, ChatRoom, Address, Voucher, Order, OrderStatus, WalletMutation, BankAccount, WithdrawRequest, WithdrawStatus, SellerBalance, Review } from './types'
+import type { ScreenName, UserRole, User, CartItem, Product, ProductVariant, Notification as AppNotification, ChatRoom, ChatMessage, Address, Voucher, Order, OrderStatus, WalletMutation, BankAccount, WithdrawRequest, WithdrawStatus, SellerBalance, Review } from './types'
 
 // ==================== APP STORE ====================
 interface AppState {
@@ -49,7 +49,10 @@ interface AppState {
 
   // Chat
   chatRooms: ChatRoom[]
+  chatMessages: Record<string, ChatMessage[]>
   totalUnreadChats: number
+  addChatMessage: (roomId: string, message: ChatMessage) => void
+  addChatRoom: (room: ChatRoom) => void
 
   // Orders
   orders: Order[]
@@ -214,6 +217,40 @@ export const useAppStore = create<AppState>()(
         { id: '3', seller: { id: 's3', userId: 'u4', storeName: 'Beauty Corner', storeSlug: 'beauty-corner', storeAvatar: '', isVerified: false, isPremium: false, rating: 4.5, totalSales: 3000, totalProducts: 80 }, lastMessage: 'Bisa restock minggu depan ya kak', lastMessageTime: '2024-12-19T16:00:00Z', unreadCount: 1 },
       ],
       totalUnreadChats: 3,
+      chatMessages: {
+        "1": [
+          { id: "m1", roomId: "1", senderId: "s1", content: "Halo kak, terima kasih sudah order di toko kami! 🙏", type: "text", isRead: true, createdAt: "2024-12-20T10:00:00Z" },
+          { id: "m2", roomId: "1", senderId: "u1", content: "Sama-sama kak, kira-kira barangnya kapan dikirim?", type: "text", isRead: true, createdAt: "2024-12-20T10:05:00Z" },
+          { id: "m3", roomId: "1", senderId: "s1", content: "Barangnya sudah kami pak hari ini ya kak, estimasi 2-3 hari sampai", type: "text", isRead: true, createdAt: "2024-12-20T10:10:00Z" },
+          { id: "m4", roomId: "1", senderId: "u1", content: "Siap kak, ditunggu ya 🙌", type: "text", isRead: true, createdAt: "2024-12-20T10:12:00Z" },
+          { id: "m5", roomId: "1", senderId: "s1", content: "Iya kak, kami sudah kirim pakai JNE REG, nomor resinya JNE1234567890 ya", type: "text", isRead: true, createdAt: "2024-12-20T10:20:00Z" },
+          { id: "m6", roomId: "1", senderId: "u1", content: "Oke noted kak, makasih banyak!", type: "text", isRead: true, createdAt: "2024-12-20T10:22:00Z" },
+          { id: "m7", roomId: "1", senderId: "s1", content: "Sama-sama kak, kalau ada pertanyaan lagi bisa chat langsung ya 😊", type: "text", isRead: true, createdAt: "2024-12-20T10:25:00Z" },
+          { id: "m8", roomId: "1", senderId: "s1", content: "Terima kasih sudah order kak! 🙏", type: "text", isRead: false, createdAt: "2024-12-20T10:30:00Z" },
+        ],
+        "2": [
+          { id: "m9", roomId: "2", senderId: "u1", content: "Halo kak, apa barang ini ready?", type: "text", isRead: true, createdAt: "2024-12-20T09:00:00Z" },
+          { id: "m10", roomId: "2", senderId: "s2", content: "Barang ready kak, silakan order", type: "text", isRead: true, createdAt: "2024-12-20T09:15:00Z" },
+        ],
+        "3": [
+          { id: "m11", roomId: "3", senderId: "u1", content: "Kak, kapan restock lagi?", type: "text", isRead: true, createdAt: "2024-12-19T15:30:00Z" },
+          { id: "m12", roomId: "3", senderId: "s3", content: "Bisa restock minggu depan ya kak", type: "text", isRead: false, createdAt: "2024-12-19T16:00:00Z" },
+        ],
+      },
+      addChatMessage: (roomId, message) => set((state) => ({
+        chatMessages: {
+          ...state.chatMessages,
+          [roomId]: [...(state.chatMessages[roomId] || []), message],
+        },
+        chatRooms: state.chatRooms.map(r =>
+          r.id === roomId
+            ? { ...r, lastMessage: message.content, lastMessageTime: message.createdAt }
+            : r
+        ),
+      })),
+      addChatRoom: (room) => set((state) => ({
+        chatRooms: [room, ...state.chatRooms],
+      })),
 
       // Orders
       orders: [
@@ -631,6 +668,7 @@ export const useAppStore = create<AppState>()(
         unreadNotificationCount: state.unreadNotificationCount,
         // Chat
         chatRooms: state.chatRooms,
+        chatMessages: state.chatMessages,
         totalUnreadChats: state.totalUnreadChats,
         // Orders
         orders: state.orders,

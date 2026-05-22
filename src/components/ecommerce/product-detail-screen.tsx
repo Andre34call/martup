@@ -218,7 +218,7 @@ function VariantSelector({
 
 // ==================== MAIN COMPONENT ====================
 export function ProductDetailScreen() {
-  const { selectedProductId, navigate, goBack, setSelectedProduct, setSelectedSeller, setSelectedChatRoom, showToast, toggleFollowStore, isFollowingStore, chatRooms, products, reviews: storeReviews } = useAppStore()
+  const { selectedProductId, navigate, goBack, setSelectedProduct, setSelectedSeller, setSelectedChatRoom, showToast, toggleFollowStore, isFollowingStore, chatRooms, products, reviews: storeReviews, addChatRoom } = useAppStore()
   const { addItem } = useCartStore()
   const { toggleWishlist, isWishlisted } = useWishlistStore()
 
@@ -765,7 +765,21 @@ export function ProductDetailScreen() {
             whileTap={{ scale: 0.95 }}
             onClick={() => {
               const room = chatRooms.find(r => r.seller.id === product.sellerId)
-              if (room) setSelectedChatRoom(room.id)
+              if (room) {
+                setSelectedChatRoom(room.id)
+              } else {
+                // Create a new chat room for this seller
+                const newRoom = {
+                  id: `chat-${Date.now()}`,
+                  seller: product.seller,
+                  lastMessage: '',
+                  lastMessageTime: new Date().toISOString(),
+                  unreadCount: 0,
+                  product: product,
+                }
+                addChatRoom(newRoom)
+                setSelectedChatRoom(newRoom.id)
+              }
               navigate('chat-room')
             }}
             className="w-11 h-11 flex items-center justify-center rounded-xl border border-border bg-card"

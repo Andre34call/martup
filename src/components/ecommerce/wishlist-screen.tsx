@@ -2,7 +2,6 @@
 
 import { motion, AnimatePresence } from "framer-motion"
 import { useAppStore, useWishlistStore } from "@/lib/store"
-import { MOCK_PRODUCTS } from "@/lib/mock-data"
 import { PageHeader, ProductCard, EmptyState } from "./shared"
 import type { Product } from "@/lib/types"
 import { useMemo, useCallback } from "react"
@@ -11,11 +10,11 @@ import { Button } from "@/components/ui/button"
 
 export function WishlistScreen() {
   const { productIds } = useWishlistStore()
-  const { navigate, setSelectedProduct } = useAppStore()
+  const { navigate, setSelectedProduct, products } = useAppStore()
 
   const wishlistedProducts = useMemo(() => {
-    return MOCK_PRODUCTS.filter((p) => productIds.includes(p.id))
-  }, [productIds])
+    return products.filter((p) => productIds.includes(p.id))
+  }, [productIds, products])
 
   const handleProductClick = useCallback((product: Product) => {
     setSelectedProduct(product.id)
