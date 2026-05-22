@@ -17,8 +17,8 @@ import {
 import type { Product, ProductVariant } from "@/lib/types"
 import { useState, useRef, useCallback } from "react"
 
-// ==================== MOCK REVIEWS ====================
-const MOCK_REVIEWS = [
+// ==================== MOCK REVIEWS (fallback) ====================
+const FALLBACK_REVIEWS = [
   {
     id: "r1", userName: "Budi Santoso", userAvatar: "", rating: 5,
     content: "Produk sangat bagus, sesuai deskripsi. Pengiriman cepat dan packing aman. Recommended seller!",
@@ -218,7 +218,7 @@ function VariantSelector({
 
 // ==================== MAIN COMPONENT ====================
 export function ProductDetailScreen() {
-  const { selectedProductId, navigate, goBack, setSelectedProduct, setSelectedSeller, setSelectedChatRoom, showToast, toggleFollowStore, isFollowingStore, chatRooms, products } = useAppStore()
+  const { selectedProductId, navigate, goBack, setSelectedProduct, setSelectedSeller, setSelectedChatRoom, showToast, toggleFollowStore, isFollowingStore, chatRooms, products, reviews: storeReviews } = useAppStore()
   const { addItem } = useCartStore()
   const { toggleWishlist, isWishlisted } = useWishlistStore()
 
@@ -636,7 +636,10 @@ export function ProductDetailScreen() {
 
             {/* Review cards */}
             <div className="space-y-3">
-              {MOCK_REVIEWS.map((review) => (
+              {(storeReviews.filter(r => r.productId === product.id).length > 0
+                ? storeReviews.filter(r => r.productId === product.id)
+                : FALLBACK_REVIEWS
+              ).map((review) => (
                 <motion.div
                   key={review.id}
                   initial={{ opacity: 0, y: 5 }}

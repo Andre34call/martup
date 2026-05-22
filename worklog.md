@@ -112,3 +112,41 @@ Stage Summary:
 - Withdraw flow uses reliable sellerIdMap instead of fragile chatRoom/order lookups
 - Avatar upload has no size limit
 - App compiles and runs without errors
+---
+Task ID: 1
+Agent: main
+Task: Fix review/ulasan submission feature - reviews not saved after submitting
+
+Work Log:
+- Added `reviews` array and `reviewedOrderIds` array to the app store (src/lib/store.ts)
+- Added `addReview` action that saves review, updates product rating/reviewCount, and marks order as reviewed
+- Added reviews and reviewedOrderIds to localStorage persistence
+- Rewrote ReviewScreen to use actual store data (delivered orders from store instead of hardcoded mock)
+- Updated handleSubmitReview to create Review objects and save via addReview
+- Added success animation overlay after review submission
+- After successful review, navigates back to orders page
+- Updated "Sudah Diulas" section to use store reviews instead of hardcoded data
+- Added empty states for both sections when no data
+- Updated ProductDetailScreen to use store reviews (with fallback to FALLBACK_REVIEWS)
+
+Stage Summary:
+- Reviews now properly persist in the store and localStorage
+- Product ratings automatically update when reviews are submitted
+- Review submission shows success animation and navigates to orders
+- Product detail page shows real reviews from the store
+---
+Task ID: 2
+Agent: main
+Task: Bring back demo login feature for buyer, seller, admin roles
+
+Work Log:
+- Added demo login section to LoginScreen with 3 role buttons (Buyer, Seller, Admin)
+- Each button creates a mock user with the appropriate role and logs in
+- Color-coded buttons: emerald for Buyer, orange for Seller, purple for Admin
+- Added emoji icons for visual distinction (🛒 Buyer, 🏪 Seller, ⚙️ Admin)
+- Buttons are disabled while loading and show loading state properly
+
+Stage Summary:
+- Demo login buttons are now visible on the login page
+- Users can quickly switch between Buyer, Seller, and Admin roles
+- Each role navigates to its appropriate dashboard after login

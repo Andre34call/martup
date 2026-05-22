@@ -5,7 +5,7 @@ import { useAppStore } from "@/lib/store"
 import { formatPrice } from "@/lib/mock-data"
 import { PageHeader, SectionHeader, EmptyState, SearchBar, WalletBalanceCard } from "./shared"
 import { useState, useRef, useCallback } from "react"
-import { Settings as SettingsIcon, Shield, Bell, Globe, Lock, Trash2, CreditCard, Ticket, Copy, Check, MapPin, Plus, Star, Camera, Send, RotateCcw, HelpCircle, ChevronDown, ChevronUp, MessageSquare, Phone, Heart, Store, Wallet, ArrowUpRight, Clock, Banknote, Edit, ChevronRight, Package, ImagePlus, Video, Play, X, Eye, EyeOff, KeyRound, ThumbsUp, ThumbsDown, Meh } from "lucide-react"
+import { Settings as SettingsIcon, Shield, Bell, Globe, Lock, Trash2, CreditCard, Ticket, Copy, Check, MapPin, Plus, Star, Camera, Send, RotateCcw, HelpCircle, ChevronDown, ChevronUp, MessageSquare, Phone, Heart, Store, Wallet, ArrowUpRight, Clock, Banknote, Edit, ChevronRight, Package, ImagePlus, Video, Play, X, Eye, EyeOff, KeyRound, ThumbsUp, ThumbsDown, Meh, CheckCircle2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
@@ -786,42 +786,24 @@ const ratingLabels: Record<number, { text: string; color: string; icon: React.Re
 }
 
 export function ReviewScreen() {
-  const { showToast, goBack } = useAppStore()
+  const { showToast, goBack, navigate, orders, reviews: storeReviews, reviewedOrderIds, addReview, currentUser, avatarUrl } = useAppStore()
   const [ratings, setRatings] = useState<Record<string, number>>({})
-  const [reviews, setReviews] = useState<Record<string, string>>({})
+  const [reviewTexts, setReviewTexts] = useState<Record<string, string>>({})
   const [images, setImages] = useState<Record<string, ReviewImage[]>>({})
   const [videos, setVideos] = useState<Record<string, ReviewVideo | null>>({})
   const [anonymous, setAnonymous] = useState<Record<string, boolean>>({})
   const [previewImage, setPreviewImage] = useState<string | null>(null)
   const [previewVideo, setPreviewVideo] = useState<string | null>(null)
+  const [showSuccess, setShowSuccess] = useState(false)
 
   const imageInputRef = useRef<HTMLInputElement>(null)
   const videoInputRef = useRef<HTMLInputElement>(null)
   const activeOrderIdRef = useRef<string | null>(null)
 
-  const deliveredOrders = [
-    { id: "r1", productName: "Kemeja Flannel Premium Cotton", price: 149000, seller: "Fashion Hub", image: "https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=400&auto=format&fit=crop" },
-    { id: "r2", productName: "Sneakers Nike Air Max 90", price: 999000, seller: "Sport Zone", image: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400&auto=format&fit=crop" },
-  ]
-
-  const submittedReviews = [
-    {
-      id: "s1", productName: "iPhone 15 Pro Max 256GB", rating: 5,
-      content: "Produk bagus, pengiriman cepat! Kamera jernih dan performa luar biasa.",
-      date: "18 Des 2024",
-      images: ["https://images.unsplash.com/photo-1695048133142-1a20484d2569?w=400&auto=format&fit=crop"],
-      video: null,
-      isAnonymous: false,
-    },
-    {
-      id: "s2", productName: "Diffuser Aromatherapy Minimalis", rating: 4,
-      content: "Aromanya enak, desain cantik. Pengepengan sedikit kurang rapi.",
-      date: "15 Des 2024",
-      images: [],
-      video: null,
-      isAnonymous: true,
-    },
-  ]
+  // Get actual delivered orders that haven't been reviewed yet
+  const deliveredOrders = orders.filter(o => o.status === 'delivered' && !reviewedOrderIds.includes(o.id))
+  // Get delivered orders that have been reviewed
+  const reviewedOrders = orders.filter(o => reviewedOrderIds.includes(o.id))
 
   // --- Image Upload Handlers ---
   const handleImageUpload = useCallback((orderId: string) => {
@@ -949,20 +931,52 @@ export function ReviewScreen() {
       return
     }
 
-    // Cleanup object URLs
-    const orderImages = images[orderId] || []
-    orderImages.forEach(img => URL.revokeObjectURL(img.url))
-    const orderVideo = videos[orderId]
-    if (orderVideo) URL.revokeObjectURL(orderVideo.url)
+    const order = orders.find(o => o.id === orderId)
+    if (!order) return
 
-    // Clear state
+    // Get the first item's productId for the review
+    const orderItem = order.items[0]
+    const productId = orderItem?.productId || ''
+
+    // Cleanup object URLs for images
+    const orderImages = images[orderId] || []
+    const imageUrls = orderImages.map(img => img.url)
+    // Don't revoke URLs yet since they may be used for display in submitted reviews
+    const orderVideo = videos[orderId]
+
+    // Create the review object
+    const review = {
+      id: `rev-${Date.now()}`,
+      userId: currentUser?.id || 'u1',
+      productId,
+      rating,
+      content: reviewTexts[orderId] || undefined,
+      images: imageUrls.length > 0 ? imageUrls : undefined,
+      userName: anonymous[orderId] ? 'Pembeli' : (currentUser?.name || 'User'),
+      userAvatar: anonymous[orderId] ? undefined : (avatarUrl || undefined),
+      createdAt: new Date().toISOString(),
+    }
+
+    // Save to store
+    addReview(review, orderId)
+
+    // Clear local state
     setImages(prev => ({ ...prev, [orderId]: [] }))
     setVideos(prev => ({ ...prev, [orderId]: null }))
     setRatings(prev => ({ ...prev, [orderId]: 0 }))
-    setReviews(prev => ({ ...prev, [orderId]: "" }))
+    setReviewTexts(prev => ({ ...prev, [orderId]: "" }))
 
-    showToast("Ulasan berhasil dikirim! 🎉", "success")
-  }, [ratings, images, videos, showToast])
+    // Show success animation
+    setShowSuccess(true)
+    setTimeout(() => {
+      setShowSuccess(false)
+      showToast("Ulasan berhasil dikirim! 🎉", "success")
+      // Navigate to orders page after short delay
+      setTimeout(() => {
+        navigate("orders")
+      }, 500)
+    }, 1500)
+  }, [ratings, images, videos, reviewTexts, anonymous, orders, currentUser, avatarUrl, addReview, showToast, navigate])
 
   return (
     <div className="pb-24">
@@ -1048,227 +1062,267 @@ export function ReviewScreen() {
         )}
       </AnimatePresence>
 
+      {/* Success Animation Overlay */}
+      <AnimatePresence>
+        {showSuccess && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[300] bg-black/60 flex items-center justify-center"
+          >
+            <motion.div
+              initial={{ scale: 0.5, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.5, opacity: 0 }}
+              className="bg-card rounded-2xl p-8 flex flex-col items-center gap-4 shadow-2xl"
+            >
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ type: "spring", stiffness: 300, delay: 0.2 }}
+                className="w-20 h-20 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center"
+              >
+                <CheckCircle2 className="w-10 h-10 text-emerald-500" />
+              </motion.div>
+              <p className="text-lg font-bold text-foreground">Ulasan Terkirim!</p>
+              <p className="text-sm text-muted-foreground text-center">Terima kasih atas ulasanmu 🎉</p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="px-4 space-y-6">
         {/* ===== Belum Diulas ===== */}
         <motion.div {...fadeIn}>
           <SectionHeader title="Belum Diulas" icon={<Star className="w-4 h-4" />} />
           <div className="space-y-4 mt-3">
-            {deliveredOrders.map((order, i) => {
-              const orderImages = images[order.id] || []
-              const orderVideo = videos[order.id]
-              const rating = ratings[order.id] || 0
-              const ratingInfo = ratingLabels[rating]
+            {deliveredOrders.length === 0 ? (
+              <EmptyState
+                icon={<CheckCircle2 className="w-10 h-10 text-muted-foreground" />}
+                title="Semua Pesanan Diulas"
+                subtitle="Tidak ada pesanan yang perlu diulas"
+              />
+            ) : (
+              deliveredOrders.map((order, i) => {
+                const orderImages = images[order.id] || []
+                const orderVideo = videos[order.id]
+                const rating = ratings[order.id] || 0
+                const ratingInfo = ratingLabels[rating]
+                const firstItem = order.items[0]
 
-              return (
-                <motion.div key={order.id} custom={i} variants={stagger} initial="initial" animate="animate">
-                  <Card className="p-4 space-y-4">
-                    {/* Product Info */}
-                    <div className="flex gap-3">
-                      <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 bg-muted">
-                        {order.image ? (
-                          <img src={order.image} alt={order.productName} className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <Package className="w-6 h-6 text-muted-foreground" />
-                          </div>
-                        )}
+                return (
+                  <motion.div key={order.id} custom={i} variants={stagger} initial="initial" animate="animate">
+                    <Card className="p-4 space-y-4">
+                      {/* Product Info */}
+                      <div className="flex gap-3">
+                        <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 bg-muted">
+                          {firstItem?.image ? (
+                            <img src={firstItem.image} alt={firstItem.productName} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <Package className="w-6 h-6 text-muted-foreground" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-foreground line-clamp-2">{firstItem?.productName || 'Produk'}</p>
+                          <p className="text-xs text-muted-foreground">{order.seller.storeName}</p>
+                          <p className="text-sm font-bold text-emerald-600 mt-0.5">{formatPrice(firstItem?.price || 0)}</p>
+                        </div>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-foreground line-clamp-2">{order.productName}</p>
-                        <p className="text-xs text-muted-foreground">{order.seller}</p>
-                        <p className="text-sm font-bold text-emerald-600 mt-0.5">{formatPrice(order.price)}</p>
-                      </div>
-                    </div>
 
-                    {/* Star Rating */}
-                    <div className="space-y-2">
-                      <p className="text-xs font-medium text-foreground">Bagaimana kualitas produk?</p>
-                      <div className="flex items-center gap-1.5">
-                        {Array.from({ length: 5 }).map((_, idx) => (
-                          <motion.button
-                            key={idx}
-                            whileTap={{ scale: 0.75 }}
-                            whileHover={{ scale: 1.1 }}
-                            onClick={() => handleRating(order.id, idx + 1)}
-                            className="p-0.5"
-                          >
-                            <Star
-                              className={`w-8 h-8 transition-all duration-150 ${
-                                rating >= idx + 1
-                                  ? "fill-amber-400 text-amber-400 drop-shadow-sm"
-                                  : "text-gray-300 dark:text-gray-600 hover:text-amber-200"
-                              }`}
-                            />
-                          </motion.button>
-                        ))}
-                        {ratingInfo && (
-                          <motion.div
-                            initial={{ opacity: 0, x: -8 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            className={`flex items-center gap-1 ml-2 ${ratingInfo.color}`}
-                          >
-                            {ratingInfo.icon}
-                            <span className="text-xs font-semibold">{ratingInfo.text}</span>
-                          </motion.div>
-                        )}
+                      {/* Star Rating */}
+                      <div className="space-y-2">
+                        <p className="text-xs font-medium text-foreground">Bagaimana kualitas produk?</p>
+                        <div className="flex items-center gap-1.5">
+                          {Array.from({ length: 5 }).map((_, idx) => (
+                            <motion.button
+                              key={idx}
+                              whileTap={{ scale: 0.75 }}
+                              whileHover={{ scale: 1.1 }}
+                              onClick={() => handleRating(order.id, idx + 1)}
+                              className="p-0.5"
+                            >
+                              <Star
+                                className={`w-8 h-8 transition-all duration-150 ${
+                                  rating >= idx + 1
+                                    ? "fill-amber-400 text-amber-400 drop-shadow-sm"
+                                    : "text-gray-300 dark:text-gray-600 hover:text-amber-200"
+                                }`}
+                              />
+                            </motion.button>
+                          ))}
+                          {ratingInfo && (
+                            <motion.div
+                              initial={{ opacity: 0, x: -8 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              className={`flex items-center gap-1 ml-2 ${ratingInfo.color}`}
+                            >
+                              {ratingInfo.icon}
+                              <span className="text-xs font-semibold">{ratingInfo.text}</span>
+                            </motion.div>
+                          )}
+                        </div>
                       </div>
-                    </div>
 
-                    {/* Review Text */}
-                    <div className="space-y-1.5">
-                      <textarea
-                        value={reviews[order.id] || ""}
-                        onChange={(e) => setReviews(prev => ({ ...prev, [order.id]: e.target.value }))}
-                        placeholder="Ceritakan pengalamanmu menggunakan produk ini..."
-                        rows={3}
-                        className="w-full rounded-xl border border-input bg-transparent px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 resize-none placeholder:text-muted-foreground/60"
-                      />
-                      <div className="flex items-center justify-between">
-                        <p className="text-[10px] text-muted-foreground">Ulasan yang detail membantu pembeli lain</p>
-                        <p className="text-[10px] text-muted-foreground">{(reviews[order.id] || "").length}/500</p>
+                      {/* Review Text */}
+                      <div className="space-y-1.5">
+                        <textarea
+                          value={reviewTexts[order.id] || ""}
+                          onChange={(e) => setReviewTexts(prev => ({ ...prev, [order.id]: e.target.value }))}
+                          placeholder="Ceritakan pengalamanmu menggunakan produk ini..."
+                          rows={3}
+                          maxLength={500}
+                          className="w-full rounded-xl border border-input bg-transparent px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 resize-none placeholder:text-muted-foreground/60"
+                        />
+                        <div className="flex items-center justify-between">
+                          <p className="text-[10px] text-muted-foreground">Ulasan yang detail membantu pembeli lain</p>
+                          <p className="text-[10px] text-muted-foreground">{(reviewTexts[order.id] || "").length}/500</p>
+                        </div>
                       </div>
-                    </div>
 
-                    {/* Image Upload Section */}
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
+                      {/* Image Upload Section */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-medium text-foreground flex items-center gap-1.5">
+                            <Camera className="w-3.5 h-3.5" />
+                            Foto Produk
+                          </p>
+                          <span className="text-[10px] text-muted-foreground">{orderImages.length}/{MAX_IMAGES}</span>
+                        </div>
+
+                        <div className="flex gap-2 flex-wrap">
+                          {/* Image Previews */}
+                          {orderImages.map((img) => (
+                            <motion.div
+                              key={img.id}
+                              initial={{ opacity: 0, scale: 0.8 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              exit={{ opacity: 0, scale: 0.8 }}
+                              className="relative group"
+                            >
+                              <div
+                                className="w-20 h-20 rounded-lg overflow-hidden border border-border/50 cursor-pointer"
+                                onClick={() => setPreviewImage(img.url)}
+                              >
+                                <img src={img.url} alt="Upload" className="w-full h-full object-cover" />
+                              </div>
+                              <button
+                                onClick={() => handleRemoveImage(order.id, img.id)}
+                                className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                              <button
+                                onClick={() => setPreviewImage(img.url)}
+                                className="absolute bottom-0.5 right-0.5 w-5 h-5 bg-black/50 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                <Eye className="w-3 h-3" />
+                              </button>
+                            </motion.div>
+                          ))}
+
+                          {/* Add Image Button */}
+                          {orderImages.length < MAX_IMAGES && (
+                            <motion.button
+                              whileTap={{ scale: 0.95 }}
+                              onClick={() => handleImageUpload(order.id)}
+                              className="w-20 h-20 rounded-lg border-2 border-dashed border-border hover:border-emerald-400 bg-muted/30 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/20 flex flex-col items-center justify-center gap-0.5 transition-colors"
+                            >
+                              <ImagePlus className="w-5 h-5 text-muted-foreground" />
+                              <span className="text-[9px] text-muted-foreground font-medium">Tambah</span>
+                            </motion.button>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-muted-foreground">Format: JPG, PNG, WebP · Maks {MAX_IMAGE_SIZE_MB}MB/foto</p>
+                      </div>
+
+                      {/* Video Upload Section */}
+                      <div className="space-y-2">
                         <p className="text-xs font-medium text-foreground flex items-center gap-1.5">
-                          <Camera className="w-3.5 h-3.5" />
-                          Foto Produk
+                          <Video className="w-3.5 h-3.5" />
+                          Video Ulasan
                         </p>
-                        <span className="text-[10px] text-muted-foreground">{orderImages.length}/{MAX_IMAGES}</span>
-                      </div>
 
-                      <div className="flex gap-2 flex-wrap">
-                        {/* Image Previews */}
-                        {orderImages.map((img) => (
+                        {orderVideo ? (
                           <motion.div
-                            key={img.id}
-                            initial={{ opacity: 0, scale: 0.8 }}
+                            initial={{ opacity: 0, scale: 0.95 }}
                             animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.8 }}
                             className="relative group"
                           >
                             <div
-                              className="w-20 h-20 rounded-lg overflow-hidden border border-border/50 cursor-pointer"
-                              onClick={() => setPreviewImage(img.url)}
+                              className="relative w-full h-36 rounded-lg overflow-hidden border border-border/50 bg-black cursor-pointer"
+                              onClick={() => setPreviewVideo(orderVideo.url)}
                             >
-                              <img src={img.url} alt="Upload" className="w-full h-full object-cover" />
+                              <video
+                                src={orderVideo.url}
+                                className="w-full h-full object-cover"
+                                muted
+                              />
+                              <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                                <div className="w-10 h-10 rounded-full bg-white/90 flex items-center justify-center shadow-lg">
+                                  <Play className="w-5 h-5 text-foreground ml-0.5" />
+                                </div>
+                              </div>
+                              <div className="absolute bottom-2 left-2 bg-black/60 text-white text-[9px] px-1.5 py-0.5 rounded-md font-medium">
+                                VIDEO
+                              </div>
                             </div>
                             <button
-                              onClick={() => handleRemoveImage(order.id, img.id)}
-                              className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={() => handleRemoveVideo(order.id)}
+                              className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center shadow-sm"
                             >
-                              <X className="w-3 h-3" />
-                            </button>
-                            <button
-                              onClick={() => setPreviewImage(img.url)}
-                              className="absolute bottom-0.5 right-0.5 w-5 h-5 bg-black/50 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                            >
-                              <Eye className="w-3 h-3" />
+                              <X className="w-3.5 h-3.5" />
                             </button>
                           </motion.div>
-                        ))}
-
-                        {/* Add Image Button */}
-                        {orderImages.length < MAX_IMAGES && (
+                        ) : (
                           <motion.button
-                            whileTap={{ scale: 0.95 }}
-                            onClick={() => handleImageUpload(order.id)}
-                            className="w-20 h-20 rounded-lg border-2 border-dashed border-border hover:border-emerald-400 bg-muted/30 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/20 flex flex-col items-center justify-center gap-0.5 transition-colors"
+                            whileTap={{ scale: 0.98 }}
+                            onClick={() => handleVideoUpload(order.id)}
+                            className="w-full h-20 rounded-lg border-2 border-dashed border-border hover:border-emerald-400 bg-muted/30 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/20 flex items-center gap-3 transition-colors"
                           >
-                            <ImagePlus className="w-5 h-5 text-muted-foreground" />
-                            <span className="text-[9px] text-muted-foreground font-medium">Tambah</span>
+                            <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center">
+                              <Video className="w-5 h-5 text-muted-foreground" />
+                            </div>
+                            <div className="text-left">
+                              <p className="text-xs font-medium text-foreground">Upload Video</p>
+                              <p className="text-[10px] text-muted-foreground">Maks {MAX_VIDEO_SIZE_MB}MB · MP4, MOV, WebM</p>
+                            </div>
                           </motion.button>
                         )}
                       </div>
-                      <p className="text-[10px] text-muted-foreground">Format: JPG, PNG, WebP · Maks {MAX_IMAGE_SIZE_MB}MB/foto</p>
-                    </div>
 
-                    {/* Video Upload Section */}
-                    <div className="space-y-2">
-                      <p className="text-xs font-medium text-foreground flex items-center gap-1.5">
-                        <Video className="w-3.5 h-3.5" />
-                        Video Ulasan
-                      </p>
-
-                      {orderVideo ? (
-                        <motion.div
-                          initial={{ opacity: 0, scale: 0.95 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          className="relative group"
-                        >
-                          <div
-                            className="relative w-full h-36 rounded-lg overflow-hidden border border-border/50 bg-black cursor-pointer"
-                            onClick={() => setPreviewVideo(orderVideo.url)}
-                          >
-                            <video
-                              src={orderVideo.url}
-                              className="w-full h-full object-cover"
-                              muted
-                            />
-                            <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                              <div className="w-10 h-10 rounded-full bg-white/90 flex items-center justify-center shadow-lg">
-                                <Play className="w-5 h-5 text-foreground ml-0.5" />
-                              </div>
-                            </div>
-                            <div className="absolute bottom-2 left-2 bg-black/60 text-white text-[9px] px-1.5 py-0.5 rounded-md font-medium">
-                              VIDEO
-                            </div>
+                      {/* Anonymous Toggle */}
+                      <div className="flex items-center justify-between py-1">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
+                            <Lock className="w-4 h-4 text-muted-foreground" />
                           </div>
-                          <button
-                            onClick={() => handleRemoveVideo(order.id)}
-                            className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center shadow-sm"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </motion.div>
-                      ) : (
-                        <motion.button
-                          whileTap={{ scale: 0.98 }}
-                          onClick={() => handleVideoUpload(order.id)}
-                          className="w-full h-20 rounded-lg border-2 border-dashed border-border hover:border-emerald-400 bg-muted/30 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/20 flex items-center gap-3 transition-colors"
-                        >
-                          <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center">
-                            <Video className="w-5 h-5 text-muted-foreground" />
+                          <div>
+                            <p className="text-xs font-medium text-foreground">Ulasan Anonim</p>
+                            <p className="text-[10px] text-muted-foreground">Nama tidak ditampilkan</p>
                           </div>
-                          <div className="text-left">
-                            <p className="text-xs font-medium text-foreground">Upload Video</p>
-                            <p className="text-[10px] text-muted-foreground">Maks {MAX_VIDEO_SIZE_MB}MB · MP4, MOV, WebM</p>
-                          </div>
-                        </motion.button>
-                      )}
-                    </div>
-
-                    {/* Anonymous Toggle */}
-                    <div className="flex items-center justify-between py-1">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
-                          <Lock className="w-4 h-4 text-muted-foreground" />
                         </div>
-                        <div>
-                          <p className="text-xs font-medium text-foreground">Ulasan Anonim</p>
-                          <p className="text-[10px] text-muted-foreground">Nama tidak ditampilkan</p>
-                        </div>
+                        <Switch
+                          checked={anonymous[order.id] || false}
+                          onCheckedChange={(v) => setAnonymous(prev => ({ ...prev, [order.id]: v }))}
+                        />
                       </div>
-                      <Switch
-                        checked={anonymous[order.id] || false}
-                        onCheckedChange={(v) => setAnonymous(prev => ({ ...prev, [order.id]: v }))}
-                      />
-                    </div>
 
-                    {/* Submit Button */}
-                    <Button
-                      disabled={!rating}
-                      onClick={() => handleSubmitReview(order.id)}
-                      className="w-full bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-10 disabled:opacity-40 text-sm font-semibold"
-                    >
-                      <Send className="w-4 h-4 mr-1.5" /> Kirim Ulasan
-                    </Button>
-                  </Card>
-                </motion.div>
-              )
-            })}
+                      {/* Submit Button */}
+                      <Button
+                        disabled={!rating}
+                        onClick={() => handleSubmitReview(order.id)}
+                        className="w-full bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-10 disabled:opacity-40 text-sm font-semibold"
+                      >
+                        <Send className="w-4 h-4 mr-1.5" /> Kirim Ulasan
+                      </Button>
+                    </Card>
+                  </motion.div>
+                )
+              })
+            )}
           </div>
         </motion.div>
 
@@ -1276,45 +1330,66 @@ export function ReviewScreen() {
         <motion.div {...fadeIn}>
           <SectionHeader title="Sudah Diulas" />
           <div className="space-y-3 mt-3">
-            {submittedReviews.map((review, i) => (
-              <motion.div key={review.id} custom={i} variants={stagger} initial="initial" animate="animate">
-                <Card className="p-4 space-y-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium text-foreground">{review.productName}</p>
-                        {review.isAnonymous && (
-                          <Badge className="text-[8px] h-4 bg-muted text-muted-foreground border-0">Anonim</Badge>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-0.5 mt-1">
-                        {Array.from({ length: 5 }).map((_, idx) => (
-                          <Star key={idx} className={`w-3.5 h-3.5 ${idx < review.rating ? "fill-amber-400 text-amber-400" : "text-gray-300"}`} />
-                        ))}
-                        <span className="text-[10px] font-medium text-foreground ml-1">{review.rating}/5</span>
-                      </div>
-                    </div>
-                    <span className="text-[10px] text-muted-foreground flex-shrink-0">{review.date}</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground leading-relaxed">{review.content}</p>
+            {reviewedOrders.length === 0 ? (
+              <EmptyState
+                icon={<Star className="w-10 h-10 text-muted-foreground" />}
+                title="Belum Ada Ulasan"
+                subtitle="Ulasan yang sudah dikirim akan muncul di sini"
+              />
+            ) : (
+              reviewedOrders.map((order, i) => {
+                // Find the review for this order
+                const orderReview = storeReviews.find(r =>
+                  r.productId === (order.items[0]?.productId || '') &&
+                  reviewedOrderIds.includes(order.id)
+                )
+                if (!orderReview) return null
 
-                  {/* Submitted review images */}
-                  {review.images.length > 0 && (
-                    <div className="flex gap-2">
-                      {review.images.map((img, idx) => (
-                        <div
-                          key={idx}
-                          className="w-16 h-16 rounded-lg overflow-hidden border border-border/50 cursor-pointer"
-                          onClick={() => setPreviewImage(img)}
-                        >
-                          <img src={img} alt="Review" className="w-full h-full object-cover" />
+                return (
+                  <motion.div key={order.id} custom={i} variants={stagger} initial="initial" animate="animate">
+                    <Card className="p-4 space-y-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-medium text-foreground">{order.items[0]?.productName || 'Produk'}</p>
+                            {orderReview.userName === 'Pembeli' && (
+                              <Badge className="text-[8px] h-4 bg-muted text-muted-foreground border-0">Anonim</Badge>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-0.5 mt-1">
+                            {Array.from({ length: 5 }).map((_, idx) => (
+                              <Star key={idx} className={`w-3.5 h-3.5 ${idx < orderReview.rating ? "fill-amber-400 text-amber-400" : "text-gray-300"}`} />
+                            ))}
+                            <span className="text-[10px] font-medium text-foreground ml-1">{orderReview.rating}/5</span>
+                          </div>
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </Card>
-              </motion.div>
-            ))}
+                        <span className="text-[10px] text-muted-foreground flex-shrink-0">
+                          {new Date(orderReview.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </span>
+                      </div>
+                      {orderReview.content && (
+                        <p className="text-xs text-muted-foreground leading-relaxed">{orderReview.content}</p>
+                      )}
+
+                      {/* Submitted review images */}
+                      {orderReview.images && orderReview.images.length > 0 && (
+                        <div className="flex gap-2">
+                          {orderReview.images.map((img, idx) => (
+                            <div
+                              key={idx}
+                              className="w-16 h-16 rounded-lg overflow-hidden border border-border/50 cursor-pointer"
+                              onClick={() => setPreviewImage(img)}
+                            >
+                              <img src={img} alt="Review" className="w-full h-full object-cover" />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </Card>
+                  </motion.div>
+                )
+              })
+            )}
           </div>
         </motion.div>
       </div>

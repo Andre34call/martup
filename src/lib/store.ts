@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { MOCK_PRODUCTS } from './mock-data'
-import type { ScreenName, UserRole, User, CartItem, Product, ProductVariant, Notification as AppNotification, ChatRoom, Address, Voucher, Order, OrderStatus, WalletMutation, BankAccount, WithdrawRequest, WithdrawStatus, SellerBalance } from './types'
+import type { ScreenName, UserRole, User, CartItem, Product, ProductVariant, Notification as AppNotification, ChatRoom, Address, Voucher, Order, OrderStatus, WalletMutation, BankAccount, WithdrawRequest, WithdrawStatus, SellerBalance, Review } from './types'
 
 // ==================== APP STORE ====================
 interface AppState {
@@ -112,6 +112,11 @@ interface AppState {
   addProduct: (product: Product) => void
   updateProduct: (product: Product) => void
   removeProduct: (id: string) => void
+
+  // Reviews
+  reviews: Review[]
+  reviewedOrderIds: string[]
+  addReview: (review: Review, orderId: string) => void
 }
 
 let toastTimer: ReturnType<typeof setTimeout> | null = null
@@ -581,6 +586,29 @@ export const useAppStore = create<AppState>()(
       removeProduct: (id) => set((state) => ({
         products: state.products.filter(p => p.id !== id)
       })),
+
+      // Reviews
+      reviews: [
+        { id: 'rev1', userId: 'u1', productId: '1', rating: 5, content: 'Produk bagus, pengiriman cepat! Kamera jernih dan performa luar biasa.', images: [], userName: 'Ahmad Fauzi', createdAt: '2024-12-18T10:00:00Z' },
+        { id: 'rev2', userId: 'u2', productId: '1', rating: 4, content: 'Sangat puas dengan pembelian ini. Recomended seller!', images: [], userName: 'Budi Santoso', createdAt: '2024-12-17T14:00:00Z' },
+        { id: 'rev3', userId: 'u3', productId: '3', rating: 5, content: 'Kemeja nyaman dipakai, bahan adem dan tebal.', images: [], userName: 'Siti Nurhaliza', userAvatar: '', createdAt: '2024-12-15T08:00:00Z' },
+        { id: 'rev4', userId: 'u1', productId: '5', rating: 4, content: 'Sepatu nyaman, ukuran pas. Pengiriman agak lama tapi overall puas.', images: [], userName: 'Ahmad Fauzi', createdAt: '2024-12-14T12:00:00Z' },
+      ],
+      reviewedOrderIds: [],
+      addReview: (review, orderId) => set((state) => {
+        // Update product rating and reviewCount
+        const updatedProducts = state.products.map(p => {
+          if (p.id !== review.productId) return p
+          const productReviews = [...state.reviews.filter(r => r.productId === p.id), review]
+          const avgRating = productReviews.reduce((sum, r) => sum + r.rating, 0) / productReviews.length
+          return { ...p, rating: Math.round(avgRating * 10) / 10, reviewCount: p.reviewCount + 1 }
+        })
+        return {
+          reviews: [review, ...state.reviews],
+          reviewedOrderIds: [...state.reviewedOrderIds, orderId],
+          products: updatedProducts,
+        }
+      }),
     }),
     {
       name: 'martup-app-store',
@@ -630,6 +658,9 @@ export const useAppStore = create<AppState>()(
         withdrawRequests: state.withdrawRequests,
         // Products
         products: state.products,
+        // Reviews
+        reviews: state.reviews,
+        reviewedOrderIds: state.reviewedOrderIds,
       }),
       skipHydration: true,
     }

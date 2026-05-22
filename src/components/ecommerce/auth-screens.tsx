@@ -429,6 +429,74 @@ export function LoginScreen() {
           Daftar
         </button>
       </div>
+
+      {/* Demo Login Section */}
+      <div className="pt-6">
+        <div className="flex items-center gap-3 py-2">
+          <Separator className="flex-1" />
+          <span className="text-xs text-muted-foreground font-medium">Demo Login</span>
+          <Separator className="flex-1" />
+        </div>
+        <div className="grid grid-cols-3 gap-2 mt-2">
+          <motion.button
+            whileTap={{ scale: 0.95 }}
+            onClick={async () => {
+              setIsLoading(true)
+              await new Promise((resolve) => setTimeout(resolve, 500))
+              const mockUser: User = {
+                id: "u1", email: "buyer@martup.id", phone: "08123456789",
+                name: "Ahmad Fauzi", role: "buyer", isVerified: true,
+                loyaltyPoints: 2500, coins: 150, referralCode: "AHMAD25",
+              }
+              login(mockUser)
+              setIsLoading(false)
+            }}
+            disabled={isLoading}
+            className="flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl border border-emerald-200 dark:border-emerald-800/50 bg-emerald-50 dark:bg-emerald-950/20 hover:bg-emerald-100 dark:hover:bg-emerald-950/40 transition-colors disabled:opacity-50"
+          >
+            <span className="text-lg">🛒</span>
+            <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400">Buyer</span>
+          </motion.button>
+          <motion.button
+            whileTap={{ scale: 0.95 }}
+            onClick={async () => {
+              setIsLoading(true)
+              await new Promise((resolve) => setTimeout(resolve, 500))
+              const mockUser: User = {
+                id: "u2", email: "seller@martup.id", phone: "08234567890",
+                name: "Gadget Pro Store", role: "seller", isVerified: true,
+                loyaltyPoints: 5000, coins: 300, referralCode: "GADGET25",
+              }
+              login(mockUser)
+              setIsLoading(false)
+            }}
+            disabled={isLoading}
+            className="flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl border border-orange-200 dark:border-orange-800/50 bg-orange-50 dark:bg-orange-950/20 hover:bg-orange-100 dark:hover:bg-orange-950/40 transition-colors disabled:opacity-50"
+          >
+            <span className="text-lg">🏪</span>
+            <span className="text-[10px] font-bold text-orange-700 dark:text-orange-400">Seller</span>
+          </motion.button>
+          <motion.button
+            whileTap={{ scale: 0.95 }}
+            onClick={async () => {
+              setIsLoading(true)
+              await new Promise((resolve) => setTimeout(resolve, 500))
+              const mockUser: User = {
+                id: "u_admin", email: "admin@martup.id", phone: "08345678901",
+                name: "Admin MartUp", role: "admin", isVerified: true,
+                loyaltyPoints: 0, coins: 0, referralCode: "ADMIN25",
+              }
+              login(mockUser)
+              setIsLoading(false)
+            }}
+            disabled={isLoading}
+            className="flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl border border-purple-200 dark:border-purple-800/50 bg-purple-50 dark:bg-purple-950/20 hover:bg-purple-100 dark:hover:bg-purple-950/40 transition-colors disabled:opacity-50"
+          >
+            <span className="text-lg">⚙️</span>
+            <span className="text-[10px] font-bold text-purple-700 dark:text-purple-400">Admin</span>
+          </motion.button>
+        </div>
+      </div>
     </motion.div>
   )
 }
