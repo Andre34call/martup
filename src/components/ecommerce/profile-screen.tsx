@@ -18,14 +18,14 @@ import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 
 const MOCK_USER = {
-  name: "Ahmad Fauzi",
-  email: "ahmad.fauzi@email.com",
-  phone: "0812****6789",
-  memberSince: "Jan 2023",
-  loyaltyPoints: 2500,
-  coins: 120,
-  coupons: 3,
-  balance: 1190000,
+  name: "New Member",
+  email: "",
+  phone: "",
+  memberSince: new Date().toLocaleDateString('id-ID', { month: 'short', year: 'numeric' }),
+  loyaltyPoints: 0,
+  coins: 0,
+  coupons: 0,
+  balance: 0,
 }
 
 // ==================== MENU ITEM ====================
@@ -90,6 +90,9 @@ export function ProfileScreen() {
   const user = currentUser || MOCK_USER
   const userName = user.name || MOCK_USER.name
   const userEmail = user.email || MOCK_USER.email
+  const memberSince = currentUser?.id
+    ? new Date().toLocaleDateString('id-ID', { month: 'short', year: 'numeric' })
+    : MOCK_USER.memberSince
 
   // Count orders by status
   const orderCounts = useMemo(() => ({
@@ -161,7 +164,7 @@ export function ProfileScreen() {
                 <h2 className="text-lg font-bold text-foreground">{userName}</h2>
                 <p className="text-xs text-muted-foreground">{userEmail}</p>
                 <p className="text-[10px] text-muted-foreground mt-0.5">
-                  Member sejak {MOCK_USER.memberSince}
+                  Member sejak {memberSince}
                 </p>
               </div>
             </div>

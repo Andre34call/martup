@@ -842,6 +842,10 @@ export const useAppStore = create<AppState>()(
               totalSales: data.seller.totalSales,
               totalProducts: data.seller.totalProducts,
               responseTime: data.seller.responseTime || undefined,
+              bankName: data.seller.bankName || undefined,
+              bankAccount: data.seller.bankAccount || undefined,
+              bankHolder: data.seller.bankHolder || undefined,
+              autoReply: data.seller.autoReply || undefined,
             }
             set({ seller })
 
@@ -1076,6 +1080,10 @@ export const useAppStore = create<AppState>()(
               totalSales: p.seller.totalSales,
               totalProducts: p.seller.totalProducts,
               responseTime: p.seller.responseTime || undefined,
+              bankName: p.seller.bankName || undefined,
+              bankAccount: p.seller.bankAccount || undefined,
+              bankHolder: p.seller.bankHolder || undefined,
+              autoReply: p.seller.autoReply || undefined,
             } : {
               id: '',
               userId: '',
@@ -1128,15 +1136,14 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: 'martup-storage',
+      version: 2, // Bumped to clear stale localStorage data from mock-data era
       partialize: (state) => ({
         // Only persist essential state, NOT user-specific data that should come from API
         currentScreen: state.currentScreen,
         previousScreens: state.previousScreens,
         settings: state.settings,
         searchHistory: state.searchHistory,
-        usedVoucherIds: state.usedVoucherIds,
-        followedStoreIds: state.followedStoreIds,
-        // Do NOT persist: orders, notifications, products, wallet, etc.
+        // Do NOT persist: orders, notifications, products, wallet, vouchers, followedStoreIds, etc.
         // These should always come from the API for consistency
       }),
     }

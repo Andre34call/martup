@@ -55,12 +55,21 @@ export async function GET(request: NextRequest) {
           seller: {
             select: {
               id: true,
+              userId: true,
               storeName: true,
               storeSlug: true,
               storeAvatar: true,
+              storeDesc: true,
               isVerified: true,
               isPremium: true,
               rating: true,
+              totalSales: true,
+              totalProducts: true,
+              responseTime: true,
+              bankName: true,
+              bankAccount: true,
+              bankHolder: true,
+              autoReply: true,
             },
           },
           category: {

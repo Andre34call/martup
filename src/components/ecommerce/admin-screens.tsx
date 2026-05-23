@@ -39,36 +39,56 @@ const stagger = {
   })
 }
 
-// ==================== MOCK DATA ====================
-const mockTopSellers = [
-  { name: "Gadget Pro Store", revenue: 4500000000, orders: 15000, rating: 4.9 },
-  { name: "Home Living ID", revenue: 2800000000, orders: 12000, rating: 4.8 },
-  { name: "Fashion Hub", revenue: 1900000000, orders: 8000, rating: 4.7 },
-  { name: "Sport Zone", revenue: 1200000000, orders: 6000, rating: 4.6 },
-  { name: "Beauty Corner", revenue: 850000000, orders: 3000, rating: 4.5 },
-]
+// ==================== HELPER: Compute top sellers from store data ====================
+function computeTopSellers(products: { sellerId: string; seller: { storeName: string }; price: number; sold: number; rating: number; reviewCount: number }[]) {
+  const sellerMap = new Map<string, { name: string; revenue: number; orders: number; rating: number; ratingCount: number }>()
+  for (const p of products) {
+    const existing = sellerMap.get(p.sellerId)
+    const revenue = p.sold * p.price
+    if (existing) {
+      existing.revenue += revenue
+      existing.orders += p.sold
+      existing.rating += p.rating * p.reviewCount
+      existing.ratingCount += p.reviewCount
+    } else {
+      sellerMap.set(p.sellerId, {
+        name: p.seller.storeName,
+        revenue,
+        orders: p.sold,
+        rating: p.rating * p.reviewCount,
+        ratingCount: p.reviewCount,
+      })
+    }
+  }
+  return Array.from(sellerMap.values())
+    .map(s => ({ ...s, rating: s.ratingCount > 0 ? Math.round((s.rating / s.ratingCount) * 10) / 10 : 0 }))
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 5)
+}
 
-const mockCategoryPerformance = [
-  { name: "Handphone", revenue: 3500000000, percentage: 28 },
-  { name: "Laptop", revenue: 2500000000, percentage: 20 },
-  { name: "Fashion", revenue: 2000000000, percentage: 16 },
-  { name: "Kecantikan", revenue: 1500000000, percentage: 12 },
-  { name: "Elektronik", revenue: 1200000000, percentage: 10 },
-  { name: "Lainnya", revenue: 1800000000, percentage: 14 },
-]
-
-const mockPaymentMethods = [
-  { name: "Midtrans", percentage: 35 },
-  { name: "GoPay", percentage: 25 },
-  { name: "OVO", percentage: 18 },
-  { name: "DANA", percentage: 12 },
-  { name: "COD", percentage: 7 },
-  { name: "Transfer Bank", percentage: 3 },
-]
+function computeCategoryPerformance(products: { categoryId: string; category: { name: string }; price: number; sold: number }[]) {
+  const catMap = new Map<string, { name: string; revenue: number }>()
+  for (const p of products) {
+    const existing = catMap.get(p.categoryId)
+    const revenue = p.sold * p.price
+    if (existing) {
+      existing.revenue += revenue
+    } else {
+      catMap.set(p.categoryId, { name: p.category.name, revenue })
+    }
+  }
+  const entries = Array.from(catMap.values()).sort((a, b) => b.revenue - a.revenue)
+  const totalRevenue = entries.reduce((sum, e) => sum + e.revenue, 0)
+  return entries.map(e => ({
+    name: e.name,
+    revenue: e.revenue,
+    percentage: totalRevenue > 0 ? Math.round((e.revenue / totalRevenue) * 100) : 0,
+  }))
+}
 
 // ==================== ADMIN DASHBOARD ====================
 export function AdminDashboard() {
-  const { navigate, switchRole, userRole, showToast, withdrawRequests, products, orders } = useAppStore()
+  const { navigate, switchRole, userRole, showToast, withdrawRequests, products, orders, adminUsers } = useAppStore()
 
   // Placeholder admin stats (replacing MOCK_ADMIN_STATS)
   const stats = {
@@ -173,10 +193,10 @@ export function AdminDashboard() {
         {/* Key Metrics Grid */}
         <motion.div {...fadeIn} className="grid grid-cols-2 gap-3">
           {[
-            { label: "Total Users", value: "125K", icon: Users, color: "text-blue-600 bg-blue-50 dark:bg-blue-900/30 dark:text-blue-400" },
-            { label: "Total Revenue", value: "Rp 12.5B", icon: DollarSign, color: "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 dark:text-emerald-400" },
-            { label: "Total Orders", value: "450K", icon: Package, color: "text-orange-600 bg-orange-50 dark:bg-orange-900/30 dark:text-orange-400" },
-            { label: "Active Products", value: "850K", icon: Box, color: "text-purple-600 bg-purple-50 dark:bg-purple-900/30 dark:text-purple-400" },
+            { label: "Total Users", value: adminUsers.length.toLocaleString(), icon: Users, color: "text-blue-600 bg-blue-50 dark:bg-blue-900/30 dark:text-blue-400" },
+            { label: "Total Revenue", value: formatPrice(orders.filter(o => o.status === 'paid' || o.status === 'delivered').reduce((sum, o) => sum + o.totalAmount, 0)), icon: DollarSign, color: "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 dark:text-emerald-400" },
+            { label: "Total Orders", value: orders.length.toLocaleString(), icon: Package, color: "text-orange-600 bg-orange-50 dark:bg-orange-900/30 dark:text-orange-400" },
+            { label: "Active Products", value: products.filter(p => p.status === 'active').length.toLocaleString(), icon: Box, color: "text-purple-600 bg-purple-50 dark:bg-purple-900/30 dark:text-purple-400" },
           ].map((item, i) => (
             <motion.div key={item.label} custom={i} variants={stagger} initial="initial" animate="animate">
               <Card className="p-4">
@@ -258,9 +278,9 @@ export function AdminDashboard() {
           <div className="space-y-2 mt-3">
             {[
               { label: "Permintaan Penarikan", count: withdrawRequests.filter(w => w.status === 'pending').length, icon: DollarSign, color: "text-amber-600 bg-amber-50 dark:bg-amber-900/30", screen: "admin-withdraw" as const },
-              { label: "Verifikasi Seller", count: 5, icon: Shield, color: "text-blue-600 bg-blue-50 dark:bg-blue-900/30", screen: "admin-users" as const },
-              { label: "Laporan Produk", count: 3, icon: Eye, color: "text-red-600 bg-red-50 dark:bg-red-900/30", screen: "admin-products" as const },
-              { label: "Keluhan Terbuka", count: 8, icon: MessageSquare, color: "text-orange-600 bg-orange-50 dark:bg-orange-900/30", screen: "admin-complaints" as const },
+              { label: "Verifikasi Seller", count: adminUsers.filter(u => u.role === 'seller' && !u.isVerified).length, icon: Shield, color: "text-blue-600 bg-blue-50 dark:bg-blue-900/30", screen: "admin-users" as const },
+              { label: "Laporan Produk", count: 0, icon: Eye, color: "text-red-600 bg-red-50 dark:bg-red-900/30", screen: "admin-products" as const },
+              { label: "Keluhan Terbuka", count: 0, icon: MessageSquare, color: "text-orange-600 bg-orange-50 dark:bg-orange-900/30", screen: "admin-complaints" as const },
             ].map((item, i) => (
               <motion.div key={item.label} custom={i} variants={stagger} initial="initial" animate="animate">
                 <Card className="p-3">
@@ -923,6 +943,10 @@ export function AdminBanner() {
 export function AdminAnalytics() {
   const { products, orders, withdrawRequests } = useAppStore()
 
+  // Compute real data from store
+  const topSellers = computeTopSellers(products)
+  const categoryPerformance = computeCategoryPerformance(products)
+
   // Placeholder admin stats (replacing MOCK_ADMIN_STATS)
   const stats = {
     totalUsers: 0,
@@ -1011,17 +1035,23 @@ export function AdminAnalytics() {
                   </tr>
                 </thead>
                 <tbody>
-                  {mockTopSellers.map((seller, i) => (
-                    <tr key={seller.name} className="border-b border-border/50 last:border-0">
-                      <td className="px-4 py-3 text-xs font-bold text-muted-foreground">{i + 1}</td>
-                      <td className="px-4 py-3">
-                        <p className="text-sm font-medium text-foreground">{seller.name}</p>
-                        <p className="text-[10px] text-muted-foreground">{seller.orders.toLocaleString()} pesanan</p>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-right font-medium text-emerald-600">{formatPrice(seller.revenue)}</td>
-                      <td className="px-4 py-3 text-sm text-right text-foreground">{seller.rating}</td>
+                  {topSellers.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-8 text-center text-sm text-muted-foreground">Data belum tersedia</td>
                     </tr>
-                  ))}
+                  ) : (
+                    topSellers.map((seller, i) => (
+                      <tr key={seller.name} className="border-b border-border/50 last:border-0">
+                        <td className="px-4 py-3 text-xs font-bold text-muted-foreground">{i + 1}</td>
+                        <td className="px-4 py-3">
+                          <p className="text-sm font-medium text-foreground">{seller.name}</p>
+                          <p className="text-[10px] text-muted-foreground">{seller.orders.toLocaleString()} pesanan</p>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-right font-medium text-emerald-600">{formatPrice(seller.revenue)}</td>
+                        <td className="px-4 py-3 text-sm text-right text-foreground">{seller.rating}</td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -1032,45 +1062,34 @@ export function AdminAnalytics() {
         <motion.div {...fadeIn}>
           <SectionHeader title="Performa Kategori" icon={<BarChart3 className="w-4 h-4" />} />
           <Card className="mt-3 p-4 space-y-3">
-            {mockCategoryPerformance.map((cat, i) => (
-              <div key={cat.name}>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm font-medium text-foreground">{cat.name}</span>
-                  <span className="text-xs text-muted-foreground">{cat.percentage}%</span>
+            {categoryPerformance.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">Data belum tersedia</p>
+            ) : (
+              categoryPerformance.map((cat, i) => (
+                <div key={cat.name}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-medium text-foreground">{cat.name}</span>
+                    <span className="text-xs text-muted-foreground">{cat.percentage}%</span>
+                  </div>
+                  <div className="h-2 bg-muted rounded-full overflow-hidden">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${cat.percentage}%` }}
+                      transition={{ delay: i * 0.1, duration: 0.5 }}
+                      className="h-full bg-emerald-500 rounded-full"
+                    />
+                  </div>
                 </div>
-                <div className="h-2 bg-muted rounded-full overflow-hidden">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${cat.percentage}%` }}
-                    transition={{ delay: i * 0.1, duration: 0.5 }}
-                    className="h-full bg-emerald-500 rounded-full"
-                  />
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </Card>
         </motion.div>
 
         {/* Payment Method Distribution */}
         <motion.div {...fadeIn}>
           <SectionHeader title="Distribusi Metode Pembayaran" icon={<CreditCard className="w-4 h-4" />} />
-          <Card className="mt-3 p-4 space-y-3">
-            {mockPaymentMethods.map((method, i) => (
-              <div key={method.name}>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm font-medium text-foreground">{method.name}</span>
-                  <span className="text-xs text-muted-foreground">{method.percentage}%</span>
-                </div>
-                <div className="h-2 bg-muted rounded-full overflow-hidden">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${method.percentage}%` }}
-                    transition={{ delay: i * 0.1, duration: 0.5 }}
-                    className="h-full bg-blue-500 rounded-full"
-                  />
-                </div>
-              </div>
-            ))}
+          <Card className="mt-3 p-4">
+            <p className="text-sm text-muted-foreground text-center py-4">Data belum tersedia</p>
           </Card>
         </motion.div>
       </div>

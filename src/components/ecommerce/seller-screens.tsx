@@ -16,10 +16,10 @@ import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { useAppStore } from "@/lib/store"
-import { formatPrice } from "@/lib/utils"
+import { formatPrice, formatRelativeTime } from "@/lib/utils"
 import { PageHeader, SectionHeader, StatusBadge, SearchBar, EmptyState, WalletBalanceCard } from "./shared"
-import type { Order, OrderStatus } from "@/lib/types"
-import { useState, useRef, useEffect, useMemo } from "react"
+import type { Order } from "@/lib/types"
+import { useState, useRef, useEffect } from "react"
 import { AnimatePresence } from "framer-motion"
 
 // ==================== ANIMATION VARIANTS ====================
@@ -37,57 +37,12 @@ const stagger = {
   })
 }
 
-// ==================== MOCK DATA ====================
-const mockRecentOrders: {
-  orderNumber: string
-  buyerName: string
-  product: string
-  amount: number
-  status: OrderStatus
-}[] = [
-  { orderNumber: "ORD-2024-101", buyerName: "Ahmad Fauzi", product: "iPhone 15 Pro Max 256GB", amount: 21999000, status: "paid" },
-  { orderNumber: "ORD-2024-102", buyerName: "Siti Nurhaliza", product: "Samsung Galaxy S24 Ultra", amount: 17999000, status: "processing" },
-  { orderNumber: "ORD-2024-103", buyerName: "Budi Santoso", product: "MacBook Pro M3 14 inch", amount: 25999000, status: "shipped" },
-  { orderNumber: "ORD-2024-104", buyerName: "Dewi Lestari", product: "PS5 Slim Digital Edition", amount: 5799000, status: "pending" },
-]
-
-
-
-const mockChatBuyers = [
-  { id: "cb1", name: "Ahmad Fauzi", lastMessage: "Apakah ready stock kak?", time: "10:30", unread: 2 },
-  { id: "cb2", name: "Siti Nurhaliza", lastMessage: "Terima kasih sudah kirim 🙏", time: "09:15", unread: 0 },
-  { id: "cb3", name: "Budi Santoso", lastMessage: "Bisa cod ga kak?", time: "Kemarin", unread: 1 },
-  { id: "cb4", name: "Dewi Lestari", lastMessage: "Warna apa yang ready?", time: "Kemarin", unread: 0 },
-]
-
-const mockTransactions = [
-  { id: "st1", type: "credit" as const, description: "Penjualan ORD-2024-101", amount: 20899120, date: "20 Des 2024" },
-  { id: "st2", type: "credit" as const, description: "Penjualan ORD-2024-102", amount: 17099120, date: "20 Des 2024" },
-  { id: "st3", type: "debit" as const, description: "Penarikan ke BCA", amount: 20000000, date: "18 Des 2024" },
-  { id: "st4", type: "credit" as const, description: "Penjualan ORD-2024-103", amount: 24699120, date: "19 Des 2024" },
-  { id: "st5", type: "credit" as const, description: "Penjualan ORD-2024-104", amount: 5509912, date: "18 Des 2024" },
-]
-
-const mockCampaigns = [
-  { id: "sc1", name: "Flash Sale Akhir Tahun", type: "flash_sale", status: "active", discount: 20, startDate: "20 Des 2024", endDate: "31 Des 2024" },
-  { id: "sc2", name: "Voucher Gratis Ongkir", type: "voucher", status: "active", discount: 25000, startDate: "15 Des 2024", endDate: "15 Jan 2025" },
-  { id: "sc3", name: "Diskon Tahun Baru", type: "flash_sale", status: "scheduled", discount: 15, startDate: "1 Jan 2025", endDate: "5 Jan 2025" },
-]
+// ==================== (mock data removed — all data from store) ====================
 
 // ==================== SELLER DASHBOARD ====================
 export function SellerDashboard() {
-  const { navigate, unreadNotificationCount, switchRole, userRole, orders, sellerBalance, currentUser, products } = useAppStore()
-  // Derive sellerId from currentUser
-  const sellerId = useMemo(() => {
-    const sellerMapping: Record<string, string> = {
-      'u2': 's1', // Gadget Pro Store
-      'u3': 's2', // Fashion Hub
-      'u4': 's3', // Beauty Corner
-      'u5': 's4', // Home Living ID
-      'u6': 's5', // Sport Zone
-    }
-    return sellerMapping[currentUser?.id || ''] || 's1'
-  }, [currentUser])
+  const { navigate, unreadNotificationCount, switchRole, userRole, orders, sellerBalance, currentUser, products, seller } = useAppStore()
+  const sellerId = seller?.id || ''
 
   // Compute real stats from store data for current seller
   const sellerOrders = orders.filter(o => o.sellerId === sellerId)
@@ -107,7 +62,7 @@ export function SellerDashboard() {
     totalRevenue,
     totalOrders,
     totalProducts: sellerProducts.length,
-    totalVisitors: 0,
+    totalSales: seller?.totalSales || 0,
     pendingOrders,
     monthlyRevenue: [] as { month: string; revenue: number }[],
     topProducts: [...sellerProducts]
@@ -142,7 +97,7 @@ export function SellerDashboard() {
         <div className="flex items-center justify-between h-14 px-4">
           <div className="flex items-center gap-2">
             <Store className="w-5 h-5 text-emerald-500" />
-            <h1 className="text-base font-bold text-foreground">Gadget Pro Store</h1>
+            <h1 className="text-base font-bold text-foreground">{seller?.storeName || 'My Store'}</h1>
             <span className="inline-flex items-center gap-0.5 text-[9px] font-medium px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
               <Check className="w-2.5 h-2.5" /> Verified
             </span>
@@ -221,7 +176,7 @@ export function SellerDashboard() {
               <p className="text-3xl font-bold mt-1">{formatPrice(sellerBalance.availableBalance + sellerBalance.pendingBalance)}</p>
               <div className="flex items-center gap-1 mt-2">
                 <TrendingUp className="w-4 h-4 text-emerald-200" />
-                <span className="text-sm text-emerald-100 font-medium">+23% dari bulan lalu</span>
+                <span className="text-sm text-emerald-100 font-medium">{totalRevenue > 0 ? 'Pendapatan bulan ini' : 'Belum ada pendapatan'}</span>
               </div>
               <Separator className="my-3 bg-emerald-400/30" />
               <div className="flex gap-6">
@@ -243,8 +198,8 @@ export function SellerDashboard() {
           {[
             { label: "Total Pesanan", value: totalOrders.toLocaleString(), icon: Package, color: "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 dark:text-emerald-400" },
             { label: "Total Produk", value: stats.totalProducts.toLocaleString(), icon: Box, color: "text-orange-600 bg-orange-50 dark:bg-orange-900/30 dark:text-orange-400" },
-            { label: "Pengunjung", value: "12.5K", icon: Eye, color: "text-cyan-600 bg-cyan-50 dark:bg-cyan-900/30 dark:text-cyan-400" },
-            { label: "Rating", value: "4.9", icon: Star, color: "text-amber-600 bg-amber-50 dark:bg-amber-900/30 dark:text-amber-400" },
+            { label: "Total Terjual", value: stats.totalSales.toLocaleString(), icon: Eye, color: "text-cyan-600 bg-cyan-50 dark:bg-cyan-900/30 dark:text-cyan-400" },
+            { label: "Rating", value: seller?.rating?.toFixed(1) || "0", icon: Star, color: "text-amber-600 bg-amber-50 dark:bg-amber-900/30 dark:text-amber-400" },
           ].map((item, i) => (
             <motion.div key={item.label} custom={i} variants={stagger} initial="initial" animate="animate">
               <Card className="p-4">
@@ -375,12 +330,11 @@ export function SellerDashboard() {
 
 // ==================== SELLER PRODUCTS ====================
 export function SellerProducts() {
-  const { navigate, showToast, products, removeProduct, setSelectedProduct, currentUser } = useAppStore()
+  const { navigate, showToast, products, removeProduct, setSelectedProduct, seller } = useAppStore()
   const [search, setSearch] = useState("")
 
-  // Derive sellerId from currentUser
-  const sellerIdMap: Record<string, string> = { 'u2': 's1', 'u3': 's2', 'u4': 's3', 'u5': 's4', 'u6': 's5' }
-  const sellerId = sellerIdMap[currentUser?.id || ''] || 's1'
+  // Derive sellerId from store seller
+  const sellerId = seller?.id || ''
 
   // Filter products for current seller
   const sellerProducts = products.filter(p => p.sellerId === sellerId)
@@ -466,23 +420,14 @@ export function SellerProducts() {
 
 // ==================== SELLER ORDERS ====================
 export function SellerOrders() {
-  const { navigate, updateOrderStatus, showToast, orders, currentUser, updateOrderTracking } = useAppStore()
+  const { navigate, updateOrderStatus, showToast, orders, updateOrderTracking, seller } = useAppStore()
   const [activeTab, setActiveTab] = useState("all")
   const [showTrackingDialog, setShowTrackingDialog] = useState(false)
   const [trackingOrderId, setTrackingOrderId] = useState<string | null>(null)
   const [trackingNumber, setTrackingNumber] = useState("")
 
-  // Derive sellerId from currentUser
-  const sellerId = useMemo(() => {
-    const sellerMapping: Record<string, string> = {
-      'u2': 's1', // Gadget Pro Store
-      'u3': 's2', // Fashion Hub
-      'u4': 's3', // Beauty Corner
-      'u5': 's4', // Home Living ID
-      'u6': 's5', // Sport Zone
-    }
-    return sellerMapping[currentUser?.id || ''] || 's1'
-  }, [currentUser])
+  // Derive sellerId from store seller
+  const sellerId = seller?.id || ''
 
   // Map real store orders for current seller to display format
   const sellerOrders = orders
@@ -639,15 +584,10 @@ export function SellerOrders() {
 
 // ==================== SELLER ANALYTICS ====================
 export function SellerAnalytics() {
-  const { products, orders, currentUser } = useAppStore()
+  const { products, orders, seller } = useAppStore()
 
-  // Derive sellerId from currentUser
-  const sellerId = useMemo(() => {
-    const sellerMapping: Record<string, string> = {
-      'u2': 's1', 'u3': 's2', 'u4': 's3', 'u5': 's4', 'u6': 's5',
-    }
-    return sellerMapping[currentUser?.id || ''] || 's1'
-  }, [currentUser])
+  // Derive sellerId from store seller
+  const sellerId = seller?.id || ''
 
   const sellerProducts = products.filter(p => p.sellerId === sellerId)
   const sellerOrders = orders.filter(o => o.sellerId === sellerId)
@@ -660,7 +600,7 @@ export function SellerAnalytics() {
     totalRevenue,
     totalOrders: sellerOrders.length,
     totalProducts: sellerProducts.length,
-    totalVisitors: 0,
+    totalSales: seller?.totalSales || 0,
     pendingOrders: sellerOrders.filter(o => o.status === 'pending' || o.status === 'paid').length,
     monthlyRevenue: [] as { month: string; revenue: number }[],
     topProducts: [...sellerProducts]
@@ -774,19 +714,10 @@ export function SellerAnalytics() {
 
 // ==================== SELLER WALLET ====================
 export function SellerWallet() {
-  const { navigate, showToast, sellerBalance, sellerBankAccounts, withdrawRequests, currentUser } = useAppStore()
+  const { navigate, showToast, sellerBalance, sellerBankAccounts, withdrawRequests, seller, walletMutations } = useAppStore()
 
-  // Derive sellerId from currentUser
-  const sellerId = useMemo(() => {
-    const sellerMapping: Record<string, string> = {
-      'u2': 's1', // Gadget Pro Store
-      'u3': 's2', // Fashion Hub
-      'u4': 's3', // Beauty Corner
-      'u5': 's4', // Home Living ID
-      'u6': 's5', // Sport Zone
-    }
-    return sellerMapping[currentUser?.id || ''] || 's1'
-  }, [currentUser])
+  // Derive sellerId from store seller
+  const sellerId = seller?.id || ''
 
   // Current seller's withdraw requests
   const myWithdrawRequests = withdrawRequests.filter(w => w.sellerId === sellerId)
@@ -1013,33 +944,41 @@ export function SellerWallet() {
         <motion.div {...fadeIn}>
           <SectionHeader title="Riwayat Transaksi" />
           <div className="space-y-2 mt-3">
-            {mockTransactions.map((tx, i) => (
-              <motion.div key={tx.id} custom={i} variants={stagger} initial="initial" animate="animate">
-                <Card className="p-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${
-                        tx.type === "credit"
-                          ? "bg-emerald-50 dark:bg-emerald-900/30"
-                          : "bg-red-50 dark:bg-red-900/30"
-                      }`}>
-                        {tx.type === "credit"
-                          ? <ArrowDownLeft className="w-4 h-4 text-emerald-600" />
-                          : <ArrowUpRight className="w-4 h-4 text-red-600" />
-                        }
+            {walletMutations.length === 0 ? (
+              <EmptyState
+                icon={<Wallet className="w-10 h-10 text-muted-foreground" />}
+                title="Belum Ada Transaksi"
+                subtitle="Riwayat transaksi akan muncul di sini"
+              />
+            ) : (
+              walletMutations.map((tx, i) => (
+                <motion.div key={tx.id} custom={i} variants={stagger} initial="initial" animate="animate">
+                  <Card className="p-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${
+                          tx.type === "credit"
+                            ? "bg-emerald-50 dark:bg-emerald-900/30"
+                            : "bg-red-50 dark:bg-red-900/30"
+                        }`}>
+                          {tx.type === "credit"
+                            ? <ArrowDownLeft className="w-4 h-4 text-emerald-600" />
+                            : <ArrowUpRight className="w-4 h-4 text-red-600" />
+                          }
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-foreground">{tx.description}</p>
+                          <p className="text-xs text-muted-foreground">{formatRelativeTime(tx.createdAt)}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-sm font-medium text-foreground">{tx.description}</p>
-                        <p className="text-xs text-muted-foreground">{tx.date}</p>
-                      </div>
+                      <p className={`text-sm font-bold ${tx.type === "credit" ? "text-emerald-600" : "text-red-600"}`}>
+                        {tx.type === "credit" ? "+" : "-"}{formatPrice(tx.amount)}
+                      </p>
                     </div>
-                    <p className={`text-sm font-bold ${tx.type === "credit" ? "text-emerald-600" : "text-red-600"}`}>
-                      {tx.type === "credit" ? "+" : "-"}{formatPrice(tx.amount)}
-                    </p>
-                  </div>
-                </Card>
-              </motion.div>
-            ))}
+                  </Card>
+                </motion.div>
+              ))
+            )}
           </div>
         </motion.div>
       </div>
@@ -1079,35 +1018,42 @@ export function SellerChat() {
         <motion.div {...fadeIn}>
           <SectionHeader title="Daftar Chat" />
           <div className="space-y-2 mt-3">
-            {mockChatBuyers.map((buyer, i) => (
-              <motion.div key={buyer.id} custom={i} variants={stagger} initial="initial" animate="animate">
-                <Card className="p-3 cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => {
-                  const chatRoom = chatRooms[i]
-                  if (chatRoom) setSelectedChatRoom(chatRoom.id)
-                  navigate("chat-room")
-                }}>
-                  <div className="flex items-center gap-3">
-                    <div className="relative">
-                      <div className="w-10 h-10 rounded-full bg-emerald-500 text-white font-bold flex items-center justify-center">
-                        {buyer.name.charAt(0)}
+            {chatRooms.length === 0 ? (
+              <EmptyState
+                icon={<MessageCircle className="w-10 h-10 text-muted-foreground" />}
+                title="Belum Ada Chat"
+                subtitle="Chat dari pembeli akan muncul di sini"
+              />
+            ) : (
+              chatRooms.map((room, i) => (
+                <motion.div key={room.id} custom={i} variants={stagger} initial="initial" animate="animate">
+                  <Card className="p-3 cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => {
+                    setSelectedChatRoom(room.id)
+                    navigate("chat-room")
+                  }}>
+                    <div className="flex items-center gap-3">
+                      <div className="relative">
+                        <div className="w-10 h-10 rounded-full bg-emerald-500 text-white font-bold flex items-center justify-center">
+                          {room.seller?.storeName?.charAt(0) || '?'}
+                        </div>
+                        {room.unreadCount > 0 && (
+                          <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-1">
+                            {room.unreadCount}
+                          </span>
+                        )}
                       </div>
-                      {buyer.unread > 0 && (
-                        <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-1">
-                          {buyer.unread}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <p className="text-sm font-medium text-foreground">{buyer.name}</p>
-                        <p className="text-[10px] text-muted-foreground">{buyer.time}</p>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm font-medium text-foreground">{room.seller?.storeName || 'Pembeli'}</p>
+                          <p className="text-[10px] text-muted-foreground">{formatRelativeTime(room.lastMessageTime)}</p>
+                        </div>
+                        <p className="text-xs text-muted-foreground truncate mt-0.5">{room.lastMessage}</p>
                       </div>
-                      <p className="text-xs text-muted-foreground truncate mt-0.5">{buyer.lastMessage}</p>
                     </div>
-                  </div>
-                </Card>
-              </motion.div>
-            ))}
+                  </Card>
+                </motion.div>
+              ))
+            )}
           </div>
         </motion.div>
       </div>
@@ -1117,10 +1063,10 @@ export function SellerChat() {
 
 // ==================== SELLER SETTINGS ====================
 export function SellerSettings() {
-  const { showToast } = useAppStore()
-  const [storeName, setStoreName] = useState("Gadget Pro Store")
-  const [storeDesc, setStoreDesc] = useState("Toko gadget terpercaya dengan produk berkualitas")
-  const [autoReplyMsg, setAutoReplyMsg] = useState("Terima kasih sudah menghubungi kami. Kami akan membalas pesan Anda secepatnya.")
+  const { showToast, seller } = useAppStore()
+  const [storeName, setStoreName] = useState(seller?.storeName || "My Store")
+  const [storeDesc, setStoreDesc] = useState(seller?.storeDesc || "")
+  const [autoReplyMsg, setAutoReplyMsg] = useState(seller?.autoReply || "Terima kasih sudah menghubungi kami. Kami akan membalas pesan Anda secepatnya.")
 
   return (
     <div className="pb-20">
@@ -1164,15 +1110,15 @@ export function SellerSettings() {
           <Card className="mt-3 p-4 space-y-4">
             <div className="space-y-2">
               <label className="text-xs font-medium text-foreground">Nama Bank</label>
-              <Input defaultValue="BCA" className="rounded-xl" />
+              <Input defaultValue={seller?.bankName || ""} className="rounded-xl" placeholder="Contoh: BCA" />
             </div>
             <div className="space-y-2">
               <label className="text-xs font-medium text-foreground">Nomor Rekening</label>
-              <Input defaultValue="1234567890" className="rounded-xl" />
+              <Input defaultValue={seller?.bankAccount || ""} className="rounded-xl" placeholder="Nomor rekening" />
             </div>
             <div className="space-y-2">
               <label className="text-xs font-medium text-foreground">Nama Pemilik</label>
-              <Input defaultValue="Ahmad Fauzi" className="rounded-xl" />
+              <Input defaultValue={seller?.bankHolder || ""} className="rounded-xl" placeholder="Nama sesuai rekening" />
             </div>
           </Card>
         </motion.div>
@@ -1234,45 +1180,11 @@ export function SellerCampaign() {
         <motion.div {...fadeIn}>
           <SectionHeader title="Kampanye Aktif" icon={<Megaphone className="w-4 h-4" />} />
           <div className="space-y-2 mt-3">
-            {mockCampaigns.map((campaign, i) => (
-              <motion.div key={campaign.id} custom={i} variants={stagger} initial="initial" animate="animate">
-                <Card className="p-4">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${
-                        campaign.type === "flash_sale"
-                          ? "bg-orange-50 dark:bg-orange-900/30"
-                          : "bg-violet-50 dark:bg-violet-900/30"
-                      }`}>
-                        {campaign.type === "flash_sale"
-                          ? <Zap className="w-4 h-4 text-orange-600" />
-                          : <Tag className="w-4 h-4 text-violet-600" />
-                        }
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-foreground">{campaign.name}</p>
-                        <p className="text-xs text-muted-foreground">{campaign.startDate} - {campaign.endDate}</p>
-                      </div>
-                    </div>
-                    <Badge variant="outline" className={`text-[10px] ${
-                      campaign.status === "active"
-                        ? "border-emerald-300 text-emerald-600"
-                        : "border-amber-300 text-amber-600"
-                    }`}>
-                      {campaign.status === "active" ? "Aktif" : "Terjadwal"}
-                    </Badge>
-                  </div>
-                  <div className="mt-2 pt-2 border-t border-border/50">
-                    <p className="text-xs text-muted-foreground">
-                      {campaign.type === "flash_sale"
-                        ? `Diskon ${campaign.discount}%`
-                        : `Potongan ${formatPrice(campaign.discount)}`
-                      }
-                    </p>
-                  </div>
-                </Card>
-              </motion.div>
-            ))}
+            <EmptyState
+              icon={<Megaphone className="w-10 h-10 text-muted-foreground" />}
+              title="Belum Ada Kampanye"
+              subtitle="Buat kampanye atau promo untuk menarik lebih banyak pembeli"
+            />
           </div>
         </motion.div>
 

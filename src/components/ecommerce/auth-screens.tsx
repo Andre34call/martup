@@ -867,13 +867,13 @@ export function OTPScreen() {
 
     const mockUser: User = {
       id: "u_otp",
-      email: "ahmad@martup.id",
-      phone: "08123456789",
-      name: "Ahmad Fauzi",
+      email: "",
+      phone: "",
+      name: "New Member",
       role: "buyer",
       isVerified: true,
-      loyaltyPoints: 2500,
-      coins: 150,
+      loyaltyPoints: 0,
+      coins: 0,
     }
 
     login(mockUser)
