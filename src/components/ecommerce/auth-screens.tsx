@@ -8,6 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Separator } from "@/components/ui/separator"
 import { InputOTP, InputOTPGroup, InputOTPSlot, InputOTPSeparator } from "@/components/ui/input-otp"
 import { useAppStore } from "@/lib/store"
+import { signIn } from "next-auth/react"
 import { useState, useEffect, useCallback } from "react"
 import type { User } from "@/lib/types"
 
@@ -281,23 +282,43 @@ export function LoginScreen() {
     if (!isFormValid) return
     setIsLoading(true)
 
-    // Simulate login delay
+    // Simulate login delay (real auth via Google OAuth below)
     await new Promise((resolve) => setTimeout(resolve, 800))
 
-    const mockUser: User = {
-      id: "u1",
-      email: "ahmad@martup.id",
-      phone: "08123456789",
-      name: "Ahmad Fauzi",
-      role: "buyer",
-      isVerified: true,
-      loyaltyPoints: 2500,
-      coins: 150,
-      referralCode: "AHMAD25",
+    // For now, create a new user via API
+    try {
+      const res = await fetch('/api/auth/sync-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: emailOrPhone, name: emailOrPhone.split('@')[0] }),
+      })
+      const data = await res.json()
+      if (data.success && data.user) {
+        const user: User = {
+          id: data.user.id,
+          email: data.user.email,
+          name: data.user.name,
+          avatar: data.user.avatar || undefined,
+          role: data.user.role || 'buyer',
+          isVerified: data.user.isVerified || false,
+          loyaltyPoints: data.user.loyaltyPoints || 0,
+          coins: data.user.coins || 0,
+        }
+        login(user)
+        // Fetch user data from DB
+        const { fetchUserData } = useAppStore.getState()
+        await fetchUserData(data.user.id)
+      }
+    } catch (error) {
+      console.error('Login failed:', error)
     }
 
-    login(mockUser)
     setIsLoading(false)
+  }
+
+  const handleGoogleLogin = async () => {
+    setIsLoading(true)
+    await signIn('google', { callbackUrl: '/' })
   }
 
   return (
@@ -416,7 +437,8 @@ export function LoginScreen() {
           <Button
             variant="outline"
             className="w-full h-12 rounded-xl font-medium text-sm border-border/50"
-            onClick={handleLogin}
+            onClick={handleGoogleLogin}
+            disabled={isLoading}
           >
             <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
               <path
@@ -443,6 +465,7 @@ export function LoginScreen() {
             variant="outline"
             className="w-full h-12 rounded-xl font-medium text-sm border-border/50"
             onClick={handleLogin}
+            disabled={isLoading}
           >
             <Apple className="w-5 h-5 mr-2" />
             Masuk dengan Apple
@@ -482,13 +505,19 @@ export function LoginScreen() {
             whileTap={{ scale: 0.95 }}
             onClick={async () => {
               setIsLoading(true)
-              await new Promise((resolve) => setTimeout(resolve, 500))
-              const mockUser: User = {
-                id: "u1", email: "buyer@martup.id", phone: "08123456789",
-                name: "Ahmad Fauzi", role: "buyer", isVerified: true,
-                loyaltyPoints: 2500, coins: 150, referralCode: "AHMAD25",
-              }
-              login(mockUser)
+              try {
+                const res = await fetch('/api/auth/sync-user', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ email: 'buyer@martup.demo', name: 'Demo Buyer' }),
+                })
+                const data = await res.json()
+                if (data.success && data.user) {
+                  login({ id: data.user.id, email: data.user.email, name: data.user.name, role: data.user.role || 'buyer', isVerified: data.user.isVerified || false, loyaltyPoints: data.user.loyaltyPoints || 0, coins: data.user.coins || 0 })
+                  const { fetchUserData } = useAppStore.getState()
+                  await fetchUserData(data.user.id)
+                }
+              } catch (e) { console.error(e) }
               setIsLoading(false)
             }}
             disabled={isLoading}
@@ -501,13 +530,20 @@ export function LoginScreen() {
             whileTap={{ scale: 0.95 }}
             onClick={async () => {
               setIsLoading(true)
-              await new Promise((resolve) => setTimeout(resolve, 500))
-              const mockUser: User = {
-                id: "u2", email: "seller@martup.id", phone: "08234567890",
-                name: "Gadget Pro Store", role: "seller", isVerified: true,
-                loyaltyPoints: 5000, coins: 300, referralCode: "GADGET25",
-              }
-              login(mockUser)
+              try {
+                // Use a demo seller account
+                const res = await fetch('/api/auth/sync-user', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ email: 'gadgetpro@martup.demo', name: 'Gadget Pro Store' }),
+                })
+                const data = await res.json()
+                if (data.success && data.user) {
+                  login({ id: data.user.id, email: data.user.email, name: data.user.name, role: data.user.role || 'seller', isVerified: data.user.isVerified || false, loyaltyPoints: data.user.loyaltyPoints || 0, coins: data.user.coins || 0 })
+                  const { fetchUserData } = useAppStore.getState()
+                  await fetchUserData(data.user.id)
+                }
+              } catch (e) { console.error(e) }
               setIsLoading(false)
             }}
             disabled={isLoading}
@@ -520,13 +556,25 @@ export function LoginScreen() {
             whileTap={{ scale: 0.95 }}
             onClick={async () => {
               setIsLoading(true)
-              await new Promise((resolve) => setTimeout(resolve, 500))
-              const mockUser: User = {
-                id: "u_admin", email: "admin@martup.id", phone: "08345678901",
-                name: "Admin MartUp", role: "admin", isVerified: true,
-                loyaltyPoints: 0, coins: 0, referralCode: "ADMIN25",
-              }
-              login(mockUser)
+              try {
+                const res = await fetch('/api/auth/sync-user', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ email: 'admin@martup.demo', name: 'Admin MartUp' }),
+                })
+                const data = await res.json()
+                if (data.success && data.user) {
+                  // Update role to admin
+                  await fetch('/api/auth/sync-user', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: 'admin@martup.demo', name: 'Admin MartUp', role: 'admin' }),
+                  })
+                  login({ id: data.user.id, email: data.user.email, name: data.user.name, role: 'admin', isVerified: true, loyaltyPoints: 0, coins: 0 })
+                  const { fetchUserData } = useAppStore.getState()
+                  await fetchUserData(data.user.id)
+                }
+              } catch (e) { console.error(e) }
               setIsLoading(false)
             }}
             disabled={isLoading}

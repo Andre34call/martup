@@ -1,0 +1,108 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { db } from '@/lib/db'
+
+// Helper to safely parse JSON fields
+function parseJsonField(value: string | null | undefined): unknown[] {
+  if (!value) return []
+  try {
+    const parsed = JSON.parse(value)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+// GET /api/products - Fetch all active products with seller and category info
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const categoryId = searchParams.get('categoryId')
+    const search = searchParams.get('search')
+    const isFlashSale = searchParams.get('isFlashSale')
+    const sellerId = searchParams.get('sellerId')
+    const limit = parseInt(searchParams.get('limit') || '50', 10)
+    const offset = parseInt(searchParams.get('offset') || '0', 10)
+
+    // Build where clause
+    const where: Record<string, unknown> = {
+      status: 'active',
+    }
+
+    if (categoryId) {
+      where.categoryId = categoryId
+    }
+
+    if (sellerId) {
+      where.sellerId = sellerId
+    }
+
+    if (isFlashSale === 'true') {
+      where.isFlashSale = true
+    }
+
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+        { tags: { contains: search, mode: 'insensitive' } },
+      ]
+    }
+
+    const [products, total] = await Promise.all([
+      db.product.findMany({
+        where,
+        include: {
+          seller: {
+            select: {
+              id: true,
+              storeName: true,
+              storeSlug: true,
+              storeAvatar: true,
+              isVerified: true,
+              isPremium: true,
+              rating: true,
+            },
+          },
+          category: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              icon: true,
+            },
+          },
+          variants: true,
+        },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip: offset,
+      }),
+      db.product.count({ where }),
+    ])
+
+    // Parse JSON fields in products
+    const parsedProducts = products.map((product) => ({
+      ...product,
+      images: parseJsonField(product.images),
+      tags: parseJsonField(product.tags),
+    }))
+
+    return NextResponse.json({
+      success: true,
+      data: parsedProducts,
+      pagination: {
+        total,
+        limit,
+        offset,
+        hasMore: offset + limit < total,
+      },
+    })
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Internal server error'
+    console.error('Products GET error:', error)
+    return NextResponse.json(
+      { success: false, error: message },
+      { status: 500 }
+    )
+  }
+}

@@ -1,10 +1,9 @@
 "use client"
 
 import { motion, AnimatePresence } from "framer-motion"
-import { Search, Bell, MessageCircle, ChevronRight, Zap } from "lucide-react"
+import { Search, Bell, MessageCircle, ChevronRight, Zap, Package } from "lucide-react"
 import { useAppStore, useCartStore } from "@/lib/store"
-import { MOCK_CATEGORIES } from "@/lib/mock-data"
-import { ProductCard, FlashSaleTimer, CategoryPill, SectionHeader } from "./shared"
+import { ProductCard, FlashSaleTimer, CategoryPill, SectionHeader, EmptyState } from "./shared"
 import type { Product } from "@/lib/types"
 import { useState, useEffect, useCallback, useRef } from "react"
 
@@ -55,7 +54,7 @@ const quickActionsRow2 = [
 
 // ==================== HOME SCREEN ====================
 export function HomeScreen() {
-  const { navigate, unreadNotificationCount, totalUnreadChats, setSelectedProduct, setSelectedCategory, setSearchQuery, showToast, products } = useAppStore()
+  const { navigate, unreadNotificationCount, totalUnreadChats, setSelectedProduct, setSelectedCategory, setSearchQuery, showToast, products, categories, isAuthenticated } = useAppStore()
   const [currentBanner, setCurrentBanner] = useState(0)
   const [showLoadingMore, setShowLoadingMore] = useState(false)
 
@@ -386,7 +385,7 @@ export function HomeScreen() {
           actionLabel="Lihat Semua"
         />
         <div className="mt-3 flex gap-2 overflow-x-auto no-scrollbar pb-1">
-          {MOCK_CATEGORIES.slice(0, 10).map((cat) => (
+          {categories.slice(0, 10).map((cat) => (
             <CategoryPill
               key={cat.id}
               id={cat.id}
@@ -398,6 +397,9 @@ export function HomeScreen() {
               }}
             />
           ))}
+          {categories.length === 0 && (
+            <p className="text-sm text-muted-foreground py-2">Memuat kategori...</p>
+          )}
         </div>
       </div>
 
@@ -410,22 +412,32 @@ export function HomeScreen() {
           actionLabel="Lihat Semua"
         />
 
-        <div className="mt-3 grid grid-cols-2 gap-3">
-          {products.map((product, idx) => (
-            <motion.div
-              key={product.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, delay: Math.min(idx * 0.05, 0.3) }}
-            >
-              <ProductCard
-                product={product}
-                onClick={() => handleProductClick(product)}
-                layout="grid"
-              />
-            </motion.div>
-          ))}
-        </div>
+        {products.length > 0 ? (
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            {products.map((product, idx) => (
+              <motion.div
+                key={product.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, delay: Math.min(idx * 0.05, 0.3) }}
+              >
+                <ProductCard
+                  product={product}
+                  onClick={() => handleProductClick(product)}
+                  layout="grid"
+                />
+              </motion.div>
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            icon={<Package className="w-10 h-10 text-muted-foreground" />}
+            title="Belum Ada Produk"
+            subtitle="Produk akan muncul ketika seller mulai berjualan"
+            actionLabel="Jelajahi Kategori"
+            onAction={() => navigate("category")}
+          />
+        )}
 
         {/* Infinite scroll sentinel & loading indicator */}
         <div id="feed-sentinel" className="h-4" />
