@@ -2,7 +2,7 @@
 
 import { motion, AnimatePresence } from "framer-motion"
 import { useAppStore, useWishlistStore } from "@/lib/store"
-import { MOCK_CATEGORIES, formatPrice, formatRelativeTime } from "@/lib/mock-data"
+import { formatPrice, formatRelativeTime } from "@/lib/mock-data"
 import { PageHeader, ProductCard, EmptyState, SearchBar, SectionHeader } from "./shared"
 import type { Product } from "@/lib/types"
 import { useState, useEffect, useRef, useMemo, useCallback } from "react"
@@ -24,7 +24,7 @@ const TRENDING_SEARCHES = [
 ]
 
 export function SearchScreen() {
-  const { searchHistory, addSearchHistory, clearSearchHistory, navigate, setSelectedProduct, setSelectedCategory, selectedCategoryId, products } = useAppStore()
+  const { searchHistory, addSearchHistory, clearSearchHistory, navigate, setSelectedProduct, setSelectedCategory, selectedCategoryId, products, categories } = useAppStore()
   // Read initial query from store (set by other screens before navigation)
   const initialQuery = useRef(useAppStore.getState().searchQuery || "")
   const [query, setQuery] = useState(initialQuery.current)
@@ -295,7 +295,7 @@ export function SearchScreen() {
                   onAction={() => navigate("category")}
                 />
                 <div className="grid grid-cols-4 gap-3 mt-3">
-                  {MOCK_CATEGORIES.slice(0, 8).map((cat) => (
+                  {categories.slice(0, 8).map((cat) => (
                     <motion.button
                       key={cat.id}
                       whileTap={{ scale: 0.95 }}

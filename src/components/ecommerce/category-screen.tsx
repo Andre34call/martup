@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion"
 import { useAppStore } from "@/lib/store"
-import { MOCK_CATEGORIES } from "@/lib/mock-data"
+// categories are now fetched from the store
 import { PageHeader, SearchBar, EmptyState, ProductCard } from "./shared"
 import type { Category, Product } from "@/lib/types"
 import { useState, useMemo, useCallback } from "react"
@@ -112,18 +112,18 @@ type SortOption = "popular" | "newest" | "price-low" | "price-high"
 
 // ==================== CATEGORY SCREEN (GRID LAYOUT) ====================
 export function CategoryScreen() {
-  const { navigate, setSelectedCategory } = useAppStore()
+  const { navigate, setSelectedCategory, categories } = useAppStore()
   const [searchQuery, setSearchQuery] = useState("")
 
   const filteredCategories = useMemo(() => {
-    if (!searchQuery.trim()) return MOCK_CATEGORIES
+    if (!searchQuery.trim()) return categories
     const q = searchQuery.toLowerCase()
-    return MOCK_CATEGORIES.filter(
+    return categories.filter(
       (c) =>
         c.name.toLowerCase().includes(q) ||
         c.slug.toLowerCase().includes(q)
     )
-  }, [searchQuery])
+  }, [searchQuery, categories])
 
   const handleCategoryClick = useCallback((categoryId: string) => {
     setSelectedCategory(categoryId)
@@ -190,14 +190,14 @@ export function CategoryScreen() {
 
 // ==================== CATEGORY DETAIL SCREEN ====================
 export function CategoryDetailScreen() {
-  const { navigate, goBack, selectedCategoryId, setSelectedProduct, products } = useAppStore()
+  const { navigate, goBack, selectedCategoryId, setSelectedProduct, products, categories } = useAppStore()
   const [selectedSubCategory, setSelectedSubCategory] = useState<string | null>(null)
   const [sortOption, setSortOption] = useState<SortOption>("popular")
 
   // Find the selected category
   const category = useMemo(
-    () => MOCK_CATEGORIES.find((c) => c.id === selectedCategoryId),
-    [selectedCategoryId]
+    () => categories.find((c) => c.id === selectedCategoryId),
+    [selectedCategoryId, categories]
   )
 
   // Get sub-categories

@@ -18,7 +18,7 @@ import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { useAppStore } from "@/lib/store"
-import { MOCK_ADMIN_STATS, formatPrice, formatRelativeTime } from "@/lib/mock-data"
+import { formatPrice, formatRelativeTime } from "@/lib/mock-data"
 import { PageHeader, SectionHeader, StatusBadge, SearchBar, EmptyState } from "./shared"
 import type { Order, OrderStatus, WithdrawStatus } from "@/lib/types"
 import { useState, useRef, useEffect } from "react"
@@ -68,8 +68,19 @@ const mockPaymentMethods = [
 
 // ==================== ADMIN DASHBOARD ====================
 export function AdminDashboard() {
-  const { navigate, switchRole, userRole, showToast, withdrawRequests } = useAppStore()
-  const stats = MOCK_ADMIN_STATS
+  const { navigate, switchRole, userRole, showToast, withdrawRequests, products, orders } = useAppStore()
+
+  // Placeholder admin stats (replacing MOCK_ADMIN_STATS)
+  const stats = {
+    totalUsers: 0,
+    totalSellers: 0,
+    totalOrders: orders.length,
+    totalRevenue: orders.reduce((sum, o) => sum + o.totalAmount, 0),
+    pendingWithdrawals: withdrawRequests.filter(w => w.status === 'pending').length,
+    activeProducts: products.filter(p => p.status === 'active').length,
+    revenueChart: [] as { date: string; revenue: number }[],
+    userGrowth: [] as { date: string; users: number }[],
+  }
   const [showRoleMenu, setShowRoleMenu] = useState(false)
   const roleMenuRef = useRef<HTMLDivElement>(null)
 
@@ -910,7 +921,19 @@ export function AdminBanner() {
 
 // ==================== ADMIN ANALYTICS ====================
 export function AdminAnalytics() {
-  const stats = MOCK_ADMIN_STATS
+  const { products, orders, withdrawRequests } = useAppStore()
+
+  // Placeholder admin stats (replacing MOCK_ADMIN_STATS)
+  const stats = {
+    totalUsers: 0,
+    totalSellers: 0,
+    totalOrders: orders.length,
+    totalRevenue: orders.reduce((sum, o) => sum + o.totalAmount, 0),
+    pendingWithdrawals: withdrawRequests.filter(w => w.status === 'pending').length,
+    activeProducts: products.filter(p => p.status === 'active').length,
+    revenueChart: [] as { date: string; revenue: number }[],
+    userGrowth: [] as { date: string; users: number }[],
+  }
   const [dateRange, setDateRange] = useState("30d")
 
   return (

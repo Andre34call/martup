@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { useAppStore } from "@/lib/store"
-import { MOCK_CATEGORIES, formatPrice } from "@/lib/mock-data"
+import { formatPrice } from "@/lib/mock-data"
 import { PageHeader } from "./shared"
 import type { Product } from "@/lib/types"
 import { useState, useRef } from "react"
@@ -35,7 +35,7 @@ interface VariantGroup {
 
 // ==================== SELLER ADD PRODUCT SCREEN ====================
 export function SellerAddProductScreen() {
-  const { navigate, showToast, addProduct, updateProduct, selectedProductId, products, currentUser } = useAppStore()
+  const { navigate, showToast, addProduct, updateProduct, selectedProductId, products, currentUser, categories } = useAppStore()
 
   // Derive sellerId and seller info from currentUser
   const sellerIdMap: Record<string, string> = { 'u2': 's1', 'u3': 's2', 'u4': 's3', 'u5': 's4', 'u6': 's5' }
@@ -82,7 +82,7 @@ export function SellerAddProductScreen() {
   const productImageInputRef = useRef<HTMLInputElement>(null)
 
   // Derived
-  const selectedCategory = MOCK_CATEGORIES.find(c => c.id === category)
+  const selectedCategory = categories.find(c => c.id === category)
   const priceNumber = parseInt(price.replace(/\D/g, "")) || 0
   const discountPriceNumber = parseInt(discountPrice.replace(/\D/g, "")) || 0
 
@@ -250,7 +250,7 @@ export function SellerAddProductScreen() {
       return
     }
 
-    const selectedCategoryObj = MOCK_CATEGORIES.find(c => c.id === category)
+    const selectedCategoryObj = categories.find(c => c.id === category)
     const productImages2 = productImages.length > 0
       ? productImages.map(img => img.url)
       : (editingProduct?.images || [])
@@ -307,7 +307,7 @@ export function SellerAddProductScreen() {
       return
     }
 
-    const selectedCategoryObj = MOCK_CATEGORIES.find(c => c.id === category)
+    const selectedCategoryObj = categories.find(c => c.id === category)
     const productImages2 = productImages.length > 0
       ? productImages.map(img => img.url)
       : (editingProduct?.images || [])
@@ -480,7 +480,7 @@ export function SellerAddProductScreen() {
                   animate={{ opacity: 1, y: 0 }}
                   className="absolute top-full left-0 right-0 mt-1 z-50 bg-card border border-border rounded-xl shadow-lg max-h-64 overflow-y-auto"
                 >
-                  {MOCK_CATEGORIES.map((cat) => (
+                  {categories.map((cat) => (
                     <button
                       key={cat.id}
                       onClick={() => {

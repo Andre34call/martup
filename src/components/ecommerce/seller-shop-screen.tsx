@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { useAppStore } from "@/lib/store"
-import { MOCK_PRODUCTS, formatPrice } from "@/lib/mock-data"
+import { formatPrice } from "@/lib/mock-data"
 import {
   PageHeader, ProductCard, RatingStars, AvatarWithName, SellerBadge,
   EmptyState, CategoryPillList
@@ -19,14 +19,14 @@ import { useState, useMemo, useCallback } from "react"
 
 // ==================== MAIN COMPONENT ====================
 export function SellerShopScreen() {
-  const { selectedSellerId, navigate, setSelectedProduct, toggleFollowStore, isFollowingStore, setSelectedChatRoom, chatRooms } = useAppStore()
+  const { selectedSellerId, navigate, setSelectedProduct, toggleFollowStore, isFollowingStore, setSelectedChatRoom, chatRooms, products } = useAppStore()
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
   const [sortBy, setSortBy] = useState<"popular" | "newest" | "price-low" | "price-high">("popular")
 
   // Find all products for the selected seller
   const sellerProducts = useMemo(() => {
-    return MOCK_PRODUCTS.filter(p => p.sellerId === selectedSellerId)
-  }, [selectedSellerId])
+    return products.filter(p => p.sellerId === selectedSellerId)
+  }, [selectedSellerId, products])
 
   // Get seller info from first product
   const seller = sellerProducts.length > 0 ? sellerProducts[0].seller : null

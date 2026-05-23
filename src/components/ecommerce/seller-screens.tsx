@@ -16,7 +16,7 @@ import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { useAppStore } from "@/lib/store"
-import { MOCK_SELLER_STATS, formatPrice } from "@/lib/mock-data"
+import { formatPrice } from "@/lib/mock-data"
 import { PageHeader, SectionHeader, StatusBadge, SearchBar, EmptyState, WalletBalanceCard } from "./shared"
 import type { Order, OrderStatus } from "@/lib/types"
 import { useState, useRef, useEffect, useMemo } from "react"
@@ -76,9 +76,7 @@ const mockCampaigns = [
 
 // ==================== SELLER DASHBOARD ====================
 export function SellerDashboard() {
-  const { navigate, unreadNotificationCount, switchRole, userRole, orders, sellerBalance, currentUser } = useAppStore()
-  const stats = MOCK_SELLER_STATS
-
+  const { navigate, unreadNotificationCount, switchRole, userRole, orders, sellerBalance, currentUser, products } = useAppStore()
   // Derive sellerId from currentUser
   const sellerId = useMemo(() => {
     const sellerMapping: Record<string, string> = {
@@ -102,6 +100,22 @@ export function SellerDashboard() {
   const recentOrders = [...sellerOrders]
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 4)
+
+  // Compute stats from store (replacing MOCK_SELLER_STATS)
+  const sellerProducts = products.filter(p => p.sellerId === sellerId)
+  const stats = {
+    totalRevenue,
+    totalOrders,
+    totalProducts: sellerProducts.length,
+    totalVisitors: 0,
+    pendingOrders,
+    monthlyRevenue: [] as { month: string; revenue: number }[],
+    topProducts: [...sellerProducts]
+      .sort((a, b) => b.sold - a.sold)
+      .slice(0, 4)
+      .map(p => ({ name: p.name, sold: p.sold, revenue: p.sold * p.price })),
+    recentOrders: [] as Order[],
+  }
   const [showRoleMenu, setShowRoleMenu] = useState(false)
   const roleMenuRef = useRef<HTMLDivElement>(null)
 
@@ -625,7 +639,36 @@ export function SellerOrders() {
 
 // ==================== SELLER ANALYTICS ====================
 export function SellerAnalytics() {
-  const stats = MOCK_SELLER_STATS
+  const { products, orders, currentUser } = useAppStore()
+
+  // Derive sellerId from currentUser
+  const sellerId = useMemo(() => {
+    const sellerMapping: Record<string, string> = {
+      'u2': 's1', 'u3': 's2', 'u4': 's3', 'u5': 's4', 'u6': 's5',
+    }
+    return sellerMapping[currentUser?.id || ''] || 's1'
+  }, [currentUser])
+
+  const sellerProducts = products.filter(p => p.sellerId === sellerId)
+  const sellerOrders = orders.filter(o => o.sellerId === sellerId)
+  const totalRevenue = sellerOrders
+    .filter(o => o.status === 'paid' || o.status === 'delivered')
+    .reduce((sum, o) => sum + o.subtotal * 0.95, 0)
+
+  // Compute stats from store (replacing MOCK_SELLER_STATS)
+  const stats = {
+    totalRevenue,
+    totalOrders: sellerOrders.length,
+    totalProducts: sellerProducts.length,
+    totalVisitors: 0,
+    pendingOrders: sellerOrders.filter(o => o.status === 'pending' || o.status === 'paid').length,
+    monthlyRevenue: [] as { month: string; revenue: number }[],
+    topProducts: [...sellerProducts]
+      .sort((a, b) => b.sold - a.sold)
+      .slice(0, 4)
+      .map(p => ({ name: p.name, sold: p.sold, revenue: p.sold * p.price })),
+    recentOrders: [] as Order[],
+  }
   const [dateRange, setDateRange] = useState("30d")
 
   return (

@@ -3,7 +3,7 @@
 import { motion, AnimatePresence } from "framer-motion"
 import { useAppStore, useCartStore } from "@/lib/store"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { MOCK_PRODUCTS, formatPrice, formatRelativeTime } from "@/lib/mock-data"
+import { formatPrice, formatRelativeTime } from "@/lib/mock-data"
 import { PageHeader, EmptyState, StatusBadge, TabBar } from "./shared"
 import type { Order, OrderStatus } from "@/lib/types"
 import { useState, useMemo, useCallback } from "react"
@@ -79,7 +79,7 @@ function getSecondaryButton(order: Order): { label: string } | null {
 
 // ==================== ORDER CARD ====================
 function OrderCard({ order, onTap }: { order: Order; onTap: () => void }) {
-  const { showToast, updateOrderStatus, setSelectedOrder, navigate, payForOrder, cancelOrder } = useAppStore()
+  const { showToast, updateOrderStatus, setSelectedOrder, navigate, payForOrder, cancelOrder, products } = useAppStore()
   const [showCancelDialog, setShowCancelDialog] = useState(false)
   const { addItem } = useCartStore()
   const primaryBtn = getActionButton(order)
@@ -163,7 +163,7 @@ function OrderCard({ order, onTap }: { order: Order; onTap: () => void }) {
                   updateOrderStatus(order.id, "delivered")
                   showToast("Pesanan dikonfirmasi diterima!", "success")
                 } else if (order.status === "delivered") {
-                  const product = MOCK_PRODUCTS.find(p => p.id === order.items[0]?.productId)
+                  const product = products.find(p => p.id === order.items[0]?.productId)
                   if (product) {
                     addItem(product)
                     showToast("Produk ditambahkan ke keranjang", "success")
@@ -231,7 +231,7 @@ function OrderCard({ order, onTap }: { order: Order; onTap: () => void }) {
 
 // ==================== ORDER DETAIL ====================
 function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
-  const { showToast, updateOrderStatus, setSelectedOrder, navigate, setSelectedChatRoom, chatRooms, payForOrder, cancelOrder } = useAppStore()
+  const { showToast, updateOrderStatus, setSelectedOrder, navigate, setSelectedChatRoom, chatRooms, payForOrder, cancelOrder, products } = useAppStore()
   const [showCancelDialog, setShowCancelDialog] = useState(false)
   const { addItem } = useCartStore()
   const activeStep = getActiveStep(order)
@@ -536,7 +536,7 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
                 className="flex-1 h-12 rounded-xl text-sm font-semibold"
                 onClick={() => {
                   order.items.forEach(item => {
-                    const product = MOCK_PRODUCTS.find(p => p.id === item.productId)
+                    const product = products.find(p => p.id === item.productId)
                     if (product) addItem(product)
                   })
                   showToast("Produk ditambahkan ke keranjang", "success")
