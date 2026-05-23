@@ -37,17 +37,32 @@ interface VariantGroup {
 export function SellerAddProductScreen() {
   const { navigate, showToast, addProduct, updateProduct, selectedProductId, products, currentUser, categories } = useAppStore()
 
-  // Derive sellerId and seller info from currentUser
-  const sellerIdMap: Record<string, string> = { 'u2': 's1', 'u3': 's2', 'u4': 's3', 'u5': 's4', 'u6': 's5' }
-  const sellerId = sellerIdMap[currentUser?.id || ''] || 's1'
-  const sellerInfoMap: Record<string, { id: string; userId: string; storeName: string; storeSlug: string; storeAvatar: string; isVerified: boolean; isPremium: boolean; rating: number; totalSales: number; totalProducts: number }> = {
-    's1': { id: 's1', userId: 'u2', storeName: 'Gadget Pro Store', storeSlug: 'gadget-pro', storeAvatar: '', isVerified: true, isPremium: true, rating: 4.9, totalSales: 15000, totalProducts: 250 },
-    's2': { id: 's2', userId: 'u3', storeName: 'Fashion Hub', storeSlug: 'fashion-hub', storeAvatar: '', isVerified: true, isPremium: false, rating: 4.7, totalSales: 8000, totalProducts: 120 },
-    's3': { id: 's3', userId: 'u4', storeName: 'Beauty Corner', storeSlug: 'beauty-corner', storeAvatar: '', isVerified: false, isPremium: false, rating: 4.5, totalSales: 3000, totalProducts: 80 },
-    's4': { id: 's4', userId: 'u5', storeName: 'Home Living ID', storeSlug: 'home-living', storeAvatar: '', isVerified: true, isPremium: true, rating: 4.8, totalSales: 12000, totalProducts: 180 },
-    's5': { id: 's5', userId: 'u6', storeName: 'Sport Zone', storeSlug: 'sport-zone', storeAvatar: '', isVerified: true, isPremium: false, rating: 4.6, totalSales: 6000, totalProducts: 95 },
+  // Derive sellerId and seller info from store's seller object (real data from database)
+  const { seller } = useAppStore()
+  const sellerId = seller?.id || ''
+  const sellerInfo = seller ? {
+    id: seller.id,
+    userId: seller.userId,
+    storeName: seller.storeName,
+    storeSlug: seller.storeSlug,
+    storeAvatar: seller.storeAvatar || '',
+    isVerified: seller.isVerified,
+    isPremium: seller.isPremium,
+    rating: seller.rating,
+    totalSales: seller.totalSales,
+    totalProducts: seller.totalProducts,
+  } : {
+    id: '',
+    userId: currentUser?.id || '',
+    storeName: 'My Store',
+    storeSlug: 'my-store',
+    storeAvatar: '',
+    isVerified: false,
+    isPremium: false,
+    rating: 0,
+    totalSales: 0,
+    totalProducts: 0,
   }
-  const sellerInfo = sellerInfoMap[sellerId] || sellerInfoMap['s1']
 
   // Pre-fill form if editing an existing product
   const editingProduct = selectedProductId ? products.find(p => p.id === selectedProductId) : null

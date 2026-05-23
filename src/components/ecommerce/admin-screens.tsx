@@ -9,7 +9,8 @@ import {
   Users, DollarSign, Package, Box, Bell, Settings, Search,
   ChevronRight, Shield, Eye, Trash2, Check, X, AlertTriangle,
   TrendingUp, Megaphone, ImageIcon, Calendar, BarChart3, MessageSquare,
-  Ban, FileText, ArrowUpRight, ArrowDownLeft, Clock, CreditCard, Plus
+  Ban, FileText, ArrowUpRight, ArrowDownLeft, Clock, CreditCard, Plus,
+  Store
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -88,11 +89,23 @@ function computeCategoryPerformance(products: { categoryId: string; category: { 
 
 // ==================== ADMIN DASHBOARD ====================
 export function AdminDashboard() {
-  const { navigate, switchRole, userRole, showToast, withdrawRequests, products, orders, adminUsers } = useAppStore()
+  const { navigate, switchRole, userRole, showToast, withdrawRequests, products, orders, adminUsers, adminStats, fetchAdminStats } = useAppStore()
 
-  // Placeholder admin stats (replacing MOCK_ADMIN_STATS)
-  const stats = {
-    totalUsers: 0,
+  useEffect(() => {
+    fetchAdminStats()
+  }, [fetchAdminStats])
+
+  const stats = adminStats ? {
+    totalUsers: adminStats.totalUsers,
+    totalSellers: adminStats.totalSellers,
+    totalOrders: adminStats.totalOrders,
+    totalRevenue: adminStats.totalRevenue,
+    pendingWithdrawals: adminStats.pendingWithdrawals,
+    activeProducts: adminStats.activeProducts,
+    revenueChart: adminStats.revenueChart,
+    userGrowth: adminStats.userGrowth,
+  } : {
+    totalUsers: adminUsers.length,
     totalSellers: 0,
     totalOrders: orders.length,
     totalRevenue: orders.reduce((sum, o) => sum + o.totalAmount, 0),
@@ -193,10 +206,12 @@ export function AdminDashboard() {
         {/* Key Metrics Grid */}
         <motion.div {...fadeIn} className="grid grid-cols-2 gap-3">
           {[
-            { label: "Total Users", value: adminUsers.length.toLocaleString(), icon: Users, color: "text-blue-600 bg-blue-50 dark:bg-blue-900/30 dark:text-blue-400" },
-            { label: "Total Revenue", value: formatPrice(orders.filter(o => o.status === 'paid' || o.status === 'delivered').reduce((sum, o) => sum + o.totalAmount, 0)), icon: DollarSign, color: "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 dark:text-emerald-400" },
-            { label: "Total Orders", value: orders.length.toLocaleString(), icon: Package, color: "text-orange-600 bg-orange-50 dark:bg-orange-900/30 dark:text-orange-400" },
-            { label: "Active Products", value: products.filter(p => p.status === 'active').length.toLocaleString(), icon: Box, color: "text-purple-600 bg-purple-50 dark:bg-purple-900/30 dark:text-purple-400" },
+            { label: "Total Users", value: stats.totalUsers.toLocaleString(), icon: Users, color: "text-blue-600 bg-blue-50 dark:bg-blue-900/30 dark:text-blue-400" },
+            { label: "Total Sellers", value: stats.totalSellers.toLocaleString(), icon: Store, color: "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 dark:text-emerald-400" },
+            { label: "Total Orders", value: stats.totalOrders.toLocaleString(), icon: Package, color: "text-orange-600 bg-orange-50 dark:bg-orange-900/30 dark:text-orange-400" },
+            { label: "Active Products", value: stats.activeProducts.toLocaleString(), icon: Box, color: "text-purple-600 bg-purple-50 dark:bg-purple-900/30 dark:text-purple-400" },
+            { label: "Total Revenue", value: formatPrice(stats.totalRevenue), icon: DollarSign, color: "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 dark:text-emerald-400" },
+            { label: "Pending Withdrawals", value: stats.pendingWithdrawals.toLocaleString(), icon: Clock, color: "text-amber-600 bg-amber-50 dark:bg-amber-900/30 dark:text-amber-400" },
           ].map((item, i) => (
             <motion.div key={item.label} custom={i} variants={stagger} initial="initial" animate="animate">
               <Card className="p-4">
@@ -941,14 +956,26 @@ export function AdminBanner() {
 
 // ==================== ADMIN ANALYTICS ====================
 export function AdminAnalytics() {
-  const { products, orders, withdrawRequests } = useAppStore()
+  const { products, orders, withdrawRequests, adminStats, fetchAdminStats } = useAppStore()
+
+  useEffect(() => {
+    fetchAdminStats()
+  }, [fetchAdminStats])
 
   // Compute real data from store
   const topSellers = computeTopSellers(products)
   const categoryPerformance = computeCategoryPerformance(products)
 
-  // Placeholder admin stats (replacing MOCK_ADMIN_STATS)
-  const stats = {
+  const stats = adminStats ? {
+    totalUsers: adminStats.totalUsers,
+    totalSellers: adminStats.totalSellers,
+    totalOrders: adminStats.totalOrders,
+    totalRevenue: adminStats.totalRevenue,
+    pendingWithdrawals: adminStats.pendingWithdrawals,
+    activeProducts: adminStats.activeProducts,
+    revenueChart: adminStats.revenueChart,
+    userGrowth: adminStats.userGrowth,
+  } : {
     totalUsers: 0,
     totalSellers: 0,
     totalOrders: orders.length,

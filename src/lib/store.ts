@@ -191,6 +191,32 @@ interface AppState {
   fetchCategories: () => Promise<void>
   categories: Array<{ id: string; name: string; slug: string; icon?: string; productCount?: number }>
   isDataLoaded: boolean
+
+  // Seller Stats (fetched from API)
+  sellerStats: {
+    totalRevenue: number
+    totalOrders: number
+    totalProducts: number
+    totalVisitors: number
+    pendingOrders: number
+    monthlyRevenue: { month: string; revenue: number }[]
+    topProducts: { name: string; sold: number; revenue: number }[]
+    recentOrders: Order[]
+  } | null
+  fetchSellerStats: () => Promise<void>
+
+  // Admin Stats (fetched from API)
+  adminStats: {
+    totalUsers: number
+    totalSellers: number
+    totalOrders: number
+    totalRevenue: number
+    pendingWithdrawals: number
+    activeProducts: number
+    revenueChart: { date: string; revenue: number }[]
+    userGrowth: { date: string; users: number }[]
+  } | null
+  fetchAdminStats: () => Promise<void>
 }
 
 let toastTimer: ReturnType<typeof setTimeout> | null = null
@@ -237,6 +263,8 @@ export const useAppStore = create<AppState>()(
         followedStoreIds: [],
         seller: null,
         isDataLoaded: false,
+        sellerStats: null,
+        adminStats: null,
       }),
       switchRole: (role) => set((state) => ({
         userRole: role,
@@ -344,137 +372,221 @@ export const useAppStore = create<AppState>()(
 
       // Orders - START EMPTY
       orders: [],
-      addOrder: (order) => set((state) => {
-        const sellerCredit = order.status === 'paid' ? order.subtotal * 0.95 : 0
-        const newSellerBalance = sellerCredit > 0
-          ? {
-              ...state.sellerBalance,
-              pendingBalance: state.sellerBalance.pendingBalance + sellerCredit,
-              totalBalance: state.sellerBalance.availableBalance + state.sellerBalance.pendingBalance + sellerCredit + state.sellerBalance.holdBalance,
-            }
-          : state.sellerBalance
-
-        const updatedProducts = state.products.map(p => {
-          const orderItem = order.items.find(item => item.productId === p.id)
-          if (!orderItem) return p
-
-          const newStock = p.stock - orderItem.quantity
-
-          const updatedVariants = p.variants.map(v => {
-            const variantItem = order.items.find(item => item.variantId === v.id)
-            if (!variantItem) return v
-            return { ...v, stock: v.stock - variantItem.quantity }
-          })
-
-          return { ...p, stock: Math.max(0, newStock), variants: updatedVariants }
+      addOrder: (order) => {
+        // Persist order to database via API
+        const state = get()
+        const addressId = state.selectedAddressId || state.addresses.find(a => a.isDefault)?.id || ''
+        fetch('/api/orders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: state.currentUser?.id,
+            sellerId: order.sellerId,
+            items: order.items.map(item => ({
+              productId: item.productId,
+              variantId: item.variantId || null,
+              productName: item.productName,
+              variantName: item.variantName || null,
+              price: item.price,
+              quantity: item.quantity,
+              subtotal: item.subtotal,
+              image: item.image || null,
+            })),
+            addressId,
+            subtotal: order.subtotal,
+            shippingCost: order.shippingCost,
+            discountAmount: order.discountAmount,
+            taxAmount: order.taxAmount,
+            platformFee: order.platformFee,
+            totalAmount: order.totalAmount,
+            paymentMethod: order.paymentMethod,
+            shipping: order.shipping ? {
+              provider: order.shipping.provider,
+              service: order.shipping.service,
+              estimatedDays: order.shipping.estimatedDays,
+            } : null,
+          }),
+        }).catch((error) => {
+          console.error('Failed to persist order to database:', error)
         })
 
-        return {
-          orders: [order, ...state.orders],
-          sellerBalance: newSellerBalance,
-          products: updatedProducts,
-        }
-      }),
-      updateOrderStatus: (orderId, status) => set((state) => {
-        const order = state.orders.find(o => o.id === orderId)
-        if (!order) return state
-        const prevStatus = order.status
-        const sellerCredit = order.subtotal * 0.95
-        let newSellerBalance = { ...state.sellerBalance }
+        // Update local state immediately
+        set((state) => {
+          const sellerCredit = order.status === 'paid' ? order.subtotal * 0.95 : 0
+          const newSellerBalance = sellerCredit > 0
+            ? {
+                ...state.sellerBalance,
+                pendingBalance: state.sellerBalance.pendingBalance + sellerCredit,
+                totalBalance: state.sellerBalance.availableBalance + state.sellerBalance.pendingBalance + sellerCredit + state.sellerBalance.holdBalance,
+              }
+            : state.sellerBalance
 
-        if (status === 'paid' && prevStatus !== 'paid') {
-          newSellerBalance.pendingBalance += sellerCredit
-        } else if (status === 'delivered') {
-          newSellerBalance.pendingBalance -= sellerCredit
-          newSellerBalance.availableBalance += sellerCredit
-        } else if (status === 'cancelled' && (prevStatus === 'paid' || prevStatus === 'processing' || prevStatus === 'shipped')) {
-          newSellerBalance.pendingBalance -= sellerCredit
-        }
+          const updatedProducts = state.products.map(p => {
+            const orderItem = order.items.find(item => item.productId === p.id)
+            if (!orderItem) return p
 
-        newSellerBalance.totalBalance = newSellerBalance.availableBalance + newSellerBalance.pendingBalance + newSellerBalance.holdBalance
+            const newStock = p.stock - orderItem.quantity
 
-        return {
+            const updatedVariants = p.variants.map(v => {
+              const variantItem = order.items.find(item => item.variantId === v.id)
+              if (!variantItem) return v
+              return { ...v, stock: v.stock - variantItem.quantity }
+            })
+
+            return { ...p, stock: Math.max(0, newStock), variants: updatedVariants }
+          })
+
+          return {
+            orders: [order, ...state.orders],
+            sellerBalance: newSellerBalance,
+            products: updatedProducts,
+          }
+        })
+      },
+      updateOrderStatus: (orderId, status) => {
+        set((state) => {
+          const order = state.orders.find(o => o.id === orderId)
+          if (!order) return state
+          const prevStatus = order.status
+          const sellerCredit = order.subtotal * 0.95
+          let newSellerBalance = { ...state.sellerBalance }
+
+          if (status === 'paid' && prevStatus !== 'paid') {
+            newSellerBalance.pendingBalance += sellerCredit
+          } else if (status === 'delivered') {
+            newSellerBalance.pendingBalance -= sellerCredit
+            newSellerBalance.availableBalance += sellerCredit
+          } else if (status === 'cancelled' && (prevStatus === 'paid' || prevStatus === 'processing' || prevStatus === 'shipped')) {
+            newSellerBalance.pendingBalance -= sellerCredit
+          }
+
+          newSellerBalance.totalBalance = newSellerBalance.availableBalance + newSellerBalance.pendingBalance + newSellerBalance.holdBalance
+
+          return {
+            orders: state.orders.map(o => o.id === orderId ? {
+              ...o, status,
+              ...(status === 'paid' ? { paymentStatus: 'paid', paidAt: new Date().toISOString() } : {}),
+              ...(status === 'shipped' ? { shippedAt: new Date().toISOString() } : {}),
+              ...(status === 'delivered' ? { deliveredAt: new Date().toISOString() } : {}),
+            } : o),
+            sellerBalance: newSellerBalance,
+          }
+        })
+
+        // Persist to database
+        fetch('/api/orders', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orderId, status }),
+        }).catch((error) => {
+          console.error('Failed to persist order status update:', error)
+        })
+      },
+      payForOrder: (orderId) => {
+        set((state) => {
+          const order = state.orders.find(o => o.id === orderId)
+          if (!order || order.status !== 'pending') return state
+
+          const sellerCredit = order.subtotal * 0.95
+          let newWalletBalance = state.walletBalance
+          let newWalletMutations = [...state.walletMutations]
+
+          if (order.paymentMethod?.toLowerCase() === 'wallet') {
+            if (order.totalAmount > state.walletBalance) return state
+            newWalletBalance = state.walletBalance - order.totalAmount
+            newWalletMutations = [{
+              id: `wm${Date.now()}`, type: 'debit' as const, amount: order.totalAmount, balance: newWalletBalance,
+              description: `Pembayaran Order #${order.orderNumber}`, refType: 'order', createdAt: new Date().toISOString()
+            }, ...state.walletMutations]
+          }
+
+          const newSellerBalance = {
+            ...state.sellerBalance,
+            pendingBalance: state.sellerBalance.pendingBalance + sellerCredit,
+            totalBalance: state.sellerBalance.availableBalance + state.sellerBalance.pendingBalance + sellerCredit + state.sellerBalance.holdBalance,
+          }
+
+          return {
+            orders: state.orders.map(o => o.id === orderId ? {
+              ...o, status: 'paid' as OrderStatus, paymentStatus: 'paid', paidAt: new Date().toISOString(),
+            } : o),
+            walletBalance: newWalletBalance,
+            walletMutations: newWalletMutations,
+            sellerBalance: newSellerBalance,
+          }
+        })
+
+        // Persist to database
+        fetch('/api/orders', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orderId, status: 'paid', paymentStatus: 'paid' }),
+        }).catch((error) => {
+          console.error('Failed to persist order payment:', error)
+        })
+      },
+      cancelOrder: (orderId) => {
+        set((state) => {
+          const order = state.orders.find(o => o.id === orderId)
+          if (!order) return state
+
+          const wasPaid = order.paymentStatus === 'paid' || order.status === 'paid' || order.status === 'processing' || order.status === 'shipped'
+          const sellerCredit = order.subtotal * 0.95
+
+          let newSellerBalance = { ...state.sellerBalance }
+          let newWalletBalance = state.walletBalance
+          let newWalletMutations = [...state.walletMutations]
+
+          if (wasPaid) {
+            newSellerBalance.pendingBalance -= sellerCredit
+          }
+
+          if (order.paymentMethod?.toLowerCase() === 'wallet' && wasPaid) {
+            newWalletBalance = state.walletBalance + order.totalAmount
+            newWalletMutations = [{
+              id: `wm${Date.now()}`, type: 'credit' as const, amount: order.totalAmount, balance: newWalletBalance,
+              description: `Refund Order #${order.orderNumber}`, refType: 'refund', createdAt: new Date().toISOString()
+            }, ...state.walletMutations]
+          }
+
+          newSellerBalance.totalBalance = newSellerBalance.availableBalance + newSellerBalance.pendingBalance + newSellerBalance.holdBalance
+
+          return {
+            orders: state.orders.map(o => o.id === orderId ? {
+              ...o, status: 'cancelled' as OrderStatus, paymentStatus: 'refunded',
+            } : o),
+            sellerBalance: newSellerBalance,
+            walletBalance: newWalletBalance,
+            walletMutations: newWalletMutations,
+          }
+        })
+
+        // Persist to database
+        fetch('/api/orders', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orderId, status: 'cancelled', paymentStatus: 'refunded' }),
+        }).catch((error) => {
+          console.error('Failed to persist order cancellation:', error)
+        })
+      },
+      updateOrderTracking: (orderId, trackingNumber) => {
+        set((state) => ({
           orders: state.orders.map(o => o.id === orderId ? {
-            ...o, status,
-            ...(status === 'paid' ? { paymentStatus: 'paid', paidAt: new Date().toISOString() } : {}),
-            ...(status === 'shipped' ? { shippedAt: new Date().toISOString() } : {}),
-            ...(status === 'delivered' ? { deliveredAt: new Date().toISOString() } : {}),
+            ...o,
+            shipping: o.shipping ? { ...o.shipping, trackingNumber } : undefined,
           } : o),
-          sellerBalance: newSellerBalance,
-        }
-      }),
-      payForOrder: (orderId) => set((state) => {
-        const order = state.orders.find(o => o.id === orderId)
-        if (!order || order.status !== 'pending') return state
+        }))
 
-        const sellerCredit = order.subtotal * 0.95
-        let newWalletBalance = state.walletBalance
-        let newWalletMutations = [...state.walletMutations]
-
-        if (order.paymentMethod?.toLowerCase() === 'wallet') {
-          if (order.totalAmount > state.walletBalance) return state
-          newWalletBalance = state.walletBalance - order.totalAmount
-          newWalletMutations = [{
-            id: `wm${Date.now()}`, type: 'debit' as const, amount: order.totalAmount, balance: newWalletBalance,
-            description: `Pembayaran Order #${order.orderNumber}`, refType: 'order', createdAt: new Date().toISOString()
-          }, ...state.walletMutations]
-        }
-
-        const newSellerBalance = {
-          ...state.sellerBalance,
-          pendingBalance: state.sellerBalance.pendingBalance + sellerCredit,
-          totalBalance: state.sellerBalance.availableBalance + state.sellerBalance.pendingBalance + sellerCredit + state.sellerBalance.holdBalance,
-        }
-
-        return {
-          orders: state.orders.map(o => o.id === orderId ? {
-            ...o, status: 'paid' as OrderStatus, paymentStatus: 'paid', paidAt: new Date().toISOString(),
-          } : o),
-          walletBalance: newWalletBalance,
-          walletMutations: newWalletMutations,
-          sellerBalance: newSellerBalance,
-        }
-      }),
-      cancelOrder: (orderId) => set((state) => {
-        const order = state.orders.find(o => o.id === orderId)
-        if (!order) return state
-
-        const wasPaid = order.paymentStatus === 'paid' || order.status === 'paid' || order.status === 'processing' || order.status === 'shipped'
-        const sellerCredit = order.subtotal * 0.95
-
-        let newSellerBalance = { ...state.sellerBalance }
-        let newWalletBalance = state.walletBalance
-        let newWalletMutations = [...state.walletMutations]
-
-        if (wasPaid) {
-          newSellerBalance.pendingBalance -= sellerCredit
-        }
-
-        if (order.paymentMethod?.toLowerCase() === 'wallet' && wasPaid) {
-          newWalletBalance = state.walletBalance + order.totalAmount
-          newWalletMutations = [{
-            id: `wm${Date.now()}`, type: 'credit' as const, amount: order.totalAmount, balance: newWalletBalance,
-            description: `Refund Order #${order.orderNumber}`, refType: 'refund', createdAt: new Date().toISOString()
-          }, ...state.walletMutations]
-        }
-
-        newSellerBalance.totalBalance = newSellerBalance.availableBalance + newSellerBalance.pendingBalance + newSellerBalance.holdBalance
-
-        return {
-          orders: state.orders.map(o => o.id === orderId ? {
-            ...o, status: 'cancelled' as OrderStatus, paymentStatus: 'refunded',
-          } : o),
-          sellerBalance: newSellerBalance,
-          walletBalance: newWalletBalance,
-          walletMutations: newWalletMutations,
-        }
-      }),
-      updateOrderTracking: (orderId, trackingNumber) => set((state) => ({
-        orders: state.orders.map(o => o.id === orderId ? {
-          ...o,
-          shipping: o.shipping ? { ...o.shipping, trackingNumber } : undefined,
-        } : o),
-      })),
+        // Persist to database
+        fetch('/api/orders', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orderId, trackingNumber }),
+        }).catch((error) => {
+          console.error('Failed to persist tracking number:', error)
+        })
+      },
 
       // Address - START EMPTY
       addresses: [],
@@ -501,16 +613,28 @@ export const useAppStore = create<AppState>()(
       walletHoldBalance: 0,
       walletCoins: 0,
       walletMutations: [],
-      topUpWallet: (amount) => set((state) => {
-        const newBalance = state.walletBalance + amount
-        return {
-          walletBalance: newBalance,
-          walletMutations: [{
-            id: `wm${Date.now()}`, type: 'credit', amount, balance: newBalance,
-            description: `Top up MartUp Pay`, refType: 'deposit', createdAt: new Date().toISOString()
-          }, ...state.walletMutations]
-        }
-      }),
+      topUpWallet: (amount) => {
+        set((state) => {
+          const newBalance = state.walletBalance + amount
+          return {
+            walletBalance: newBalance,
+            walletMutations: [{
+              id: `wm${Date.now()}`, type: 'credit', amount, balance: newBalance,
+              description: `Top up MartUp Pay`, refType: 'deposit', createdAt: new Date().toISOString()
+            }, ...state.walletMutations]
+          }
+        })
+
+        // Persist to database
+        const state = get()
+        fetch('/api/wallet', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: state.currentUser?.id, amount }),
+        }).catch((error) => {
+          console.error('Failed to persist wallet top-up:', error)
+        })
+      },
       withdrawWallet: (amount, bankAccount) => set((state) => {
         if (amount > state.walletBalance) return state
         const newBalance = state.walletBalance - amount
@@ -662,9 +786,54 @@ export const useAppStore = create<AppState>()(
 
       // Products - START EMPTY (fetched from API)
       products: [],
-      addProduct: (product) => set((state) => ({
-        products: [product, ...state.products]
-      })),
+      addProduct: (product) => {
+        // Persist product to database via API
+        fetch('/api/seller/products', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sellerId: product.sellerId,
+            categoryId: product.categoryId,
+            name: product.name,
+            slug: product.slug,
+            description: product.description,
+            price: product.price,
+            discountPrice: product.discountPrice || null,
+            images: product.images,
+            stock: product.stock,
+            minOrder: product.minOrder,
+            weight: product.weight,
+            condition: product.condition,
+            status: product.status,
+            isFeatured: product.isFeatured,
+            isFlashSale: product.isFlashSale,
+            tags: product.tags || null,
+            variants: product.variants.map(v => ({
+              name: v.name,
+              value: v.value,
+              sku: v.sku || null,
+              price: v.price || null,
+              stock: v.stock,
+              image: v.image || null,
+            })),
+          }),
+        }).then(async (res) => {
+          if (res.ok) {
+            const data = await res.json()
+            if (data.success && data.data) {
+              // Refresh products from API to get the server-generated ID
+              get().fetchProducts()
+            }
+          }
+        }).catch((error) => {
+          console.error('Failed to persist product to database:', error)
+        })
+
+        // Update local state immediately
+        set((state) => ({
+          products: [product, ...state.products]
+        }))
+      },
       updateProduct: (product) => set((state) => ({
         products: state.products.map(p => p.id === product.id ? product : p)
       })),
@@ -790,6 +959,8 @@ export const useAppStore = create<AppState>()(
         followedStoreIds: [],
         seller: null,
         isDataLoaded: false,
+        sellerStats: null,
+        adminStats: null,
       }),
 
       // Data fetching
@@ -1131,6 +1302,39 @@ export const useAppStore = create<AppState>()(
           })
         } catch (error) {
           console.error('Failed to fetch categories:', error)
+        }
+      },
+
+      // Seller Stats
+      sellerStats: null,
+      fetchSellerStats: async () => {
+        const state = get()
+        const sellerId = state.seller?.id
+        if (!sellerId) return
+        try {
+          const res = await fetch(`/api/seller/stats?sellerId=${sellerId}`)
+          if (!res.ok) return
+          const data = await res.json()
+          if (data.success) {
+            set({ sellerStats: data.data })
+          }
+        } catch (error) {
+          console.error('Failed to fetch seller stats:', error)
+        }
+      },
+
+      // Admin Stats
+      adminStats: null,
+      fetchAdminStats: async () => {
+        try {
+          const res = await fetch('/api/admin/stats')
+          if (!res.ok) return
+          const data = await res.json()
+          if (data.success) {
+            set({ adminStats: data.data })
+          }
+        } catch (error) {
+          console.error('Failed to fetch admin stats:', error)
         }
       },
     }),

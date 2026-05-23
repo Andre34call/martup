@@ -6,7 +6,8 @@ import {
   Bell, Settings, Package, Box, Eye, Star, Plus, Gift, MessageCircle,
   BarChart3, Check, TrendingUp, ChevronRight, ArrowLeft, Search,
   Edit, Trash2, Truck, Printer, Calendar, Wallet, Banknote, Clock,
-  Megaphone, Zap, Tag, Store, AlertTriangle, ArrowUpRight, ArrowDownLeft, Shield
+  Megaphone, Zap, Tag, Store, AlertTriangle, ArrowUpRight, ArrowDownLeft, Shield,
+  ShoppingBag
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -41,10 +42,15 @@ const stagger = {
 
 // ==================== SELLER DASHBOARD ====================
 export function SellerDashboard() {
-  const { navigate, unreadNotificationCount, switchRole, userRole, orders, sellerBalance, currentUser, products, seller } = useAppStore()
+  const { navigate, unreadNotificationCount, switchRole, userRole, orders, sellerBalance, currentUser, products, seller, sellerStats, fetchSellerStats } = useAppStore()
   const sellerId = seller?.id || ''
 
-  // Compute real stats from store data for current seller
+  // Fetch seller stats from API on mount
+  useEffect(() => {
+    fetchSellerStats()
+  }, [fetchSellerStats])
+
+  // Compute real stats from store data for current seller (fallback)
   const sellerOrders = orders.filter(o => o.sellerId === sellerId)
   const totalRevenue = sellerOrders
     .filter(o => o.status === 'paid' || o.status === 'delivered')
@@ -58,7 +64,16 @@ export function SellerDashboard() {
 
   // Compute stats from store (replacing MOCK_SELLER_STATS)
   const sellerProducts = products.filter(p => p.sellerId === sellerId)
-  const stats = {
+  const stats = sellerStats ? {
+    totalRevenue: sellerStats.totalRevenue,
+    totalOrders: sellerStats.totalOrders,
+    totalProducts: sellerStats.totalProducts,
+    totalSales: seller?.totalSales || 0,
+    pendingOrders: sellerStats.pendingOrders,
+    monthlyRevenue: sellerStats.monthlyRevenue,
+    topProducts: sellerStats.topProducts,
+    recentOrders: sellerStats.recentOrders,
+  } : {
     totalRevenue,
     totalOrders,
     totalProducts: sellerProducts.length,
@@ -198,7 +213,7 @@ export function SellerDashboard() {
           {[
             { label: "Total Pesanan", value: totalOrders.toLocaleString(), icon: Package, color: "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 dark:text-emerald-400" },
             { label: "Total Produk", value: stats.totalProducts.toLocaleString(), icon: Box, color: "text-orange-600 bg-orange-50 dark:bg-orange-900/30 dark:text-orange-400" },
-            { label: "Total Terjual", value: stats.totalSales.toLocaleString(), icon: Eye, color: "text-cyan-600 bg-cyan-50 dark:bg-cyan-900/30 dark:text-cyan-400" },
+            { label: "Total Terjual", value: stats.totalSales.toLocaleString(), icon: ShoppingBag, color: "text-cyan-600 bg-cyan-50 dark:bg-cyan-900/30 dark:text-cyan-400" },
             { label: "Rating", value: seller?.rating?.toFixed(1) || "0", icon: Star, color: "text-amber-600 bg-amber-50 dark:bg-amber-900/30 dark:text-amber-400" },
           ].map((item, i) => (
             <motion.div key={item.label} custom={i} variants={stagger} initial="initial" animate="animate">
@@ -277,7 +292,7 @@ export function SellerDashboard() {
             onAction={() => navigate("seller-orders")}
           />
           <div className="space-y-2 mt-3">
-            {recentOrders.map((order, i) => (
+            {(sellerStats ? stats.recentOrders : recentOrders).map((order, i) => (
               <motion.div key={order.id} custom={i} variants={stagger} initial="initial" animate="animate">
                 <Card className="p-3">
                   <div className="flex items-start justify-between gap-2">
@@ -286,8 +301,8 @@ export function SellerDashboard() {
                         <p className="text-xs font-mono text-muted-foreground">{order.orderNumber}</p>
                         <StatusBadge status={order.status} size="sm" />
                       </div>
-                      <p className="text-sm font-medium text-foreground mt-1 truncate">{order.address.recipient}</p>
-                      <p className="text-xs text-muted-foreground truncate">{order.items.map(it => it.productName).join(', ')}</p>
+                      <p className="text-sm font-medium text-foreground mt-1 truncate">{order.address?.recipient || (order as Record<string, unknown>).buyerName as string || ''}</p>
+                      <p className="text-xs text-muted-foreground truncate">{order.items?.map(it => it.productName).join(', ') || ''}</p>
                     </div>
                     <p className="text-sm font-bold text-emerald-600 flex-shrink-0">{formatPrice(order.totalAmount)}</p>
                   </div>
@@ -584,7 +599,12 @@ export function SellerOrders() {
 
 // ==================== SELLER ANALYTICS ====================
 export function SellerAnalytics() {
-  const { products, orders, seller } = useAppStore()
+  const { products, orders, seller, sellerStats, fetchSellerStats } = useAppStore()
+
+  // Fetch seller stats from API on mount
+  useEffect(() => {
+    fetchSellerStats()
+  }, [fetchSellerStats])
 
   // Derive sellerId from store seller
   const sellerId = seller?.id || ''
@@ -595,8 +615,17 @@ export function SellerAnalytics() {
     .filter(o => o.status === 'paid' || o.status === 'delivered')
     .reduce((sum, o) => sum + o.subtotal * 0.95, 0)
 
-  // Compute stats from store (replacing MOCK_SELLER_STATS)
-  const stats = {
+  // Use API stats when available, fallback to local computation
+  const stats = sellerStats ? {
+    totalRevenue: sellerStats.totalRevenue,
+    totalOrders: sellerStats.totalOrders,
+    totalProducts: sellerStats.totalProducts,
+    totalSales: seller?.totalSales || 0,
+    pendingOrders: sellerStats.pendingOrders,
+    monthlyRevenue: sellerStats.monthlyRevenue,
+    topProducts: sellerStats.topProducts,
+    recentOrders: sellerStats.recentOrders,
+  } : {
     totalRevenue,
     totalOrders: sellerOrders.length,
     totalProducts: sellerProducts.length,
