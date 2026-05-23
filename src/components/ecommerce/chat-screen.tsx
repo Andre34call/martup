@@ -2,7 +2,7 @@
 
 import { motion, AnimatePresence } from "framer-motion"
 import { useAppStore } from "@/lib/store"
-import { formatPrice, formatRelativeTime } from "@/lib/mock-data"
+import { formatPrice, formatRelativeTime } from "@/lib/utils"
 import { PageHeader, EmptyState, SearchBar } from "./shared"
 import type { ChatRoom, ChatMessage } from "@/lib/types"
 import { useState, useMemo, useCallback, useRef, useEffect } from "react"

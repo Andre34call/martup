@@ -2,7 +2,7 @@
 
 import { motion, AnimatePresence } from "framer-motion"
 import { useAppStore } from "@/lib/store"
-import { formatRelativeTime } from "@/lib/mock-data"
+import { formatRelativeTime } from "@/lib/utils"
 import { PageHeader, EmptyState, TabBar, NotificationItem } from "./shared"
 import type { Notification as AppNotification } from "@/lib/types"
 import { useState, useMemo, useCallback } from "react"

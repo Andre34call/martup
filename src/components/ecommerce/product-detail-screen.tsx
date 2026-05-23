@@ -9,7 +9,8 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { useAppStore, useCartStore, useWishlistStore } from "@/lib/store"
-import { MOCK_SHIPPING_OPTIONS, formatPrice } from "@/lib/mock-data"
+import { formatPrice } from "@/lib/utils"
+import { SHIPPING_OPTIONS } from "@/lib/constants"
 import {
   PageHeader, QuantitySelector, PriceDisplay, ProductCard, EmptyState,
   FlashSaleTimer, RatingStars, AvatarWithName, SellerBadge
@@ -733,7 +734,7 @@ export function ProductDetailScreen() {
                 <button onClick={() => setShowShippingModal(false)} className="text-muted-foreground text-lg font-bold">✕</button>
               </div>
               <div className="space-y-2 max-h-72 overflow-y-auto">
-                {MOCK_SHIPPING_OPTIONS.map((opt) => (
+                {SHIPPING_OPTIONS.map((opt) => (
                   <div key={`${opt.provider}-${opt.service}`} className="flex items-center justify-between p-3 bg-muted/30 rounded-xl">
                     <div className="flex items-center gap-3">
                       <span className="text-xl">{opt.logo}</span>

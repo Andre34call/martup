@@ -2,7 +2,7 @@
 
 import { motion, AnimatePresence } from "framer-motion"
 import { useAppStore } from "@/lib/store"
-import { formatPrice } from "@/lib/mock-data"
+import { formatPrice } from "@/lib/utils"
 import { PageHeader, SectionHeader, RoleBadge } from "./shared"
 import { useState, useMemo, useRef } from "react"
 import { useTheme } from 'next-themes'

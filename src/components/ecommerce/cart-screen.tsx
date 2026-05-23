@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { useAppStore, useCartStore } from "@/lib/store"
-import { formatPrice } from "@/lib/mock-data"
+import { formatPrice } from "@/lib/utils"
 import {
   PageHeader, QuantitySelector, PriceDisplay, EmptyState
 } from "./shared"

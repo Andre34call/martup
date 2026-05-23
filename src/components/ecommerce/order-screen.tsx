@@ -3,7 +3,7 @@
 import { motion, AnimatePresence } from "framer-motion"
 import { useAppStore, useCartStore } from "@/lib/store"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { formatPrice, formatRelativeTime } from "@/lib/mock-data"
+import { formatPrice, formatRelativeTime } from "@/lib/utils"
 import { PageHeader, EmptyState, StatusBadge, TabBar } from "./shared"
 import type { Order, OrderStatus } from "@/lib/types"
 import { useState, useMemo, useCallback } from "react"

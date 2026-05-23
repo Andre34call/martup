@@ -10,7 +10,8 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { useAppStore, useCartStore } from "@/lib/store"
-import { MOCK_SHIPPING_OPTIONS, formatPrice } from "@/lib/mock-data"
+import { formatPrice } from "@/lib/utils"
+import { SHIPPING_OPTIONS } from "@/lib/constants"
 import {
   PageHeader, EmptyState
 } from "./shared"
@@ -173,7 +174,7 @@ function ShippingSelector({
             className="overflow-hidden"
           >
             <div className="space-y-2 pt-1">
-              {MOCK_SHIPPING_OPTIONS.map((option) => {
+              {SHIPPING_OPTIONS.map((option) => {
                 const isSelected = selectedShipping?.service === option.service && selectedShipping?.provider === option.provider
 
                 return (

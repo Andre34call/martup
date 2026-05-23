@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { useAppStore, useCartStore, useWishlistStore } from "@/lib/store"
-import { formatPrice, formatRelativeTime } from "@/lib/mock-data"
+import { formatPrice, formatRelativeTime } from "@/lib/utils"
 import type { Product, ScreenName, OrderStatus } from "@/lib/types"
 import { useState, useEffect, useCallback, useRef } from "react"
 

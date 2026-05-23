@@ -2,7 +2,7 @@
 
 import { motion, AnimatePresence } from "framer-motion"
 import { useAppStore } from "@/lib/store"
-import { formatPrice } from "@/lib/mock-data"
+import { formatPrice } from "@/lib/utils"
 import { PageHeader, SectionHeader, EmptyState, SearchBar, WalletBalanceCard } from "./shared"
 import { useState, useRef, useCallback } from "react"
 import { Settings as SettingsIcon, Shield, Bell, Globe, Lock, Trash2, CreditCard, Ticket, Copy, Check, MapPin, Plus, Star, Camera, Send, RotateCcw, HelpCircle, ChevronDown, ChevronUp, MessageSquare, Phone, Heart, Store, Wallet, ArrowUpRight, Clock, Banknote, Edit, ChevronRight, Package, ImagePlus, Video, Play, X, Eye, EyeOff, KeyRound, ThumbsUp, ThumbsDown, Meh, CheckCircle2 } from "lucide-react"

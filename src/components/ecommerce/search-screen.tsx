@@ -2,7 +2,7 @@
 
 import { motion, AnimatePresence } from "framer-motion"
 import { useAppStore, useWishlistStore } from "@/lib/store"
-import { formatPrice, formatRelativeTime } from "@/lib/mock-data"
+import { formatPrice, formatRelativeTime } from "@/lib/utils"
 import { PageHeader, ProductCard, EmptyState, SearchBar, SectionHeader } from "./shared"
 import type { Product } from "@/lib/types"
 import { useState, useEffect, useRef, useMemo, useCallback } from "react"

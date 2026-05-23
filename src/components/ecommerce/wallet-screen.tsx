@@ -2,7 +2,7 @@
 
 import { motion, AnimatePresence } from "framer-motion"
 import { useAppStore } from "@/lib/store"
-import { formatPrice, formatRelativeTime } from "@/lib/mock-data"
+import { formatPrice, formatRelativeTime } from "@/lib/utils"
 import { PageHeader, SectionHeader, EmptyState } from "./shared"
 import type { WalletMutation } from "@/lib/types"
 import { useState, useMemo } from "react"
