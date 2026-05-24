@@ -215,8 +215,18 @@ interface AppState {
     activeProducts: number
     revenueChart: { date: string; revenue: number }[]
     userGrowth: { date: string; users: number }[]
+    openComplaints: number
+    unverifiedSellers: number
+    pendingWithdrawalAmount: number
+    paymentMethodDistribution: { method: string; count: number; percentage: number }[]
   } | null
   fetchAdminStats: () => Promise<void>
+
+  // Admin data fetching
+  fetchAdminUsers: () => Promise<void>
+  fetchAdminWithdrawals: () => Promise<void>
+  fetchAdminBanners: () => Promise<void>
+  fetchAdminComplaints: () => Promise<void>
 }
 
 let toastTimer: ReturnType<typeof setTimeout> | null = null
@@ -265,6 +275,9 @@ export const useAppStore = create<AppState>()(
         isDataLoaded: false,
         sellerStats: null,
         adminStats: null,
+        adminUsers: [],
+        adminBanners: [],
+        adminComplaints: [],
       }),
       switchRole: (role) => set((state) => ({
         userRole: role,
@@ -750,38 +763,48 @@ export const useAppStore = create<AppState>()(
           }
         }
       }),
-      updateWithdrawStatus: (id, status, rejectionReason) => set((state) => {
-        const wd = state.withdrawRequests.find(w => w.id === id)
-        if (!wd) return state
-        const now = new Date().toISOString()
-        const updatedRequests = state.withdrawRequests.map(w => {
-          if (w.id !== id) return w
+      updateWithdrawStatus: (id, status, rejectionReason) => {
+        set((state) => {
+          const wd = state.withdrawRequests.find(w => w.id === id)
+          if (!wd) return state
+          const now = new Date().toISOString()
+          const updatedRequests = state.withdrawRequests.map(w => {
+            if (w.id !== id) return w
+            return {
+              ...w,
+              status,
+              processedDate: status === 'approved' || status === 'rejected' ? now : w.processedDate,
+              completedDate: status === 'completed' ? now : w.completedDate,
+              rejectionReason: rejectionReason || w.rejectionReason,
+            }
+          })
+          let newBalance = { ...state.sellerBalance }
+          if (status === 'approved') {
+            newBalance.holdBalance = Math.max(0, newBalance.holdBalance - wd.amount)
+          }
+          if (status === 'rejected') {
+            newBalance.availableBalance += wd.amount
+            newBalance.holdBalance = Math.max(0, newBalance.holdBalance - wd.amount)
+          }
+          if (status === 'completed') {
+            newBalance.totalWithdrawn += wd.amount
+            newBalance.lastWithdrawDate = now
+          }
+          newBalance.totalBalance = newBalance.availableBalance + newBalance.pendingBalance + newBalance.holdBalance
           return {
-            ...w,
-            status,
-            processedDate: status === 'approved' || status === 'rejected' ? now : w.processedDate,
-            completedDate: status === 'completed' ? now : w.completedDate,
-            rejectionReason: rejectionReason || w.rejectionReason,
+            withdrawRequests: updatedRequests,
+            sellerBalance: newBalance,
           }
         })
-        let newBalance = { ...state.sellerBalance }
-        if (status === 'approved') {
-          newBalance.holdBalance = Math.max(0, newBalance.holdBalance - wd.amount)
-        }
-        if (status === 'rejected') {
-          newBalance.availableBalance += wd.amount
-          newBalance.holdBalance = Math.max(0, newBalance.holdBalance - wd.amount)
-        }
-        if (status === 'completed') {
-          newBalance.totalWithdrawn += wd.amount
-          newBalance.lastWithdrawDate = now
-        }
-        newBalance.totalBalance = newBalance.availableBalance + newBalance.pendingBalance + newBalance.holdBalance
-        return {
-          withdrawRequests: updatedRequests,
-          sellerBalance: newBalance,
-        }
-      }),
+        // Persist to database via admin API
+        fetch('/api/admin/withdrawals', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ withdrawalId: id, status, adminNote: rejectionReason }),
+        }).catch((error) => {
+          console.error('Failed to persist withdrawal status update:', error)
+        })
+      },
       getSellerAvailableForWithdraw: () => get().sellerBalance.availableBalance,
 
       // Products - START EMPTY (fetched from API)
@@ -834,12 +857,32 @@ export const useAppStore = create<AppState>()(
           products: [product, ...state.products]
         }))
       },
-      updateProduct: (product) => set((state) => ({
-        products: state.products.map(p => p.id === product.id ? product : p)
-      })),
-      removeProduct: (id) => set((state) => ({
-        products: state.products.filter(p => p.id !== id)
-      })),
+      updateProduct: (product) => {
+        set((state) => ({
+          products: state.products.map(p => p.id === product.id ? product : p)
+        }))
+        // Persist product status changes to database
+        fetch('/api/admin/products', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ productId: product.id, status: product.status, isFeatured: product.isFeatured }),
+        }).catch((error) => {
+          console.error('Failed to persist product update:', error)
+        })
+      },
+      removeProduct: (id) => {
+        set((state) => ({
+          products: state.products.filter(p => p.id !== id)
+        }))
+        // Persist to database
+        fetch('/api/admin/products', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ productId: id }),
+        }).catch((error) => {
+          console.error('Failed to persist product delete:', error)
+        })
+      },
 
       // Reviews - START EMPTY
       reviews: [],
@@ -906,30 +949,93 @@ export const useAppStore = create<AppState>()(
 
       // Admin Users - START EMPTY
       adminUsers: [],
-      updateAdminUser: (userId, updates) => set((state) => ({
-        adminUsers: state.adminUsers.map(u => u.id === userId ? { ...u, ...updates } : u)
-      })),
-      deleteAdminUser: (userId) => set((state) => ({
-        adminUsers: state.adminUsers.filter(u => u.id !== userId)
-      })),
+      updateAdminUser: (userId, updates) => {
+        set((state) => ({
+          adminUsers: state.adminUsers.map(u => u.id === userId ? { ...u, ...updates } : u)
+        }))
+        // Persist to database
+        const apiUpdates: Record<string, any> = {}
+        if (updates.isVerified !== undefined) apiUpdates.isVerified = updates.isVerified
+        if (updates.isBlocked !== undefined) apiUpdates.isActive = !updates.isBlocked
+        fetch('/api/admin/users', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId, ...apiUpdates }),
+        }).catch((error) => {
+          console.error('Failed to persist admin user update:', error)
+        })
+      },
+      deleteAdminUser: (userId) => {
+        set((state) => ({
+          adminUsers: state.adminUsers.filter(u => u.id !== userId)
+        }))
+        // Persist to database
+        fetch('/api/admin/users', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId }),
+        }).catch((error) => {
+          console.error('Failed to persist admin user delete:', error)
+        })
+      },
 
       // Admin Banners - START EMPTY
       adminBanners: [],
-      addAdminBanner: (banner) => set((state) => ({
-        adminBanners: [...state.adminBanners, banner]
-      })),
-      updateAdminBanner: (bannerId, updates) => set((state) => ({
-        adminBanners: state.adminBanners.map(b => b.id === bannerId ? { ...b, ...updates } : b)
-      })),
-      deleteAdminBanner: (bannerId) => set((state) => ({
-        adminBanners: state.adminBanners.filter(b => b.id !== bannerId)
-      })),
+      addAdminBanner: (banner) => {
+        set((state) => ({
+          adminBanners: [...state.adminBanners, banner]
+        }))
+        // Persist to database
+        fetch('/api/admin/banners', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(banner),
+        }).catch((error) => {
+          console.error('Failed to persist admin banner create:', error)
+        })
+      },
+      updateAdminBanner: (bannerId, updates) => {
+        set((state) => ({
+          adminBanners: state.adminBanners.map(b => b.id === bannerId ? { ...b, ...updates } : b)
+        }))
+        // Persist to database
+        fetch('/api/admin/banners', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bannerId, ...updates }),
+        }).catch((error) => {
+          console.error('Failed to persist admin banner update:', error)
+        })
+      },
+      deleteAdminBanner: (bannerId) => {
+        set((state) => ({
+          adminBanners: state.adminBanners.filter(b => b.id !== bannerId)
+        }))
+        // Persist to database
+        fetch('/api/admin/banners', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bannerId }),
+        }).catch((error) => {
+          console.error('Failed to persist admin banner delete:', error)
+        })
+      },
 
       // Admin Complaints - START EMPTY
       adminComplaints: [],
-      updateAdminComplaint: (complaintId, updates) => set((state) => ({
-        adminComplaints: state.adminComplaints.map(c => c.id === complaintId ? { ...c, ...updates } : c)
-      })),
+      updateAdminComplaint: (complaintId, updates) => {
+        set((state) => ({
+          adminComplaints: state.adminComplaints.map(c => c.id === complaintId ? { ...c, ...updates } : c)
+        }))
+        // Persist to database
+        fetch('/api/admin/complaints', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ complaintId, ...updates }),
+        }).catch((error) => {
+          console.error('Failed to persist admin complaint update:', error)
+        })
+      },
 
       // Settings
       settings: {
@@ -1337,10 +1443,103 @@ export const useAppStore = create<AppState>()(
           console.error('Failed to fetch admin stats:', error)
         }
       },
+
+      fetchAdminUsers: async () => {
+        try {
+          const res = await fetch('/api/admin/users')
+          if (!res.ok) throw new Error('Failed to fetch admin users')
+          const data = await res.json()
+          if (data.success) {
+            set({ adminUsers: data.data })
+          }
+        } catch (error) {
+          console.error('Failed to fetch admin users:', error)
+        }
+      },
+
+      fetchAdminWithdrawals: async () => {
+        try {
+          const res = await fetch('/api/admin/withdrawals')
+          if (!res.ok) throw new Error('Failed to fetch admin withdrawals')
+          const data = await res.json()
+          if (data.success) {
+            // Map DB withdrawals to the WithdrawRequest type used by the store
+            const withdrawals = data.data.map((w: any) => ({
+              id: w.id,
+              sellerId: w.sellerId,
+              sellerName: w.sellerName || w.seller?.storeName || 'Unknown',
+              amount: w.amount,
+              adminFee: 0,
+              netAmount: w.amount,
+              bankAccount: {
+                id: w.id,
+                bankName: w.bankName,
+                accountNumber: w.bankAccount,
+                accountHolder: w.bankHolder,
+                isDefault: true,
+              },
+              status: w.status as WithdrawStatus,
+              requestDate: w.createdAt,
+              processedDate: w.processedAt || undefined,
+              completedDate: w.status === 'processed' ? w.processedAt : undefined,
+              rejectionReason: w.adminNote || undefined,
+              estimatedArrival: '1-2 hari kerja',
+            }))
+            set({ withdrawRequests: withdrawals })
+          }
+        } catch (error) {
+          console.error('Failed to fetch admin withdrawals:', error)
+        }
+      },
+
+      fetchAdminBanners: async () => {
+        try {
+          const res = await fetch('/api/admin/banners')
+          if (!res.ok) throw new Error('Failed to fetch admin banners')
+          const data = await res.json()
+          if (data.success) {
+            set({ adminBanners: data.data.map((b: any) => ({
+              id: b.id,
+              title: b.title,
+              image: b.image,
+              link: b.link || '',
+              position: b.position,
+              isActive: b.isActive,
+            })) })
+          }
+        } catch (error) {
+          console.error('Failed to fetch admin banners:', error)
+        }
+      },
+
+      fetchAdminComplaints: async () => {
+        try {
+          const res = await fetch('/api/admin/complaints')
+          if (!res.ok) throw new Error('Failed to fetch admin complaints')
+          const data = await res.json()
+          if (data.success) {
+            set({ adminComplaints: data.data.map((c: any) => ({
+              id: c.id,
+              userId: c.userId,
+              userName: c.userName || 'Unknown',
+              type: c.type,
+              description: c.description || c.reason,
+              status: c.status,
+              createdAt: c.createdAt,
+              response: c.resolution || undefined,
+              orderId: c.orderId,
+              buyer: c.buyer,
+              seller: c.seller,
+            })) })
+          }
+        } catch (error) {
+          console.error('Failed to fetch admin complaints:', error)
+        }
+      },
     }),
     {
       name: 'martup-storage',
-      version: 2, // Bumped to clear stale localStorage data from mock-data era
+      version: 3, // Bumped to clear stale localStorage data - admin now uses real API data
       partialize: (state) => ({
         // Only persist essential state, NOT user-specific data that should come from API
         currentScreen: state.currentScreen,

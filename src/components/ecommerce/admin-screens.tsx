@@ -89,11 +89,13 @@ function computeCategoryPerformance(products: { categoryId: string; category: { 
 
 // ==================== ADMIN DASHBOARD ====================
 export function AdminDashboard() {
-  const { navigate, switchRole, userRole, showToast, withdrawRequests, products, orders, adminUsers, adminStats, fetchAdminStats } = useAppStore()
+  const { navigate, switchRole, userRole, showToast, withdrawRequests, products, orders, adminUsers, adminStats, fetchAdminStats, fetchAdminUsers, fetchAdminWithdrawals } = useAppStore()
 
   useEffect(() => {
     fetchAdminStats()
-  }, [fetchAdminStats])
+    fetchAdminUsers()
+    fetchAdminWithdrawals()
+  }, [fetchAdminStats, fetchAdminUsers, fetchAdminWithdrawals])
 
   const stats = adminStats ? {
     totalUsers: adminStats.totalUsers,
@@ -293,9 +295,9 @@ export function AdminDashboard() {
           <div className="space-y-2 mt-3">
             {[
               { label: "Permintaan Penarikan", count: withdrawRequests.filter(w => w.status === 'pending').length, icon: DollarSign, color: "text-amber-600 bg-amber-50 dark:bg-amber-900/30", screen: "admin-withdraw" as const },
-              { label: "Verifikasi Seller", count: adminUsers.filter(u => u.role === 'seller' && !u.isVerified).length, icon: Shield, color: "text-blue-600 bg-blue-50 dark:bg-blue-900/30", screen: "admin-users" as const },
+              { label: "Verifikasi Seller", count: adminStats?.unverifiedSellers ?? adminUsers.filter(u => u.role === 'seller' && !u.isVerified).length, icon: Shield, color: "text-blue-600 bg-blue-50 dark:bg-blue-900/30", screen: "admin-users" as const },
               { label: "Laporan Produk", count: 0, icon: Eye, color: "text-red-600 bg-red-50 dark:bg-red-900/30", screen: "admin-products" as const },
-              { label: "Keluhan Terbuka", count: 0, icon: MessageSquare, color: "text-orange-600 bg-orange-50 dark:bg-orange-900/30", screen: "admin-complaints" as const },
+              { label: "Keluhan Terbuka", count: adminStats?.openComplaints ?? 0, icon: MessageSquare, color: "text-orange-600 bg-orange-50 dark:bg-orange-900/30", screen: "admin-complaints" as const },
             ].map((item, i) => (
               <motion.div key={item.label} custom={i} variants={stagger} initial="initial" animate="animate">
                 <Card className="p-3">
@@ -357,9 +359,13 @@ export function AdminDashboard() {
 
 // ==================== ADMIN USERS ====================
 export function AdminUsers() {
-  const { showToast, adminUsers, updateAdminUser, deleteAdminUser } = useAppStore()
+  const { showToast, adminUsers, updateAdminUser, deleteAdminUser, fetchAdminUsers } = useAppStore()
   const [search, setSearch] = useState("")
   const [roleFilter, setRoleFilter] = useState("all")
+
+  useEffect(() => {
+    fetchAdminUsers()
+  }, [fetchAdminUsers])
 
   // Derive status from store fields for UI compatibility
   const users = adminUsers.map(u => ({
@@ -643,8 +649,12 @@ export function AdminProducts() {
 
 // ==================== ADMIN WITHDRAW ====================
 export function AdminWithdraw() {
-  const { showToast, withdrawRequests, updateWithdrawStatus } = useAppStore()
+  const { showToast, withdrawRequests, updateWithdrawStatus, fetchAdminWithdrawals } = useAppStore()
   const [activeTab, setActiveTab] = useState<"pending" | "approved" | "completed" | "rejected" | "all">("pending")
+
+  useEffect(() => {
+    fetchAdminWithdrawals()
+  }, [fetchAdminWithdrawals])
   const [showRejectModal, setShowRejectModal] = useState<string | null>(null)
   const [rejectReason, setRejectReason] = useState('')
 
@@ -872,8 +882,12 @@ export function AdminWithdraw() {
 
 // ==================== ADMIN BANNER ====================
 export function AdminBanner() {
-  const { showToast, adminBanners, addAdminBanner, updateAdminBanner, deleteAdminBanner } = useAppStore()
+  const { showToast, adminBanners, addAdminBanner, updateAdminBanner, deleteAdminBanner, fetchAdminBanners } = useAppStore()
   const [showAdd, setShowAdd] = useState(false)
+
+  useEffect(() => {
+    fetchAdminBanners()
+  }, [fetchAdminBanners])
 
   return (
     <div className="pb-20">
@@ -922,12 +936,12 @@ export function AdminBanner() {
             <Card className="mt-3 p-4 space-y-4">
               <div className="space-y-2">
                 <label className="text-xs font-medium text-foreground">Judul Banner</label>
-                <Input placeholder="Contoh: Flash Sale Weekend" className="rounded-xl" />
+                <Input id="banner-title" placeholder="Contoh: Flash Sale Weekend" className="rounded-xl" />
               </div>
 
               <div className="space-y-2">
                 <label className="text-xs font-medium text-foreground">Posisi</label>
-                <Input placeholder="Contoh: Home Top" className="rounded-xl" />
+                <Input id="banner-position" placeholder="Contoh: Home Top" className="rounded-xl" />
               </div>
 
               <div className="space-y-2">
@@ -940,10 +954,28 @@ export function AdminBanner() {
 
               <div className="space-y-2">
                 <label className="text-xs font-medium text-foreground">Link (Opsional)</label>
-                <Input placeholder="https://..." className="rounded-xl" />
+                <Input id="banner-link" placeholder="https://..." className="rounded-xl" />
               </div>
 
-              <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl h-10">
+              <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl h-10" onClick={() => {
+                const title = (document.getElementById('banner-title') as HTMLInputElement)?.value
+                const position = (document.getElementById('banner-position') as HTMLInputElement)?.value
+                const link = (document.getElementById('banner-link') as HTMLInputElement)?.value
+                if (!title || !position) {
+                  showToast('Judul dan posisi wajib diisi', 'error')
+                  return
+                }
+                addAdminBanner({
+                  id: `banner-${Date.now()}`,
+                  title,
+                  image: '/placeholder-banner.jpg',
+                  link: link || '',
+                  position,
+                  isActive: true,
+                })
+                showToast('Banner berhasil ditambahkan', 'success')
+                setShowAdd(false)
+              }}>
                 Simpan Banner
               </Button>
             </Card>
@@ -1115,8 +1147,27 @@ export function AdminAnalytics() {
         {/* Payment Method Distribution */}
         <motion.div {...fadeIn}>
           <SectionHeader title="Distribusi Metode Pembayaran" icon={<CreditCard className="w-4 h-4" />} />
-          <Card className="mt-3 p-4">
-            <p className="text-sm text-muted-foreground text-center py-4">Data belum tersedia</p>
+          <Card className="mt-3 p-4 space-y-3">
+            {(adminStats?.paymentMethodDistribution && adminStats.paymentMethodDistribution.length > 0) ? (
+              adminStats.paymentMethodDistribution.map((pm, i) => (
+                <div key={pm.method}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-medium text-foreground capitalize">{pm.method || 'Lainnya'}</span>
+                    <span className="text-xs text-muted-foreground">{pm.percentage}% ({pm.count})</span>
+                  </div>
+                  <div className="h-2 bg-muted rounded-full overflow-hidden">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${pm.percentage}%` }}
+                      transition={{ delay: i * 0.1, duration: 0.5 }}
+                      className="h-full bg-blue-500 rounded-full"
+                    />
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-4">Data belum tersedia</p>
+            )}
           </Card>
         </motion.div>
       </div>
@@ -1126,8 +1177,12 @@ export function AdminAnalytics() {
 
 // ==================== ADMIN COMPLAINTS ====================
 export function AdminComplaints() {
-  const { showToast, adminComplaints, updateAdminComplaint } = useAppStore()
+  const { showToast, adminComplaints, updateAdminComplaint, fetchAdminComplaints } = useAppStore()
   const [activeTab, setActiveTab] = useState("open")
+
+  useEffect(() => {
+    fetchAdminComplaints()
+  }, [fetchAdminComplaints])
 
   const filtered = activeTab === "all"
     ? adminComplaints

@@ -10,7 +10,7 @@ import { useAppStore } from "@/lib/store"
 import { formatPrice, formatDate } from "@/lib/utils"
 import { PageHeader, StatusBadge, EmptyState } from "./shared"
 import type { OrderStatus, Order } from "@/lib/types"
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 
 // ==================== ANIMATION VARIANTS ====================
 const fadeIn = {
@@ -130,8 +130,12 @@ function getOrderActions(status: AdminOrderStatus): { label: string; icon: React
 
 // ==================== COMPONENT ====================
 export function AdminOrdersScreen() {
-  const { orders: storeOrders, updateOrderStatus, showToast, setSelectedOrder, navigate } = useAppStore()
+  const { orders: storeOrders, updateOrderStatus, showToast, setSelectedOrder, navigate, fetchAdminStats } = useAppStore()
   const [activeTab, setActiveTab] = useState("all")
+
+  useEffect(() => {
+    fetchAdminStats()
+  }, [fetchAdminStats])
 
   const orders = useMemo(() => storeOrders.map(mapStoreOrderToAdminOrder), [storeOrders])
 

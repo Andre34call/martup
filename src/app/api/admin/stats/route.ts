@@ -12,6 +12,10 @@ export async function GET() {
       revenueResult,
       pendingWithdrawals,
       activeProducts,
+      openComplaints,
+      unverifiedSellers,
+      pendingWithdrawalAmount,
+      paymentMethodRaw,
     ] = await Promise.all([
       db.user.count(),
       db.seller.count(),
@@ -22,9 +26,31 @@ export async function GET() {
       }),
       db.withdrawal.count({ where: { status: 'pending' } }),
       db.product.count({ where: { status: 'active' } }),
+      db.complaint.count({ where: { status: 'open' } }),
+      db.seller.count({ where: { isVerified: false } }),
+      db.withdrawal.aggregate({
+        _sum: { amount: true },
+        where: { status: 'pending' },
+      }),
+      db.$queryRaw<
+        Array<{ paymentMethod: string; count: bigint }>
+      >`
+        SELECT "paymentMethod", COUNT(*) AS count
+        FROM "Order"
+        WHERE "paymentStatus" = 'paid'
+          AND "paymentMethod" IS NOT NULL
+        GROUP BY "paymentMethod"
+        ORDER BY count DESC
+      `,
     ])
 
     const totalRevenue = revenueResult._sum.totalAmount ?? 0
+    const totalPendingWithdrawal = pendingWithdrawalAmount._sum.amount ?? 0
+
+    const paymentMethodDistribution = paymentMethodRaw.map((row) => ({
+      paymentMethod: row.paymentMethod,
+      count: Number(row.count),
+    }))
 
     // Revenue chart for last 6 months using raw query with date_trunc
     const sixMonthsAgo = new Date()
@@ -97,6 +123,10 @@ export async function GET() {
         totalRevenue,
         pendingWithdrawals,
         activeProducts,
+        openComplaints,
+        unverifiedSellers,
+        pendingWithdrawalAmount: totalPendingWithdrawal,
+        paymentMethodDistribution,
         revenueChart,
         userGrowth,
       },
