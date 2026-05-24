@@ -212,3 +212,32 @@ Stage Summary:
 - New features: Category CRUD, Voucher CRUD, Deposit verification with wallet credit, Campaign moderation, Platform settings
 - Fixed: Buyer name in admin orders now shows real name from DB
 - All 11 admin API routes protected with requireAdmin() middleware
+
+---
+Task ID: 10
+Agent: Code Agent
+Task: Fix admin authentication - both backend and frontend
+
+Work Log:
+- Created /api/admin/setup/route.ts - POST endpoint for creating the first admin user using a setup secret (ADMIN_SETUP_SECRET env var or 'martup-admin-2024' default). No auth required since it's for initial setup before any admin exists.
+- Fixed switchRole() in store.ts - Added security check: if target role is 'admin' but currentUser.role !== 'admin', the switch is blocked (returns unchanged state)
+- Added frontend admin role verification in page.tsx - ScreenRenderer now checks if currentScreen is in ADMIN_SCREENS but currentUser.role !== 'admin', and if so, renders HomeScreen instead of the admin screen
+- Fixed AdminDashboard role switcher - Only shows "admin" option in the Switch Role dropdown if currentUser.role === 'admin'. Other users only see buyer/seller options.
+- Fixed BottomNav role switcher - Same admin-only restriction applied to the Switch Role popup
+- Fixed AdminBottomNav role switcher - Same admin-only restriction applied
+- Fixed SellerBottomNav role switcher - Same admin-only restriction applied
+- Fixed SellerDashboard role switcher - Same admin-only restriction applied
+- Fixed ProfileScreen - Admin Panel card now only shows if currentUser.role === 'admin' (was showing for seller too). Role switcher buttons now only show admin option if currentUser is actually admin.
+- Updated AdminUsers component - Added "Make Admin" button (purple) for non-admin users and "Remove Admin" button for admin users (not for self). Added currentUser to store destructuring for self-check. Added "Admin" filter tab. Updated role badge colors to include admin (purple).
+- Updated /api/admin/users PUT route - Added `role` field support with validation (must be buyer/seller/admin). Added safety check: prevents admin from removing their own admin role.
+- Updated store's updateAdminUser() - Now passes `role` field to the API when included in updates.
+- Lint passes with zero errors
+
+Stage Summary:
+- 1 new API route created (/api/admin/setup) for first admin creation
+- 1 API route updated (/api/admin/users PUT) with role change support
+- 1 store function fixed (switchRole) with admin role guard
+- 1 page-level guard added (ScreenRenderer blocks non-admin access to admin screens)
+- 6 role switcher dropdowns fixed across 4 component files to hide admin option for non-admin users
+- AdminUsers screen now has Make Admin / Remove Admin functionality
+- Frontend is now fully secured: non-admin users cannot switch to admin role, cannot see admin role option, and cannot access admin screens even via direct navigation

@@ -51,14 +51,14 @@ export async function GET() {
   }
 }
 
-// PUT /api/admin/users - Update user (verify, block, unblock)
+// PUT /api/admin/users - Update user (verify, block, unblock, change role)
 export async function PUT(request: NextRequest) {
   const admin = await requireAdmin()
   if (!admin) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
 
   try {
     const body = await request.json()
-    const { userId, isVerified, isActive } = body
+    const { userId, isVerified, isActive, role } = body
 
     if (!userId) {
       return NextResponse.json(
@@ -70,6 +70,24 @@ export async function PUT(request: NextRequest) {
     const updateData: Record<string, unknown> = {}
     if (isVerified !== undefined) updateData.isVerified = isVerified
     if (isActive !== undefined) updateData.isActive = isActive
+    if (role !== undefined) {
+      // Validate role value
+      const validRoles = ['buyer', 'seller', 'admin']
+      if (!validRoles.includes(role)) {
+        return NextResponse.json(
+          { success: false, error: `Invalid role. Must be one of: ${validRoles.join(', ')}` },
+          { status: 400 }
+        )
+      }
+      // Prevent admin from removing their own admin role
+      if (role !== 'admin' && userId === admin.id) {
+        return NextResponse.json(
+          { success: false, error: 'Cannot remove your own admin role' },
+          { status: 400 }
+        )
+      }
+      updateData.role = role
+    }
 
     const user = await db.user.update({
       where: { id: userId },

@@ -155,7 +155,7 @@ export function SellerDashboard() {
                     className="absolute right-0 top-full mt-2 bg-card rounded-xl shadow-lg border border-border p-2 min-w-[160px] z-50"
                   >
                     <p className="text-xs text-muted-foreground px-3 py-1.5 font-medium">Switch Role</p>
-                    {(["buyer", "seller", "admin"] as const).map((role) => (
+                    {(["buyer", "seller", ...(currentUser?.role === 'admin' ? ["admin" as const] : [])] as const).map((role) => (
                       <button
                         key={role}
                         onClick={() => { switchRole(role); setShowRoleMenu(false) }}

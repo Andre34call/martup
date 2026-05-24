@@ -354,11 +354,17 @@ export const useAppStore = create<AppState>()(
         adminCampaigns: [],
         adminSettings: {},
       }),
-      switchRole: (role) => set((state) => ({
-        userRole: role,
-        currentUser: state.currentUser ? { ...state.currentUser, role } : null,
-        currentScreen: role === 'buyer' ? 'home' : role === 'seller' ? 'seller-dashboard' : 'admin-dashboard'
-      })),
+      switchRole: (role) => set((state) => {
+        // Security: Only allow admin role if user is actually an admin in the database
+        if (role === 'admin' && state.currentUser?.role !== 'admin') {
+          return state // Don't switch - user is not an admin
+        }
+        return {
+          userRole: role,
+          currentUser: state.currentUser ? { ...state.currentUser, role } : null,
+          currentScreen: role === 'buyer' ? 'home' : role === 'seller' ? 'seller-dashboard' : 'admin-dashboard'
+        }
+      }),
 
       // Selected items
       selectedProductId: null,
@@ -1035,6 +1041,7 @@ export const useAppStore = create<AppState>()(
         const apiUpdates: Record<string, any> = {}
         if (updates.isVerified !== undefined) apiUpdates.isVerified = updates.isVerified
         if (updates.isBlocked !== undefined) apiUpdates.isActive = !updates.isBlocked
+        if (updates.role !== undefined) apiUpdates.role = updates.role
         fetch('/api/admin/users', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },

@@ -89,7 +89,7 @@ function computeCategoryPerformance(products: { categoryId: string; category: { 
 
 // ==================== ADMIN DASHBOARD ====================
 export function AdminDashboard() {
-  const { navigate, switchRole, userRole, showToast, withdrawRequests, products, orders, adminUsers, adminStats, fetchAdminStats, fetchAdminUsers, fetchAdminWithdrawals } = useAppStore()
+  const { navigate, switchRole, userRole, currentUser, showToast, withdrawRequests, products, orders, adminUsers, adminStats, fetchAdminStats, fetchAdminUsers, fetchAdminWithdrawals } = useAppStore()
 
   useEffect(() => {
     fetchAdminStats()
@@ -179,7 +179,7 @@ export function AdminDashboard() {
                     className="absolute right-0 top-full mt-2 bg-card rounded-xl shadow-lg border border-border p-2 min-w-[160px] z-50"
                   >
                     <p className="text-xs text-muted-foreground px-3 py-1.5 font-medium">Switch Role</p>
-                    {(["buyer", "seller", "admin"] as const).map((role) => (
+                    {(["buyer", "seller", ...(currentUser?.role === 'admin' ? ["admin" as const] : [])] as const).map((role) => (
                       <button
                         key={role}
                         onClick={() => { switchRole(role); setShowRoleMenu(false) }}
@@ -365,7 +365,7 @@ export function AdminDashboard() {
 
 // ==================== ADMIN USERS ====================
 export function AdminUsers() {
-  const { showToast, adminUsers, updateAdminUser, deleteAdminUser, fetchAdminUsers } = useAppStore()
+  const { showToast, adminUsers, updateAdminUser, deleteAdminUser, fetchAdminUsers, currentUser } = useAppStore()
   const [search, setSearch] = useState("")
   const [roleFilter, setRoleFilter] = useState("all")
 
@@ -399,6 +399,7 @@ export function AdminUsers() {
             { key: "all", label: "Semua" },
             { key: "buyer", label: "Buyer" },
             { key: "seller", label: "Seller" },
+            { key: "admin", label: "Admin" },
           ].map((filter) => (
             <motion.button
               key={filter.key}
@@ -435,7 +436,9 @@ export function AdminUsers() {
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-medium text-foreground truncate">{user.name}</p>
                         <Badge variant="outline" className={`text-[9px] ${
-                          user.role === "seller" ? "border-orange-300 text-orange-600" : "border-emerald-300 text-emerald-600"
+                          user.role === "admin" ? "border-purple-300 text-purple-600" :
+                          user.role === "seller" ? "border-orange-300 text-orange-600" :
+                          "border-emerald-300 text-emerald-600"
                         }`}>
                           {user.role}
                         </Badge>
@@ -476,6 +479,24 @@ export function AdminUsers() {
                         showToast("User dibuka kembali", "success")
                       }}>
                         <Check className="w-3 h-3 mr-0.5" /> Unblock
+                      </Button>
+                    )}
+                    {/* Make Admin button - only show for non-admin users when current user is admin */}
+                    {user.role !== 'admin' && currentUser?.role === 'admin' && (
+                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-purple-500 hover:bg-purple-600 text-white" onClick={() => {
+                        updateAdminUser(user.id, { role: 'admin' })
+                        showToast(`${user.name} telah dijadikan admin`, "success")
+                      }}>
+                        <Shield className="w-3 h-3 mr-0.5" /> Make Admin
+                      </Button>
+                    )}
+                    {/* Remove Admin button - only show for admin users when current user is admin */}
+                    {user.role === 'admin' && currentUser?.role === 'admin' && user.id !== currentUser.id && (
+                      <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-purple-600 hover:text-purple-700 hover:bg-purple-50 dark:hover:bg-purple-900/20" onClick={() => {
+                        updateAdminUser(user.id, { role: 'buyer' })
+                        showToast(`${user.name} telah dihapus dari admin`, "info")
+                      }}>
+                        <Shield className="w-3 h-3 mr-0.5" /> Remove Admin
                       </Button>
                     )}
                     <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20" onClick={() => {

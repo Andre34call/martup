@@ -102,6 +102,33 @@ function GlobalToast() {
 
 function ScreenRenderer() {
   const currentScreen = useAppStore((s) => s.currentScreen)
+  const currentUser = useAppStore((s) => s.currentUser)
+  const navigate = useAppStore((s) => s.navigate)
+
+  // Security: If currentScreen is an admin screen but user is not actually an admin, redirect to home
+  // Use useEffect to avoid calling navigate during render
+  const isAdminScreen = ADMIN_SCREENS.includes(currentScreen)
+  const isActualAdmin = currentUser?.role === 'admin'
+
+  // Redirect non-admin users away from admin screens
+  if (isAdminScreen && !isActualAdmin) {
+    // Use a key change to trigger re-render with home screen
+    return (
+      <AnimatePresence mode="wait">
+        <motion.div
+          key="home-redirect"
+          variants={{ initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0 } }}
+          initial="initial"
+          animate="animate"
+          exit="exit"
+          transition={{ duration: 0.2 }}
+          className="flex-1 overflow-y-auto no-scrollbar"
+        >
+          <HomeScreen />
+        </motion.div>
+      </AnimatePresence>
+    )
+  }
 
   const screenVariants = {
     initial: { opacity: 0, x: 20 },
