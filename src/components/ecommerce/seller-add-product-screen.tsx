@@ -1,15 +1,21 @@
 "use client"
 
 import { motion, AnimatePresence } from "framer-motion"
-import { Plus, Minus, X, Camera, ChevronDown, Tag, Package, DollarSign, Upload, Image as ImageIcon } from "lucide-react"
+import { Plus, Minus, X, Camera, ChevronDown, Tag, Package, DollarSign, Upload, Image as ImageIcon, Video } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { useAppStore } from "@/lib/store"
+import { uploadFile } from "@/lib/upload"
 import { formatPrice } from "@/lib/utils"
 import { PageHeader } from "./shared"
 import type { Product } from "@/lib/types"
 import { useState, useRef } from "react"
+
+// ==================== CONSTANTS ====================
+const MAX_PRODUCT_IMAGES = 8
+const MAX_PRODUCT_IMAGE_SIZE_MB = 5
+const MAX_VIDEO_SIZE_MB = 30
 
 // ==================== ANIMATION VARIANTS ====================
 const fadeIn = {
@@ -92,9 +98,12 @@ export function SellerAddProductScreen() {
   const [tags, setTags] = useState<string[]>(editingProduct?.tags || [])
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false)
   const [variantInputValues, setVariantInputValues] = useState<Record<string, { name: string; value: string }>>({})
-  const [productImages, setProductImages] = useState<{ id: string; url: string; file: File }[]>([])
+  const [productImages, setProductImages] = useState<{ id: string; url: string; file?: File }[]>([])
   const [previewImage, setPreviewImage] = useState<string | null>(null)
   const productImageInputRef = useRef<HTMLInputElement>(null)
+  const [productVideo, setProductVideo] = useState<{ file: File; url: string } | null>(null)
+  const [isUploading, setIsUploading] = useState(false)
+  const videoInputRef = useRef<HTMLInputElement>(null)
 
   // Derived
   const selectedCategory = categories.find(c => c.id === category)
@@ -199,10 +208,7 @@ export function SellerAddProductScreen() {
   }
 
   // Image upload handlers
-  const MAX_PRODUCT_IMAGES = 5
-  const MAX_PRODUCT_IMAGE_SIZE_MB = 2
-
-  const handleProductImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleProductImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
     if (!files.length) return
 
@@ -213,7 +219,9 @@ export function SellerAddProductScreen() {
       showToast(`Maksimal ${MAX_PRODUCT_IMAGES} foto per produk`, "error")
     }
 
-    const newImages: { id: string; url: string; file: File }[] = []
+    setIsUploading(true)
+    const newImages: { id: string; url: string; file?: File }[] = []
+
     for (const file of filesToAdd) {
       if (file.size > MAX_PRODUCT_IMAGE_SIZE_MB * 1024 * 1024) {
         showToast(`Foto "${file.name}" melebihi ${MAX_PRODUCT_IMAGE_SIZE_MB}MB`, "error")
@@ -223,21 +231,62 @@ export function SellerAddProductScreen() {
         showToast(`"${file.name}" bukan file gambar`, "error")
         continue
       }
-      newImages.push({
-        id: `pimg-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        url: URL.createObjectURL(file),
-        file,
-      })
+
+      try {
+        const result = await uploadFile(file, 'products', 'images')
+        newImages.push({
+          id: `pimg-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          url: result.url,
+        })
+      } catch (error) {
+        console.error('Image upload failed:', error)
+        newImages.push({
+          id: `pimg-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          url: URL.createObjectURL(file),
+          file,
+        })
+        showToast(`Gagal upload "${file.name}", menggunakan preview sementara`, "error")
+      }
     }
 
     setProductImages(prev => [...prev, ...newImages])
+    setIsUploading(false)
+    e.target.value = ""
+  }
+
+  const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (file.size > MAX_VIDEO_SIZE_MB * 1024 * 1024) {
+      showToast(`Video melebihi ${MAX_VIDEO_SIZE_MB}MB`, "error")
+      return
+    }
+
+    const allowedVideoTypes = ['video/mp4', 'video/webm', 'video/quicktime']
+    if (!allowedVideoTypes.includes(file.type)) {
+      showToast('Format video harus MP4, WebM, atau MOV', 'error')
+      return
+    }
+
+    setIsUploading(true)
+    try {
+      const result = await uploadFile(file, 'products', 'videos')
+      setProductVideo({ file, url: result.url })
+      showToast('Video berhasil diupload', 'success')
+    } catch (error) {
+      console.error('Video upload failed:', error)
+      setProductVideo({ file, url: URL.createObjectURL(file) })
+      showToast('Gagal upload video ke server, menggunakan preview sementara', 'error')
+    }
+    setIsUploading(false)
     e.target.value = ""
   }
 
   const handleRemoveProductImage = (imageId: string) => {
     setProductImages(prev => {
       const img = prev.find(i => i.id === imageId)
-      if (img) URL.revokeObjectURL(img.url)
+      if (img?.file) URL.revokeObjectURL(img.url)
       return prev.filter(i => i.id !== imageId)
     })
   }
@@ -305,6 +354,7 @@ export function SellerAddProductScreen() {
       seller: sellerInfo,
       category: selectedCategoryObj ? { id: selectedCategoryObj.id, name: selectedCategoryObj.name, slug: selectedCategoryObj.slug } : { id: category, name: category, slug: category },
       ...(tags.length > 0 ? { tags } : {}),
+      ...(productVideo ? { videoUrl: productVideo.url } : {}),
     }
 
     if (editingProduct) {
@@ -361,6 +411,7 @@ export function SellerAddProductScreen() {
       seller: sellerInfo,
       category: selectedCategoryObj ? { id: selectedCategoryObj.id, name: selectedCategoryObj.name, slug: selectedCategoryObj.slug } : (editingProduct?.category || { id: category || '', name: category || '', slug: category || '' }),
       ...(tags.length > 0 ? { tags } : {}),
+      ...(productVideo ? { videoUrl: productVideo.url } : {}),
     }
 
     if (editingProduct) {
@@ -385,7 +436,7 @@ export function SellerAddProductScreen() {
               <h3 className="text-sm font-semibold text-foreground">Foto Produk</h3>
               <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 font-medium">Wajib</span>
             </div>
-            <p className="text-xs text-muted-foreground">Upload hingga 5 foto. Foto utama adalah foto pertama.</p>
+            <p className="text-xs text-muted-foreground">Upload hingga {MAX_PRODUCT_IMAGES} foto. Foto utama adalah foto pertama.</p>
 
             {/* Hidden file input */}
             <input
@@ -457,6 +508,55 @@ export function SellerAddProductScreen() {
               </Button>
               <span className="text-[10px] text-muted-foreground">{productImages.length}/{MAX_PRODUCT_IMAGES} · JPG, PNG, max {MAX_PRODUCT_IMAGE_SIZE_MB}MB</span>
             </div>
+          </div>
+        </motion.div>
+
+        {/* ============ Product Video Section ============ */}
+        <motion.div {...fadeIn}>
+          <div className="rounded-2xl border border-border/50 bg-card p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <Video className="w-4 h-4 text-purple-500" />
+              <h3 className="text-sm font-semibold text-foreground">Video Produk</h3>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 font-medium">Opsional</span>
+            </div>
+            <p className="text-xs text-muted-foreground">Tambahkan video untuk menarik lebih banyak pembeli. Max 30MB.</p>
+
+            <input
+              ref={videoInputRef}
+              type="file"
+              accept="video/mp4,video/webm,video/quicktime"
+              className="hidden"
+              onChange={handleVideoUpload}
+            />
+
+            {productVideo ? (
+              <div className="relative group">
+                <div className="rounded-xl overflow-hidden border border-border/50">
+                  <video
+                    src={productVideo.url}
+                    className="w-full h-40 object-cover"
+                    controls
+                    preload="metadata"
+                  />
+                </div>
+                <button
+                  onClick={() => setProductVideo(null)}
+                  className="absolute -top-1.5 -right-1.5 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center shadow-sm"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ) : (
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                onClick={() => videoInputRef.current?.click()}
+                className="w-full py-4 rounded-xl border-2 border-dashed border-purple-300 hover:border-purple-400 transition-colors flex flex-col items-center gap-1.5 bg-purple-50/30 hover:bg-purple-50/50 dark:bg-purple-900/10 dark:hover:bg-purple-900/20"
+              >
+                <Video className="w-6 h-6 text-purple-400" />
+                <span className="text-xs text-purple-600 dark:text-purple-400 font-medium">Upload Video</span>
+                <span className="text-[10px] text-muted-foreground">MP4, WebM, MOV · Max 30MB</span>
+              </motion.button>
+            )}
           </div>
         </motion.div>
 
@@ -862,6 +962,27 @@ export function SellerAddProductScreen() {
         </motion.div>
       </div>
 
+
+      {/* Upload Loading Overlay */}
+      <AnimatePresence>
+        {isUploading && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[150] bg-black/40 flex items-center justify-center"
+          >
+            <div className="bg-card rounded-2xl p-6 flex flex-col items-center gap-3 shadow-xl">
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
+                className="w-8 h-8 border-2 border-muted border-t-emerald-500 rounded-full"
+              />
+              <p className="text-sm font-medium text-foreground">Mengupload...</p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Image Preview Modal */}
       <AnimatePresence>

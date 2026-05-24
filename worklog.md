@@ -308,3 +308,61 @@ Stage Summary:
 - 8 admin screens now show LoadingSpinner while fetching data
 - 8 types of destructive actions now require confirmation dialog before execution
 - Consistent UX: all confirm dialogs use Indonesian language, show context-specific messages, and support danger/warning/info variants
+
+---
+Task ID: 23-26
+Agent: Code Agent
+Task: Implement real file upload to Supabase Storage + add video upload
+
+Work Log:
+- Added NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to .env
+- Created /src/app/api/upload/route.ts - POST endpoint that uploads files to Supabase Storage via REST API. Supports both images (5MB max) and videos (30MB max). Validates file types (JPG, PNG, WebP, GIF, MP4, WebM, MOV). Generates unique filenames. Returns public URL for uploaded files.
+- Created /src/lib/upload.ts - uploadFile() and uploadMultipleFiles() helper functions that POST FormData to /api/upload and return UploadResult with url, path, and type.
+- Updated /src/components/ecommerce/seller-add-product-screen.tsx:
+  - Imported uploadFile from @/lib/upload and Video icon from lucide-react
+  - Increased MAX_PRODUCT_IMAGES from 5 to 8, MAX_PRODUCT_IMAGE_SIZE_MB from 2 to 5
+  - Added MAX_VIDEO_SIZE_MB = 30 constant
+  - Changed productImages state type: file is now optional (file?: File) since uploaded images won't have a local file
+  - Added productVideo state, isUploading state, videoInputRef ref
+  - Rewrote handleProductImageUpload: now uploads each image to Supabase Storage via uploadFile(). Falls back to blob URL on failure with error toast.
+  - Added handleVideoUpload: validates video type/size, uploads to Supabase Storage via uploadFile(), falls back to blob URL on failure
+  - Fixed handleRemoveProductImage: only revokes blob URL if file exists (uploaded images don't have local blob URLs)
+  - Updated handleSubmit: now includes videoUrl: productVideo?.url in the product object
+  - Updated handleDraft: same videoUrl addition
+  - Added Video upload section JSX: purple-themed card with Video icon, upload button, video player preview, remove button
+  - Added upload loading overlay: full-screen modal with spinning loader and "Mengupload..." text
+  - Updated description text to show MAX_PRODUCT_IMAGES (8) instead of hardcoded "5"
+- Updated /src/components/ecommerce/product-detail-screen.tsx:
+  - Added Video import from lucide-react
+  - Completely rewrote ImageGallery component to support mixed media (video + images):
+    - Now accepts videoUrl prop
+    - Builds mediaItems array with video first, then images
+    - Renders video player with controls when active item is a video
+    - Added purple "VIDEO" badge overlay on video slides
+    - Purple dot indicators for video slides, emerald for images
+    - Updated media counter to show total items including video
+  - Updated ImageGallery invocation to pass videoUrl={product.videoUrl}
+- Types.ts already had videoUrl?: string in Product interface - no change needed
+- Seller products API (/api/seller/products) already supports videoUrl - no change needed
+- Prisma schema already has videoUrl field on Product model - no change needed
+- Lint passes with zero errors
+
+IMPORTANT: Supabase Storage bucket setup required:
+- The upload code assumes a "products" bucket exists in Supabase Storage
+- User needs to:
+  1. Go to Supabase Dashboard → Storage
+  2. Create a bucket named "products" (if not exists)
+  3. Set the bucket to PUBLIC (so images/videos can be accessed via public URL)
+  4. Set up RLS policies as needed (or set bucket to allow public reads)
+
+Stage Summary:
+- 1 new API route created (/api/upload) for Supabase Storage file uploads
+- 1 new lib file created (upload.ts) with uploadFile and uploadMultipleFiles helpers
+- 1 env file updated (.env with Supabase URL and anon key)
+- 1 seller screen updated (real upload to Supabase Storage + video upload section)
+- 1 product detail screen updated (video display in image gallery)
+- Image uploads now persist to Supabase Storage instead of temporary blob URLs
+- Video upload is now functional (was missing entirely before)
+- Upload shows loading overlay during upload
+- Fallback to blob URL on upload failure with error toast
+- All lint checks pass
