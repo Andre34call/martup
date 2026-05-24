@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireAdmin } from '@/lib/admin-auth'
 
 // GET /api/admin/stats - Fetch admin dashboard statistics
 export async function GET() {
+  const admin = await requireAdmin()
+  if (!admin) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+
   try {
     // Run all simple count/sum queries in parallel
     const [

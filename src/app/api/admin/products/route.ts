@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireAdmin } from '@/lib/admin-auth'
 
 // PUT /api/admin/products - Update product status (block, approve, etc.)
 export async function PUT(request: NextRequest) {
+  const admin = await requireAdmin()
+  if (!admin) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+
   try {
     const body = await request.json()
     const { productId, status, isFeatured } = body
@@ -36,6 +40,9 @@ export async function PUT(request: NextRequest) {
 
 // DELETE /api/admin/products - Delete product
 export async function DELETE(request: NextRequest) {
+  const admin = await requireAdmin()
+  if (!admin) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+
   try {
     const body = await request.json()
     const { productId } = body

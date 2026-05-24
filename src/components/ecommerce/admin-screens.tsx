@@ -10,7 +10,7 @@ import {
   ChevronRight, Shield, Eye, Trash2, Check, X, AlertTriangle,
   TrendingUp, Megaphone, ImageIcon, Calendar, BarChart3, MessageSquare,
   Ban, FileText, ArrowUpRight, ArrowDownLeft, Clock, CreditCard, Plus,
-  Store
+  Store, FolderTree, Tag, Wallet
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -333,10 +333,16 @@ export function AdminDashboard() {
             {[
               { label: "Users", icon: Users, screen: "admin-users" as const, color: "bg-blue-50 text-blue-600 dark:bg-blue-900/30" },
               { label: "Products", icon: Box, screen: "admin-products" as const, color: "bg-purple-50 text-purple-600 dark:bg-purple-900/30" },
+              { label: "Orders", icon: Package, screen: "admin-orders" as const, color: "bg-orange-50 text-orange-600 dark:bg-orange-900/30" },
               { label: "Withdraw", icon: DollarSign, screen: "admin-withdraw" as const, color: "bg-amber-50 text-amber-600 dark:bg-amber-900/30" },
               { label: "Banners", icon: ImageIcon, screen: "admin-banner" as const, color: "bg-cyan-50 text-cyan-600 dark:bg-cyan-900/30" },
               { label: "Analytics", icon: BarChart3, screen: "admin-analytics" as const, color: "bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30" },
               { label: "Complaints", icon: MessageSquare, screen: "admin-complaints" as const, color: "bg-red-50 text-red-600 dark:bg-red-900/30" },
+              { label: "Categories", icon: FolderTree, screen: "admin-categories" as const, color: "bg-teal-50 text-teal-600 dark:bg-teal-900/30" },
+              { label: "Vouchers", icon: Tag, screen: "admin-vouchers" as const, color: "bg-pink-50 text-pink-600 dark:bg-pink-900/30" },
+              { label: "Deposits", icon: Wallet, screen: "admin-deposits" as const, color: "bg-lime-50 text-lime-600 dark:bg-lime-900/30" },
+              { label: "Campaigns", icon: Megaphone, screen: "admin-campaigns" as const, color: "bg-violet-50 text-violet-600 dark:bg-violet-900/30" },
+              { label: "Settings", icon: Settings, screen: "admin-settings" as const, color: "bg-slate-50 text-slate-600 dark:bg-slate-900/30" },
             ].map((item) => (
               <motion.button
                 key={item.label}

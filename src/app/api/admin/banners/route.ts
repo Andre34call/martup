@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireAdmin } from '@/lib/admin-auth'
 
 // GET /api/admin/banners - Fetch all banners
 export async function GET() {
+  const admin = await requireAdmin()
+  if (!admin) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+
   try {
     const banners = await db.banner.findMany({
       orderBy: { sortOrder: 'asc' },
@@ -21,6 +25,9 @@ export async function GET() {
 
 // POST /api/admin/banners - Create new banner
 export async function POST(request: NextRequest) {
+  const admin = await requireAdmin()
+  if (!admin) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+
   try {
     const body = await request.json()
     const { title, image, link, position, isActive, sortOrder, startDate, endDate } = body
@@ -55,6 +62,9 @@ export async function POST(request: NextRequest) {
 
 // PUT /api/admin/banners - Update banner
 export async function PUT(request: NextRequest) {
+  const admin = await requireAdmin()
+  if (!admin) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+
   try {
     const body = await request.json()
     const { bannerId, title, image, link, position, isActive, sortOrder } = body
@@ -92,6 +102,9 @@ export async function PUT(request: NextRequest) {
 
 // DELETE /api/admin/banners - Delete banner
 export async function DELETE(request: NextRequest) {
+  const admin = await requireAdmin()
+  if (!admin) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+
   try {
     const body = await request.json()
     const { bannerId } = body

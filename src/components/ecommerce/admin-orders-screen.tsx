@@ -58,7 +58,7 @@ function mapStoreOrderToAdminOrder(order: Order): AdminOrder {
   return {
     id: order.id,
     orderNumber: order.orderNumber,
-    buyerName: 'Buyer',
+    buyerName: order.buyerName || 'Buyer',
     items: order.items.map(i => ({ name: i.productName, quantity: i.quantity })),
     totalAmount: order.totalAmount,
     status: mapToAdminStatus(order.status),
@@ -130,14 +130,15 @@ function getOrderActions(status: AdminOrderStatus): { label: string; icon: React
 
 // ==================== COMPONENT ====================
 export function AdminOrdersScreen() {
-  const { orders: storeOrders, updateOrderStatus, showToast, setSelectedOrder, navigate, fetchAdminStats } = useAppStore()
+  const { adminOrders, updateOrderStatus, showToast, setSelectedOrder, navigate, fetchAdminStats, fetchAdminOrders } = useAppStore()
   const [activeTab, setActiveTab] = useState("all")
 
   useEffect(() => {
     fetchAdminStats()
-  }, [fetchAdminStats])
+    fetchAdminOrders()
+  }, [fetchAdminStats, fetchAdminOrders])
 
-  const orders = useMemo(() => storeOrders.map(mapStoreOrderToAdminOrder), [storeOrders])
+  const orders = useMemo(() => adminOrders.map(mapStoreOrderToAdminOrder), [adminOrders])
 
   const filtered = activeTab === "all"
     ? orders

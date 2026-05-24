@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireAdmin } from '@/lib/admin-auth'
 
 // GET /api/admin/withdrawals - Fetch all withdrawal requests with seller info
 export async function GET() {
+  const admin = await requireAdmin()
+  if (!admin) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+
   try {
     const withdrawals = await db.withdrawal.findMany({
       include: {
@@ -41,6 +45,9 @@ export async function GET() {
 
 // PUT /api/admin/withdrawals - Update withdrawal status (approve, reject, complete)
 export async function PUT(request: NextRequest) {
+  const admin = await requireAdmin()
+  if (!admin) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+
   try {
     const body = await request.json()
     const { withdrawalId, status, adminNote } = body

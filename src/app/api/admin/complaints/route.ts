@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireAdmin } from '@/lib/admin-auth'
 
 // GET /api/admin/complaints - Fetch all complaints with order and user info
 export async function GET() {
+  const admin = await requireAdmin()
+  if (!admin) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+
   try {
     const complaints = await db.complaint.findMany({
       include: {
@@ -45,6 +49,9 @@ export async function GET() {
 
 // PUT /api/admin/complaints - Update complaint status (process, resolve, reject)
 export async function PUT(request: NextRequest) {
+  const admin = await requireAdmin()
+  if (!admin) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+
   try {
     const body = await request.json()
     const { complaintId, status, resolution, refundAmount } = body

@@ -14,6 +14,7 @@ export type ScreenName =
   | 'seller-campaign' | 'seller-wallet' | 'seller-withdraw' | 'seller-withdraw-history'
   | 'admin-dashboard' | 'admin-users' | 'admin-products' | 'admin-orders'
   | 'admin-withdraw' | 'admin-banner' | 'admin-analytics' | 'admin-complaints'
+  | 'admin-categories' | 'admin-vouchers' | 'admin-deposits' | 'admin-campaigns' | 'admin-settings'
 
 export interface User {
   id: string
@@ -138,6 +139,7 @@ export interface Order {
   shipping?: Shipping
   address: Address
   seller: Seller
+  buyerName?: string
   createdAt: string
   paidAt?: string
   shippedAt?: string

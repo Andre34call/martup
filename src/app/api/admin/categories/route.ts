@@ -1,0 +1,212 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { db } from '@/lib/db'
+import { requireAdmin } from '@/lib/admin-auth'
+
+function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '')
+}
+
+// GET /api/admin/categories - List all categories with product count, support ?parentId= for subcategories
+export async function GET(request: NextRequest) {
+  try {
+    const admin = await requireAdmin()
+    if (!admin) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
+
+    const { searchParams } = new URL(request.url)
+    const parentId = searchParams.get('parentId')
+
+    const where: Record<string, unknown> = {}
+    if (parentId !== null) {
+      where.parentId = parentId === 'null' ? null : parentId
+    }
+
+    const categories = await db.category.findMany({
+      where,
+      include: {
+        _count: {
+          select: { products: true, children: true },
+        },
+        parent: {
+          select: { id: true, name: true, slug: true },
+        },
+      },
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+    })
+
+    const mapped = categories.map((cat) => ({
+      id: cat.id,
+      name: cat.name,
+      slug: cat.slug,
+      icon: cat.icon,
+      image: cat.image,
+      parentId: cat.parentId,
+      parent: cat.parent,
+      sortOrder: cat.sortOrder,
+      isActive: cat.isActive,
+      productCount: cat._count.products,
+      childrenCount: cat._count.children,
+      createdAt: cat.createdAt,
+      updatedAt: cat.updatedAt,
+    }))
+
+    return NextResponse.json({ success: true, data: mapped })
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Internal server error'
+    console.error('Admin categories GET error:', error)
+    return NextResponse.json(
+      { success: false, error: message },
+      { status: 500 }
+    )
+  }
+}
+
+// POST /api/admin/categories - Create category
+export async function POST(request: NextRequest) {
+  try {
+    const admin = await requireAdmin()
+    if (!admin) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
+
+    const body = await request.json()
+    const { name, slug, icon, image, parentId, sortOrder, isActive } = body
+
+    if (!name) {
+      return NextResponse.json(
+        { success: false, error: 'name is required' },
+        { status: 400 }
+      )
+    }
+
+    const categorySlug = slug || slugify(name)
+
+    // Check slug uniqueness
+    const existing = await db.category.findUnique({
+      where: { slug: categorySlug },
+    })
+    if (existing) {
+      return NextResponse.json(
+        { success: false, error: 'Category slug already exists' },
+        { status: 409 }
+      )
+    }
+
+    const category = await db.category.create({
+      data: {
+        name,
+        slug: categorySlug,
+        icon: icon || null,
+        image: image || null,
+        parentId: parentId || null,
+        sortOrder: sortOrder ?? 0,
+        isActive: isActive ?? true,
+      },
+    })
+
+    return NextResponse.json({ success: true, data: category }, { status: 201 })
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Internal server error'
+    console.error('Admin categories POST error:', error)
+    return NextResponse.json(
+      { success: false, error: message },
+      { status: 500 }
+    )
+  }
+}
+
+// PUT /api/admin/categories - Update category
+export async function PUT(request: NextRequest) {
+  try {
+    const admin = await requireAdmin()
+    if (!admin) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
+
+    const body = await request.json()
+    const { categoryId, name, slug, icon, image, parentId, sortOrder, isActive } = body
+
+    if (!categoryId) {
+      return NextResponse.json(
+        { success: false, error: 'categoryId is required' },
+        { status: 400 }
+      )
+    }
+
+    const updateData: Record<string, unknown> = {}
+    if (name !== undefined) {
+      updateData.name = name
+      updateData.slug = slug || slugify(name)
+    }
+    if (slug !== undefined && name === undefined) updateData.slug = slug
+    if (icon !== undefined) updateData.icon = icon
+    if (image !== undefined) updateData.image = image
+    if (parentId !== undefined) updateData.parentId = parentId || null
+    if (sortOrder !== undefined) updateData.sortOrder = sortOrder
+    if (isActive !== undefined) updateData.isActive = isActive
+
+    const category = await db.category.update({
+      where: { id: categoryId },
+      data: updateData,
+    })
+
+    return NextResponse.json({ success: true, data: category })
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Internal server error'
+    console.error('Admin categories PUT error:', error)
+    return NextResponse.json(
+      { success: false, error: message },
+      { status: 500 }
+    )
+  }
+}
+
+// DELETE /api/admin/categories - Soft delete by setting isActive=false
+export async function DELETE(request: NextRequest) {
+  try {
+    const admin = await requireAdmin()
+    if (!admin) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
+
+    const body = await request.json()
+    const { categoryId } = body
+
+    if (!categoryId) {
+      return NextResponse.json(
+        { success: false, error: 'categoryId is required' },
+        { status: 400 }
+      )
+    }
+
+    const category = await db.category.update({
+      where: { id: categoryId },
+      data: { isActive: false },
+    })
+
+    return NextResponse.json({ success: true, data: category })
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Internal server error'
+    console.error('Admin categories DELETE error:', error)
+    return NextResponse.json(
+      { success: false, error: message },
+      { status: 500 }
+    )
+  }
+}

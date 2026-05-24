@@ -222,6 +222,75 @@ interface AppState {
   } | null
   fetchAdminStats: () => Promise<void>
 
+  // Admin Orders (with buyer name from User relation)
+  adminOrders: Order[]
+  fetchAdminOrders: () => Promise<void>
+
+  // Admin Categories
+  adminCategories: Array<{
+    id: string
+    name: string
+    slug: string
+    icon?: string
+    parentId?: string
+    parentName?: string
+    productCount: number
+    sortOrder: number
+    isActive: boolean
+  }>
+  fetchAdminCategories: () => Promise<void>
+
+  // Admin Vouchers
+  adminVouchers: Array<{
+    id: string
+    code: string
+    name: string
+    type: string
+    value: number
+    minPurchase: number
+    maxDiscount?: number
+    usageCount: number
+    usageLimit?: number
+    validFrom: string
+    validUntil: string
+    isActive: boolean
+    sellerName?: string
+  }>
+  fetchAdminVouchers: () => Promise<void>
+
+  // Admin Deposits
+  adminDeposits: Array<{
+    id: string
+    userId: string
+    userName: string
+    amount: number
+    method: string
+    status: string
+    proofUrl?: string
+    adminNote?: string
+    createdAt: string
+  }>
+  fetchAdminDeposits: () => Promise<void>
+
+  // Admin Campaigns
+  adminCampaigns: Array<{
+    id: string
+    sellerId: string
+    sellerName: string
+    name: string
+    type: string
+    startDate: string
+    endDate: string
+    discount?: number
+    isActive: boolean
+    isExpired: boolean
+  }>
+  fetchAdminCampaigns: () => Promise<void>
+
+  // Admin Settings
+  adminSettings: Record<string, any>
+  fetchAdminSettings: () => Promise<void>
+
   // Admin data fetching
   fetchAdminUsers: () => Promise<void>
   fetchAdminWithdrawals: () => Promise<void>
@@ -278,6 +347,12 @@ export const useAppStore = create<AppState>()(
         adminUsers: [],
         adminBanners: [],
         adminComplaints: [],
+        adminOrders: [],
+        adminCategories: [],
+        adminVouchers: [],
+        adminDeposits: [],
+        adminCampaigns: [],
+        adminSettings: {},
       }),
       switchRole: (role) => set((state) => ({
         userRole: role,
@@ -947,6 +1022,9 @@ export const useAppStore = create<AppState>()(
         }
       }),
 
+      // Admin Orders - START EMPTY (fetched from /api/admin/orders)
+      adminOrders: [],
+
       // Admin Users - START EMPTY
       adminUsers: [],
       updateAdminUser: (userId, updates) => {
@@ -1067,6 +1145,12 @@ export const useAppStore = create<AppState>()(
         isDataLoaded: false,
         sellerStats: null,
         adminStats: null,
+        adminOrders: [],
+        adminCategories: [],
+        adminVouchers: [],
+        adminDeposits: [],
+        adminCampaigns: [],
+        adminSettings: {},
       }),
 
       // Data fetching
@@ -1444,6 +1528,101 @@ export const useAppStore = create<AppState>()(
         }
       },
 
+      fetchAdminOrders: async () => {
+        try {
+          const res = await fetch('/api/admin/orders?limit=100')
+          if (!res.ok) throw new Error('Failed to fetch admin orders')
+          const data = await res.json()
+          if (data.success) {
+            const orders: Order[] = (data.data || []).map((o: any) => ({
+              id: o.id,
+              orderNumber: o.orderNumber,
+              userId: o.userId,
+              sellerId: o.sellerId,
+              status: o.status as OrderStatus,
+              subtotal: o.subtotal,
+              shippingCost: o.shippingCost,
+              discountAmount: o.discountAmount || 0,
+              taxAmount: o.taxAmount || 0,
+              platformFee: o.platformFee || 0,
+              totalAmount: o.totalAmount,
+              paymentMethod: o.paymentMethod || undefined,
+              paymentStatus: o.paymentStatus,
+              buyerName: o.buyerName || undefined,
+              items: (o.items || []).map((item: any) => ({
+                id: item.id,
+                productId: item.productId,
+                productName: item.productName,
+                variantName: item.variantName || undefined,
+                variantId: item.variantId || undefined,
+                price: item.price,
+                quantity: item.quantity,
+                subtotal: item.subtotal,
+                image: item.image || (item.product?.images?.[0]) || undefined,
+              })),
+              shipping: o.shipping ? {
+                id: o.shipping.id,
+                provider: o.shipping.provider,
+                service: o.shipping.service,
+                trackingNumber: o.shipping.trackingNumber || undefined,
+                estimatedDays: o.shipping.estimatedDays || undefined,
+                status: o.shipping.status,
+              } : undefined,
+              address: o.addressId ? {
+                id: o.addressId,
+                label: '',
+                recipient: '',
+                phone: '',
+                address: '',
+                city: '',
+                province: '',
+                postalCode: '',
+                isDefault: false,
+              } : {
+                id: 'default',
+                label: 'Alamat',
+                recipient: '',
+                phone: '',
+                address: 'Alamat pengiriman',
+                city: '',
+                province: '',
+                postalCode: '',
+                isDefault: true,
+              },
+              seller: o.seller ? {
+                id: o.seller.id,
+                userId: o.seller.id,
+                storeName: o.seller.storeName,
+                storeSlug: o.seller.storeSlug,
+                storeAvatar: o.seller.storeAvatar || undefined,
+                isVerified: o.seller.isVerified,
+                isPremium: o.seller.isPremium || false,
+                rating: o.seller.rating || 0,
+                totalSales: o.seller.totalSales || 0,
+                totalProducts: o.seller.totalProducts || 0,
+              } : {
+                id: '',
+                userId: '',
+                storeName: 'Unknown Seller',
+                storeSlug: '',
+                isVerified: false,
+                isPremium: false,
+                rating: 0,
+                totalSales: 0,
+                totalProducts: 0,
+              },
+              createdAt: o.createdAt,
+              paidAt: o.paidAt || undefined,
+              shippedAt: o.shippedAt || undefined,
+              deliveredAt: o.deliveredAt || undefined,
+            }))
+            set({ adminOrders: orders })
+          }
+        } catch (error) {
+          console.error('Failed to fetch admin orders:', error)
+        }
+      },
+
       fetchAdminUsers: async () => {
         try {
           const res = await fetch('/api/admin/users')
@@ -1534,6 +1713,81 @@ export const useAppStore = create<AppState>()(
           }
         } catch (error) {
           console.error('Failed to fetch admin complaints:', error)
+        }
+      },
+
+      // Admin Categories - START EMPTY
+      adminCategories: [],
+      fetchAdminCategories: async () => {
+        try {
+          const res = await fetch('/api/admin/categories')
+          if (!res.ok) throw new Error('Failed to fetch admin categories')
+          const data = await res.json()
+          if (data.success) {
+            set({ adminCategories: data.data })
+          }
+        } catch (error) {
+          console.error('Failed to fetch admin categories:', error)
+        }
+      },
+
+      // Admin Vouchers - START EMPTY
+      adminVouchers: [],
+      fetchAdminVouchers: async () => {
+        try {
+          const res = await fetch('/api/admin/vouchers')
+          if (!res.ok) throw new Error('Failed to fetch admin vouchers')
+          const data = await res.json()
+          if (data.success) {
+            set({ adminVouchers: data.data })
+          }
+        } catch (error) {
+          console.error('Failed to fetch admin vouchers:', error)
+        }
+      },
+
+      // Admin Deposits - START EMPTY
+      adminDeposits: [],
+      fetchAdminDeposits: async () => {
+        try {
+          const res = await fetch('/api/admin/deposits')
+          if (!res.ok) throw new Error('Failed to fetch admin deposits')
+          const data = await res.json()
+          if (data.success) {
+            set({ adminDeposits: data.data })
+          }
+        } catch (error) {
+          console.error('Failed to fetch admin deposits:', error)
+        }
+      },
+
+      // Admin Campaigns - START EMPTY
+      adminCampaigns: [],
+      fetchAdminCampaigns: async () => {
+        try {
+          const res = await fetch('/api/admin/campaigns')
+          if (!res.ok) throw new Error('Failed to fetch admin campaigns')
+          const data = await res.json()
+          if (data.success) {
+            set({ adminCampaigns: data.data })
+          }
+        } catch (error) {
+          console.error('Failed to fetch admin campaigns:', error)
+        }
+      },
+
+      // Admin Settings - START EMPTY
+      adminSettings: {},
+      fetchAdminSettings: async () => {
+        try {
+          const res = await fetch('/api/admin/settings')
+          if (!res.ok) throw new Error('Failed to fetch admin settings')
+          const data = await res.json()
+          if (data.success) {
+            set({ adminSettings: data.data })
+          }
+        } catch (error) {
+          console.error('Failed to fetch admin settings:', error)
         }
       },
     }),
