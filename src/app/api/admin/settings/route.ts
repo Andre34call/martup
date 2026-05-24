@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/admin-auth'
-import fs from 'fs'
-import path from 'path'
+import { db } from '@/lib/db'
 
 // Default platform settings
-const DEFAULT_SETTINGS = {
+const DEFAULT_SETTINGS: Record<string, number | boolean | string> = {
   commissionRate: 5,       // percentage
   minWithdrawal: 50000,    // IDR
   platformFee: 1000,       // IDR per transaction
@@ -22,25 +21,28 @@ const DEFAULT_SETTINGS = {
   returnWindowDays: 7,     // return window after delivery
 }
 
-type Settings = typeof DEFAULT_SETTINGS
+const SETTINGS_KEY = 'platform_settings'
 
-const SETTINGS_FILE = path.join(process.cwd(), 'admin-settings.json')
-
-function readSettings(): Settings {
+async function readSettings(): Promise<Record<string, number | boolean | string>> {
   try {
-    if (fs.existsSync(SETTINGS_FILE)) {
-      const raw = fs.readFileSync(SETTINGS_FILE, 'utf-8')
-      const saved = JSON.parse(raw)
+    const row = await db.platformSetting.findUnique({ where: { key: SETTINGS_KEY } })
+    if (row) {
+      const saved = JSON.parse(row.value) as Record<string, number | boolean | string>
       return { ...DEFAULT_SETTINGS, ...saved }
     }
   } catch {
-    // If file is corrupted, return defaults
+    // If DB read fails or JSON is corrupted, return defaults
   }
   return { ...DEFAULT_SETTINGS }
 }
 
-function writeSettings(settings: Settings): void {
-  fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2), 'utf-8')
+async function writeSettings(settings: Record<string, number | boolean | string>): Promise<void> {
+  const value = JSON.stringify(settings)
+  await db.platformSetting.upsert({
+    where: { key: SETTINGS_KEY },
+    update: { value },
+    create: { key: SETTINGS_KEY, value },
+  })
 }
 
 // GET /api/admin/settings - Get platform settings
@@ -54,7 +56,7 @@ export async function GET() {
       )
     }
 
-    const settings = readSettings()
+    const settings = await readSettings()
 
     return NextResponse.json({ success: true, data: settings })
   } catch (error: unknown) {
@@ -79,11 +81,11 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json()
-    const current = readSettings()
+    const current = await readSettings()
 
     // Only update fields that are provided and valid
-    const allowedKeys = Object.keys(DEFAULT_SETTINGS) as Array<keyof Settings>
-    const updates: Partial<Settings> = {}
+    const allowedKeys = Object.keys(DEFAULT_SETTINGS)
+    const updates: Record<string, number | boolean | string> = {}
 
     for (const key of allowedKeys) {
       if (body[key] !== undefined) {
@@ -91,18 +93,18 @@ export async function PUT(request: NextRequest) {
         if (typeof DEFAULT_SETTINGS[key] === 'number') {
           const numVal = parseFloat(String(body[key]))
           if (!isNaN(numVal)) {
-            (updates as Record<string, unknown>)[key] = numVal
+            updates[key] = numVal
           }
         } else if (typeof DEFAULT_SETTINGS[key] === 'boolean') {
-          (updates as Record<string, unknown>)[key] = Boolean(body[key])
+          updates[key] = Boolean(body[key])
         } else {
-          (updates as Record<string, unknown>)[key] = body[key]
+          updates[key] = body[key]
         }
       }
     }
 
     const merged = { ...current, ...updates }
-    writeSettings(merged)
+    await writeSettings(merged)
 
     return NextResponse.json({ success: true, data: merged })
   } catch (error: unknown) {

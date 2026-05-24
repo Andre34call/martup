@@ -486,3 +486,10 @@ model Referral {
 
   referrer    User     @relation("UserReferrals", fields: [referrerId], references: [id])
 }
+
+// ==================== PLATFORM SETTINGS ====================
+
+model PlatformSetting {
+  key   String @id
+  value String // JSON string
+}

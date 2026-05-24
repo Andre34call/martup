@@ -279,8 +279,12 @@ export interface AdminStats {
   totalRevenue: number
   pendingWithdrawals: number
   activeProducts: number
+  openComplaints: number
+  unverifiedSellers: number
+  pendingWithdrawalAmount: number
   revenueChart: { date: string; revenue: number }[]
   userGrowth: { date: string; users: number }[]
+  paymentMethodDistribution: { method: string; count: number; percentage: number }[]
 }
 
 // ==================== SELLER FINANCIAL TYPES ====================

@@ -18,6 +18,8 @@ import { useAppStore } from "@/lib/store"
 import { formatPrice, formatRelativeTime, formatDate } from "@/lib/utils"
 import { PageHeader, SectionHeader, SearchBar, EmptyState } from "./shared"
 import { useState, useEffect, useCallback } from "react"
+import { ConfirmDialog } from "./confirm-dialog"
+import { LoadingSpinner } from "./loading-spinner"
 
 // ==================== ANIMATION VARIANTS ====================
 const fadeIn = {
@@ -132,6 +134,7 @@ export function AdminCategories() {
   const [showAddForm, setShowAddForm] = useState(false)
   const [loading, setLoading] = useState(true)
   const [form, setForm] = useState({ name: "", icon: "", parentId: "", sortOrder: 0 })
+  const [confirmAction, setConfirmAction] = useState<{action: () => void, title: string, message: string} | null>(null)
 
   const fetchCategories = useCallback(async () => {
     try {
@@ -334,9 +337,7 @@ export function AdminCategories() {
         {/* Category List */}
         <div className="space-y-2">
           {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="w-6 h-6 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
-            </div>
+            <LoadingSpinner message="Memuat kategori..." />
           ) : filtered.length === 0 ? (
             <EmptyState
               icon={<Tags className="w-10 h-10 text-muted-foreground" />}
@@ -395,7 +396,11 @@ export function AdminCategories() {
                       variant="outline"
                       size="sm"
                       className="h-7 text-[11px] rounded-lg text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
-                      onClick={() => handleDelete(category.id)}
+                      onClick={() => setConfirmAction({
+                        action: () => handleDelete(category.id),
+                        title: 'Hapus Kategori',
+                        message: `Apakah Anda yakin ingin menghapus kategori "${category.name}"? Kategori akan dinonaktifkan.`
+                      })}
                     >
                       <Trash2 className="w-3 h-3" />
                     </Button>
@@ -406,6 +411,13 @@ export function AdminCategories() {
           )}
         </div>
       </div>
+      <ConfirmDialog
+        isOpen={!!confirmAction}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={() => confirmAction?.action()}
+        title={confirmAction?.title || ''}
+        message={confirmAction?.message || ''}
+      />
     </div>
   )
 }
@@ -423,6 +435,7 @@ export function AdminVouchers() {
     value: 0, minPurchase: 0, maxDiscount: 0, usageLimit: 0, perUserLimit: 1,
     validFrom: "", validUntil: "",
   })
+  const [confirmAction, setConfirmAction] = useState<{action: () => void, title: string, message: string} | null>(null)
 
   const fetchVouchers = useCallback(async () => {
     try {
@@ -713,9 +726,7 @@ export function AdminVouchers() {
         {/* Voucher List */}
         <div className="space-y-2">
           {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="w-6 h-6 border-2 border-orange-600 border-t-transparent rounded-full animate-spin" />
-            </div>
+            <LoadingSpinner message="Memuat voucher..." />
           ) : filtered.length === 0 ? (
             <EmptyState
               icon={<Ticket className="w-10 h-10 text-muted-foreground" />}
@@ -784,7 +795,11 @@ export function AdminVouchers() {
                         variant="outline"
                         size="sm"
                         className="h-7 text-[11px] rounded-lg text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
-                        onClick={() => handleDelete(voucher.id)}
+                        onClick={() => setConfirmAction({
+                          action: () => handleDelete(voucher.id),
+                          title: 'Hapus Voucher',
+                          message: `Apakah Anda yakin ingin menghapus voucher "${voucher.name}" (${voucher.code})? Tindakan ini tidak dapat dibatalkan.`
+                        })}
                       >
                         <Trash2 className="w-3 h-3" />
                       </Button>
@@ -796,6 +811,13 @@ export function AdminVouchers() {
           )}
         </div>
       </div>
+      <ConfirmDialog
+        isOpen={!!confirmAction}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={() => confirmAction?.action()}
+        title={confirmAction?.title || ''}
+        message={confirmAction?.message || ''}
+      />
     </div>
   )
 }
@@ -808,6 +830,7 @@ export function AdminDeposits() {
   const [loading, setLoading] = useState(true)
   const [showRejectModal, setShowRejectModal] = useState<string | null>(null)
   const [rejectNote, setRejectNote] = useState("")
+  const [confirmAction, setConfirmAction] = useState<{action: () => void, title: string, message: string} | null>(null)
 
   const fetchDeposits = useCallback(async () => {
     try {
@@ -857,24 +880,30 @@ export function AdminDeposits() {
 
   const handleReject = async () => {
     if (!showRejectModal) return
-    try {
-      const res = await fetch("/api/admin/deposits", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ depositId: showRejectModal, status: "failed", adminNote: rejectNote || "Ditolak oleh admin" }),
-      })
-      const data = await res.json()
-      if (data.success) {
-        showToast("Deposit ditolak", "info")
-        setShowRejectModal(null)
-        setRejectNote("")
-        fetchDeposits()
-      } else {
-        showToast(data.error || "Gagal menolak deposit", "error")
-      }
-    } catch {
-      showToast("Gagal menolak deposit", "error")
-    }
+    setConfirmAction({
+      action: async () => {
+        try {
+          const res = await fetch("/api/admin/deposits", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ depositId: showRejectModal, status: "failed", adminNote: rejectNote || "Ditolak oleh admin" }),
+          })
+          const data = await res.json()
+          if (data.success) {
+            showToast("Deposit ditolak", "info")
+            setShowRejectModal(null)
+            setRejectNote("")
+            fetchDeposits()
+          } else {
+            showToast(data.error || "Gagal menolak deposit", "error")
+          }
+        } catch {
+          showToast("Gagal menolak deposit", "error")
+        }
+      },
+      title: 'Tolak Deposit',
+      message: 'Apakah Anda yakin ingin menolak deposit ini? Dana tidak akan ditambahkan ke saldo user.'
+    })
   }
 
   const methodLabel: Record<string, string> = {
@@ -969,9 +998,7 @@ export function AdminDeposits() {
         {/* Deposit List */}
         <div className="space-y-3">
           {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="w-6 h-6 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />
-            </div>
+            <LoadingSpinner message="Memuat deposit..." />
           ) : filtered.length === 0 ? (
             <EmptyState
               icon={<Wallet className="w-10 h-10 text-muted-foreground" />}
@@ -1101,6 +1128,13 @@ export function AdminDeposits() {
           </motion.div>
         )}
       </AnimatePresence>
+      <ConfirmDialog
+        isOpen={!!confirmAction}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={() => confirmAction?.action()}
+        title={confirmAction?.title || ''}
+        message={confirmAction?.message || ''}
+      />
     </div>
   )
 }
@@ -1112,6 +1146,7 @@ export function AdminCampaigns() {
   const [statusFilter, setStatusFilter] = useState("all")
   const [loading, setLoading] = useState(true)
   const [selectedCampaign, setSelectedCampaign] = useState<CampaignItem | null>(null)
+  const [confirmAction, setConfirmAction] = useState<{action: () => void, title: string, message: string} | null>(null)
 
   const fetchCampaigns = useCallback(async () => {
     try {
@@ -1291,7 +1326,13 @@ export function AdminCampaigns() {
                         variant="outline"
                         size="sm"
                         className="h-7 text-[11px] rounded-lg"
-                        onClick={() => handleToggleActive(campaign.id, campaign.isActive)}
+                        onClick={() => setConfirmAction({
+                          action: () => handleToggleActive(campaign.id, campaign.isActive),
+                          title: campaign.isActive ? 'Nonaktifkan Kampanye' : 'Aktifkan Kampanye',
+                          message: campaign.isActive
+                            ? `Apakah Anda yakin ingin menonaktifkan kampanye "${campaign.name}"? Kampanye tidak akan terlihat oleh pembeli.`
+                            : `Apakah Anda yakin ingin mengaktifkan kampanye "${campaign.name}"? Kampanye akan terlihat oleh pembeli.`
+                        })}
                       >
                         {campaign.isActive ? (
                           <><Ban className="w-3 h-3 mr-0.5" /> Tolak</>
@@ -1369,7 +1410,11 @@ export function AdminCampaigns() {
                     className="flex-1 h-10 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white"
                     onClick={() => {
                       if (!selectedCampaign.isActive) {
-                        handleToggleActive(selectedCampaign.id, false)
+                        setConfirmAction({
+                          action: () => handleToggleActive(selectedCampaign.id, false),
+                          title: 'Aktifkan Kampanye',
+                          message: `Apakah Anda yakin ingin mengaktifkan kampanye "${selectedCampaign.name}"? Kampanye akan terlihat oleh pembeli.`
+                        })
                       }
                       setSelectedCampaign(null)
                     }}
@@ -1381,7 +1426,11 @@ export function AdminCampaigns() {
                     className="flex-1 h-10 rounded-xl text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
                     onClick={() => {
                       if (selectedCampaign.isActive) {
-                        handleToggleActive(selectedCampaign.id, true)
+                        setConfirmAction({
+                          action: () => handleToggleActive(selectedCampaign.id, true),
+                          title: 'Nonaktifkan Kampanye',
+                          message: `Apakah Anda yakin ingin menonaktifkan kampanye "${selectedCampaign.name}"? Kampanye tidak akan terlihat oleh pembeli.`
+                        })
                       }
                       setSelectedCampaign(null)
                     }}
@@ -1394,6 +1443,13 @@ export function AdminCampaigns() {
           </motion.div>
         )}
       </AnimatePresence>
+      <ConfirmDialog
+        isOpen={!!confirmAction}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={() => confirmAction?.action()}
+        title={confirmAction?.title || ''}
+        message={confirmAction?.message || ''}
+      />
     </div>
   )
 }

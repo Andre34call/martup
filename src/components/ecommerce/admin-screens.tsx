@@ -22,8 +22,10 @@ import { useAppStore } from "@/lib/store"
 import { formatPrice, formatRelativeTime } from "@/lib/utils"
 import { PageHeader, SectionHeader, StatusBadge, SearchBar, EmptyState } from "./shared"
 import type { Order, OrderStatus, WithdrawStatus } from "@/lib/types"
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
 import { AnimatePresence } from "framer-motion"
+import { ConfirmDialog } from "./confirm-dialog"
+import { LoadingSpinner } from "./loading-spinner"
 
 // ==================== ANIMATION VARIANTS ====================
 const fadeIn = {
@@ -91,10 +93,10 @@ function computeCategoryPerformance(products: { categoryId: string; category: { 
 export function AdminDashboard() {
   const { navigate, switchRole, userRole, currentUser, showToast, withdrawRequests, products, orders, adminUsers, adminStats, fetchAdminStats, fetchAdminUsers, fetchAdminWithdrawals } = useAppStore()
 
+  const [isLoading, setIsLoading] = useState(true)
+
   useEffect(() => {
-    fetchAdminStats()
-    fetchAdminUsers()
-    fetchAdminWithdrawals()
+    Promise.all([fetchAdminStats(), fetchAdminUsers(), fetchAdminWithdrawals()]).finally(() => setIsLoading(false))
   }, [fetchAdminStats, fetchAdminUsers, fetchAdminWithdrawals])
 
   const stats = adminStats ? {
@@ -135,6 +137,8 @@ export function AdminDashboard() {
     admin: "bg-purple-500",
   }
 
+  if (isLoading) return <div className="pb-20"><PageHeader title="MartUp Admin" /><div className="px-4"><LoadingSpinner message="Memuat dashboard..." /></div></div>
+
   return (
     <div className="pb-20">
       {/* Top Header */}
@@ -154,7 +158,7 @@ export function AdminDashboard() {
             </motion.button>
             <motion.button
               whileTap={{ scale: 0.9 }}
-              onClick={() => navigate("admin-analytics")}
+              onClick={() => navigate("admin-settings")}
               className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-muted transition-colors"
             >
               <Settings className="w-5 h-5 text-muted-foreground" />
@@ -368,9 +372,11 @@ export function AdminUsers() {
   const { showToast, adminUsers, updateAdminUser, deleteAdminUser, fetchAdminUsers, currentUser } = useAppStore()
   const [search, setSearch] = useState("")
   const [roleFilter, setRoleFilter] = useState("all")
+  const [isLoading, setIsLoading] = useState(true)
+  const [confirmAction, setConfirmAction] = useState<{action: () => void, title: string, message: string} | null>(null)
 
   useEffect(() => {
-    fetchAdminUsers()
+    fetchAdminUsers().finally(() => setIsLoading(false))
   }, [fetchAdminUsers])
 
   // Derive status from store fields for UI compatibility
@@ -385,6 +391,8 @@ export function AdminUsers() {
     const matchesRole = roleFilter === "all" || u.role === roleFilter
     return matchesSearch && matchesRole
   })
+
+  if (isLoading) return <div className="pb-20"><PageHeader title="Kelola Users" /><LoadingSpinner message="Memuat users..." /></div>
 
   return (
     <div className="pb-20">
@@ -466,10 +474,11 @@ export function AdminUsers() {
                       </Button>
                     )}
                     {user.status === "active" && (
-                      <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-amber-600" onClick={() => {
-                        updateAdminUser(user.id, { isBlocked: true })
-                        showToast("User diblokir", "info")
-                      }}>
+                      <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-amber-600" onClick={() => setConfirmAction({
+                        action: () => { updateAdminUser(user.id, { isBlocked: true }); showToast("User diblokir", "info") },
+                        title: 'Blokir User',
+                        message: `Apakah Anda yakin ingin memblokir ${user.name}? User tidak akan dapat mengakses akunnya.`
+                      })}>
                         <Ban className="w-3 h-3 mr-0.5" /> Block
                       </Button>
                     )}
@@ -483,26 +492,29 @@ export function AdminUsers() {
                     )}
                     {/* Make Admin button - only show for non-admin users when current user is admin */}
                     {user.role !== 'admin' && currentUser?.role === 'admin' && (
-                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-purple-500 hover:bg-purple-600 text-white" onClick={() => {
-                        updateAdminUser(user.id, { role: 'admin' })
-                        showToast(`${user.name} telah dijadikan admin`, "success")
-                      }}>
+                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-purple-500 hover:bg-purple-600 text-white" onClick={() => setConfirmAction({
+                        action: () => { updateAdminUser(user.id, { role: 'admin' }); showToast(`${user.name} telah dijadikan admin`, "success") },
+                        title: 'Jadikan Admin',
+                        message: `Apakah Anda yakin ingin menjadikan ${user.name} sebagai admin? User akan memiliki akses penuh ke panel admin.`
+                      })}>
                         <Shield className="w-3 h-3 mr-0.5" /> Make Admin
                       </Button>
                     )}
                     {/* Remove Admin button - only show for admin users when current user is admin */}
                     {user.role === 'admin' && currentUser?.role === 'admin' && user.id !== currentUser.id && (
-                      <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-purple-600 hover:text-purple-700 hover:bg-purple-50 dark:hover:bg-purple-900/20" onClick={() => {
-                        updateAdminUser(user.id, { role: 'buyer' })
-                        showToast(`${user.name} telah dihapus dari admin`, "info")
-                      }}>
+                      <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-purple-600 hover:text-purple-700 hover:bg-purple-50 dark:hover:bg-purple-900/20" onClick={() => setConfirmAction({
+                        action: () => { updateAdminUser(user.id, { role: 'buyer' }); showToast(`${user.name} telah dihapus dari admin`, "info") },
+                        title: 'Hapus Admin',
+                        message: `Apakah Anda yakin ingin menghapus akses admin ${user.name}? User akan kembali menjadi buyer.`
+                      })}>
                         <Shield className="w-3 h-3 mr-0.5" /> Remove Admin
                       </Button>
                     )}
-                    <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20" onClick={() => {
-                      deleteAdminUser(user.id)
-                      showToast("User dihapus", "info")
-                    }}>
+                    <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20" onClick={() => setConfirmAction({
+                      action: () => { deleteAdminUser(user.id); showToast("User dihapus", "info") },
+                      title: 'Hapus User',
+                      message: `Apakah Anda yakin ingin menghapus ${user.name}? Tindakan ini tidak dapat dibatalkan.`
+                    })}>
                       <Trash2 className="w-3 h-3" />
                     </Button>
                   </div>
@@ -512,32 +524,111 @@ export function AdminUsers() {
           )}
         </div>
       </div>
+      <ConfirmDialog
+        isOpen={!!confirmAction}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={() => confirmAction?.action()}
+        title={confirmAction?.title || ''}
+        message={confirmAction?.message || ''}
+      />
     </div>
   )
 }
 
 // ==================== ADMIN PRODUCTS ====================
+interface AdminProductItem {
+  id: string
+  name: string
+  sellerName: string
+  price: number
+  status: string
+  sold: number
+  isFeatured: boolean
+}
+
 export function AdminProducts() {
-  const { showToast, products, updateProduct, removeProduct } = useAppStore()
+  const { showToast } = useAppStore()
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
+  const [adminProducts, setAdminProducts] = useState<AdminProductItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [confirmAction, setConfirmAction] = useState<{action: () => void, title: string, message: string} | null>(null)
 
-  // Derive admin product list from store products
-  const adminProducts = products.map(p => ({
-    id: p.id,
-    name: p.name,
-    seller: p.seller.storeName,
-    price: p.price,
-    status: p.status as 'active' | 'blocked' | 'draft',
-  }))
+  const fetchAdminProducts = useCallback(async () => {
+    try {
+      setLoading(true)
+      const res = await fetch('/api/admin/products?limit=500')
+      const data = await res.json()
+      if (data.success) {
+        const mapped: AdminProductItem[] = (data.data || []).map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          sellerName: p.seller?.storeName || 'Unknown',
+          price: p.price,
+          status: p.status,
+          sold: p.sold,
+          isFeatured: p.isFeatured,
+        }))
+        setAdminProducts(mapped)
+      }
+    } catch {
+      showToast("Gagal memuat produk", "error")
+    } finally {
+      setLoading(false)
+    }
+  }, [showToast])
+
+  useEffect(() => {
+    fetchAdminProducts()
+  }, [fetchAdminProducts])
+
+  const handleStatusChange = async (productId: string, newStatus: string) => {
+    try {
+      const res = await fetch('/api/admin/products', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productId, status: newStatus }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setAdminProducts(prev => prev.map(p => p.id === productId ? { ...p, status: newStatus } : p))
+        showToast(newStatus === 'active' ? "Produk diapprove" : "Produk diblokir", "success")
+      } else {
+        showToast(data.error || "Gagal mengubah status produk", "error")
+      }
+    } catch {
+      showToast("Gagal mengubah status produk", "error")
+    }
+  }
+
+  const handleDelete = async (productId: string) => {
+    try {
+      const res = await fetch('/api/admin/products', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productId }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setAdminProducts(prev => prev.filter(p => p.id !== productId))
+        showToast("Produk dihapus", "info")
+      } else {
+        showToast(data.error || "Gagal menghapus produk", "error")
+      }
+    } catch {
+      showToast("Gagal menghapus produk", "error")
+    }
+  }
 
   const filtered = adminProducts.filter(p => {
-    const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) || p.seller.toLowerCase().includes(search.toLowerCase())
+    const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) || p.sellerName.toLowerCase().includes(search.toLowerCase())
     const matchesStatus = statusFilter === "all" || p.status === statusFilter
     return matchesSearch && matchesStatus
   })
 
   const flaggedProducts = adminProducts.filter(p => p.status === "blocked")
+
+  if (loading) return <div className="pb-20"><PageHeader title="Moderasi Produk" /><LoadingSpinner message="Memuat produk..." /></div>
 
   return (
     <div className="pb-20">
@@ -552,6 +643,7 @@ export function AdminProducts() {
             { key: "all", label: "Semua" },
             { key: "active", label: "Aktif" },
             { key: "blocked", label: "Diblokir" },
+            { key: "draft", label: "Draft" },
           ].map((filter) => (
             <motion.button
               key={filter.key}
@@ -585,21 +677,18 @@ export function AdminProducts() {
                           <p className="text-sm font-medium text-foreground truncate">{product.name}</p>
                           <Badge variant="outline" className="text-[9px] border-red-300 text-red-600">Blocked</Badge>
                         </div>
-                        <p className="text-xs text-muted-foreground">{product.seller} · {formatPrice(product.price)}</p>
+                        <p className="text-xs text-muted-foreground">{product.sellerName} · {formatPrice(product.price)}</p>
                       </div>
                     </div>
                     <div className="flex gap-2 mt-3 pt-2 border-t border-red-100 dark:border-red-900/30">
-                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={() => {
-                        const storeProduct = products.find(sp => sp.id === product.id)
-                        if (storeProduct) updateProduct({ ...storeProduct, status: 'active' })
-                        showToast("Produk diapprove", "success")
-                      }}>
+                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={() => handleStatusChange(product.id, 'active')}>
                         <Check className="w-3 h-3 mr-0.5" /> Approve
                       </Button>
-                      <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500" onClick={() => {
-                        removeProduct(product.id)
-                        showToast("Produk dihapus", "info")
-                      }}>
+                      <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500" onClick={() => setConfirmAction({
+                        action: () => handleDelete(product.id),
+                        title: 'Hapus Produk',
+                        message: `Apakah Anda yakin ingin menghapus "${product.name}"? Tindakan ini tidak dapat dibatalkan.`
+                      })}>
                         <Trash2 className="w-3 h-3 mr-0.5" /> Delete
                       </Button>
                     </div>
@@ -630,37 +719,36 @@ export function AdminProducts() {
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-medium text-foreground truncate">{product.name}</p>
                         <Badge variant="outline" className={`text-[9px] ${
-                          product.status === "active" ? "border-emerald-300 text-emerald-600" : "border-red-300 text-red-600"
+                          product.status === "active" ? "border-emerald-300 text-emerald-600" :
+                          product.status === "draft" ? "border-amber-300 text-amber-600" :
+                          "border-red-300 text-red-600"
                         }`}>
-                          {product.status === "active" ? "Aktif" : "Blocked"}
+                          {product.status === "active" ? "Aktif" : product.status === "draft" ? "Draft" : "Blocked"}
                         </Badge>
                       </div>
-                      <p className="text-xs text-muted-foreground">{product.seller}</p>
+                      <p className="text-xs text-muted-foreground">{product.sellerName} · Terjual {product.sold}</p>
                       <p className="text-sm font-bold text-emerald-600 mt-0.5">{formatPrice(product.price)}</p>
                     </div>
                   </div>
                   <div className="flex gap-2 mt-3 pt-2 border-t border-border/50">
                     {product.status === "blocked" ? (
-                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={() => {
-                        const storeProduct = products.find(sp => sp.id === product.id)
-                        if (storeProduct) updateProduct({ ...storeProduct, status: 'active' })
-                        showToast("Produk diapprove", "success")
-                      }}>
+                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={() => handleStatusChange(product.id, 'active')}>
                         <Check className="w-3 h-3 mr-0.5" /> Approve
                       </Button>
                     ) : (
-                      <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500" onClick={() => {
-                        const storeProduct = products.find(sp => sp.id === product.id)
-                        if (storeProduct) updateProduct({ ...storeProduct, status: 'blocked' })
-                        showToast("Produk diblokir", "info")
-                      }}>
+                      <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500" onClick={() => setConfirmAction({
+                        action: () => handleStatusChange(product.id, 'blocked'),
+                        title: 'Blokir Produk',
+                        message: `Apakah Anda yakin ingin memblokir "${product.name}"? Produk tidak akan terlihat oleh pembeli.`
+                      })}>
                         <Ban className="w-3 h-3 mr-0.5" /> Block
                       </Button>
                     )}
-                    <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500" onClick={() => {
-                      removeProduct(product.id)
-                      showToast("Produk dihapus", "info")
-                    }}>
+                    <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500" onClick={() => setConfirmAction({
+                      action: () => handleDelete(product.id),
+                      title: 'Hapus Produk',
+                      message: `Apakah Anda yakin ingin menghapus "${product.name}"? Tindakan ini tidak dapat dibatalkan.`
+                    })}>
                       <Trash2 className="w-3 h-3" />
                     </Button>
                   </div>
@@ -670,6 +758,13 @@ export function AdminProducts() {
           )}
         </div>
       </div>
+      <ConfirmDialog
+        isOpen={!!confirmAction}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={() => confirmAction?.action()}
+        title={confirmAction?.title || ''}
+        message={confirmAction?.message || ''}
+      />
     </div>
   )
 }
@@ -678,9 +773,11 @@ export function AdminProducts() {
 export function AdminWithdraw() {
   const { showToast, withdrawRequests, updateWithdrawStatus, fetchAdminWithdrawals } = useAppStore()
   const [activeTab, setActiveTab] = useState<"pending" | "approved" | "completed" | "rejected" | "all">("pending")
+  const [isLoading, setIsLoading] = useState(true)
+  const [confirmAction, setConfirmAction] = useState<{action: () => void, title: string, message: string} | null>(null)
 
   useEffect(() => {
-    fetchAdminWithdrawals()
+    fetchAdminWithdrawals().finally(() => setIsLoading(false))
   }, [fetchAdminWithdrawals])
   const [showRejectModal, setShowRejectModal] = useState<string | null>(null)
   const [rejectReason, setRejectReason] = useState('')
@@ -699,10 +796,11 @@ export function AdminWithdraw() {
 
   const handleReject = () => {
     if (!showRejectModal) return
-    updateWithdrawStatus(showRejectModal, 'rejected', rejectReason || 'Tidak memenuhi syarat')
-    showToast("Penarikan ditolak", "info")
-    setShowRejectModal(null)
-    setRejectReason('')
+    setConfirmAction({
+      action: () => { updateWithdrawStatus(showRejectModal, 'rejected', rejectReason || 'Tidak memenuhi syarat'); showToast("Penarikan ditolak", "info"); setShowRejectModal(null); setRejectReason('') },
+      title: 'Tolak Penarikan',
+      message: 'Apakah Anda yakin ingin menolak permintaan penarikan ini? Dana tidak akan ditransfer ke penjual.'
+    })
   }
 
   const handleMarkCompleted = (id: string) => {
@@ -725,6 +823,8 @@ export function AdminWithdraw() {
     completed: "Selesai",
     rejected: "Ditolak",
   }
+
+  if (isLoading) return <div className="pb-20"><PageHeader title="Penarikan Dana" /><LoadingSpinner message="Memuat penarikan..." /></div>
 
   return (
     <div className="pb-20">
@@ -903,6 +1003,13 @@ export function AdminWithdraw() {
           </motion.div>
         )}
       </AnimatePresence>
+      <ConfirmDialog
+        isOpen={!!confirmAction}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={() => confirmAction?.action()}
+        title={confirmAction?.title || ''}
+        message={confirmAction?.message || ''}
+      />
     </div>
   )
 }
@@ -911,10 +1018,17 @@ export function AdminWithdraw() {
 export function AdminBanner() {
   const { showToast, adminBanners, addAdminBanner, updateAdminBanner, deleteAdminBanner, fetchAdminBanners } = useAppStore()
   const [showAdd, setShowAdd] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+  const [newBannerTitle, setNewBannerTitle] = useState("")
+  const [newBannerPosition, setNewBannerPosition] = useState("home_top")
+  const [newBannerImageUrl, setNewBannerImageUrl] = useState("")
+  const [newBannerLink, setNewBannerLink] = useState("")
 
   useEffect(() => {
-    fetchAdminBanners()
+    fetchAdminBanners().finally(() => setIsLoading(false))
   }, [fetchAdminBanners])
+
+  if (isLoading) return <div className="pb-20"><PageHeader title="Kelola Banner" /><LoadingSpinner message="Memuat banner..." /></div>
 
   return (
     <div className="pb-20">
@@ -963,44 +1077,55 @@ export function AdminBanner() {
             <Card className="mt-3 p-4 space-y-4">
               <div className="space-y-2">
                 <label className="text-xs font-medium text-foreground">Judul Banner</label>
-                <Input id="banner-title" placeholder="Contoh: Flash Sale Weekend" className="rounded-xl" />
+                <Input value={newBannerTitle} onChange={(e) => setNewBannerTitle(e.target.value)} placeholder="Contoh: Flash Sale Weekend" className="rounded-xl" />
               </div>
 
               <div className="space-y-2">
                 <label className="text-xs font-medium text-foreground">Posisi</label>
-                <Input id="banner-position" placeholder="Contoh: Home Top" className="rounded-xl" />
+                <select
+                  value={newBannerPosition}
+                  onChange={(e) => setNewBannerPosition(e.target.value)}
+                  className="w-full h-10 rounded-xl border border-input bg-background px-3 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <option value="home_top">Home Top</option>
+                  <option value="home_mid">Home Middle</option>
+                  <option value="category">Category</option>
+                </select>
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs font-medium text-foreground">Gambar Banner</label>
-                <div className="h-28 rounded-xl bg-muted/50 border-2 border-dashed border-border flex flex-col items-center justify-center cursor-pointer hover:bg-muted transition-colors">
-                  <ImageIcon className="w-6 h-6 text-muted-foreground mb-1" />
-                  <p className="text-xs text-muted-foreground">Upload Banner</p>
-                </div>
+                <label className="text-xs font-medium text-foreground">URL Gambar</label>
+                <Input value={newBannerImageUrl} onChange={(e) => setNewBannerImageUrl(e.target.value)} placeholder="https://example.com/banner.jpg" className="rounded-xl" />
+                {newBannerImageUrl && (
+                  <div className="h-28 rounded-xl overflow-hidden bg-muted">
+                    <img src={newBannerImageUrl} alt="Preview" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2">
                 <label className="text-xs font-medium text-foreground">Link (Opsional)</label>
-                <Input id="banner-link" placeholder="https://..." className="rounded-xl" />
+                <Input value={newBannerLink} onChange={(e) => setNewBannerLink(e.target.value)} placeholder="https://..." className="rounded-xl" />
               </div>
 
               <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl h-10" onClick={() => {
-                const title = (document.getElementById('banner-title') as HTMLInputElement)?.value
-                const position = (document.getElementById('banner-position') as HTMLInputElement)?.value
-                const link = (document.getElementById('banner-link') as HTMLInputElement)?.value
-                if (!title || !position) {
+                if (!newBannerTitle || !newBannerPosition) {
                   showToast('Judul dan posisi wajib diisi', 'error')
                   return
                 }
                 addAdminBanner({
                   id: `banner-${Date.now()}`,
-                  title,
-                  image: '/placeholder-banner.jpg',
-                  link: link || '',
-                  position,
+                  title: newBannerTitle,
+                  image: newBannerImageUrl || '/placeholder-banner.jpg',
+                  link: newBannerLink || '',
+                  position: newBannerPosition,
                   isActive: true,
                 })
                 showToast('Banner berhasil ditambahkan', 'success')
+                setNewBannerTitle('')
+                setNewBannerPosition('home_top')
+                setNewBannerImageUrl('')
+                setNewBannerLink('')
                 setShowAdd(false)
               }}>
                 Simpan Banner
@@ -1016,9 +1141,10 @@ export function AdminBanner() {
 // ==================== ADMIN ANALYTICS ====================
 export function AdminAnalytics() {
   const { products, orders, withdrawRequests, adminStats, fetchAdminStats } = useAppStore()
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    fetchAdminStats()
+    fetchAdminStats().finally(() => setIsLoading(false))
   }, [fetchAdminStats])
 
   // Compute real data from store
@@ -1045,6 +1171,8 @@ export function AdminAnalytics() {
     userGrowth: [] as { date: string; users: number }[],
   }
   const [dateRange, setDateRange] = useState("30d")
+
+  if (isLoading) return <div className="pb-20"><PageHeader title="Analitik Lengkap" /><LoadingSpinner message="Memuat analitik..." /></div>
 
   return (
     <div className="pb-20">
@@ -1206,9 +1334,10 @@ export function AdminAnalytics() {
 export function AdminComplaints() {
   const { showToast, adminComplaints, updateAdminComplaint, fetchAdminComplaints } = useAppStore()
   const [activeTab, setActiveTab] = useState("open")
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    fetchAdminComplaints()
+    fetchAdminComplaints().finally(() => setIsLoading(false))
   }, [fetchAdminComplaints])
 
   const filtered = activeTab === "all"
@@ -1219,13 +1348,17 @@ export function AdminComplaints() {
     open: "Terbuka",
     processing: "Diproses",
     resolved: "Diselesaikan",
+    rejected: "Ditolak",
   }
 
   const statusColor: Record<string, string> = {
     open: "border-red-300 text-red-600",
     processing: "border-amber-300 text-amber-600",
     resolved: "border-emerald-300 text-emerald-600",
+    rejected: "border-red-300 text-red-600",
   }
+
+  if (isLoading) return <div className="pb-20"><PageHeader title="Keluhan" /><LoadingSpinner message="Memuat keluhan..." /></div>
 
   return (
     <div className="pb-20">
@@ -1239,6 +1372,7 @@ export function AdminComplaints() {
             { key: "open", label: "Terbuka" },
             { key: "processing", label: "Diproses" },
             { key: "resolved", label: "Diselesaikan" },
+            { key: "rejected", label: "Ditolak" },
           ].map((tab) => (
             <motion.button
               key={tab.key}

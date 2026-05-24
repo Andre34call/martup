@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireAdmin } from '@/lib/admin-auth'
 
 // Helper to safely parse JSON fields
 function parseJsonField(value: string | null | undefined): unknown[] {
@@ -15,6 +16,14 @@ function parseJsonField(value: string | null | undefined): unknown[] {
 // GET /api/admin/orders - Fetch all orders with buyer name for admin
 export async function GET(request: NextRequest) {
   try {
+    const admin = await requireAdmin()
+    if (!admin) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
+
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status')
     const page = parseInt(searchParams.get('page') || '1', 10)
@@ -101,6 +110,80 @@ export async function GET(request: NextRequest) {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     console.error('Admin orders GET error:', error)
+    return NextResponse.json(
+      { success: false, error: message },
+      { status: 500 }
+    )
+  }
+}
+
+// PUT /api/admin/orders - Update order status (admin-protected)
+export async function PUT(request: NextRequest) {
+  try {
+    const admin = await requireAdmin()
+    if (!admin) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
+
+    const body = await request.json()
+    const { orderId, status } = body
+
+    if (!orderId) {
+      return NextResponse.json(
+        { success: false, error: 'orderId is required' },
+        { status: 400 }
+      )
+    }
+
+    if (!status) {
+      return NextResponse.json(
+        { success: false, error: 'status is required' },
+        { status: 400 }
+      )
+    }
+
+    // Find the order
+    const existingOrder = await db.order.findUnique({
+      where: { id: orderId },
+    })
+
+    if (!existingOrder) {
+      return NextResponse.json(
+        { success: false, error: 'Order not found' },
+        { status: 404 }
+      )
+    }
+
+    // Build update data
+    const updateData: Record<string, unknown> = { status }
+
+    // Set timestamp fields based on status
+    if (status === 'paid') {
+      updateData.paidAt = new Date()
+      updateData.paymentStatus = 'paid'
+    }
+    if (status === 'shipped') {
+      updateData.shippedAt = new Date()
+    }
+    if (status === 'delivered') {
+      updateData.deliveredAt = new Date()
+    }
+    if (status === 'cancelled') {
+      updateData.cancelledAt = new Date()
+    }
+
+    const updatedOrder = await db.order.update({
+      where: { id: orderId },
+      data: updateData,
+    })
+
+    return NextResponse.json({ success: true, data: updatedOrder })
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Internal server error'
+    console.error('Admin orders PUT error:', error)
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

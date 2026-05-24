@@ -11,6 +11,8 @@ import { formatPrice, formatDate } from "@/lib/utils"
 import { PageHeader, StatusBadge, EmptyState } from "./shared"
 import type { OrderStatus, Order } from "@/lib/types"
 import { useState, useMemo, useEffect } from "react"
+import { ConfirmDialog } from "./confirm-dialog"
+import { LoadingSpinner } from "./loading-spinner"
 
 // ==================== ANIMATION VARIANTS ====================
 const fadeIn = {
@@ -130,13 +132,37 @@ function getOrderActions(status: AdminOrderStatus): { label: string; icon: React
 
 // ==================== COMPONENT ====================
 export function AdminOrdersScreen() {
-  const { adminOrders, updateOrderStatus, showToast, setSelectedOrder, navigate, fetchAdminStats, fetchAdminOrders } = useAppStore()
+  const { adminOrders, showToast, setSelectedOrder, navigate, fetchAdminStats, fetchAdminOrders } = useAppStore()
   const [activeTab, setActiveTab] = useState("all")
+  const [updating, setUpdating] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [confirmAction, setConfirmAction] = useState<{action: () => void, title: string, message: string} | null>(null)
 
   useEffect(() => {
-    fetchAdminStats()
-    fetchAdminOrders()
+    Promise.all([fetchAdminStats(), fetchAdminOrders()]).finally(() => setIsLoading(false))
   }, [fetchAdminStats, fetchAdminOrders])
+
+  const handleStatusUpdate = async (orderId: string, newStatus: OrderStatus) => {
+    setUpdating(orderId)
+    try {
+      const res = await fetch('/api/admin/orders', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId, status: newStatus }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        // Refresh admin orders list
+        await fetchAdminOrders()
+      } else {
+        showToast(data.error || 'Gagal mengubah status pesanan', 'error')
+      }
+    } catch {
+      showToast('Gagal mengubah status pesanan', 'error')
+    } finally {
+      setUpdating(null)
+    }
+  }
 
   const orders = useMemo(() => adminOrders.map(mapStoreOrderToAdminOrder), [adminOrders])
 
@@ -166,6 +192,8 @@ export function AdminOrdersScreen() {
     { label: "Dikirim", count: shippedCount, icon: Truck, color: "text-cyan-600 bg-cyan-50 dark:bg-cyan-900/30 dark:text-cyan-400" },
     { label: "Selesai", count: deliveredCount, icon: Check, color: "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 dark:text-emerald-400" },
   ]
+
+  if (isLoading) return <div className="pb-20"><PageHeader title="Kelola Pesanan" /><LoadingSpinner message="Memuat pesanan..." /></div>
 
   return (
     <div className="pb-20">
@@ -277,11 +305,12 @@ export function AdminOrdersScreen() {
                             size="sm"
                             className={`h-8 text-[11px] rounded-lg ${action.className}`}
                             onClick={() => {
-                              if (action.label === 'Approve') { updateOrderStatus(order.id, 'paid'); showToast('Pesanan disetujui', 'success') }
-                              else if (action.label === 'Batalkan') { updateOrderStatus(order.id, 'cancelled'); showToast('Pesanan dibatalkan', 'info') }
-                              else if (action.label === 'Kirim') { updateOrderStatus(order.id, 'shipped'); showToast('Pesanan dikirim', 'success') }
-                              else if (action.label === 'Selesai') { updateOrderStatus(order.id, 'delivered'); showToast('Pesanan selesai', 'success') }
+                              if (action.label === 'Approve') { handleStatusUpdate(order.id, 'paid'); showToast('Pesanan disetujui', 'success') }
+                              else if (action.label === 'Batalkan') { setConfirmAction({ action: () => { handleStatusUpdate(order.id, 'cancelled'); showToast('Pesanan dibatalkan', 'info') }, title: 'Batalkan Pesanan', message: `Apakah Anda yakin ingin membatalkan pesanan ${order.orderNumber}? Tindakan ini tidak dapat dibatalkan.` }) }
+                              else if (action.label === 'Kirim') { handleStatusUpdate(order.id, 'shipped'); showToast('Pesanan dikirim', 'success') }
+                              else if (action.label === 'Selesai') { handleStatusUpdate(order.id, 'delivered'); showToast('Pesanan selesai', 'success') }
                             }}
+                            disabled={updating === order.id}
                           >
                             {action.icon}
                             {action.label}
@@ -336,6 +365,13 @@ export function AdminOrdersScreen() {
           )}
         </div>
       </div>
+      <ConfirmDialog
+        isOpen={!!confirmAction}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={() => confirmAction?.action()}
+        title={confirmAction?.title || ''}
+        message={confirmAction?.message || ''}
+      />
     </div>
   )
 }
