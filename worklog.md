@@ -30,3 +30,35 @@ Stage Summary:
 - Categories and products fetched from real DB via API
 - Google OAuth login works with user sync to DB
 - Lint passes cleanly
+
+---
+Task ID: 2
+Agent: Main Agent
+Task: Admin promotion + Division/Department feature with expanded user roles
+
+Work Log:
+- Created POST /api/admin/setup route for promoting users to admin (secret: martup-admin-2024)
+- Created GET/PATCH/DELETE /api/admin/users route for fetching and managing users
+- Promoted kholisakm@gmail.com (Kholis Muhaimin) from buyer to admin with isVerified=true
+- Updated Prisma schema: added Division model + User.divisionId + User.ledDivision relation
+- Expanded User.role comment to include: buyer, seller, admin, finance, pr, tech, cs, marketing, operations, legal, hr
+- Pushed schema changes to Supabase (Division table created, User.divisionId column added)
+- Seeded 8 default divisions: Finance, PR & Komunikasi, Tech & Bug, Customer Service, Marketing, Operations, Legal, HR & Admin
+- Assigned Kholis Muhaimin as head of Operations division
+- Created GET/POST/PATCH/DELETE /api/admin/divisions CRUD route
+- Updated types.ts: expanded UserRole, added ScreenName 'admin-divisions', added Division interface, ROLE_DISPLAY, STAFF_ROLES, DIVISION_ROLE_MAP
+- Updated Zustand store: added divisions state, fetchDivisions, fetchAdminUsers, assignUserToDivision, updateDivision
+- Created AdminDivisions screen with: division list, search/filter, detail view, member assignment, edit modal, role reference
+- Updated admin dashboard: added Divisions to quick nav, added Building2 icon, expanded role switcher, added Staff Members metric
+- Updated AdminUsers screen: expanded role filter to include all staff roles
+- Wired up admin-divisions screen in page.tsx
+- Updated .env with SUPABASE_DATABASE_URL and SUPABASE_DIRECT_URL
+- Lint passes cleanly
+
+Stage Summary:
+- Admin promotion API works (POST /api/admin/setup with secret key)
+- 8 divisions created with icons, colors, descriptions, and sort order
+- Division management UI with CRUD operations, member assignment, and role reference
+- User roles expanded from 3 (buyer/seller/admin) to 11 (added finance, pr, tech, cs, marketing, operations, legal, hr)
+- All division APIs tested and working via curl
+- Admin dashboard shows real user counts and division stats

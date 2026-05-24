@@ -1,6 +1,6 @@
 // ==================== TYPES ====================
 
-export type UserRole = 'buyer' | 'seller' | 'admin'
+export type UserRole = 'buyer' | 'seller' | 'admin' | 'finance' | 'pr' | 'tech' | 'cs' | 'marketing' | 'operations' | 'legal' | 'hr'
 export type ScreenName =
   | 'splash' | 'onboarding' | 'login' | 'register' | 'otp' | 'forgot-password'
   | 'home' | 'search' | 'category' | 'product-detail' | 'wishlist'
@@ -14,6 +14,7 @@ export type ScreenName =
   | 'seller-campaign' | 'seller-wallet' | 'seller-withdraw' | 'seller-withdraw-history'
   | 'admin-dashboard' | 'admin-users' | 'admin-products' | 'admin-orders'
   | 'admin-withdraw' | 'admin-banner' | 'admin-analytics' | 'admin-complaints'
+  | 'admin-divisions'
 
 export interface User {
   id: string
@@ -315,4 +316,58 @@ export interface SellerBalance {
   totalBalance: number      // All balances combined
   totalWithdrawn: number    // Historical total withdrawn
   lastWithdrawDate?: string
+}
+
+// ==================== DIVISION / DEPARTMENT TYPES ====================
+
+export interface Division {
+  id: string
+  name: string
+  slug: string
+  description?: string
+  icon?: string
+  color?: string
+  headUserId?: string
+  headUser?: {
+    id: string
+    name: string
+    email: string
+    avatar?: string
+    role: string
+  }
+  memberCount: number
+  isActive: boolean
+  sortOrder: number
+  createdAt: string
+  updatedAt: string
+}
+
+// Division role mapping - which role belongs to which division
+export const DIVISION_ROLE_MAP: Record<string, string[]> = {
+  finance: ['finance', 'admin'],
+  pr: ['pr', 'admin'],
+  tech: ['tech', 'admin'],
+  cs: ['cs', 'admin'],
+  marketing: ['marketing', 'admin'],
+  operations: ['operations', 'admin'],
+  legal: ['legal', 'admin'],
+  hr: ['hr', 'admin'],
+}
+
+// All staff roles (division-based)
+export const STAFF_ROLES: UserRole[] = ['finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr']
+
+// Role display info
+export const ROLE_DISPLAY: Record<string, { label: string; color: string; icon: string }> = {
+  buyer: { label: 'Buyer', color: 'emerald', icon: '🛒' },
+  seller: { label: 'Seller', color: 'orange', icon: '🏪' },
+  admin: { label: 'Admin', color: 'purple', icon: '👑' },
+  finance: { label: 'Finance', color: 'emerald', icon: '💰' },
+  pr: { label: 'PR & Komunikasi', color: 'blue', icon: '📢' },
+  tech: { label: 'Tech & Bug', color: 'purple', icon: '🐛' },
+  cs: { label: 'Customer Service', color: 'orange', icon: '🎧' },
+  marketing: { label: 'Marketing', color: 'pink', icon: '📊' },
+  operations: { label: 'Operations', color: 'amber', icon: '⚙️' },
+  legal: { label: 'Legal', color: 'red', icon: '⚖️' },
+  hr: { label: 'HR & Admin', color: 'teal', icon: '👥' },
 }

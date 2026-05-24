@@ -9,7 +9,8 @@ import {
   Users, DollarSign, Package, Box, Bell, Settings, Search,
   ChevronRight, Shield, Eye, Trash2, Check, X, AlertTriangle,
   TrendingUp, Megaphone, ImageIcon, Calendar, BarChart3, MessageSquare,
-  Ban, FileText, ArrowUpRight, ArrowDownLeft, Clock, CreditCard, Plus
+  Ban, FileText, ArrowUpRight, ArrowDownLeft, Clock, CreditCard, Plus,
+  Building2
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -88,18 +89,26 @@ function computeCategoryPerformance(products: { categoryId: string; category: { 
 
 // ==================== ADMIN DASHBOARD ====================
 export function AdminDashboard() {
-  const { navigate, switchRole, userRole, showToast, withdrawRequests, products, orders, adminUsers } = useAppStore()
+  const { navigate, switchRole, userRole, showToast, withdrawRequests, products, orders, adminUsers, fetchAdminUsers, fetchDivisions, divisions } = useAppStore()
 
-  // Placeholder admin stats (replacing MOCK_ADMIN_STATS)
+  // Fetch admin data on mount
+  useEffect(() => {
+    fetchAdminUsers()
+    fetchDivisions()
+  }, [])
+
+  // Stats derived from real data
   const stats = {
-    totalUsers: 0,
-    totalSellers: 0,
+    totalUsers: adminUsers.length,
+    totalSellers: adminUsers.filter(u => u.role === 'seller').length,
     totalOrders: orders.length,
     totalRevenue: orders.reduce((sum, o) => sum + o.totalAmount, 0),
     pendingWithdrawals: withdrawRequests.filter(w => w.status === 'pending').length,
     activeProducts: products.filter(p => p.status === 'active').length,
     revenueChart: [] as { date: string; revenue: number }[],
     userGrowth: [] as { date: string; users: number }[],
+    totalDivisions: divisions.length,
+    totalStaff: adminUsers.filter(u => ['admin', 'finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr'].includes(u.role)).length,
   }
   const [showRoleMenu, setShowRoleMenu] = useState(false)
   const roleMenuRef = useRef<HTMLDivElement>(null)
@@ -118,6 +127,14 @@ export function AdminDashboard() {
     buyer: "bg-emerald-500",
     seller: "bg-orange-500",
     admin: "bg-purple-500",
+    finance: "bg-emerald-600",
+    pr: "bg-blue-500",
+    tech: "bg-purple-600",
+    cs: "bg-orange-600",
+    marketing: "bg-pink-500",
+    operations: "bg-amber-500",
+    legal: "bg-red-500",
+    hr: "bg-teal-500",
   }
 
   return (
@@ -164,7 +181,7 @@ export function AdminDashboard() {
                     className="absolute right-0 top-full mt-2 bg-card rounded-xl shadow-lg border border-border p-2 min-w-[160px] z-50"
                   >
                     <p className="text-xs text-muted-foreground px-3 py-1.5 font-medium">Switch Role</p>
-                    {(["buyer", "seller", "admin"] as const).map((role) => (
+                    {(["buyer", "seller", "admin", "finance", "pr", "tech", "cs", "marketing", "operations"] as const).map((role) => (
                       <button
                         key={role}
                         onClick={() => { switchRole(role); setShowRoleMenu(false) }}
@@ -196,7 +213,9 @@ export function AdminDashboard() {
             { label: "Total Users", value: adminUsers.length.toLocaleString(), icon: Users, color: "text-blue-600 bg-blue-50 dark:bg-blue-900/30 dark:text-blue-400" },
             { label: "Total Revenue", value: formatPrice(orders.filter(o => o.status === 'paid' || o.status === 'delivered').reduce((sum, o) => sum + o.totalAmount, 0)), icon: DollarSign, color: "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 dark:text-emerald-400" },
             { label: "Total Orders", value: orders.length.toLocaleString(), icon: Package, color: "text-orange-600 bg-orange-50 dark:bg-orange-900/30 dark:text-orange-400" },
-            { label: "Active Products", value: products.filter(p => p.status === 'active').length.toLocaleString(), icon: Box, color: "text-purple-600 bg-purple-50 dark:bg-purple-900/30 dark:text-purple-400" },
+            { label: "Divisions", value: stats.totalDivisions.toString(), icon: Building2, color: "text-teal-600 bg-teal-50 dark:bg-teal-900/30 dark:text-teal-400" },
+            { label: "Staff Members", value: stats.totalStaff.toString(), icon: Shield, color: "text-purple-600 bg-purple-50 dark:bg-purple-900/30 dark:text-purple-400" },
+            { label: "Active Products", value: products.filter(p => p.status === 'active').length.toLocaleString(), icon: Box, color: "text-pink-600 bg-pink-50 dark:bg-pink-900/30 dark:text-pink-400" },
           ].map((item, i) => (
             <motion.div key={item.label} custom={i} variants={stagger} initial="initial" animate="animate">
               <Card className="p-4">
@@ -315,6 +334,7 @@ export function AdminDashboard() {
           <div className="grid grid-cols-3 gap-3 mt-3">
             {[
               { label: "Users", icon: Users, screen: "admin-users" as const, color: "bg-blue-50 text-blue-600 dark:bg-blue-900/30" },
+              { label: "Divisions", icon: Building2, screen: "admin-divisions" as const, color: "bg-teal-50 text-teal-600 dark:bg-teal-900/30" },
               { label: "Products", icon: Box, screen: "admin-products" as const, color: "bg-purple-50 text-purple-600 dark:bg-purple-900/30" },
               { label: "Withdraw", icon: DollarSign, screen: "admin-withdraw" as const, color: "bg-amber-50 text-amber-600 dark:bg-amber-900/30" },
               { label: "Banners", icon: ImageIcon, screen: "admin-banner" as const, color: "bg-cyan-50 text-cyan-600 dark:bg-cyan-900/30" },
@@ -372,6 +392,13 @@ export function AdminUsers() {
             { key: "all", label: "Semua" },
             { key: "buyer", label: "Buyer" },
             { key: "seller", label: "Seller" },
+            { key: "admin", label: "Admin" },
+            { key: "finance", label: "Finance" },
+            { key: "pr", label: "PR" },
+            { key: "tech", label: "Tech" },
+            { key: "cs", label: "CS" },
+            { key: "marketing", label: "Marketing" },
+            { key: "operations", label: "Ops" },
           ].map((filter) => (
             <motion.button
               key={filter.key}

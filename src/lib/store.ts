@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { ScreenName, UserRole, User, CartItem, Product, ProductVariant, Notification as AppNotification, ChatRoom, ChatMessage, Address, Voucher, Order, OrderStatus, WalletMutation, BankAccount, WithdrawRequest, WithdrawStatus, SellerBalance, Review, Seller } from './types'
+import type { ScreenName, UserRole, User, CartItem, Product, ProductVariant, Notification as AppNotification, ChatRoom, ChatMessage, Address, Voucher, Order, OrderStatus, WalletMutation, BankAccount, WithdrawRequest, WithdrawStatus, SellerBalance, Review, Seller, Division } from './types'
 
 // ==================== APP STORE ====================
 interface AppState {
@@ -139,6 +139,7 @@ interface AppState {
     joinDate: string
     totalSpent: number
     totalOrders: number
+    divisionId?: string | null
   }>
   updateAdminUser: (userId: string, updates: Record<string, any>) => void
   deleteAdminUser: (userId: string) => void
@@ -171,6 +172,13 @@ interface AppState {
     seller?: string
   }>
   updateAdminComplaint: (complaintId: string, updates: Record<string, any>) => void
+
+  // Admin Divisions
+  divisions: Division[]
+  fetchDivisions: () => Promise<void>
+  fetchAdminUsers: () => Promise<void>
+  assignUserToDivision: (userId: string, divisionId: string | null) => Promise<void>
+  updateDivision: (divisionId: string, updates: Record<string, any>) => Promise<void>
 
   // Settings
   settings: {
@@ -761,6 +769,76 @@ export const useAppStore = create<AppState>()(
       updateAdminComplaint: (complaintId, updates) => set((state) => ({
         adminComplaints: state.adminComplaints.map(c => c.id === complaintId ? { ...c, ...updates } : c)
       })),
+
+      // Admin Divisions - START EMPTY
+      divisions: [],
+      fetchDivisions: async () => {
+        try {
+          const res = await fetch('/api/admin/divisions')
+          if (!res.ok) throw new Error('Failed to fetch divisions')
+          const data = await res.json()
+          if (data.success) {
+            set({ divisions: data.divisions })
+          }
+        } catch (error) {
+          console.error('Fetch divisions error:', error)
+        }
+      },
+      fetchAdminUsers: async () => {
+        try {
+          const res = await fetch('/api/admin/users')
+          if (!res.ok) throw new Error('Failed to fetch admin users')
+          const data = await res.json()
+          if (data.success) {
+            set({
+              adminUsers: data.users.map((u: any) => ({
+                id: u.id,
+                name: u.name,
+                email: u.email,
+                phone: u.phone || '',
+                role: u.role,
+                isVerified: u.isVerified,
+                isBlocked: u.isBlocked,
+                joinDate: u.joinDate,
+                totalSpent: u.totalSpent || 0,
+                totalOrders: u.totalOrders || 0,
+                divisionId: u.divisionId || null,
+              })),
+            })
+          }
+        } catch (error) {
+          console.error('Fetch admin users error:', error)
+        }
+      },
+      assignUserToDivision: async (userId, divisionId) => {
+        try {
+          const res = await fetch('/api/admin/users', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId, updates: { divisionId } }),
+          })
+          if (!res.ok) throw new Error('Failed to assign user to division')
+          // Refresh divisions to update member counts
+          get().fetchDivisions()
+          get().fetchAdminUsers()
+        } catch (error) {
+          console.error('Assign user to division error:', error)
+        }
+      },
+      updateDivision: async (divisionId, updates) => {
+        try {
+          const res = await fetch('/api/admin/divisions', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ divisionId, updates }),
+          })
+          if (!res.ok) throw new Error('Failed to update division')
+          // Refresh divisions
+          get().fetchDivisions()
+        } catch (error) {
+          console.error('Update division error:', error)
+        }
+      },
 
       // Settings
       settings: {
