@@ -54,6 +54,10 @@ interface AppState {
   addChatMessage: (roomId: string, message: ChatMessage) => void
   addChatRoom: (room: ChatRoom) => void
   markChatRead: (roomId: string) => void
+  fetchChatRooms: () => Promise<void>
+  fetchChatMessages: (roomId: string) => Promise<void>
+  sendChatMessage: (roomId: string, content: string, type?: string) => Promise<void>
+  createChatRoom: (sellerId: string, productId?: string) => Promise<string | null>
 
   // Orders
   orders: Order[]
@@ -127,6 +131,7 @@ interface AppState {
   addReview: (review: Review, orderId: string) => void
   deleteReview: (reviewId: string) => void
   updateReview: (reviewId: string, updates: Partial<Review>) => void
+  fetchProductReviews: (productId: string) => Promise<void>
 
   // Admin Users
   adminUsers: Array<{
@@ -210,7 +215,7 @@ interface AppState {
   fetchUserData: (userId: string) => Promise<void>
   fetchProducts: () => Promise<void>
   fetchCategories: () => Promise<void>
-  categories: Array<{ id: string; name: string; slug: string; icon?: string; productCount?: number }>
+  categories: Array<{ id: string; name: string; slug: string; icon?: string; image?: string; parentId?: string | null; productCount?: number; children?: Array<{ id: string; name: string; slug: string; icon?: string; parentId?: string | null; productCount?: number; children?: any[] }> }>
   isDataLoaded: boolean
 
   // Home Banners (public, from DB)
@@ -221,7 +226,7 @@ interface AppState {
 let toastTimer: ReturnType<typeof setTimeout> | null = null
 
 // Helper to get auth headers from localStorage for API calls
-function getAuthHeaders(): Record<string, string> {
+export function getAuthHeaders(): Record<string, string> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (typeof window !== 'undefined') {
     const token = localStorage.getItem('authToken')
@@ -491,27 +496,200 @@ export const useAppStore = create<AppState>()(
       addChatRoom: (room) => set((state) => ({
         chatRooms: [room, ...state.chatRooms],
       })),
-      markChatRead: (roomId) => set((state) => {
-        const roomMessages = state.chatMessages[roomId]
-        if (!roomMessages) return state
+      markChatRead: (roomId) => {
+        // Mark as read on server
+        fetch('/api/chat/messages', {
+          method: 'PUT',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ roomId }),
+        }).catch(() => {})
 
-        const updatedMessages = {
-          ...state.chatMessages,
-          [roomId]: roomMessages.map(m => ({ ...m, isRead: true })),
+        return set((state) => {
+          const roomMessages = state.chatMessages[roomId]
+          if (!roomMessages) return state
+
+          const updatedMessages = {
+            ...state.chatMessages,
+            [roomId]: roomMessages.map(m => ({ ...m, isRead: true })),
+          }
+
+          const updatedRooms = state.chatRooms.map(r =>
+            r.id === roomId ? { ...r, unreadCount: 0 } : r
+          )
+
+          const totalUnreadChats = updatedRooms.reduce((sum, r) => sum + r.unreadCount, 0)
+
+          return {
+            chatMessages: updatedMessages,
+            chatRooms: updatedRooms,
+            totalUnreadChats,
+          }
+        })
+      },
+      fetchChatRooms: async () => {
+        try {
+          const res = await fetch('/api/chat/rooms', { headers: getAuthHeaders() })
+          if (!res.ok) throw new Error('Failed to fetch chat rooms')
+          const data = await res.json()
+          if (data.success && data.data) {
+            const rooms: ChatRoom[] = (data.data as Array<Record<string, unknown>>).map((r: Record<string, unknown>) => {
+              const otherUser = r.otherUser as Record<string, unknown> | undefined
+              const sellerData = (otherUser?.seller as Record<string, unknown>) || {}
+              const productData = r.product as Record<string, unknown> | undefined
+              return {
+                id: r.id as string,
+                seller: {
+                  id: sellerData.id as string || otherUser?.id as string || '',
+                  userId: otherUser?.id as string || '',
+                  storeName: (otherUser?.name as string) || (sellerData.storeName as string) || 'Seller',
+                  storeSlug: (sellerData.storeSlug as string) || '',
+                  storeAvatar: (otherUser?.avatar as string) || (sellerData.storeAvatar as string) || undefined,
+                  isVerified: (sellerData.isVerified as boolean) || false,
+                  isPremium: (sellerData.isPremium as boolean) || false,
+                  rating: (sellerData.rating as number) || 0,
+                  totalSales: (sellerData.totalSales as number) || 0,
+                  totalProducts: (sellerData.totalProducts as number) || 0,
+                },
+                lastMessage: (r.lastMessage as string) || '',
+                lastMessageTime: (r.lastMessageTime as string) || (r.updatedAt as string) || new Date().toISOString(),
+                unreadCount: (r.unreadCount as number) || 0,
+                product: productData ? {
+                  id: productData.id as string,
+                  name: productData.name as string,
+                  price: productData.price as number,
+                  images: typeof productData.images === 'string' ? JSON.parse(productData.images) : (productData.images as string[]) || [],
+                } as any : undefined,
+              }
+            })
+            const totalUnreadChats = rooms.reduce((sum, r) => sum + r.unreadCount, 0)
+            set({ chatRooms: rooms, totalUnreadChats })
+          }
+        } catch (error) {
+          console.error('Fetch chat rooms error:', error)
         }
-
-        const updatedRooms = state.chatRooms.map(r =>
-          r.id === roomId ? { ...r, unreadCount: 0 } : r
-        )
-
-        const totalUnreadChats = updatedRooms.reduce((sum, r) => sum + r.unreadCount, 0)
-
-        return {
-          chatMessages: updatedMessages,
-          chatRooms: updatedRooms,
-          totalUnreadChats,
+      },
+      fetchChatMessages: async (roomId) => {
+        try {
+          const res = await fetch(`/api/chat/messages?roomId=${roomId}`, { headers: getAuthHeaders() })
+          if (!res.ok) throw new Error('Failed to fetch chat messages')
+          const data = await res.json()
+          if (data.success && data.data) {
+            const messages: ChatMessage[] = (data.data as Array<Record<string, unknown>>).map((m: Record<string, unknown>) => ({
+              id: m.id as string,
+              roomId: m.roomId as string || roomId,
+              senderId: m.senderId as string,
+              content: m.content as string,
+              type: (m.type as ChatMessage['type']) || 'text',
+              isRead: m.isRead as boolean,
+              createdAt: m.createdAt as string,
+            }))
+            set((state) => ({
+              chatMessages: {
+                ...state.chatMessages,
+                [roomId]: messages,
+              },
+            }))
+          }
+        } catch (error) {
+          console.error('Fetch chat messages error:', error)
         }
-      }),
+      },
+      sendChatMessage: async (roomId, content, type = 'text') => {
+        // Optimistic local update first
+        const tempMsg: ChatMessage = {
+          id: `temp-${Date.now()}`,
+          roomId,
+          senderId: get().currentUser?.id || '',
+          content,
+          type: type as ChatMessage['type'],
+          isRead: false,
+          createdAt: new Date().toISOString(),
+        }
+        get().addChatMessage(roomId, tempMsg)
+
+        try {
+          const res = await fetch('/api/chat/messages', {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ roomId, content, type }),
+          })
+          if (!res.ok) throw new Error('Failed to send message')
+          const data = await res.json()
+          // Replace temp message with real one from server
+          if (data.success && data.data) {
+            const m = data.data as Record<string, unknown>
+            const realMsg: ChatMessage = {
+              id: m.id as string,
+              roomId: m.roomId as string || roomId,
+              senderId: m.senderId as string,
+              content: m.content as string,
+              type: (m.type as ChatMessage['type']) || 'text',
+              isRead: m.isRead as boolean,
+              createdAt: m.createdAt as string,
+            }
+            set((state) => ({
+              chatMessages: {
+                ...state.chatMessages,
+                [roomId]: (state.chatMessages[roomId] || []).map(msg =>
+                  msg.id === tempMsg.id ? realMsg : msg
+                ),
+              },
+            }))
+          }
+        } catch (error) {
+          console.error('Send chat message error:', error)
+        }
+      },
+      createChatRoom: async (sellerId, productId) => {
+        try {
+          const res = await fetch('/api/chat/rooms', {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ sellerId, productId }),
+          })
+          if (!res.ok) throw new Error('Failed to create chat room')
+          const data = await res.json()
+          if (data.success && data.data) {
+            const r = data.data as Record<string, unknown>
+            const otherUser = r.otherUser as Record<string, unknown> | undefined
+            const sellerData = (otherUser?.seller as Record<string, unknown>) || {}
+            const productData = r.product as Record<string, unknown> | undefined
+            const room: ChatRoom = {
+              id: r.id as string,
+              seller: {
+                id: sellerData.id as string || otherUser?.id as string || '',
+                userId: otherUser?.id as string || '',
+                storeName: (otherUser?.name as string) || (sellerData.storeName as string) || 'Seller',
+                storeSlug: (sellerData.storeSlug as string) || '',
+                storeAvatar: (otherUser?.avatar as string) || (sellerData.storeAvatar as string) || undefined,
+                isVerified: (sellerData.isVerified as boolean) || false,
+                isPremium: (sellerData.isPremium as boolean) || false,
+                rating: (sellerData.rating as number) || 0,
+                totalSales: (sellerData.totalSales as number) || 0,
+                totalProducts: (sellerData.totalProducts as number) || 0,
+              },
+              lastMessage: (r.lastMessage as string) || '',
+              lastMessageTime: (r.lastMessageTime as string) || (r.updatedAt as string) || new Date().toISOString(),
+              unreadCount: 0,
+              product: productData ? {
+                id: productData.id as string,
+                name: productData.name as string,
+                price: productData.price as number,
+                images: typeof productData.images === 'string' ? JSON.parse(productData.images) : (productData.images as string[]) || [],
+              } as any : undefined,
+            }
+            // Add to local state if not already present
+            if (!get().chatRooms.find(cr => cr.id === room.id)) {
+              get().addChatRoom(room)
+            }
+            return room.id
+          }
+          return null
+        } catch (error) {
+          console.error('Create chat room error:', error)
+          return null
+        }
+      },
 
       // Orders - START EMPTY
       orders: [],
@@ -849,19 +1027,36 @@ export const useAppStore = create<AppState>()(
       // Reviews - START EMPTY
       reviews: [],
       reviewedOrderIds: [],
-      addReview: (review, orderId) => set((state) => {
-        const updatedProducts = state.products.map(p => {
-          if (p.id !== review.productId) return p
-          const productReviews = [...state.reviews.filter(r => r.productId === p.id), review]
-          const avgRating = productReviews.reduce((sum, r) => sum + r.rating, 0) / productReviews.length
-          return { ...p, rating: Math.round(avgRating * 10) / 10, reviewCount: p.reviewCount + 1 }
+      addReview: (review, orderId) => {
+        // Call the API to persist the review
+        fetch('/api/reviews', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({
+            productId: review.productId,
+            rating: review.rating,
+            content: review.content,
+            images: review.images,
+          }),
+        }).catch((error) => {
+          console.error('Create review API error:', error)
         })
-        return {
-          reviews: [review, ...state.reviews],
-          reviewedOrderIds: [...state.reviewedOrderIds, orderId],
-          products: updatedProducts,
-        }
-      }),
+
+        // Also update local state for immediate UI feedback
+        return set((state) => {
+          const updatedProducts = state.products.map(p => {
+            if (p.id !== review.productId) return p
+            const productReviews = [...state.reviews.filter(r => r.productId === p.id), review]
+            const avgRating = productReviews.reduce((sum, r) => sum + r.rating, 0) / productReviews.length
+            return { ...p, rating: Math.round(avgRating * 10) / 10, reviewCount: p.reviewCount + 1 }
+          })
+          return {
+            reviews: [review, ...state.reviews],
+            reviewedOrderIds: [...state.reviewedOrderIds, orderId],
+            products: updatedProducts,
+          }
+        })
+      },
       deleteReview: (reviewId) => set((state) => {
         const review = state.reviews.find(r => r.id === reviewId)
         if (!review) return state
@@ -908,6 +1103,36 @@ export const useAppStore = create<AppState>()(
           products: updatedProducts,
         }
       }),
+      fetchProductReviews: async (productId) => {
+        try {
+          const res = await fetch(`/api/reviews?productId=${productId}`)
+          if (!res.ok) throw new Error('Failed to fetch product reviews')
+          const data = await res.json()
+          if (data.success && data.data) {
+            const reviews: Review[] = (data.data as Array<Record<string, unknown>>).map((r: Record<string, unknown>) => {
+              const user = r.user as Record<string, unknown> | undefined
+              return {
+                id: r.id as string,
+                userId: r.userId as string,
+                productId: r.productId as string,
+                rating: r.rating as number,
+                content: r.content as string || undefined,
+                images: typeof r.images === 'string' ? JSON.parse(r.images) : (r.images as string[]) || undefined,
+                userName: (user?.name as string) || 'User',
+                userAvatar: (user?.avatar as string) || undefined,
+                createdAt: r.createdAt as string,
+              }
+            })
+            set((state) => {
+              // Replace reviews for this product, keep others
+              const otherReviews = state.reviews.filter(r => r.productId !== productId)
+              return { reviews: [...reviews, ...otherReviews] }
+            })
+          }
+        } catch (error) {
+          console.error('Fetch product reviews error:', error)
+        }
+      },
 
       // Admin Users - START EMPTY
       adminUsers: [],
@@ -1513,15 +1738,18 @@ export const useAppStore = create<AppState>()(
           if (!res.ok) throw new Error('Failed to fetch categories')
           const data = await res.json()
 
-          set({
-            categories: (data.data || data.categories || []).map((c: any) => ({
-              id: c.id,
-              name: c.name,
-              slug: c.slug,
-              icon: c.icon || undefined,
-              productCount: c.productCount || c._count?.products || 0,
-            }))
+          const mapCategory = (c: any): any => ({
+            id: c.id,
+            name: c.name,
+            slug: c.slug,
+            icon: c.icon || undefined,
+            image: c.image || undefined,
+            parentId: c.parentId || null,
+            productCount: c.productCount || c._count?.products || 0,
+            children: (c.children || []).map(mapCategory),
           })
+
+          set({ categories: (data.data || data.categories || []).map(mapCategory) })
         } catch (error) {
           console.error('Failed to fetch categories:', error)
         }
@@ -1666,18 +1894,63 @@ interface WishlistState {
   wishlistIds: string[]
   toggleWishlist: (productId: string) => void
   isWishlisted: (productId: string) => boolean
+  syncWishlistFromServer: (userId: string) => Promise<void>
 }
 
 export const useWishlistStore = create<WishlistState>()(
   persist(
     (set, get) => ({
       wishlistIds: [],
-      toggleWishlist: (productId) => set((state) => ({
-        wishlistIds: state.wishlistIds.includes(productId)
-          ? state.wishlistIds.filter((id) => id !== productId)
-          : [...state.wishlistIds, productId],
-      })),
+      toggleWishlist: (productId) => {
+        const isCurrentlyWishlisted = get().wishlistIds.includes(productId)
+
+        // Optimistic local update
+        set((state) => ({
+          wishlistIds: isCurrentlyWishlisted
+            ? state.wishlistIds.filter((id) => id !== productId)
+            : [...state.wishlistIds, productId],
+        }))
+
+        // Call API to persist
+        if (isCurrentlyWishlisted) {
+          fetch('/api/wishlist', {
+            method: 'DELETE',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ productId }),
+          }).catch((error) => {
+            console.error('Remove from wishlist API error:', error)
+            // Revert on error
+            set((state) => ({ wishlistIds: [...state.wishlistIds, productId] }))
+          })
+        } else {
+          fetch('/api/wishlist', {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ productId }),
+          }).catch((error) => {
+            console.error('Add to wishlist API error:', error)
+            // Revert on error
+            set((state) => ({ wishlistIds: state.wishlistIds.filter((id) => id !== productId) }))
+          })
+        }
+      },
       isWishlisted: (productId) => get().wishlistIds.includes(productId),
+      syncWishlistFromServer: async (userId) => {
+        try {
+          const res = await fetch(`/api/wishlist?userId=${userId}`, { headers: getAuthHeaders() })
+          if (!res.ok) throw new Error('Failed to fetch wishlist')
+          const data = await res.json()
+          if (data.success && data.data) {
+            const ids = (data.data as Array<Record<string, unknown>>).map((item: Record<string, unknown>) => {
+              const product = item.product as Record<string, unknown> | undefined
+              return (item.productId as string) || (product?.id as string) || ''
+            }).filter(Boolean)
+            set({ wishlistIds: ids })
+          }
+        } catch (error) {
+          console.error('Sync wishlist from server error:', error)
+        }
+      },
     }),
     {
       name: 'martup-wishlist',

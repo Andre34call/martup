@@ -366,6 +366,8 @@ model ChatParticipant {
 
   room     ChatRoom @relation(fields: [roomId], references: [id])
   user     User     @relation(fields: [userId], references: [id])
+
+  @@unique([roomId, userId])
 }
 
 model ChatMessage {

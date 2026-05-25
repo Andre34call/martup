@@ -9,7 +9,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { useAppStore, useCartStore } from "@/lib/store"
+import { useAppStore, useCartStore, getAuthHeaders } from "@/lib/store"
 import { formatPrice } from "@/lib/utils"
 import { SHIPPING_OPTIONS } from "@/lib/constants"
 import {
@@ -229,7 +229,7 @@ function ShippingSelector({
 
 // ==================== MAIN COMPONENT ====================
 export function CheckoutScreen() {
-  const { navigate, addresses, selectedAddressId, selectedVoucher, addOrder, showToast, walletBalance, deductWallet, useVoucher: markVoucherUsed, currentUser } = useAppStore()
+  const { navigate, addresses, selectedAddressId, selectedVoucher, addOrder, showToast, walletBalance, deductWallet, useVoucher: markVoucherUsed, currentUser, selectVoucher } = useAppStore()
   const { items, getCheckedItems, getCheckedTotal, getCheckedCount, clearCart, removeItem } = useCartStore()
 
   const [selectedPayment, setSelectedPayment] = useState<string | null>(null)
@@ -300,7 +300,7 @@ export function CheckoutScreen() {
     )
   }, [selectedPayment, defaultAddress, shippingBySeller, groupedBySeller, checkedCount, walletBalance, totalAmount])
 
-  const handlePay = () => {
+  const handlePay = async () => {
     if (!selectedPayment) {
       showToast("Pilih metode pembayaran terlebih dahulu", "error")
       return
@@ -329,6 +329,34 @@ export function CheckoutScreen() {
       return
     }
 
+    // Server-side voucher validation
+    let validatedVoucherDiscount = voucherDiscount
+    if (selectedVoucher) {
+      try {
+        const validateRes = await fetch('/api/vouchers/validate', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({
+            code: selectedVoucher.code,
+            userId: currentUser?.id,
+            cartSubtotal: subtotal,
+          }),
+        })
+        const validateData = await validateRes.json()
+        if (validateData.success && validateData.data) {
+          if (!validateData.data.valid) {
+            showToast(validateData.data.message || "Voucher tidak valid", "error")
+            selectVoucher(null)
+            return
+          }
+          // Use server-computed discount amount
+          validatedVoucherDiscount = validateData.data.discountAmount
+        }
+      } catch {
+        // Fallback: use local calculation
+      }
+    }
+
     setIsProcessing(true)
 
     const newOrderNumber = `ORD-${Date.now()}`
@@ -341,7 +369,7 @@ export function CheckoutScreen() {
         const sellerShipping = shippingBySeller[group.seller.id]
         const groupSubtotal = group.items.reduce((sum, i) => sum + ((i.product.discountPrice || i.product.price) * i.quantity), 0)
         const groupShipping = sellerShipping?.price || 0
-        const groupDiscount = subtotal > 0 ? Math.round(voucherDiscount * (groupSubtotal / subtotal)) : 0
+        const groupDiscount = subtotal > 0 ? Math.round(validatedVoucherDiscount * (groupSubtotal / subtotal)) : 0
         const groupTotal = groupSubtotal + groupShipping - groupDiscount + platformFee
 
         const orderPayload = {

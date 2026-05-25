@@ -15,28 +15,6 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 
-// Mock messages for chat room
-const MOCK_MESSAGES: Record<string, ChatMessage[]> = {
-  "1": [
-    { id: "m1", roomId: "1", senderId: "s1", content: "Halo kak, terima kasih sudah order di toko kami! 🙏", type: "text", isRead: true, createdAt: "2024-12-20T10:00:00Z" },
-    { id: "m2", roomId: "1", senderId: "u1", content: "Sama-sama kak, kira-kira barangnya kapan dikirim?", type: "text", isRead: true, createdAt: "2024-12-20T10:05:00Z" },
-    { id: "m3", roomId: "1", senderId: "s1", content: "Barangnya sudah kami pak hari ini ya kak, estimasi 2-3 hari sampai", type: "text", isRead: true, createdAt: "2024-12-20T10:10:00Z" },
-    { id: "m4", roomId: "1", senderId: "u1", content: "Siap kak, ditunggu ya 🙌", type: "text", isRead: true, createdAt: "2024-12-20T10:12:00Z" },
-    { id: "m5", roomId: "1", senderId: "s1", content: "Iya kak, kami sudah kirim pakai JNE REG, nomor resinya JNE1234567890 ya", type: "text", isRead: true, createdAt: "2024-12-20T10:20:00Z" },
-    { id: "m6", roomId: "1", senderId: "u1", content: "Oke noted kak, makasih banyak!", type: "text", isRead: true, createdAt: "2024-12-20T10:22:00Z" },
-    { id: "m7", roomId: "1", senderId: "s1", content: "Sama-sama kak, kalau ada pertanyaan lagi bisa chat langsung ya 😊", type: "text", isRead: true, createdAt: "2024-12-20T10:25:00Z" },
-    { id: "m8", roomId: "1", senderId: "s1", content: "Terima kasih sudah order kak! 🙏", type: "text", isRead: false, createdAt: "2024-12-20T10:30:00Z" },
-  ],
-  "2": [
-    { id: "m9", roomId: "2", senderId: "u1", content: "Halo kak, apa barang ini ready?", type: "text", isRead: true, createdAt: "2024-12-20T09:00:00Z" },
-    { id: "m10", roomId: "2", senderId: "s2", content: "Barang ready kak, silakan order", type: "text", isRead: true, createdAt: "2024-12-20T09:15:00Z" },
-  ],
-  "3": [
-    { id: "m11", roomId: "3", senderId: "u1", content: "Kak, kapan restock lagi?", type: "text", isRead: true, createdAt: "2024-12-19T15:30:00Z" },
-    { id: "m12", roomId: "3", senderId: "s3", content: "Bisa restock minggu depan ya kak", type: "text", isRead: false, createdAt: "2024-12-19T16:00:00Z" },
-  ],
-}
-
 // ==================== CHAT ROOM ITEM ====================
 function ChatRoomItem({ room, onTap }: { room: ChatRoom; onTap: () => void }) {
   const colors = [
@@ -136,11 +114,18 @@ export function ChatRoomScreen() {
 
 // ==================== CHAT ROOM VIEW ====================
 function ChatRoomView({ room, onBack }: { room: ChatRoom; onBack: () => void }) {
-  const { showToast, chatMessages, addChatMessage, currentUser, markChatRead } = useAppStore()
+  const { showToast, chatMessages, currentUser, markChatRead, fetchChatMessages, sendChatMessage } = useAppStore()
   const [message, setMessage] = useState("")
   const messages = chatMessages[room.id] || []
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  // Fetch messages from API when entering a chat room
+  useEffect(() => {
+    if (room?.id) {
+      fetchChatMessages(room.id)
+    }
+  }, [room?.id, fetchChatMessages])
 
   useEffect(() => {
     markChatRead(room.id)
@@ -152,19 +137,10 @@ function ChatRoomView({ room, onBack }: { room: ChatRoom; onBack: () => void }) 
 
   const handleSend = useCallback(() => {
     if (!message.trim()) return
-    const newMsg: ChatMessage = {
-      id: `m-${Date.now()}`,
-      roomId: room.id,
-      senderId: currentUser?.id || "u1",
-      content: message.trim(),
-      type: "text",
-      isRead: false,
-      createdAt: new Date().toISOString(),
-    }
-    addChatMessage(room.id, newMsg)
+    sendChatMessage(room.id, message.trim())
     setMessage("")
     inputRef.current?.focus()
-  }, [message, room.id, currentUser, addChatMessage])
+  }, [message, room.id, sendChatMessage])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -335,8 +311,13 @@ function ChatRoomView({ room, onBack }: { room: ChatRoom; onBack: () => void }) 
 
 // ==================== CHAT SCREEN ====================
 export function ChatScreen() {
-  const { chatRooms, navigate, setSelectedChatRoom } = useAppStore()
+  const { chatRooms, navigate, setSelectedChatRoom, fetchChatRooms } = useAppStore()
   const [searchQuery, setSearchQuery] = useState("")
+
+  // Fetch chat rooms from API on mount
+  useEffect(() => {
+    fetchChatRooms()
+  }, [fetchChatRooms])
 
   const filteredRooms = useMemo(() => {
     if (!searchQuery.trim()) return chatRooms

@@ -5,7 +5,7 @@ import { Plus, Minus, X, Camera, ChevronDown, Tag, Package, DollarSign, Upload, 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
-import { useAppStore } from "@/lib/store"
+import { useAppStore, getAuthHeaders } from "@/lib/store"
 import { uploadFile } from "@/lib/upload"
 import { formatPrice } from "@/lib/utils"
 import { PageHeader } from "./shared"
@@ -341,27 +341,26 @@ export function SellerAddProductScreen() {
     try {
       if (editingProduct) {
         // Update existing product via API
-        const res = await fetch(`/api/admin/products`, {
+        const res = await fetch('/api/seller/products', {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthHeaders(),
           body: JSON.stringify({
             productId: editingProduct.id,
-            updates: {
-              name: productName.trim(),
-              slug: productName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
-              description: description.trim(),
-              price: priceNumber,
-              discountPrice: discountPriceNumber > 0 && discountPriceNumber < priceNumber ? discountPriceNumber : null,
-              images: productImages2,
-              stock: parseInt(stock),
-              minOrder: parseInt(minOrder) || 1,
-              weight: parseInt(weight) || 100,
-              condition,
-              status: 'active',
-              categoryId: category,
-              tags: tags.length > 0 ? tags : null,
-              videoUrl: productVideo?.url || null,
-            },
+            name: productName.trim(),
+            slug: productName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+            description: description.trim(),
+            price: priceNumber,
+            discountPrice: discountPriceNumber > 0 && discountPriceNumber < priceNumber ? discountPriceNumber : null,
+            images: productImages2,
+            stock: parseInt(stock),
+            minOrder: parseInt(minOrder) || 1,
+            weight: parseInt(weight) || 100,
+            condition,
+            status: 'active',
+            categoryId: category,
+            tags: tags.length > 0 ? tags : null,
+            videoUrl: productVideo?.url || null,
+            variants: apiVariants.length > 0 ? apiVariants : undefined,
           }),
         })
         const data = await res.json()

@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { useAppStore } from "@/lib/store"
+import { useAppStore, getAuthHeaders } from "@/lib/store"
 import { formatPrice, formatRelativeTime } from "@/lib/utils"
 import { PageHeader, SectionHeader, StatusBadge, SearchBar, EmptyState, WalletBalanceCard } from "./shared"
 import type { Order } from "@/lib/types"
@@ -418,9 +418,23 @@ export function SellerProducts() {
                     }}>
                       <Edit className="w-3 h-3 mr-1" /> Edit
                     </Button>
-                    <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20" onClick={() => {
-                      showToast("Produk dihapus", "info")
-                      removeProduct(product.id)
+                    <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20" onClick={async () => {
+                      try {
+                        const res = await fetch('/api/seller/products', {
+                          method: 'DELETE',
+                          headers: getAuthHeaders(),
+                          body: JSON.stringify({ productId: product.id }),
+                        })
+                        const data = await res.json()
+                        if (data.success) {
+                          removeProduct(product.id)
+                          showToast("Produk berhasil dihapus", "success")
+                        } else {
+                          showToast(data.error || "Gagal menghapus produk", "error")
+                        }
+                      } catch {
+                        showToast("Gagal menghapus produk", "error")
+                      }
                     }}>
                       <Trash2 className="w-3 h-3" />
                     </Button>

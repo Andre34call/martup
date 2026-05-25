@@ -1,10 +1,10 @@
 "use client"
 
 import { motion, AnimatePresence } from "framer-motion"
-import { useAppStore } from "@/lib/store"
+import { useAppStore, getAuthHeaders } from "@/lib/store"
 import { formatPrice } from "@/lib/utils"
 import { PageHeader, SectionHeader, EmptyState, SearchBar, WalletBalanceCard } from "./shared"
-import { useState, useRef, useCallback } from "react"
+import { useState, useRef, useCallback, useEffect, useMemo } from "react"
 import { Settings as SettingsIcon, Shield, Bell, Globe, Lock, Trash2, CreditCard, Ticket, Copy, Check, MapPin, Plus, Star, Camera, Send, RotateCcw, HelpCircle, ChevronDown, ChevronUp, MessageSquare, Phone, Heart, Store, Wallet, ArrowUpRight, Clock, Banknote, Edit, ChevronRight, Package, ImagePlus, Video, Play, X, Eye, EyeOff, KeyRound, ThumbsUp, ThumbsDown, Meh, CheckCircle2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -431,10 +431,52 @@ export function VoucherScreen() {
   const [activeTab, setActiveTab] = useState("available")
   const [code, setCode] = useState("")
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [apiVouchers, setApiVouchers] = useState<typeof vouchers>([])
+  const [isLoadingVouchers, setIsLoadingVouchers] = useState(false)
 
-  const availableVouchers = vouchers.filter(v => v.isActive && new Date(v.validUntil) > new Date() && !usedVoucherIds.includes(v.id))
-  const usedVouchers = vouchers.filter(v => usedVoucherIds.includes(v.id))
-  const expiredVouchers = vouchers.filter(v => new Date(v.validUntil) <= new Date())
+  // Fetch vouchers from API on mount
+  useEffect(() => {
+    const fetchVouchers = async () => {
+      setIsLoadingVouchers(true)
+      try {
+        const res = await fetch('/api/vouchers')
+        if (res.ok) {
+          const data = await res.json()
+          if (data.success && data.data) {
+            const mapped = data.data.map((v: any) => ({
+              id: v.id,
+              code: v.code || '',
+              name: v.name,
+              description: v.description || '',
+              type: v.type || 'fixed',
+              value: v.value || 0,
+              maxDiscount: v.maxDiscount || undefined,
+              minPurchase: v.minPurchase || 0,
+              isActive: v.isActive ?? true,
+              validFrom: v.validFrom || new Date().toISOString(),
+              validUntil: v.validUntil || new Date().toISOString(),
+            }))
+            setApiVouchers(mapped)
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch vouchers:', error)
+      }
+      setIsLoadingVouchers(false)
+    }
+    fetchVouchers()
+  }, [])
+
+  // Merge API vouchers with store vouchers (API takes priority, avoid duplicates)
+  const allVouchers = useMemo(() => {
+    const apiIds = new Set(apiVouchers.map((v: typeof vouchers[0]) => v.id))
+    const merged = [...apiVouchers, ...vouchers.filter((v: typeof vouchers[0]) => !apiIds.has(v.id))]
+    return merged
+  }, [apiVouchers, vouchers])
+
+  const availableVouchers = allVouchers.filter(v => v.isActive && new Date(v.validUntil) > new Date() && !usedVoucherIds.includes(v.id))
+  const usedVouchers = allVouchers.filter(v => usedVoucherIds.includes(v.id))
+  const expiredVouchers = allVouchers.filter(v => new Date(v.validUntil) <= new Date())
 
   const displayed = activeTab === "available" ? availableVouchers : activeTab === "used" ? usedVouchers : expiredVouchers
 
@@ -450,7 +492,7 @@ export function VoucherScreen() {
       showToast("Masukkan kode voucher terlebih dahulu", "error")
       return
     }
-    const found = vouchers.find(v => v.code.toUpperCase() === trimmedCode)
+    const found = allVouchers.find(v => v.code.toUpperCase() === trimmedCode)
     if (found) {
       selectVoucher(found)
       showToast(`Voucher "${found.name}" berhasil dipakai!`, "success")
@@ -460,7 +502,7 @@ export function VoucherScreen() {
     }
   }
 
-  const handleUseVoucher = (voucher: typeof vouchers[0]) => {
+  const handleUseVoucher = (voucher: typeof allVouchers[0]) => {
     selectVoucher(voucher)
     showToast(`Voucher "${voucher.name}" berhasil dipakai!`, "success")
     goBack()
