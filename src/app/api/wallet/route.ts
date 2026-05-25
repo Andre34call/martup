@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAuth, checkRateLimit } from '@/lib/auth-middleware'
+import { serializeDecimal } from '@/lib/decimal-utils'
 
 // GET /api/wallet - Fetch wallet for a user
 export async function GET(request: NextRequest) {
@@ -49,10 +50,10 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    return NextResponse.json({
+    return NextResponse.json(serializeDecimal({
       success: true,
       data: wallet,
-    })
+    }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     console.error('Wallet GET error:', error)
@@ -132,13 +133,14 @@ export async function POST(request: NextRequest) {
         })
       }
 
-      const newBalance = existingWallet.balance + amount
-
-      // Update wallet balance
+      // SECURITY: Use atomic increment to prevent race condition on concurrent top-ups
       const updatedWallet = await tx.wallet.update({
         where: { userId },
-        data: { balance: newBalance },
+        data: { balance: { increment: amount } },
       })
+      // Get the new balance for the mutation record
+      const freshWallet = await tx.wallet.findUnique({ where: { userId } })
+      const newBalance = freshWallet!.balance
 
       // Create mutation record
       await tx.walletMutation.create({
@@ -166,10 +168,10 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    return NextResponse.json({
+    return NextResponse.json(serializeDecimal({
       success: true,
       data: walletWithMutations,
-    }, { status: 201 })
+    }), { status: 201 })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     console.error('Wallet POST error:', error)

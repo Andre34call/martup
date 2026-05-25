@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAuth, checkRateLimit } from '@/lib/auth-middleware'
+import { sanitizeInput } from '@/lib/sanitize'
+import { serializeDecimal } from '@/lib/decimal-utils'
 
 // ==================== HELPERS ====================
 
@@ -65,10 +67,10 @@ export async function GET(request: NextRequest) {
       images: parseJsonField(review.images),
     }))
 
-    return NextResponse.json({
+    return NextResponse.json(serializeDecimal({
       success: true,
       data: parsedReviews,
-    })
+    }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     console.error('Reviews GET error:', error)
@@ -105,7 +107,10 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { productId, orderItemId, rating, content, images } = body
+    const { productId, orderItemId, rating, images } = body
+
+    // SECURITY: Sanitize user-generated content
+    const content = sanitizeInput(body.content || '')
 
     // Validate required fields
     if (!productId) {
@@ -232,10 +237,10 @@ export async function POST(request: NextRequest) {
       images: parseJsonField(review.images as string | null),
     }
 
-    return NextResponse.json({
+    return NextResponse.json(serializeDecimal({
       success: true,
       data: parsedReview,
-    }, { status: 201 })
+    }), { status: 201 })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     console.error('Reviews POST error:', error)
@@ -260,7 +265,10 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { reviewId, rating, content, images } = body
+    const { reviewId, rating, images } = body
+
+    // SECURITY: Sanitize user-generated content
+    const content = body.content !== undefined ? sanitizeInput(body.content) : undefined
 
     if (!reviewId) {
       return NextResponse.json(
@@ -354,10 +362,10 @@ export async function PUT(request: NextRequest) {
       images: parseJsonField(updatedReview.images as string | null),
     }
 
-    return NextResponse.json({
+    return NextResponse.json(serializeDecimal({
       success: true,
       data: parsedReview,
-    })
+    }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     console.error('Reviews PUT error:', error)

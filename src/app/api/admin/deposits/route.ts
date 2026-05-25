@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
+import { serializeDecimal } from '@/lib/decimal-utils'
 
 // GET /api/admin/deposits - List all deposits with user info, support ?status=pending filter
 export async function GET(request: NextRequest) {
@@ -39,7 +40,7 @@ export async function GET(request: NextRequest) {
       userEmail: d.user.email,
       userPhone: d.user.phone,
       userAvatar: d.user.avatar,
-      amount: d.amount,
+      amount: Number(d.amount),
       method: d.method,
       status: d.status,
       proofUrl: d.proofUrl,
@@ -48,7 +49,7 @@ export async function GET(request: NextRequest) {
       updatedAt: d.updatedAt,
     }))
 
-    return NextResponse.json({ success: true, data: mapped })
+    return NextResponse.json(serializeDecimal({ success: true, data: mapped }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     console.error('Admin deposits GET error:', error)
@@ -102,24 +103,28 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    // If approving, credit the user's wallet
+    // If approving, credit the user's wallet (use atomic increment to avoid race condition)
     if (status === 'success') {
       const wallet = await db.wallet.findUnique({
         where: { userId: deposit.userId },
       })
 
       if (wallet) {
+        // Use atomic increment for balance (safe under concurrency)
         await db.wallet.update({
           where: { id: wallet.id },
           data: { balance: { increment: deposit.amount } },
         })
+
+        // Fetch fresh balance after increment for mutation record
+        const freshWallet = await db.wallet.findUnique({ where: { id: wallet.id } })
 
         await db.walletMutation.create({
           data: {
             walletId: wallet.id,
             type: 'credit',
             amount: deposit.amount,
-            balance: wallet.balance + deposit.amount,
+            balance: freshWallet!.balance,
             description: `Deposit approved - ${deposit.method}`,
             refType: 'deposit',
             refId: deposit.id,
@@ -157,7 +162,7 @@ export async function PUT(request: NextRequest) {
       data: updateData,
     })
 
-    return NextResponse.json({ success: true, data: updatedDeposit })
+    return NextResponse.json(serializeDecimal({ success: true, data: updatedDeposit }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     console.error('Admin deposits PUT error:', error)

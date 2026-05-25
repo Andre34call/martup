@@ -1,34 +1,65 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
 
 // GET /api/seller/stats?sellerId=xxx - Fetch seller dashboard statistics
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url)
-    const sellerId = searchParams.get('sellerId')
-
-    if (!sellerId) {
-      return NextResponse.json(
-        { success: false, error: 'sellerId is required' },
-        { status: 400 }
-      )
+    // Verify authentication
+    const authResult = await verifyAuth(request)
+    if (!authResult.success) {
+      return authErrorResponse(authResult)
     }
 
-    // Verify seller exists
-    const seller = await db.seller.findUnique({
-      where: { id: sellerId },
+    // Verify the authenticated user is a seller
+    const seller = await db.seller.findFirst({
+      where: { userId: authResult.user.id },
       select: { id: true, commissionRate: true },
     })
 
     if (!seller) {
+      return NextResponse.json(
+        { success: false, error: 'Forbidden - Seller account required' },
+        { status: 403 }
+      )
+    }
+
+    const { searchParams } = new URL(request.url)
+    const requestedSellerId = searchParams.get('sellerId')
+
+    // Determine which seller's stats to return
+    let sellerId: string
+    if (requestedSellerId) {
+      // If sellerId param provided, verify ownership or admin role
+      if (seller.id !== requestedSellerId && authResult.user.role !== 'admin') {
+        return NextResponse.json(
+          { success: false, error: 'Forbidden - You can only view your own stats' },
+          { status: 403 }
+        )
+      }
+      sellerId = requestedSellerId
+    } else {
+      // No sellerId param, use the authenticated seller's ID
+      sellerId = seller.id
+    }
+
+    // Verify seller exists (for admin viewing another seller's stats)
+    const targetSeller = requestedSellerId && requestedSellerId !== seller.id
+      ? await db.seller.findUnique({
+          where: { id: sellerId },
+          select: { id: true, commissionRate: true },
+        })
+      : seller
+
+    if (!targetSeller) {
       return NextResponse.json(
         { success: false, error: 'Seller not found' },
         { status: 404 }
       )
     }
 
-    // Commission rate (default 5%)
-    const commissionRate = seller.commissionRate ?? 0.05
+    // Commission rate (default 5%) - convert Decimal to number for calculations
+    const commissionRate = Number(targetSeller.commissionRate ?? 0.05)
     const sellerKeepRate = 1 - commissionRate
 
     // Run simple count queries in parallel
@@ -51,7 +82,7 @@ export async function GET(request: NextRequest) {
         status: { in: ['paid', 'delivered'] },
       },
     })
-    const totalRevenue = (revenueAgg._sum.subtotal ?? 0) * sellerKeepRate
+    const totalRevenue = Number(revenueAgg._sum.subtotal ?? 0) * sellerKeepRate
 
     // Monthly revenue for last 6 months using raw query
     const sixMonthsAgo = new Date()
@@ -106,7 +137,7 @@ export async function GET(request: NextRequest) {
     const topProducts = topProductsRaw.map((p) => ({
       name: p.name,
       sold: p.sold,
-      revenue: p.sold * p.price * sellerKeepRate,
+      revenue: p.sold * Number(p.price) * sellerKeepRate,
     }))
 
     // Last 5 orders for this seller
@@ -155,12 +186,12 @@ export async function GET(request: NextRequest) {
       userId: o.userId,
       sellerId: o.sellerId,
       status: o.status,
-      subtotal: o.subtotal,
-      shippingCost: o.shippingCost,
-      discountAmount: o.discountAmount,
-      taxAmount: o.taxAmount,
-      platformFee: o.platformFee,
-      totalAmount: o.totalAmount,
+      subtotal: Number(o.subtotal),
+      shippingCost: Number(o.shippingCost),
+      discountAmount: Number(o.discountAmount),
+      taxAmount: Number(o.taxAmount),
+      platformFee: Number(o.platformFee),
+      totalAmount: Number(o.totalAmount),
       paymentMethod: o.paymentMethod,
       paymentStatus: o.paymentStatus,
       buyerName: o.user?.name || '',

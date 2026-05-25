@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { serializeDecimal } from '@/lib/decimal-utils'
 
 // GET /api/vouchers - Public endpoint: list active vouchers for display
 // Query params:
@@ -63,7 +64,7 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    return NextResponse.json({ success: true, data })
+    return NextResponse.json(serializeDecimal({ success: true, data }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     console.error('Vouchers GET error:', error)

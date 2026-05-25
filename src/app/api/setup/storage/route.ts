@@ -1,12 +1,19 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 
 /**
  * Setup Supabase Storage bucket for product uploads.
  * Creates the "products" bucket with public read access and upload policies.
  * Called once during app initialization.
  */
-export async function POST() {
+export async function POST(request: NextRequest) {
   try {
+    // Verify admin authentication
+    const authResult = await verifyAdmin(request)
+    if (!authResult.success) {
+      return authErrorResponse(authResult)
+    }
+
     // Dynamic import of pg to avoid issues
     const { Pool } = await import('pg')
 

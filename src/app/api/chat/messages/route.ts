@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAuth, checkRateLimit } from '@/lib/auth-middleware'
+import { sanitizeInput } from '@/lib/sanitize'
 
 const MAX_MESSAGE_LENGTH = 2000
 const VALID_MESSAGE_TYPES = ['text', 'image', 'product', 'order']
@@ -163,8 +164,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Sanitize message content
-    const sanitizedContent = content.trim()
+    // SECURITY: Sanitize message content to prevent XSS
+    const sanitizedContent = sanitizeInput(content).trim()
 
     if (sanitizedContent.length === 0) {
       return NextResponse.json(

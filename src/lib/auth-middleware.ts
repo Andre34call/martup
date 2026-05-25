@@ -42,9 +42,12 @@ setInterval(() => {
 
 // ==================== TOKEN SIGNING ====================
 
-const TOKEN_SECRET = process.env.TOKEN_SECRET || process.env.NEXTAUTH_SECRET || (() => {
-  console.warn('[SECURITY] WARNING: Using fallback TOKEN_SECRET. Set TOKEN_SECRET or NEXTAUTH_SECRET environment variable in production!')
-  return 'fallback-dev-only-secret'
+const TOKEN_SECRET = (() => {
+  const secret = process.env.TOKEN_SECRET || process.env.NEXTAUTH_SECRET
+  if (!secret) {
+    throw new Error('[FATAL] TOKEN_SECRET or NEXTAUTH_SECRET environment variable must be set. Application cannot start without it.')
+  }
+  return secret
 })()
 const TOKEN_EXPIRY = 24 * 60 * 60 * 1000 // 24 hours
 

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middleware'
+import { sanitizeInput } from '@/lib/sanitize'
+import { serializeDecimal } from '@/lib/decimal-utils'
 
 // Helper to safely parse JSON fields
 function parseJsonField(value: string | null | undefined): unknown[] {
@@ -48,10 +50,10 @@ export async function GET(request: NextRequest) {
       tags: parseJsonField(product.tags),
     }))
 
-    return NextResponse.json({
+    return NextResponse.json(serializeDecimal({
       success: true,
       data: parsedProducts,
-    })
+    }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     console.error('Seller Products GET error:', error)
@@ -65,13 +67,26 @@ export async function GET(request: NextRequest) {
 // POST /api/seller/products - Create a new product with variants
 export async function POST(request: NextRequest) {
   try {
+    // Verify authentication
+    const authResult = await verifyAuth(request)
+    if (!authResult.success) {
+      return authErrorResponse(authResult)
+    }
+
+    // Rate limit: max 20 operations per minute
+    const rateLimitId = `seller-products-post-${authResult.user.id}`
+    if (!checkRateLimit(rateLimitId, 20)) {
+      return NextResponse.json(
+        { success: false, error: 'Rate limit exceeded. Max 20 operations per minute.' },
+        { status: 429 }
+      )
+    }
+
     const body = await request.json()
     const {
       sellerId,
       categoryId,
-      name,
       slug,
-      description,
       price,
       discountPrice,
       images,
@@ -87,6 +102,22 @@ export async function POST(request: NextRequest) {
       tags,
       variants = [],
     } = body
+
+    // SECURITY: Sanitize user-generated text fields
+    const name = sanitizeInput(body.name || '')
+    const description = sanitizeInput(body.description || '')
+
+    // SECURITY: Verify the authenticated user is a seller and owns this store
+    const seller = await db.seller.findFirst({
+      where: { userId: authResult.user.id },
+    })
+
+    if (!seller || seller.id !== sellerId) {
+      return NextResponse.json(
+        { success: false, error: 'Forbidden - You can only create products for your own store' },
+        { status: 403 }
+      )
+    }
 
     // Validate required fields
     if (!sellerId) {
@@ -199,10 +230,10 @@ export async function POST(request: NextRequest) {
       tags: parseJsonField(product.tags),
     }
 
-    return NextResponse.json({
+    return NextResponse.json(serializeDecimal({
       success: true,
       data: parsedProduct,
-    }, { status: 201 })
+    }), { status: 201 })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     console.error('Seller Products POST error:', error)
@@ -235,9 +266,7 @@ export async function PUT(request: NextRequest) {
     const {
       productId,
       categoryId,
-      name,
       slug,
-      description,
       price,
       discountPrice,
       images,
@@ -253,6 +282,10 @@ export async function PUT(request: NextRequest) {
       tags,
       variants,
     } = body
+
+    // SECURITY: Sanitize user-generated text fields
+    const name = body.name !== undefined ? sanitizeInput(body.name) : undefined
+    const description = body.description !== undefined ? sanitizeInput(body.description) : undefined
 
     // Validate required productId
     if (!productId) {
@@ -440,10 +473,10 @@ export async function PUT(request: NextRequest) {
         tags: parseJsonField(updatedProduct.tags),
       }
 
-      return NextResponse.json({
+      return NextResponse.json(serializeDecimal({
         success: true,
         data: parsedProduct,
-      })
+      }))
     }
 
     // No variants update - simpler path without transaction
@@ -483,10 +516,10 @@ export async function PUT(request: NextRequest) {
       tags: parseJsonField(updatedProduct.tags),
     }
 
-    return NextResponse.json({
+    return NextResponse.json(serializeDecimal({
       success: true,
       data: parsedProduct,
-    })
+    }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     console.error('Seller Products PUT error:', error)

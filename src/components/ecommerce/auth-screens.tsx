@@ -270,8 +270,8 @@ export function LoginScreen() {
 
   const passwordError = touchedPassword && !password
     ? "Password wajib diisi"
-    : touchedPassword && password.length < 6
-    ? "Password minimal 6 karakter"
+    : touchedPassword && password.length < 8
+    ? "Password minimal 8 karakter"
     : ""
 
   const isFormValid = emailOrPhone && password && !emailOrPhoneError && !passwordError
@@ -282,21 +282,31 @@ export function LoginScreen() {
     if (!isFormValid) return
     setIsLoading(true)
 
-    // Simulate login delay (real auth via Google OAuth below)
-    await new Promise((resolve) => setTimeout(resolve, 800))
-
-    // For now, create a new user via API
     try {
-      const res = await fetch('/api/auth/sync-user', {
+      // If input is a phone number, redirect to OTP flow
+      if (isValidPhone(emailOrPhone)) {
+        navigate('otp')
+        setIsLoading(false)
+        return
+      }
+
+      // Email + password login
+      const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: emailOrPhone, name: emailOrPhone.split('@')[0] }),
+        body: JSON.stringify({ email: emailOrPhone, password }),
       })
       const data = await res.json()
+
       if (data.success && data.user) {
+        // Store auth token
+        if (data.token) {
+          localStorage.setItem('authToken', data.token)
+        }
         const user: User = {
           id: data.user.id,
           email: data.user.email,
+          phone: data.user.phone || undefined,
           name: data.user.name,
           avatar: data.user.avatar || undefined,
           role: data.user.role || 'buyer',
@@ -305,12 +315,14 @@ export function LoginScreen() {
           coins: data.user.coins || 0,
         }
         login(user)
-        // Fetch user data from DB
         const { fetchUserData } = useAppStore.getState()
         await fetchUserData(data.user.id)
+      } else {
+        showToast(data.error || 'Login gagal. Periksa email dan password Anda.', 'error')
       }
     } catch (error) {
       console.error('Login failed:', error)
+      showToast('Terjadi kesalahan koneksi. Coba lagi nanti.', 'error')
     }
 
     setIsLoading(false)
@@ -769,11 +781,36 @@ export function RegisterScreen() {
 }
 
 // ==================== OTP SCREEN ====================
+function maskPhone(phone: string): string {
+  const digits = phone.replace(/\D/g, '')
+  if (digits.length < 8) return phone
+  const visibleStart = digits.slice(0, 4)
+  const visibleEnd = digits.slice(-3)
+  const maskedMiddle = '*'.repeat(Math.min(digits.length - 7, 4))
+  // Format: +62 812****789
+  if (digits.startsWith('62')) {
+    return `+62 ${digits.slice(2, 4)}${maskedMiddle}${visibleEnd}`
+  }
+  if (digits.startsWith('0')) {
+    return `0${digits.slice(1, 3)}${maskedMiddle}${visibleEnd}`
+  }
+  return `${visibleStart}${maskedMiddle}${visibleEnd}`
+}
+
 export function OTPScreen() {
-  const { navigate, login, goBack } = useAppStore()
+  const { navigate, login, goBack, showToast } = useAppStore()
+  const [phone, setPhone] = useState("")
+  const [step, setStep] = useState<'phone' | 'otp'>('phone')
   const [otp, setOtp] = useState("")
   const [countdown, setCountdown] = useState(60)
   const [isVerifying, setIsVerifying] = useState(false)
+  const [touchedPhone, setTouchedPhone] = useState(false)
+
+  const phoneError = touchedPhone && !phone
+    ? "Nomor HP wajib diisi"
+    : touchedPhone && phone && !isValidPhone(phone)
+    ? "Nomor HP harus dimulai dengan 0 atau +62, minimal 10 digit"
+    : ""
 
   useEffect(() => {
     if (countdown <= 0) return
@@ -788,23 +825,39 @@ export function OTPScreen() {
     setCountdown(60)
   }
 
+  const handlePhoneSubmit = () => {
+    setTouchedPhone(true)
+    if (!phone || !isValidPhone(phone)) return
+    setStep('otp')
+    setCountdown(60)
+  }
+
   const handleVerify = async () => {
     if (otp.length !== 6) return
+    if (!phone) {
+      showToast('Masukkan nomor HP terlebih dahulu', 'error')
+      return
+    }
     setIsVerifying(true)
 
     try {
-      // Create/sync user via API (OTP verification)
+      // Format phone number to international format
+      const formattedPhone = phone.startsWith('+') ? phone : phone.startsWith('0') ? '+62' + phone.substring(1) : '+62' + phone
+
       const res = await fetch('/api/auth/sync-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: '+628120000789', name: 'New Member' }),
+        body: JSON.stringify({ phone: formattedPhone, name: 'New Member', provider: 'phone' }),
       })
       const data = await res.json()
       if (data.success && data.user) {
+        if (data.token) {
+          localStorage.setItem('authToken', data.token)
+        }
         const user: User = {
           id: data.user.id,
           email: data.user.email || '',
-          phone: data.user.phone || '',
+          phone: data.user.phone || formattedPhone,
           name: data.user.name,
           role: data.user.role || 'buyer',
           isVerified: true,
@@ -814,9 +867,12 @@ export function OTPScreen() {
         login(user)
         const { fetchUserData } = useAppStore.getState()
         await fetchUserData(data.user.id)
+      } else {
+        showToast(data.error || 'Verifikasi OTP gagal. Coba lagi.', 'error')
       }
     } catch (error) {
       console.error('OTP verification failed:', error)
+      showToast('Terjadi kesalahan koneksi. Coba lagi nanti.', 'error')
     }
 
     setIsVerifying(false)
@@ -835,7 +891,7 @@ export function OTPScreen() {
       <div className="flex items-center gap-3 mb-8">
         <motion.button
           whileTap={{ scale: 0.9 }}
-          onClick={goBack}
+          onClick={step === 'otp' ? () => setStep('phone') : goBack}
           className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-muted transition-colors"
         >
           <ArrowLeft className="w-5 h-5" />
@@ -854,67 +910,107 @@ export function OTPScreen() {
           <Smartphone className="w-10 h-10 text-emerald-500" />
         </motion.div>
 
-        <h1 className="text-2xl font-bold text-foreground text-center mb-2">
-          Masukkan kode OTP
-        </h1>
-        <p className="text-sm text-muted-foreground text-center mb-8">
-          Kode telah dikirim ke <span className="font-medium text-foreground">+62 812****789</span>
-        </p>
-
-        {/* OTP Input */}
-        <div className="flex justify-center mb-8">
-          <InputOTP
-            maxLength={6}
-            value={otp}
-            onChange={setOtp}
-          >
-            <InputOTPGroup>
-              <InputOTPSlot index={0} className="w-12 h-14 text-lg font-bold rounded-xl border-2 data-[active=true]:border-emerald-500 data-[active=true]:ring-emerald-500/20" />
-              <InputOTPSlot index={1} className="w-12 h-14 text-lg font-bold rounded-xl border-2 data-[active=true]:border-emerald-500 data-[active=true]:ring-emerald-500/20" />
-              <InputOTPSlot index={2} className="w-12 h-14 text-lg font-bold rounded-xl border-2 data-[active=true]:border-emerald-500 data-[active=true]:ring-emerald-500/20" />
-            </InputOTPGroup>
-            <InputOTPSeparator />
-            <InputOTPGroup>
-              <InputOTPSlot index={3} className="w-12 h-14 text-lg font-bold rounded-xl border-2 data-[active=true]:border-emerald-500 data-[active=true]:ring-emerald-500/20" />
-              <InputOTPSlot index={4} className="w-12 h-14 text-lg font-bold rounded-xl border-2 data-[active=true]:border-emerald-500 data-[active=true]:ring-emerald-500/20" />
-              <InputOTPSlot index={5} className="w-12 h-14 text-lg font-bold rounded-xl border-2 data-[active=true]:border-emerald-500 data-[active=true]:ring-emerald-500/20" />
-            </InputOTPGroup>
-          </InputOTP>
-        </div>
-
-        {/* Resend */}
-        <div className="text-center mb-8">
-          {countdown > 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Kirim ulang dalam{" "}
-              <span className="font-semibold text-emerald-600">{countdown}s</span>
+        {step === 'phone' ? (
+          <>
+            <h1 className="text-2xl font-bold text-foreground text-center mb-2">
+              Masukkan Nomor HP
+            </h1>
+            <p className="text-sm text-muted-foreground text-center mb-8">
+              Kami akan mengirimkan kode OTP ke nomor HP Anda
             </p>
-          ) : (
-            <button
-              onClick={handleResend}
-              className="text-sm text-emerald-600 hover:text-emerald-700 font-semibold transition-colors"
-            >
-              Kirim Ulang Kode
-            </button>
-          )}
-        </div>
 
-        {/* Verify button */}
-        <Button
-          onClick={handleVerify}
-          disabled={isVerifying || otp.length !== 6}
-          className="w-full h-12 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-semibold text-base disabled:opacity-50"
-        >
-          {isVerifying ? (
-            <motion.div
-              animate={{ rotate: 360 }}
-              transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-              className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full"
-            />
-          ) : (
-            "Verifikasi"
-          )}
-        </Button>
+            {/* Phone input */}
+            <div className="space-y-2 mb-6">
+              <label className="text-sm font-medium text-foreground">No. HP</label>
+              <div className="relative">
+                <Smartphone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  onBlur={() => setTouchedPhone(true)}
+                  placeholder="08123456789"
+                  className={`pl-10 h-12 rounded-xl bg-muted/50 border-border/50 focus:border-emerald-500 focus:ring-emerald-500/20 ${phoneError ? "border-red-500 focus:border-red-500" : ""}`}
+                />
+              </div>
+              {phoneError && (
+                <p className="text-xs text-red-500">{phoneError}</p>
+              )}
+            </div>
+
+            {/* Submit phone button */}
+            <Button
+              onClick={handlePhoneSubmit}
+              disabled={!phone || !isValidPhone(phone)}
+              className="w-full h-12 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-semibold text-base disabled:opacity-50"
+            >
+              Kirim Kode OTP
+            </Button>
+          </>
+        ) : (
+          <>
+            <h1 className="text-2xl font-bold text-foreground text-center mb-2">
+              Masukkan kode OTP
+            </h1>
+            <p className="text-sm text-muted-foreground text-center mb-8">
+              Kode telah dikirim ke <span className="font-medium text-foreground">{maskPhone(phone)}</span>
+            </p>
+
+            {/* OTP Input */}
+            <div className="flex justify-center mb-8">
+              <InputOTP
+                maxLength={6}
+                value={otp}
+                onChange={setOtp}
+              >
+                <InputOTPGroup>
+                  <InputOTPSlot index={0} className="w-12 h-14 text-lg font-bold rounded-xl border-2 data-[active=true]:border-emerald-500 data-[active=true]:ring-emerald-500/20" />
+                  <InputOTPSlot index={1} className="w-12 h-14 text-lg font-bold rounded-xl border-2 data-[active=true]:border-emerald-500 data-[active=true]:ring-emerald-500/20" />
+                  <InputOTPSlot index={2} className="w-12 h-14 text-lg font-bold rounded-xl border-2 data-[active=true]:border-emerald-500 data-[active=true]:ring-emerald-500/20" />
+                </InputOTPGroup>
+                <InputOTPSeparator />
+                <InputOTPGroup>
+                  <InputOTPSlot index={3} className="w-12 h-14 text-lg font-bold rounded-xl border-2 data-[active=true]:border-emerald-500 data-[active=true]:ring-emerald-500/20" />
+                  <InputOTPSlot index={4} className="w-12 h-14 text-lg font-bold rounded-xl border-2 data-[active=true]:border-emerald-500 data-[active=true]:ring-emerald-500/20" />
+                  <InputOTPSlot index={5} className="w-12 h-14 text-lg font-bold rounded-xl border-2 data-[active=true]:border-emerald-500 data-[active=true]:ring-emerald-500/20" />
+                </InputOTPGroup>
+              </InputOTP>
+            </div>
+
+            {/* Resend */}
+            <div className="text-center mb-8">
+              {countdown > 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Kirim ulang dalam{" "}
+                  <span className="font-semibold text-emerald-600">{countdown}s</span>
+                </p>
+              ) : (
+                <button
+                  onClick={handleResend}
+                  className="text-sm text-emerald-600 hover:text-emerald-700 font-semibold transition-colors"
+                >
+                  Kirim Ulang Kode
+                </button>
+              )}
+            </div>
+
+            {/* Verify button */}
+            <Button
+              onClick={handleVerify}
+              disabled={isVerifying || otp.length !== 6}
+              className="w-full h-12 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-semibold text-base disabled:opacity-50"
+            >
+              {isVerifying ? (
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                  className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full"
+                />
+              ) : (
+                "Verifikasi"
+              )}
+            </Button>
+          </>
+        )}
       </div>
 
       {/* Back to login */}

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAuth } from '@/lib/auth-middleware'
+import { serializeDecimal } from '@/lib/decimal-utils'
 
 // Helper to safely parse JSON fields
 function parseJsonField(value: string | null | undefined): unknown[] {
@@ -208,7 +209,7 @@ export async function GET(request: NextRequest) {
     // Count unread notifications
     const unreadNotificationCount = notifications.filter((n) => !n.isRead).length
 
-    return NextResponse.json({
+    return NextResponse.json(serializeDecimal({
       success: true,
       data: {
         user,
@@ -221,7 +222,7 @@ export async function GET(request: NextRequest) {
         reviews: parsedReviews,
         wishlistProductIds,
       },
-    })
+    }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     console.error('User Data GET error:', error)

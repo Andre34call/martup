@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
+import { serializeDecimal } from '@/lib/decimal-utils'
 
 export async function GET(request: NextRequest) {
   const authResult = await verifyAdmin(request)
@@ -191,7 +192,7 @@ export async function GET(request: NextRequest) {
       }),
     ])
 
-    return NextResponse.json({
+    return NextResponse.json(serializeDecimal({
       success: true,
       data: {
         totalUsers,
@@ -220,7 +221,7 @@ export async function GET(request: NextRequest) {
           createdAt: u.createdAt.toISOString(),
         })),
       },
-    })
+    }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     console.error('Admin stats GET error:', error)

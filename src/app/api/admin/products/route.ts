@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
+import { serializeDecimal } from '@/lib/decimal-utils'
 
 // Helper to safely parse JSON fields
 function parseJsonField(value: string | null | undefined): unknown[] {
@@ -72,7 +73,7 @@ export async function GET(request: NextRequest) {
       tags: product.tags ? (() => { try { return JSON.parse(product.tags) } catch { return [] } })() : [],
     }))
 
-    return NextResponse.json({
+    return NextResponse.json(serializeDecimal({
       success: true,
       data: parsedProducts,
       pagination: {
@@ -81,7 +82,7 @@ export async function GET(request: NextRequest) {
         total,
         totalPages: Math.ceil(total / limit),
       },
-    })
+    }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     console.error('Admin products GET error:', error)
@@ -117,7 +118,7 @@ export async function PUT(request: NextRequest) {
       data: updateData,
     })
 
-    return NextResponse.json({ success: true, data: product })
+    return NextResponse.json(serializeDecimal({ success: true, data: product }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     console.error('Admin products PUT error:', error)
@@ -148,7 +149,7 @@ export async function DELETE(request: NextRequest) {
       where: { id: productId },
     })
 
-    return NextResponse.json({ success: true, data: product })
+    return NextResponse.json(serializeDecimal({ success: true, data: product }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     console.error('Admin products DELETE error:', error)

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middleware'
+import { serializeDecimal } from '@/lib/decimal-utils'
 
 // Helper to safely parse JSON fields
 function parseJsonField(value: string | null | undefined): unknown[] {
@@ -88,10 +89,10 @@ export async function GET(request: NextRequest) {
         : item.product,
     }))
 
-    return NextResponse.json({
+    return NextResponse.json(serializeDecimal({
       success: true,
       data: parsedWishlistItems,
-    })
+    }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     console.error('Wishlist GET error:', error)
@@ -199,11 +200,11 @@ export async function POST(request: NextRequest) {
     const alreadyExisted = wishlistItem.createdAt.getTime() < Date.now() - 1000
 
     return NextResponse.json(
-      {
+      serializeDecimal({
         success: true,
         data: parsedWishlistItem,
         message: alreadyExisted ? 'Product already in wishlist' : 'Product added to wishlist',
-      },
+      }),
       { status: alreadyExisted ? 200 : 201 }
     )
   } catch (error: unknown) {

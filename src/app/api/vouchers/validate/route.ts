@@ -134,12 +134,12 @@ export async function POST(request: NextRequest) {
     }
 
     // 3. Cart subtotal meets minPurchase requirement
-    if (cartSubtotal < voucher.minPurchase) {
+    if (cartSubtotal < Number(voucher.minPurchase)) {
       return NextResponse.json({
         success: true,
         data: {
           valid: false,
-          message: `Minimum pembelian Rp ${voucher.minPurchase.toLocaleString('id-ID')} untuk menggunakan voucher ini`,
+          message: `Minimum pembelian Rp ${Number(voucher.minPurchase).toLocaleString('id-ID')} untuk menggunakan voucher ini`,
         },
       })
     }
@@ -184,16 +184,16 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Calculate discount amount
+    // Calculate discount amount (convert Decimal to number for arithmetic)
     let discountAmount = 0
     if (voucher.type === 'percentage') {
-      discountAmount = cartSubtotal * (voucher.value / 100)
+      discountAmount = cartSubtotal * (Number(voucher.value) / 100)
       // Apply maxDiscount cap if set
-      if (voucher.maxDiscount !== null && discountAmount > voucher.maxDiscount) {
-        discountAmount = voucher.maxDiscount
+      if (voucher.maxDiscount !== null && discountAmount > Number(voucher.maxDiscount)) {
+        discountAmount = Number(voucher.maxDiscount)
       }
     } else if (voucher.type === 'fixed') {
-      discountAmount = voucher.value
+      discountAmount = Number(voucher.value)
     }
 
     // Ensure discount doesn't exceed cart subtotal
@@ -210,9 +210,9 @@ export async function POST(request: NextRequest) {
       name: voucher.name,
       description: voucher.description,
       type: voucher.type,
-      value: voucher.value,
-      minPurchase: voucher.minPurchase,
-      maxDiscount: voucher.maxDiscount,
+      value: Number(voucher.value),
+      minPurchase: Number(voucher.minPurchase),
+      maxDiscount: voucher.maxDiscount !== null ? Number(voucher.maxDiscount) : null,
       perUserLimit: voucher.perUserLimit,
       sellerId: voucher.sellerId,
       validFrom: voucher.validFrom,
@@ -311,9 +311,9 @@ export async function GET(request: NextRequest) {
         name: v.name,
         description: v.description,
         type: v.type,
-        value: v.value,
-        minPurchase: v.minPurchase,
-        maxDiscount: v.maxDiscount,
+        value: Number(v.value),
+        minPurchase: Number(v.minPurchase),
+        maxDiscount: v.maxDiscount !== null ? Number(v.maxDiscount) : null,
         usageLimit: v.usageLimit,
         usageCount: v.usageCount,
         remainingUses,

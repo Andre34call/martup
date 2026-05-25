@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
+import { serializeDecimal } from '@/lib/decimal-utils'
 
 // Helper to safely parse JSON fields
 function parseJsonField(value: string | null | undefined): unknown[] {
@@ -92,7 +93,7 @@ export async function GET(request: NextRequest) {
       })),
     }))
 
-    return NextResponse.json({
+    return NextResponse.json(serializeDecimal({
       success: true,
       data: parsedOrders,
       pagination: {
@@ -101,7 +102,7 @@ export async function GET(request: NextRequest) {
         total,
         totalPages: Math.ceil(total / limit),
       },
-    })
+    }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     console.error('Admin orders GET error:', error)
@@ -170,7 +171,7 @@ export async function PUT(request: NextRequest) {
       data: updateData,
     })
 
-    return NextResponse.json({ success: true, data: updatedOrder })
+    return NextResponse.json(serializeDecimal({ success: true, data: updatedOrder }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     console.error('Admin orders PUT error:', error)
