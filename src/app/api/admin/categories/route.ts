@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAdmin } from '@/lib/admin-auth'
+import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 
 function slugify(name: string): string {
   return name
@@ -12,13 +12,8 @@ function slugify(name: string): string {
 // GET /api/admin/categories - List all categories with product count, support ?parentId= for subcategories
 export async function GET(request: NextRequest) {
   try {
-    const admin = await requireAdmin()
-    if (!admin) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
+    const authResult = await verifyAdmin(request)
+    if (!authResult.success) return authErrorResponse(authResult)
 
     const { searchParams } = new URL(request.url)
     const parentId = searchParams.get('parentId')
@@ -71,13 +66,8 @@ export async function GET(request: NextRequest) {
 // POST /api/admin/categories - Create category
 export async function POST(request: NextRequest) {
   try {
-    const admin = await requireAdmin()
-    if (!admin) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
+    const authResult = await verifyAdmin(request)
+    if (!authResult.success) return authErrorResponse(authResult)
 
     const body = await request.json()
     const { name, slug, icon, image, parentId, sortOrder, isActive } = body
@@ -128,13 +118,8 @@ export async function POST(request: NextRequest) {
 // PUT /api/admin/categories - Update category
 export async function PUT(request: NextRequest) {
   try {
-    const admin = await requireAdmin()
-    if (!admin) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
+    const authResult = await verifyAdmin(request)
+    if (!authResult.success) return authErrorResponse(authResult)
 
     const body = await request.json()
     const { categoryId, name, slug, icon, image, parentId, sortOrder, isActive } = body
@@ -177,13 +162,8 @@ export async function PUT(request: NextRequest) {
 // DELETE /api/admin/categories - Soft delete by setting isActive=false
 export async function DELETE(request: NextRequest) {
   try {
-    const admin = await requireAdmin()
-    if (!admin) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
+    const authResult = await verifyAdmin(request)
+    if (!authResult.success) return authErrorResponse(authResult)
 
     const body = await request.json()
     const { categoryId } = body

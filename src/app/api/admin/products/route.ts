@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAdmin } from '@/lib/admin-auth'
+import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 
 // Helper to safely parse JSON fields
 function parseJsonField(value: string | null | undefined): unknown[] {
@@ -15,8 +15,8 @@ function parseJsonField(value: string | null | undefined): unknown[] {
 
 // GET /api/admin/products - Fetch ALL products (including blocked/draft) with seller info
 export async function GET(request: NextRequest) {
-  const admin = await requireAdmin()
-  if (!admin) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+  const authResult = await verifyAdmin(request)
+  if (!authResult.success) return authErrorResponse(authResult)
 
   try {
     const { searchParams } = new URL(request.url)
@@ -94,8 +94,8 @@ export async function GET(request: NextRequest) {
 
 // PUT /api/admin/products - Update product status (block, approve, etc.)
 export async function PUT(request: NextRequest) {
-  const admin = await requireAdmin()
-  if (!admin) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+  const authResult = await verifyAdmin(request)
+  if (!authResult.success) return authErrorResponse(authResult)
 
   try {
     const body = await request.json()
@@ -130,8 +130,8 @@ export async function PUT(request: NextRequest) {
 
 // DELETE /api/admin/products - Delete product
 export async function DELETE(request: NextRequest) {
-  const admin = await requireAdmin()
-  if (!admin) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+  const authResult = await verifyAdmin(request)
+  if (!authResult.success) return authErrorResponse(authResult)
 
   try {
     const body = await request.json()

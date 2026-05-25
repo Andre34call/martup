@@ -1,17 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAdmin } from '@/lib/admin-auth'
+import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 
 // GET /api/admin/deposits - List all deposits with user info, support ?status=pending filter
 export async function GET(request: NextRequest) {
   try {
-    const admin = await requireAdmin()
-    if (!admin) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
+    const authResult = await verifyAdmin(request)
+    if (!authResult.success) return authErrorResponse(authResult)
 
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status')
@@ -68,13 +63,8 @@ export async function GET(request: NextRequest) {
 // When approving (status='success'), also credit the user's wallet balance
 export async function PUT(request: NextRequest) {
   try {
-    const admin = await requireAdmin()
-    if (!admin) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
+    const authResult = await verifyAdmin(request)
+    if (!authResult.success) return authErrorResponse(authResult)
 
     const body = await request.json()
     const { depositId, status, adminNote } = body

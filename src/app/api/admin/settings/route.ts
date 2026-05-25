@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAdmin } from '@/lib/admin-auth'
+import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 import { db } from '@/lib/db'
 
 // Default platform settings
@@ -46,15 +46,10 @@ async function writeSettings(settings: Record<string, number | boolean | string>
 }
 
 // GET /api/admin/settings - Get platform settings
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const admin = await requireAdmin()
-    if (!admin) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
+    const authResult = await verifyAdmin(request)
+    if (!authResult.success) return authErrorResponse(authResult)
 
     const settings = await readSettings()
 
@@ -72,13 +67,8 @@ export async function GET() {
 // PUT /api/admin/settings - Update platform settings
 export async function PUT(request: NextRequest) {
   try {
-    const admin = await requireAdmin()
-    if (!admin) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
+    const authResult = await verifyAdmin(request)
+    if (!authResult.success) return authErrorResponse(authResult)
 
     const body = await request.json()
     const current = await readSettings()

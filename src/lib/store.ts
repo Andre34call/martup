@@ -1542,8 +1542,11 @@ export const useAppStore = create<AppState>()(
           if (!res.ok) throw new Error('Failed to fetch categories')
           const data = await res.json()
 
+          // API returns { success: true, data: [...] }
+          const categoriesData = data.data || data.categories || []
+
           set({
-            categories: (data.categories || []).map((c: any) => ({
+            categories: categoriesData.map((c: any) => ({
               id: c.id,
               name: c.name,
               slug: c.slug,
