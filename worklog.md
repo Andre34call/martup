@@ -366,3 +366,53 @@ Stage Summary:
 - Upload shows loading overlay during upload
 - Fallback to blob URL on upload failure with error toast
 - All lint checks pass
+
+---
+Task ID: 11
+Agent: Main Agent
+Task: Critical security overhaul - fix impersonation vulnerability, HMAC token signing, harden admin setup
+
+Work Log:
+- FIXED CRITICAL: Removed x-auth-user-id header authentication method from auth-middleware.ts
+  - This method allowed anyone to impersonate any user by simply passing their user ID in the header
+  - Now only NextAuth session and HMAC-signed bearer tokens are accepted
+- FIXED CRITICAL: Implemented HMAC-SHA256 signed bearer tokens
+  - Tokens now include a cryptographic signature that cannot be forged without TOKEN_SECRET
+  - Uses crypto.timingSafeEqual() for timing-safe signature comparison
+  - Token format: base64(userId:timestamp:hmacSignature)
+  - 24-hour expiry enforced
+- FIXED: Updated client-side getAuthHeaders() and getAdminAuthHeaders() to remove x-auth-user-id
+  - Now only sends Authorization: Bearer <token> header
+- FIXED: Strengthened admin setup route
+  - Once at least one admin exists, the secret key method is DISABLED
+  - Only existing authenticated admins can promote users
+  - Secret key only works for initial setup when no admin exists
+- FIXED: Added internal secret verification for sync-user endpoint
+  - Only the NextAuth callback can create OAuth users (not external callers)
+  - Uses x-internal-secret header with NEXTAUTH_SECRET value
+- ADDED: Next.js middleware (src/middleware.ts) for additional security
+  - Security headers (X-Content-Type-Options, X-Frame-Options, X-XSS-Protection, etc.)
+  - Blocks unauthenticated requests to /api/admin/ routes at middleware level
+  - Allows admin setup route for initial admin creation
+  - Restricts auth endpoints to POST only
+- ADDED: TOKEN_SECRET environment variable for HMAC signing
+- Tested all security fixes locally:
+  - Random login: ✅ Rejected ("Email atau password salah")
+  - Admin API without auth: ✅ Rejected ("Unauthorized - Authentication required")
+  - Forged token: ✅ Rejected ("Unauthorized - Please login first")
+  - Non-admin token on admin route: ✅ Rejected ("Forbidden - Admin access required")
+  - Admin setup with secret (admin exists): ✅ Rejected ("Akses ditolak. Hanya admin yang sudah ada...")
+  - sync-user without internal secret: ✅ Rejected ("Unauthorized - Invalid internal authentication")
+- Merged with remote changes (image/video upload, admin fixes, new admin screens)
+  - All security fixes preserved in merged code
+  - All remote features preserved
+- Pushed to GitHub (auto-deploys to Vercel)
+
+Stage Summary:
+- CRITICAL vulnerability fixed: x-auth-user-id header removed (was allowing full impersonation)
+- CRITICAL vulnerability fixed: HMAC token signing prevents token forgery
+- Admin setup hardened: once admin exists, secret key disabled
+- sync-user endpoint protected: only NextAuth callback can call it
+- Middleware added: security headers + basic route protection
+- All features from remote preserved in merged code
+- Vercel deployment: NEEDS environment variables set (TOKEN_SECRET, NEXTAUTH_SECRET, ADMIN_SETUP_SECRET)
