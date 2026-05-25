@@ -173,10 +173,49 @@ interface AppState {
   }>
   updateAdminComplaint: (complaintId: string, updates: Record<string, any>) => void
 
+  // Admin Stats
+  adminStats: {
+    totalUsers: number
+    totalSellers: number
+    totalOrders: number
+    totalRevenue: number
+    activeProducts: number
+    pendingWithdrawals: number
+    totalDivisions: number
+    totalStaff: number
+    pendingSellerVerifications: number
+    openComplaints: number
+    revenueChart: { date: string; revenue: number }[]
+    userGrowth: { date: string; users: number }[]
+    topSellers: { name: string; revenue: number; orders: number }[]
+    categoryPerformance: { name: string; revenue: number; percentage: number }[]
+    recentOrders: { orderNumber: string; totalAmount: number; status: string; createdAt: string }[]
+    recentUsers: { name: string; email: string; role: string; createdAt: string }[]
+  } | null
+  fetchAdminStats: () => Promise<void>
+
+  // Admin Withdrawals
+  adminWithdrawals: Array<{
+    id: string
+    sellerId: string
+    sellerName: string
+    amount: number
+    bankAccount: string
+    bankName: string
+    bankHolder: string
+    status: string
+    adminNote?: string
+    processedAt?: string
+    createdAt: string
+  }>
+  fetchAdminWithdrawals: () => Promise<void>
+
   // Admin Divisions
   divisions: Division[]
   fetchDivisions: () => Promise<void>
   fetchAdminUsers: () => Promise<void>
+  fetchAdminBanners: () => Promise<void>
+  fetchAdminComplaints: () => Promise<void>
   assignUserToDivision: (userId: string, divisionId: string | null) => Promise<void>
   updateDivision: (divisionId: string, updates: Record<string, any>) => Promise<void>
 
@@ -770,6 +809,50 @@ export const useAppStore = create<AppState>()(
         adminComplaints: state.adminComplaints.map(c => c.id === complaintId ? { ...c, ...updates } : c)
       })),
 
+      // Admin Stats - START NULL (fetched fresh each time)
+      adminStats: null,
+      fetchAdminStats: async () => {
+        try {
+          const res = await fetch('/api/admin/stats')
+          if (!res.ok) throw new Error('Failed to fetch admin stats')
+          const data = await res.json()
+          if (data.success && data.stats) {
+            set({ adminStats: data.stats })
+          }
+        } catch (error) {
+          console.error('Fetch admin stats error:', error)
+        }
+      },
+
+      // Admin Withdrawals - START EMPTY
+      adminWithdrawals: [],
+      fetchAdminWithdrawals: async () => {
+        try {
+          const res = await fetch('/api/admin/withdrawals')
+          if (!res.ok) throw new Error('Failed to fetch admin withdrawals')
+          const data = await res.json()
+          if (data.success) {
+            set({
+              adminWithdrawals: (data.withdrawals || []).map((w: any) => ({
+                id: w.id,
+                sellerId: w.sellerId,
+                sellerName: w.sellerName || w.seller?.storeName || 'Unknown',
+                amount: w.amount,
+                bankAccount: w.bankAccount || '',
+                bankName: w.bankName || '',
+                bankHolder: w.bankHolder || '',
+                status: w.status,
+                adminNote: w.adminNote || undefined,
+                processedAt: w.processedAt || undefined,
+                createdAt: w.createdAt,
+              }))
+            })
+          }
+        } catch (error) {
+          console.error('Fetch admin withdrawals error:', error)
+        }
+      },
+
       // Admin Divisions - START EMPTY
       divisions: [],
       fetchDivisions: async () => {
@@ -808,6 +891,53 @@ export const useAppStore = create<AppState>()(
           }
         } catch (error) {
           console.error('Fetch admin users error:', error)
+        }
+      },
+      fetchAdminBanners: async () => {
+        try {
+          const res = await fetch('/api/admin/banners')
+          if (!res.ok) throw new Error('Failed to fetch admin banners')
+          const data = await res.json()
+          if (data.success) {
+            set({
+              adminBanners: (data.banners || []).map((b: any) => ({
+                id: b.id,
+                title: b.title,
+                image: b.image,
+                link: b.link || '',
+                position: b.position || 'home',
+                isActive: b.isActive,
+              }))
+            })
+          }
+        } catch (error) {
+          console.error('Fetch admin banners error:', error)
+        }
+      },
+      fetchAdminComplaints: async () => {
+        try {
+          const res = await fetch('/api/admin/complaints')
+          if (!res.ok) throw new Error('Failed to fetch admin complaints')
+          const data = await res.json()
+          if (data.success) {
+            set({
+              adminComplaints: (data.complaints || []).map((c: any) => ({
+                id: c.id,
+                userId: c.userId || '',
+                userName: c.userName || c.user?.name || 'Unknown',
+                type: c.type,
+                description: c.description,
+                status: c.status,
+                createdAt: c.createdAt,
+                response: c.resolution || c.response || undefined,
+                orderId: c.orderId || undefined,
+                buyer: c.buyer || undefined,
+                seller: c.seller || undefined,
+              }))
+            })
+          }
+        } catch (error) {
+          console.error('Fetch admin complaints error:', error)
         }
       },
       assignUserToDivision: async (userId, divisionId) => {

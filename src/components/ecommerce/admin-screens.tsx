@@ -20,8 +20,7 @@ import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { useAppStore } from "@/lib/store"
 import { formatPrice, formatRelativeTime } from "@/lib/utils"
-import { PageHeader, SectionHeader, StatusBadge, SearchBar, EmptyState } from "./shared"
-import type { Order, OrderStatus, WithdrawStatus } from "@/lib/types"
+import { PageHeader, SectionHeader, SearchBar, EmptyState } from "./shared"
 import { useState, useRef, useEffect } from "react"
 import { AnimatePresence } from "framer-motion"
 
@@ -38,53 +37,6 @@ const stagger = {
     opacity: 1, y: 0,
     transition: { delay: i * 0.05, duration: 0.3 }
   })
-}
-
-// ==================== HELPER: Compute top sellers from store data ====================
-function computeTopSellers(products: { sellerId: string; seller: { storeName: string }; price: number; sold: number; rating: number; reviewCount: number }[]) {
-  const sellerMap = new Map<string, { name: string; revenue: number; orders: number; rating: number; ratingCount: number }>()
-  for (const p of products) {
-    const existing = sellerMap.get(p.sellerId)
-    const revenue = p.sold * p.price
-    if (existing) {
-      existing.revenue += revenue
-      existing.orders += p.sold
-      existing.rating += p.rating * p.reviewCount
-      existing.ratingCount += p.reviewCount
-    } else {
-      sellerMap.set(p.sellerId, {
-        name: p.seller.storeName,
-        revenue,
-        orders: p.sold,
-        rating: p.rating * p.reviewCount,
-        ratingCount: p.reviewCount,
-      })
-    }
-  }
-  return Array.from(sellerMap.values())
-    .map(s => ({ ...s, rating: s.ratingCount > 0 ? Math.round((s.rating / s.ratingCount) * 10) / 10 : 0 }))
-    .sort((a, b) => b.revenue - a.revenue)
-    .slice(0, 5)
-}
-
-function computeCategoryPerformance(products: { categoryId: string; category: { name: string }; price: number; sold: number }[]) {
-  const catMap = new Map<string, { name: string; revenue: number }>()
-  for (const p of products) {
-    const existing = catMap.get(p.categoryId)
-    const revenue = p.sold * p.price
-    if (existing) {
-      existing.revenue += revenue
-    } else {
-      catMap.set(p.categoryId, { name: p.category.name, revenue })
-    }
-  }
-  const entries = Array.from(catMap.values()).sort((a, b) => b.revenue - a.revenue)
-  const totalRevenue = entries.reduce((sum, e) => sum + e.revenue, 0)
-  return entries.map(e => ({
-    name: e.name,
-    revenue: e.revenue,
-    percentage: totalRevenue > 0 ? Math.round((e.revenue / totalRevenue) * 100) : 0,
-  }))
 }
 
 // ==================== ADMIN DASHBOARD ====================
@@ -109,6 +61,10 @@ export function AdminDashboard() {
     userGrowth: [] as { date: string; users: number }[],
     totalDivisions: divisions.length,
     totalStaff: adminUsers.filter(u => ['admin', 'finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr'].includes(u.role)).length,
+    pendingSellerVerifications: adminUsers.filter(u => u.role === 'seller' && !u.isVerified).length,
+    openComplaints: 0,
+    recentOrders: [] as { orderNumber: string; totalAmount: number; status: string; createdAt: string }[],
+    recentUsers: [] as { name: string; email: string; role: string; createdAt: string }[],
   }
   const [showRoleMenu, setShowRoleMenu] = useState(false)
   const roleMenuRef = useRef<HTMLDivElement>(null)
@@ -207,15 +163,25 @@ export function AdminDashboard() {
       </motion.div>
 
       <div className="px-4 pt-4 space-y-6">
+        {/* Loading State */}
+        {!stats && (
+          <motion.div {...fadeIn} className="flex items-center justify-center py-12">
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+              <p className="text-sm text-muted-foreground">Loading dashboard data...</p>
+            </div>
+          </motion.div>
+        )}
+
         {/* Key Metrics Grid */}
         <motion.div {...fadeIn} className="grid grid-cols-2 gap-3">
           {[
-            { label: "Total Users", value: adminUsers.length.toLocaleString(), icon: Users, color: "text-blue-600 bg-blue-50 dark:bg-blue-900/30 dark:text-blue-400" },
-            { label: "Total Revenue", value: formatPrice(orders.filter(o => o.status === 'paid' || o.status === 'delivered').reduce((sum, o) => sum + o.totalAmount, 0)), icon: DollarSign, color: "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 dark:text-emerald-400" },
-            { label: "Total Orders", value: orders.length.toLocaleString(), icon: Package, color: "text-orange-600 bg-orange-50 dark:bg-orange-900/30 dark:text-orange-400" },
-            { label: "Divisions", value: stats.totalDivisions.toString(), icon: Building2, color: "text-teal-600 bg-teal-50 dark:bg-teal-900/30 dark:text-teal-400" },
-            { label: "Staff Members", value: stats.totalStaff.toString(), icon: Shield, color: "text-purple-600 bg-purple-50 dark:bg-purple-900/30 dark:text-purple-400" },
-            { label: "Active Products", value: products.filter(p => p.status === 'active').length.toLocaleString(), icon: Box, color: "text-pink-600 bg-pink-50 dark:bg-pink-900/30 dark:text-pink-400" },
+            { label: "Total Users", value: (stats?.totalUsers ?? 0).toLocaleString(), icon: Users, color: "text-blue-600 bg-blue-50 dark:bg-blue-900/30 dark:text-blue-400" },
+            { label: "Total Revenue", value: formatPrice(stats?.totalRevenue ?? 0), icon: DollarSign, color: "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 dark:text-emerald-400" },
+            { label: "Total Orders", value: (stats?.totalOrders ?? 0).toLocaleString(), icon: Package, color: "text-orange-600 bg-orange-50 dark:bg-orange-900/30 dark:text-orange-400" },
+            { label: "Divisions", value: (stats?.totalDivisions ?? 0).toString(), icon: Building2, color: "text-teal-600 bg-teal-50 dark:bg-teal-900/30 dark:text-teal-400" },
+            { label: "Staff Members", value: (stats?.totalStaff ?? 0).toString(), icon: Shield, color: "text-purple-600 bg-purple-50 dark:bg-purple-900/30 dark:text-purple-400" },
+            { label: "Active Products", value: (stats?.activeProducts ?? 0).toLocaleString(), icon: Box, color: "text-pink-600 bg-pink-50 dark:bg-pink-900/30 dark:text-pink-400" },
           ].map((item, i) => (
             <motion.div key={item.label} custom={i} variants={stagger} initial="initial" animate="animate">
               <Card className="p-4">
@@ -237,31 +203,42 @@ export function AdminDashboard() {
         <motion.div {...fadeIn}>
           <SectionHeader title="Revenue Overview" icon={<DollarSign className="w-4 h-4" />} />
           <Card className="mt-3 p-4">
-            <div className="h-56">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={stats.revenueChart} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
-                  <defs>
-                    <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
-                  <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                  <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v: number) => `${(v / 1000000000).toFixed(1)}B`} />
-                  <Tooltip
-                    formatter={(value: number) => [formatPrice(value), "Revenue"]}
-                    contentStyle={{
-                      backgroundColor: "hsl(var(--card))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: "8px",
-                      fontSize: "12px"
-                    }}
-                  />
-                  <Area type="monotone" dataKey="revenue" stroke="#10b981" fill="url(#revenueGradient)" strokeWidth={2} />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
+            {(stats?.revenueChart && stats.revenueChart.length > 0) ? (
+              <div className="h-56">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={stats.revenueChart} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+                    <defs>
+                      <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                    <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
+                    <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v: number) => {
+                      if (v >= 1000000000) return `${(v / 1000000000).toFixed(1)}B`
+                      if (v >= 1000000) return `${(v / 1000000).toFixed(1)}M`
+                      if (v >= 1000) return `${(v / 1000).toFixed(0)}K`
+                      return v.toString()
+                    }} />
+                    <Tooltip
+                      formatter={(value: number) => [formatPrice(value), "Revenue"]}
+                      contentStyle={{
+                        backgroundColor: "hsl(var(--card))",
+                        border: "1px solid hsl(var(--border))",
+                        borderRadius: "8px",
+                        fontSize: "12px"
+                      }}
+                    />
+                    <Area type="monotone" dataKey="revenue" stroke="#10b981" fill="url(#revenueGradient)" strokeWidth={2} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="h-56 flex items-center justify-center">
+                <p className="text-sm text-muted-foreground">No revenue data yet</p>
+              </div>
+            )}
           </Card>
         </motion.div>
 
@@ -269,25 +246,34 @@ export function AdminDashboard() {
         <motion.div {...fadeIn}>
           <SectionHeader title="User Growth" icon={<Users className="w-4 h-4" />} />
           <Card className="mt-3 p-4">
-            <div className="h-48">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={stats.userGrowth} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
-                  <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                  <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}K`} />
-                  <Tooltip
-                    formatter={(value: number) => [value.toLocaleString(), "Users"]}
-                    contentStyle={{
-                      backgroundColor: "hsl(var(--card))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: "8px",
-                      fontSize: "12px"
-                    }}
-                  />
-                  <Line type="monotone" dataKey="users" stroke="#3b82f6" strokeWidth={2} dot={{ fill: "#3b82f6", r: 3 }} activeDot={{ r: 5 }} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
+            {(stats?.userGrowth && stats.userGrowth.length > 0) ? (
+              <div className="h-48">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={stats.userGrowth} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                    <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
+                    <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v: number) => {
+                      if (v >= 1000) return `${(v / 1000).toFixed(0)}K`
+                      return v.toString()
+                    }} />
+                    <Tooltip
+                      formatter={(value: number) => [value.toLocaleString(), "Users"]}
+                      contentStyle={{
+                        backgroundColor: "hsl(var(--card))",
+                        border: "1px solid hsl(var(--border))",
+                        borderRadius: "8px",
+                        fontSize: "12px"
+                      }}
+                    />
+                    <Line type="monotone" dataKey="users" stroke="#3b82f6" strokeWidth={2} dot={{ fill: "#3b82f6", r: 3 }} activeDot={{ r: 5 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="h-48 flex items-center justify-center">
+                <p className="text-sm text-muted-foreground">No user growth data yet</p>
+              </div>
+            )}
           </Card>
         </motion.div>
 
@@ -296,10 +282,10 @@ export function AdminDashboard() {
           <SectionHeader title="Tindakan Diperlukan" icon={<AlertTriangle className="w-4 h-4" />} />
           <div className="space-y-2 mt-3">
             {[
-              { label: "Permintaan Penarikan", count: withdrawRequests.filter(w => w.status === 'pending').length, icon: DollarSign, color: "text-amber-600 bg-amber-50 dark:bg-amber-900/30", screen: "admin-withdraw" as const },
-              { label: "Verifikasi Seller", count: adminUsers.filter(u => u.role === 'seller' && !u.isVerified).length, icon: Shield, color: "text-blue-600 bg-blue-50 dark:bg-blue-900/30", screen: "admin-users" as const },
+              { label: "Permintaan Penarikan", count: stats?.pendingWithdrawals ?? 0, icon: DollarSign, color: "text-amber-600 bg-amber-50 dark:bg-amber-900/30", screen: "admin-withdraw" as const },
+              { label: "Verifikasi Seller", count: stats?.pendingSellerVerifications ?? 0, icon: Shield, color: "text-blue-600 bg-blue-50 dark:bg-blue-900/30", screen: "admin-users" as const },
               { label: "Laporan Produk", count: 0, icon: Eye, color: "text-red-600 bg-red-50 dark:bg-red-900/30", screen: "admin-products" as const },
-              { label: "Keluhan Terbuka", count: 0, icon: MessageSquare, color: "text-orange-600 bg-orange-50 dark:bg-orange-900/30", screen: "admin-complaints" as const },
+              { label: "Keluhan Terbuka", count: stats?.openComplaints ?? 0, icon: MessageSquare, color: "text-orange-600 bg-orange-50 dark:bg-orange-900/30", screen: "admin-complaints" as const },
             ].map((item, i) => (
               <motion.div key={item.label} custom={i} variants={stagger} initial="initial" animate="animate">
                 <Card className="p-3">
@@ -327,6 +313,82 @@ export function AdminDashboard() {
             ))}
           </div>
         </motion.div>
+
+        {/* Recent Activity */}
+        {stats && (stats.recentOrders.length > 0 || stats.recentUsers.length > 0) && (
+          <motion.div {...fadeIn}>
+            <SectionHeader title="Aktivitas Terbaru" icon={<Clock className="w-4 h-4" />} />
+            <div className="space-y-3 mt-3">
+              {/* Recent Orders */}
+              {stats.recentOrders.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider">Pesanan Terbaru</p>
+                  <div className="space-y-2">
+                    {stats.recentOrders.map((order, i) => (
+                      <motion.div key={order.orderNumber} custom={i} variants={stagger} initial="initial" animate="animate">
+                        <Card className="p-3">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-orange-50 dark:bg-orange-900/30 text-orange-600">
+                                <Package className="w-4 h-4" />
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium text-foreground">#{order.orderNumber}</p>
+                                <p className="text-xs text-muted-foreground">{formatPrice(order.totalAmount)}</p>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <Badge variant="outline" className={`text-[9px] ${
+                                order.status === 'paid' ? 'border-emerald-300 text-emerald-600' :
+                                order.status === 'delivered' ? 'border-blue-300 text-blue-600' :
+                                order.status === 'pending' ? 'border-amber-300 text-amber-600' :
+                                'border-gray-300 text-gray-600'
+                              }`}>
+                                {order.status}
+                              </Badge>
+                              <p className="text-[10px] text-muted-foreground mt-1">{formatRelativeTime(order.createdAt)}</p>
+                            </div>
+                          </div>
+                        </Card>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {/* Recent Users */}
+              {stats.recentUsers.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider">User Terbaru</p>
+                  <div className="space-y-2">
+                    {stats.recentUsers.map((user, i) => (
+                      <motion.div key={user.email} custom={i} variants={stagger} initial="initial" animate="animate">
+                        <Card className="p-3">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className="w-9 h-9 rounded-full bg-blue-500 text-white font-bold flex items-center justify-center text-sm">
+                                {user.name.charAt(0)}
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium text-foreground">{user.name}</p>
+                                <p className="text-xs text-muted-foreground">{user.email}</p>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <Badge variant="outline" className="text-[9px] border-emerald-300 text-emerald-600">
+                                {user.role}
+                              </Badge>
+                              <p className="text-[10px] text-muted-foreground mt-1">{formatRelativeTime(user.createdAt)}</p>
+                            </div>
+                          </div>
+                        </Card>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
 
         {/* Quick Navigation */}
         <motion.div {...fadeIn}>
@@ -654,49 +716,126 @@ export function AdminProducts() {
 }
 
 // ==================== ADMIN WITHDRAW ====================
+type ApiWithdrawal = {
+  id: string
+  sellerId: string
+  sellerName: string
+  sellerEmail: string
+  amount: number
+  bankAccount: string
+  bankName: string
+  bankHolder: string
+  status: string
+  adminNote: string | null
+  processedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
 export function AdminWithdraw() {
-  const { showToast, withdrawRequests, updateWithdrawStatus } = useAppStore()
-  const [activeTab, setActiveTab] = useState<"pending" | "approved" | "completed" | "rejected" | "all">("pending")
+  const { showToast } = useAppStore()
+  const [withdrawals, setWithdrawals] = useState<ApiWithdrawal[]>([])
+  const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState<"pending" | "approved" | "processed" | "rejected" | "all">("pending")
   const [showRejectModal, setShowRejectModal] = useState<string | null>(null)
   const [rejectReason, setRejectReason] = useState('')
 
-  const pendingWithdrawals = withdrawRequests.filter(w => w.status === 'pending')
-  const historyWithdrawals = withdrawRequests.filter(w => w.status !== 'pending')
-
-  const displayed = activeTab === 'pending' ? pendingWithdrawals
-    : activeTab === 'all' ? withdrawRequests
-    : withdrawRequests.filter(w => w.status === activeTab)
-
-  const handleApprove = (id: string) => {
-    updateWithdrawStatus(id, 'approved')
-    showToast("Penarikan disetujui", "success")
+  const fetchWithdrawals = async () => {
+    try {
+      const res = await fetch('/api/admin/withdrawals')
+      const data = await res.json()
+      if (data.success) {
+        setWithdrawals(data.withdrawals)
+      }
+    } catch {
+      console.error('Failed to fetch withdrawals')
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const handleReject = () => {
+  useEffect(() => { fetchWithdrawals() }, [])
+
+  const pendingWithdrawals = withdrawals.filter(w => w.status === 'pending')
+
+  const displayed = activeTab === 'pending' ? pendingWithdrawals
+    : activeTab === 'all' ? withdrawals
+    : withdrawals.filter(w => w.status === activeTab)
+
+  const handleApprove = async (id: string) => {
+    try {
+      const res = await fetch('/api/admin/withdrawals', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ withdrawalId: id, updates: { status: 'approved' } }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        showToast("Penarikan disetujui", "success")
+        fetchWithdrawals()
+      } else {
+        showToast(data.error || 'Gagal menyetujui', "error")
+      }
+    } catch {
+      showToast('Gagal menyetujui', "error")
+    }
+  }
+
+  const handleReject = async () => {
     if (!showRejectModal) return
-    updateWithdrawStatus(showRejectModal, 'rejected', rejectReason || 'Tidak memenuhi syarat')
-    showToast("Penarikan ditolak", "info")
+    try {
+      const res = await fetch('/api/admin/withdrawals', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ withdrawalId: showRejectModal, updates: { status: 'rejected', adminNote: rejectReason || 'Tidak memenuhi syarat' } }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        showToast("Penarikan ditolak", "info")
+        fetchWithdrawals()
+      } else {
+        showToast(data.error || 'Gagal menolak', "error")
+      }
+    } catch {
+      showToast('Gagal menolak', "error")
+    }
     setShowRejectModal(null)
     setRejectReason('')
   }
 
-  const handleMarkCompleted = (id: string) => {
-    updateWithdrawStatus(id, 'completed')
-    showToast("Penarikan selesai - dana telah ditransfer", "success")
+  const handleMarkProcessed = async (id: string) => {
+    try {
+      const res = await fetch('/api/admin/withdrawals', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ withdrawalId: id, updates: { status: 'processed' } }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        showToast("Penarikan selesai - dana telah ditransfer", "success")
+        fetchWithdrawals()
+      } else {
+        showToast(data.error || 'Gagal memproses', "error")
+      }
+    } catch {
+      showToast('Gagal memproses', "error")
+    }
   }
 
-  const statusColorMap: Record<WithdrawStatus, string> = {
+  const statusColorMap: Record<string, string> = {
     pending: "border-amber-300 text-amber-600",
     approved: "border-blue-300 text-blue-600",
     processing: "border-purple-300 text-purple-600",
+    processed: "border-emerald-300 text-emerald-600",
     completed: "border-emerald-300 text-emerald-600",
     rejected: "border-red-300 text-red-600",
   }
 
-  const statusLabelMap: Record<WithdrawStatus, string> = {
+  const statusLabelMap: Record<string, string> = {
     pending: "Pending",
     approved: "Disetujui",
     processing: "Diproses",
+    processed: "Selesai",
     completed: "Selesai",
     rejected: "Ditolak",
   }
@@ -715,11 +854,11 @@ export function AdminWithdraw() {
             <p className="text-[10px] text-amber-600 font-medium">Pending</p>
           </div>
           <div className="bg-emerald-50 dark:bg-emerald-950/30 rounded-xl p-3 text-center">
-            <p className="text-lg font-bold text-emerald-600">{withdrawRequests.filter(w => w.status === 'completed').length}</p>
+            <p className="text-lg font-bold text-emerald-600">{withdrawals.filter(w => w.status === 'processed' || w.status === 'completed').length}</p>
             <p className="text-[10px] text-emerald-600 font-medium">Selesai</p>
           </div>
           <div className="bg-red-50 dark:bg-red-950/30 rounded-xl p-3 text-center">
-            <p className="text-lg font-bold text-red-600">{withdrawRequests.filter(w => w.status === 'rejected').length}</p>
+            <p className="text-lg font-bold text-red-600">{withdrawals.filter(w => w.status === 'rejected').length}</p>
             <p className="text-[10px] text-red-600 font-medium">Ditolak</p>
           </div>
         </div>
@@ -729,7 +868,7 @@ export function AdminWithdraw() {
           {[
             { key: "pending" as const, label: "Pending" },
             { key: "approved" as const, label: "Approved" },
-            { key: "completed" as const, label: "Selesai" },
+            { key: "processed" as const, label: "Selesai" },
             { key: "rejected" as const, label: "Ditolak" },
             { key: "all" as const, label: "Semua" },
           ].map((tab) => (
@@ -784,24 +923,23 @@ export function AdminWithdraw() {
                         </Badge>
                       </div>
                       <p className="text-base font-bold text-foreground mt-0.5">{formatPrice(withdrawal.amount)}</p>
-                      <p className="text-[10px] text-muted-foreground">Net: {formatPrice(withdrawal.netAmount)} · Fee: {formatPrice(withdrawal.adminFee)}</p>
                     </div>
-                    <span className="text-[10px] text-muted-foreground flex-shrink-0">{formatRelativeTime(withdrawal.requestDate)}</span>
+                    <span className="text-[10px] text-muted-foreground flex-shrink-0">{formatRelativeTime(withdrawal.createdAt)}</span>
                   </div>
                   <Separator className="my-3" />
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-muted-foreground">Bank</span>
-                      <span className="text-xs font-medium text-foreground">{withdrawal.bankAccount.bankName} - ****{withdrawal.bankAccount.accountNumber.slice(-4)}</span>
+                      <span className="text-xs font-medium text-foreground">{withdrawal.bankName} - ****{(withdrawal.bankAccount || '').slice(-4)}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-muted-foreground">Pemilik</span>
-                      <span className="text-xs text-foreground">{withdrawal.bankAccount.accountHolder}</span>
+                      <span className="text-xs text-foreground">{withdrawal.bankHolder}</span>
                     </div>
-                    {withdrawal.rejectionReason && (
+                    {withdrawal.adminNote && (
                       <div className="flex items-start gap-1.5 mt-1 p-2 bg-red-50 dark:bg-red-950/30 rounded-lg">
                         <AlertTriangle className="w-3 h-3 text-red-500 mt-0.5 flex-shrink-0" />
-                        <span className="text-[10px] text-red-600 dark:text-red-400">{withdrawal.rejectionReason}</span>
+                        <span className="text-[10px] text-red-600 dark:text-red-400">{withdrawal.adminNote}</span>
                       </div>
                     )}
                   </div>
@@ -817,7 +955,7 @@ export function AdminWithdraw() {
                   )}
                   {withdrawal.status === 'approved' && (
                     <div className="mt-3 pt-3 border-t border-border/50">
-                      <Button size="sm" className="w-full h-8 text-xs rounded-lg bg-blue-500 hover:bg-blue-600 text-white" onClick={() => handleMarkCompleted(withdrawal.id)}>
+                      <Button size="sm" className="w-full h-8 text-xs rounded-lg bg-blue-500 hover:bg-blue-600 text-white" onClick={() => handleMarkProcessed(withdrawal.id)}>
                         <Check className="w-3 h-3 mr-1" /> Tandai Selesai Transfer
                       </Button>
                     </div>
@@ -883,9 +1021,102 @@ export function AdminWithdraw() {
 }
 
 // ==================== ADMIN BANNER ====================
+type ApiBanner = {
+  id: string
+  title: string
+  image: string
+  link: string | null
+  position: string
+  sortOrder: number
+  isActive: boolean
+  startDate: string | null
+  endDate: string | null
+  createdAt: string
+}
+
 export function AdminBanner() {
-  const { showToast, adminBanners, addAdminBanner, updateAdminBanner, deleteAdminBanner } = useAppStore()
+  const { showToast } = useAppStore()
+  const [banners, setBanners] = useState<ApiBanner[]>([])
+  const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
+  const [newTitle, setNewTitle] = useState('')
+  const [newPosition, setNewPosition] = useState('home_top')
+  const [newLink, setNewLink] = useState('')
+  const [newImage, setNewImage] = useState('')
+
+  const fetchBanners = async () => {
+    try {
+      const res = await fetch('/api/admin/banners')
+      const data = await res.json()
+      if (data.success) {
+        setBanners(data.banners)
+      }
+    } catch {
+      console.error('Failed to fetch banners')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { fetchBanners() }, [])
+
+  const handleToggleActive = async (banner: ApiBanner) => {
+    try {
+      const res = await fetch('/api/admin/banners', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bannerId: banner.id, updates: { isActive: !banner.isActive } }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        showToast(!banner.isActive ? "Banner diaktifkan" : "Banner dinonaktifkan", "success")
+        fetchBanners()
+      }
+    } catch {
+      showToast('Gagal mengubah status banner', "error")
+    }
+  }
+
+  const handleAddBanner = async () => {
+    if (!newTitle || !newImage) {
+      showToast('Judul dan gambar wajib diisi', "error")
+      return
+    }
+    try {
+      const res = await fetch('/api/admin/banners', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: newTitle, image: newImage, position: newPosition, link: newLink || null }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        showToast("Banner berhasil ditambahkan", "success")
+        setShowAdd(false)
+        setNewTitle('')
+        setNewPosition('home_top')
+        setNewLink('')
+        setNewImage('')
+        fetchBanners()
+      } else {
+        showToast(data.error || 'Gagal menambahkan banner', "error")
+      }
+    } catch {
+      showToast('Gagal menambahkan banner', "error")
+    }
+  }
+
+  const handleDeleteBanner = async (bannerId: string) => {
+    try {
+      const res = await fetch(`/api/admin/banners?bannerId=${bannerId}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (data.success) {
+        showToast("Banner dihapus", "info")
+        fetchBanners()
+      }
+    } catch {
+      showToast('Gagal menghapus banner', "error")
+    }
+  }
 
   return (
     <div className="pb-20">
@@ -903,7 +1134,7 @@ export function AdminBanner() {
         <motion.div {...fadeIn}>
           <SectionHeader title="Banner Aktif" icon={<ImageIcon className="w-4 h-4" />} />
           <div className="space-y-2 mt-3">
-            {adminBanners.map((banner, i) => (
+            {banners.map((banner, i) => (
               <motion.div key={banner.id} custom={i} variants={stagger} initial="initial" animate="animate">
                 <Card className="p-4">
                   <div className="flex items-center justify-between">
@@ -916,10 +1147,16 @@ export function AdminBanner() {
                         <p className="text-xs text-muted-foreground">{banner.position}</p>
                       </div>
                     </div>
-                    <Switch checked={banner.isActive} onCheckedChange={(checked) => {
-                      updateAdminBanner(banner.id, { isActive: checked })
-                      showToast(checked ? "Banner diaktifkan" : "Banner dinonaktifkan", "success")
-                    }} />
+                    <div className="flex items-center gap-2">
+                      <Switch checked={banner.isActive} onCheckedChange={() => handleToggleActive(banner)} />
+                      <motion.button
+                        whileTap={{ scale: 0.9 }}
+                        onClick={() => handleDeleteBanner(banner.id)}
+                        className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                      </motion.button>
+                    </div>
                   </div>
                 </Card>
               </motion.div>
@@ -934,28 +1171,35 @@ export function AdminBanner() {
             <Card className="mt-3 p-4 space-y-4">
               <div className="space-y-2">
                 <label className="text-xs font-medium text-foreground">Judul Banner</label>
-                <Input placeholder="Contoh: Flash Sale Weekend" className="rounded-xl" />
+                <Input placeholder="Contoh: Flash Sale Weekend" className="rounded-xl" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} />
               </div>
 
               <div className="space-y-2">
                 <label className="text-xs font-medium text-foreground">Posisi</label>
-                <Input placeholder="Contoh: Home Top" className="rounded-xl" />
+                <Input placeholder="Contoh: Home Top" className="rounded-xl" value={newPosition} onChange={(e) => setNewPosition(e.target.value)} />
               </div>
 
               <div className="space-y-2">
                 <label className="text-xs font-medium text-foreground">Gambar Banner</label>
-                <div className="h-28 rounded-xl bg-muted/50 border-2 border-dashed border-border flex flex-col items-center justify-center cursor-pointer hover:bg-muted transition-colors">
-                  <ImageIcon className="w-6 h-6 text-muted-foreground mb-1" />
-                  <p className="text-xs text-muted-foreground">Upload Banner</p>
+                <div className="h-28 rounded-xl bg-muted/50 border-2 border-dashed border-border flex flex-col items-center justify-center cursor-pointer hover:bg-muted transition-colors" onClick={() => setNewImage(newImage ? newImage : 'https://placehold.co/800x400/e2e8f0/64748b?text=Banner')}>
+                  {newImage ? (
+                    <p className="text-xs text-muted-foreground text-center px-4 break-all">{newImage}</p>
+                  ) : (
+                    <>
+                      <ImageIcon className="w-6 h-6 text-muted-foreground mb-1" />
+                      <p className="text-xs text-muted-foreground">Upload Banner</p>
+                    </>
+                  )}
                 </div>
+                <Input placeholder="URL gambar..." className="rounded-xl" value={newImage} onChange={(e) => setNewImage(e.target.value)} />
               </div>
 
               <div className="space-y-2">
                 <label className="text-xs font-medium text-foreground">Link (Opsional)</label>
-                <Input placeholder="https://..." className="rounded-xl" />
+                <Input placeholder="https://..." className="rounded-xl" value={newLink} onChange={(e) => setNewLink(e.target.value)} />
               </div>
 
-              <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl h-10">
+              <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl h-10" onClick={handleAddBanner}>
                 Simpan Banner
               </Button>
             </Card>
@@ -967,25 +1211,49 @@ export function AdminBanner() {
 }
 
 // ==================== ADMIN ANALYTICS ====================
+type AdminStats = {
+  totalUsers: number
+  totalSellers: number
+  totalOrders: number
+  totalRevenue: number
+  activeProducts: number
+  pendingWithdrawals: number
+  totalDivisions: number
+  totalStaff: number
+  pendingSellerVerifications: number
+  openComplaints: number
+  revenueChart: { date: string; revenue: number }[]
+  userGrowth: { date: string; users: number }[]
+  topSellers: { name: string; revenue: number; orders: number }[]
+  categoryPerformance: { name: string; revenue: number; percentage: number }[]
+  recentOrders: { orderNumber: string; totalAmount: number; status: string; createdAt: string }[]
+  recentUsers: { name: string; email: string; role: string; createdAt: string }[]
+}
+
 export function AdminAnalytics() {
-  const { products, orders, withdrawRequests } = useAppStore()
-
-  // Compute real data from store
-  const topSellers = computeTopSellers(products)
-  const categoryPerformance = computeCategoryPerformance(products)
-
-  // Placeholder admin stats (replacing MOCK_ADMIN_STATS)
-  const stats = {
-    totalUsers: 0,
-    totalSellers: 0,
-    totalOrders: orders.length,
-    totalRevenue: orders.reduce((sum, o) => sum + o.totalAmount, 0),
-    pendingWithdrawals: withdrawRequests.filter(w => w.status === 'pending').length,
-    activeProducts: products.filter(p => p.status === 'active').length,
-    revenueChart: [] as { date: string; revenue: number }[],
-    userGrowth: [] as { date: string; users: number }[],
-  }
+  const [stats, setStats] = useState<AdminStats | null>(null)
+  const [loading, setLoading] = useState(true)
   const [dateRange, setDateRange] = useState("30d")
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const res = await fetch('/api/admin/stats')
+        const data = await res.json()
+        if (data.success) {
+          setStats(data.stats)
+        }
+      } catch {
+        console.error('Failed to fetch admin stats')
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchStats()
+  }, [])
+
+  const topSellers = stats?.topSellers || []
+  const categoryPerformance = stats?.categoryPerformance || []
 
   return (
     <div className="pb-20">
@@ -1021,7 +1289,7 @@ export function AdminAnalytics() {
           <Card className="mt-3 p-4">
             <div className="h-56">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={stats.revenueChart} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+                <AreaChart data={stats?.revenueChart || []} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
                   <defs>
                     <linearGradient id="adminRevenueGradient" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
@@ -1058,7 +1326,7 @@ export function AdminAnalytics() {
                     <th className="text-left text-xs font-medium text-muted-foreground px-4 py-2.5">#</th>
                     <th className="text-left text-xs font-medium text-muted-foreground px-4 py-2.5">Toko</th>
                     <th className="text-right text-xs font-medium text-muted-foreground px-4 py-2.5">Revenue</th>
-                    <th className="text-right text-xs font-medium text-muted-foreground px-4 py-2.5">Rating</th>
+                    <th className="text-right text-xs font-medium text-muted-foreground px-4 py-2.5">Pesanan</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1075,7 +1343,7 @@ export function AdminAnalytics() {
                           <p className="text-[10px] text-muted-foreground">{seller.orders.toLocaleString()} pesanan</p>
                         </td>
                         <td className="px-4 py-3 text-sm text-right font-medium text-emerald-600">{formatPrice(seller.revenue)}</td>
-                        <td className="px-4 py-3 text-sm text-right text-foreground">{seller.rating}</td>
+                        <td className="px-4 py-3 text-sm text-right text-muted-foreground">{seller.orders} pesanan</td>
                       </tr>
                     ))
                   )}
@@ -1125,24 +1393,89 @@ export function AdminAnalytics() {
 }
 
 // ==================== ADMIN COMPLAINTS ====================
+type ApiComplaint = {
+  id: string
+  orderId: string
+  orderNumber: string
+  orderStatus: string
+  orderTotal: number
+  paymentStatus: string
+  userId: string
+  userName: string
+  userEmail: string
+  userAvatar: string | null
+  sellerId: string
+  sellerName: string
+  type: string
+  reason: string
+  description: string
+  images: string[]
+  status: string
+  resolution: string | null
+  refundAmount: number | null
+  createdAt: string
+  updatedAt: string
+}
+
 export function AdminComplaints() {
-  const { showToast, adminComplaints, updateAdminComplaint } = useAppStore()
+  const { showToast } = useAppStore()
+  const [complaints, setComplaints] = useState<ApiComplaint[]>([])
+  const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState("open")
 
+  const fetchComplaints = async () => {
+    try {
+      const res = await fetch('/api/admin/complaints')
+      const data = await res.json()
+      if (data.success) {
+        setComplaints(data.complaints)
+      }
+    } catch {
+      console.error('Failed to fetch complaints')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { fetchComplaints() }, [])
+
+  const handleUpdateComplaint = async (complaintId: string, updates: Record<string, unknown>) => {
+    try {
+      const res = await fetch('/api/admin/complaints', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ complaintId, updates }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        fetchComplaints()
+        return true
+      } else {
+        showToast(data.error || 'Gagal memperbarui keluhan', "error")
+        return false
+      }
+    } catch {
+      showToast('Gagal memperbarui keluhan', "error")
+      return false
+    }
+  }
+
   const filtered = activeTab === "all"
-    ? adminComplaints
-    : adminComplaints.filter(c => c.status === activeTab)
+    ? complaints
+    : complaints.filter(c => c.status === activeTab)
 
   const statusLabel: Record<string, string> = {
     open: "Terbuka",
     processing: "Diproses",
     resolved: "Diselesaikan",
+    rejected: "Ditolak",
   }
 
   const statusColor: Record<string, string> = {
     open: "border-red-300 text-red-600",
     processing: "border-amber-300 text-amber-600",
     resolved: "border-emerald-300 text-emerald-600",
+    rejected: "border-gray-300 text-gray-500",
   }
 
   return (
@@ -1186,19 +1519,24 @@ export function AdminComplaints() {
               <motion.div key={complaint.id} custom={i} variants={stagger} initial="initial" animate="animate">
                 <Card className="p-4">
                   <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs font-mono text-muted-foreground">{complaint.orderId}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs font-mono text-muted-foreground">{complaint.orderNumber || complaint.orderId}</p>
+                      {complaint.orderTotal > 0 && (
+                        <span className="text-[10px] text-muted-foreground">· {formatPrice(complaint.orderTotal)}</span>
+                      )}
+                    </div>
                     <Badge variant="outline" className={`text-[10px] ${statusColor[complaint.status]}`}>
-                      {statusLabel[complaint.status]}
+                      {statusLabel[complaint.status] || complaint.status}
                     </Badge>
                   </div>
                   <div className="flex items-center gap-4 mb-2">
                     <div>
                       <p className="text-[10px] text-muted-foreground">Pembeli</p>
-                      <p className="text-xs font-medium text-foreground">{complaint.buyer || complaint.userName}</p>
+                      <p className="text-xs font-medium text-foreground">{complaint.userName}</p>
                     </div>
                     <div>
                       <p className="text-[10px] text-muted-foreground">Seller</p>
-                      <p className="text-xs font-medium text-foreground">{complaint.seller}</p>
+                      <p className="text-xs font-medium text-foreground">{complaint.sellerName}</p>
                     </div>
                   </div>
                   <div className="mb-2">
@@ -1206,27 +1544,41 @@ export function AdminComplaints() {
                       {complaint.type}
                     </Badge>
                   </div>
+                  {complaint.reason && (
+                    <p className="text-xs font-medium text-foreground mb-1">{complaint.reason}</p>
+                  )}
                   <p className="text-sm text-foreground">{complaint.description}</p>
+                  {complaint.resolution && (
+                    <div className="mt-2 p-2 bg-emerald-50 dark:bg-emerald-950/30 rounded-lg">
+                      <p className="text-[10px] text-emerald-600 font-medium">Resolusi:</p>
+                      <p className="text-xs text-emerald-700 dark:text-emerald-400">{complaint.resolution}</p>
+                    </div>
+                  )}
+                  {complaint.refundAmount && complaint.refundAmount > 0 && (
+                    <div className="mt-1 p-2 bg-blue-50 dark:bg-blue-950/30 rounded-lg">
+                      <p className="text-[10px] text-blue-600 font-medium">Refund: {formatPrice(complaint.refundAmount)}</p>
+                    </div>
+                  )}
 
-                  {complaint.status !== "resolved" && (
+                  {complaint.status !== "resolved" && complaint.status !== "rejected" && (
                     <div className="flex gap-2 mt-3 pt-3 border-t border-border/50">
                       {complaint.status === "open" && (
-                        <Button size="sm" className="h-7 text-[11px] rounded-lg bg-amber-500 hover:bg-amber-600 text-white" onClick={() => {
-                          updateAdminComplaint(complaint.id, { status: "processing" })
-                          showToast("Keluhan sedang diproses", "info")
+                        <Button size="sm" className="h-7 text-[11px] rounded-lg bg-amber-500 hover:bg-amber-600 text-white" onClick={async () => {
+                          const ok = await handleUpdateComplaint(complaint.id, { status: "processing" })
+                          if (ok) showToast("Keluhan sedang diproses", "info")
                         }}>
                           <Clock className="w-3 h-3 mr-0.5" /> Proses
                         </Button>
                       )}
-                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={() => {
-                        updateAdminComplaint(complaint.id, { status: "resolved" })
-                        showToast("Keluhan diselesaikan", "success")
+                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={async () => {
+                        const ok = await handleUpdateComplaint(complaint.id, { status: "resolved" })
+                        if (ok) showToast("Keluhan diselesaikan", "success")
                       }}>
                         <Check className="w-3 h-3 mr-0.5" /> Resolve
                       </Button>
-                      <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500" onClick={() => {
-                        updateAdminComplaint(complaint.id, { status: "rejected" })
-                        showToast("Keluhan ditolak", "info")
+                      <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500" onClick={async () => {
+                        const ok = await handleUpdateComplaint(complaint.id, { status: "rejected" })
+                        if (ok) showToast("Keluhan ditolak", "info")
                       }}>
                         <X className="w-3 h-3 mr-0.5" /> Reject
                       </Button>
