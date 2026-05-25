@@ -20,7 +20,6 @@ export function middleware(request: NextRequest) {
 
   // Block direct access to admin API routes without any auth header
   // Exception: /api/admin/setup allows secret key for initial setup
-  // This is a first line of defense - actual auth verification happens in the route handlers
   if (pathname.startsWith('/api/admin/')) {
     const isSetupRoute = pathname === '/api/admin/setup'
     const hasAuth = request.headers.get('authorization') ||
@@ -34,16 +33,9 @@ export function middleware(request: NextRequest) {
     }
   }
 
-  // Block suspicious requests to auth endpoints
-  if (pathname.startsWith('/api/auth/')) {
-    // Only allow POST to auth endpoints
-    if (request.method !== 'POST' && pathname !== '/api/auth/session') {
-      return NextResponse.json(
-        { success: false, error: 'Method not allowed' },
-        { status: 405 }
-      )
-    }
-  }
+  // NOTE: We do NOT block/restrict /api/auth/* routes here because NextAuth
+  // needs to handle various HTTP methods (GET for callbacks, sessions, etc.)
+  // The auth routes have their own security (password verification, rate limiting, etc.)
 
   return response
 }
@@ -51,6 +43,5 @@ export function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     '/api/admin/:path*',
-    '/api/auth/:path*',
   ],
 }
