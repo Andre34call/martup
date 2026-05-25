@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { signOut } from 'next-auth/react'
 import type { ScreenName, UserRole, User, CartItem, Product, ProductVariant, Notification as AppNotification, ChatRoom, ChatMessage, Address, Voucher, Order, OrderStatus, WalletMutation, BankAccount, WithdrawRequest, WithdrawStatus, SellerBalance, Review, Seller, Division, SellerStats } from './types'
 
 // ==================== APP STORE ====================
@@ -15,7 +16,7 @@ interface AppState {
   currentUser: User | null
   userRole: UserRole
   login: (user: User) => void
-  logout: () => void
+  logout: () => Promise<void>
   switchRole: (role: UserRole) => Promise<void>
 
   // Selected items
@@ -231,9 +232,16 @@ export const useAppStore = create<AppState>()(
         userRole: user.role,
         currentScreen: 'home'
       }),
-      logout: () => {
+      logout: async () => {
         // Clear auth token
         localStorage.removeItem('authToken')
+        // Sign out from NextAuth to clear the session cookie
+        // This prevents DataFetcher from re-authenticating the user
+        try {
+          await signOut({ redirect: false })
+        } catch {
+          // signOut may fail if there's no active session, that's OK
+        }
         set({
           isAuthenticated: false,
           currentUser: null,
@@ -920,8 +928,9 @@ export const useAppStore = create<AppState>()(
           if (!res.ok) throw new Error('Failed to fetch admin users')
           const data = await res.json()
           if (data.success) {
+            const users = data.data || data.users || []
             set({
-              adminUsers: data.users.map((u: any) => ({
+              adminUsers: users.map((u: any) => ({
                 id: u.id,
                 name: u.name,
                 email: u.email,
@@ -982,24 +991,31 @@ export const useAppStore = create<AppState>()(
       })),
 
       // Account
-      deleteAccount: () => set({
-        isAuthenticated: false,
-        currentUser: null,
-        userRole: 'buyer',
-        currentScreen: 'login',
-        orders: [],
-        notifications: [],
-        unreadNotificationCount: 0,
-        addresses: [],
-        walletBalance: 0,
-        walletHoldBalance: 0,
-        walletMutations: [],
-        reviews: [],
-        followedStoreIds: [],
-        seller: null,
-        sellerStats: null,
-        isDataLoaded: false,
-      }),
+      deleteAccount: async () => {
+        try {
+          await signOut({ redirect: false })
+        } catch {
+          // signOut may fail if there's no active session, that's OK
+        }
+        set({
+          isAuthenticated: false,
+          currentUser: null,
+          userRole: 'buyer',
+          currentScreen: 'login',
+          orders: [],
+          notifications: [],
+          unreadNotificationCount: 0,
+          addresses: [],
+          walletBalance: 0,
+          walletHoldBalance: 0,
+          walletMutations: [],
+          reviews: [],
+          followedStoreIds: [],
+          seller: null,
+          sellerStats: null,
+          isDataLoaded: false,
+        })
+      },
 
       // Data fetching
       seller: null,
@@ -1265,7 +1281,7 @@ export const useAppStore = create<AppState>()(
           if (!res.ok) throw new Error('Failed to fetch products')
           const data = await res.json()
 
-          const products: Product[] = (data.products || []).map((p: any) => ({
+          const products: Product[] = (data.data || data.products || []).map((p: any) => ({
             id: p.id,
             sellerId: p.sellerId,
             categoryId: p.categoryId,
@@ -1351,7 +1367,7 @@ export const useAppStore = create<AppState>()(
           const data = await res.json()
 
           set({
-            categories: (data.categories || []).map((c: any) => ({
+            categories: (data.data || data.categories || []).map((c: any) => ({
               id: c.id,
               name: c.name,
               slug: c.slug,
