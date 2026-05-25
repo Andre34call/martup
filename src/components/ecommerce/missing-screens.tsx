@@ -359,7 +359,7 @@ export function SettingsScreen() {
           </DialogHeader>
           <div className="space-y-3 mt-2">
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-foreground">Password Saat Ini</label>
+              <label className="text-xs font-medium text-foreground">Password Saat Ini <span className="text-red-500">*</span></label>
               <div className="relative">
                 <Input
                   type={showCurrentPassword ? "text" : "password"}
@@ -377,7 +377,7 @@ export function SettingsScreen() {
               </div>
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-foreground">Password Baru</label>
+              <label className="text-xs font-medium text-foreground">Password Baru <span className="text-red-500">*</span></label>
               <div className="relative">
                 <Input
                   type={showNewPassword ? "text" : "password"}
@@ -398,7 +398,7 @@ export function SettingsScreen() {
               )}
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-foreground">Konfirmasi Password Baru</label>
+              <label className="text-xs font-medium text-foreground">Konfirmasi Password Baru <span className="text-red-500">*</span></label>
               <Input
                 type="password"
                 value={confirmPassword}
@@ -711,33 +711,33 @@ export function AddressScreen() {
               <Card className="mt-3 p-4 space-y-3">
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-foreground">Label</label>
+                    <label className="text-xs font-medium text-foreground">Label <span className="text-red-500">*</span></label>
                     <Input value={formLabel} onChange={(e) => setFormLabel(e.target.value)} placeholder="Rumah" className="rounded-xl h-9" />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-foreground">Penerima</label>
+                    <label className="text-xs font-medium text-foreground">Penerima <span className="text-red-500">*</span></label>
                     <Input value={formRecipient} onChange={(e) => setFormRecipient(e.target.value)} placeholder="Nama" className="rounded-xl h-9" />
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-foreground">No. Telepon</label>
+                  <label className="text-xs font-medium text-foreground">No. Telepon <span className="text-red-500">*</span></label>
                   <Input value={formPhone} onChange={(e) => setFormPhone(e.target.value)} placeholder="08123456789" className="rounded-xl h-9" />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-foreground">Alamat Lengkap</label>
+                  <label className="text-xs font-medium text-foreground">Alamat Lengkap <span className="text-red-500">*</span></label>
                   <Input value={formAddress} onChange={(e) => setFormAddress(e.target.value)} placeholder="Jl. ..." className="rounded-xl h-9" />
                 </div>
                 <div className="grid grid-cols-3 gap-3">
                   <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-foreground">Kota</label>
+                    <label className="text-xs font-medium text-foreground">Kota <span className="text-red-500">*</span></label>
                     <Input value={formCity} onChange={(e) => setFormCity(e.target.value)} placeholder="Jakarta" className="rounded-xl h-9" />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-foreground">Provinsi</label>
+                    <label className="text-xs font-medium text-foreground">Provinsi <span className="text-red-500">*</span></label>
                     <Input value={formProvince} onChange={(e) => setFormProvince(e.target.value)} placeholder="DKI Jakarta" className="rounded-xl h-9" />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-foreground">Kode Pos</label>
+                    <label className="text-xs font-medium text-foreground">Kode Pos <span className="text-red-500">*</span></label>
                     <Input value={formPostalCode} onChange={(e) => setFormPostalCode(e.target.value)} placeholder="12345" className="rounded-xl h-9" />
                   </div>
                 </div>
@@ -1518,14 +1518,14 @@ export function RefundScreen() {
                 <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}>
                   <Card className="p-4 space-y-3">
                     <div className="space-y-1.5">
-                      <label className="text-xs font-medium text-foreground">Pilih Pesanan</label>
+                      <label className="text-xs font-medium text-foreground">Pilih Pesanan <span className="text-red-500">*</span></label>
                       <select className="w-full h-9 rounded-xl border border-input bg-transparent px-3 text-sm">
                         <option>ORD-2024-003 - Lipstik Matte Velvet</option>
                         <option>ORD-2024-001 - iPhone 15 Pro Max</option>
                       </select>
                     </div>
                     <div className="space-y-1.5">
-                      <label className="text-xs font-medium text-foreground">Alasan</label>
+                      <label className="text-xs font-medium text-foreground">Alasan <span className="text-red-500">*</span></label>
                       <select className="w-full h-9 rounded-xl border border-input bg-transparent px-3 text-sm">
                         <option>Barang rusak</option>
                         <option>Tidak sesuai deskripsi</option>
@@ -1534,7 +1534,7 @@ export function RefundScreen() {
                       </select>
                     </div>
                     <div className="space-y-1.5">
-                      <label className="text-xs font-medium text-foreground">Deskripsi</label>
+                      <label className="text-xs font-medium text-foreground">Deskripsi <span className="text-red-500">*</span></label>
                       <textarea
                         placeholder="Jelaskan masalahnya..."
                         className="w-full min-h-[60px] rounded-xl border border-input bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 resize-none"

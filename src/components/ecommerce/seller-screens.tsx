@@ -558,7 +558,7 @@ export function SellerOrders() {
             <DialogTitle className="text-base font-bold">Masukkan Nomor Resi</DialogTitle>
           </DialogHeader>
           <div className="space-y-2 mt-2">
-            <label className="text-xs font-medium text-foreground">No. Resi Pengiriman</label>
+            <label className="text-xs font-medium text-foreground">No. Resi Pengiriman <span className="text-red-500">*</span></label>
             <Input
               value={trackingNumber}
               onChange={(e) => setTrackingNumber(e.target.value)}
@@ -1107,7 +1107,7 @@ export function SellerSettings() {
           <SectionHeader title="Profil Toko" icon={<Store className="w-4 h-4" />} />
           <Card className="mt-3 p-4 space-y-4">
             <div className="space-y-2">
-              <label className="text-xs font-medium text-foreground">Nama Toko</label>
+              <label className="text-xs font-medium text-foreground">Nama Toko <span className="text-red-500">*</span></label>
               <Input value={storeName} onChange={e => setStoreName(e.target.value)} className="rounded-xl" />
             </div>
             <div className="space-y-2">
@@ -1138,15 +1138,15 @@ export function SellerSettings() {
           <SectionHeader title="Rekening Bank" icon={<Banknote className="w-4 h-4" />} />
           <Card className="mt-3 p-4 space-y-4">
             <div className="space-y-2">
-              <label className="text-xs font-medium text-foreground">Nama Bank</label>
+              <label className="text-xs font-medium text-foreground">Nama Bank <span className="text-red-500">*</span></label>
               <Input defaultValue={seller?.bankName || ""} className="rounded-xl" placeholder="Contoh: BCA" />
             </div>
             <div className="space-y-2">
-              <label className="text-xs font-medium text-foreground">Nomor Rekening</label>
+              <label className="text-xs font-medium text-foreground">Nomor Rekening <span className="text-red-500">*</span></label>
               <Input defaultValue={seller?.bankAccount || ""} className="rounded-xl" placeholder="Nomor rekening" />
             </div>
             <div className="space-y-2">
-              <label className="text-xs font-medium text-foreground">Nama Pemilik</label>
+              <label className="text-xs font-medium text-foreground">Nama Pemilik <span className="text-red-500">*</span></label>
               <Input defaultValue={seller?.bankHolder || ""} className="rounded-xl" placeholder="Nama sesuai rekening" />
             </div>
           </Card>
@@ -1223,12 +1223,12 @@ export function SellerCampaign() {
             <SectionHeader title="Buat Kampanye Baru" icon={<Plus className="w-4 h-4" />} />
             <Card className="mt-3 p-4 space-y-4">
               <div className="space-y-2">
-                <label className="text-xs font-medium text-foreground">Nama Kampanye</label>
+                <label className="text-xs font-medium text-foreground">Nama Kampanye <span className="text-red-500">*</span></label>
                 <Input placeholder="Contoh: Flash Sale Akhir Tahun" className="rounded-xl" />
               </div>
 
               <div className="space-y-3">
-                <label className="text-xs font-medium text-foreground">Tipe Kampanye</label>
+                <label className="text-xs font-medium text-foreground">Tipe Kampanye <span className="text-red-500">*</span></label>
                 <div className="flex gap-2">
                   <Button variant="outline" className="flex-1 rounded-xl text-xs h-9">
                     <Zap className="w-3 h-3 mr-1" /> Flash Sale
@@ -1240,17 +1240,17 @@ export function SellerCampaign() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs font-medium text-foreground">Diskon (%)</label>
+                <label className="text-xs font-medium text-foreground">Diskon (%) <span className="text-red-500">*</span></label>
                 <Input type="number" placeholder="10" className="rounded-xl" />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <label className="text-xs font-medium text-foreground">Mulai</label>
+                  <label className="text-xs font-medium text-foreground">Mulai <span className="text-red-500">*</span></label>
                   <Input type="date" className="rounded-xl" />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-medium text-foreground">Berakhir</label>
+                  <label className="text-xs font-medium text-foreground">Berakhir <span className="text-red-500">*</span></label>
                   <Input type="date" className="rounded-xl" />
                 </div>
               </div>

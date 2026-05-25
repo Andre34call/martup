@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
     const maxSize = isVideo ? 30 * 1024 * 1024 : 5 * 1024 * 1024
     if (file.size > maxSize) {
       return NextResponse.json(
-        { success: false, error: `File too large. Max ${isVideo ? '30MB' : '5MB'}` },
+        { success: false, error: `File terlalu besar. Maksimal ${isVideo ? '30MB' : '5MB'}` },
         { status: 400 }
       )
     }
@@ -31,13 +31,13 @@ export async function POST(request: NextRequest) {
 
     if (!allowedTypes.includes(file.type)) {
       return NextResponse.json(
-        { success: false, error: 'Invalid file type. Allowed: JPG, PNG, WebP, GIF, MP4, WebM' },
+        { success: false, error: 'Tipe file tidak didukung. Format yang diizinkan: JPG, PNG, WebP, GIF, MP4, WebM' },
         { status: 400 }
       )
     }
 
     // Generate unique filename
-    const ext = file.name.split('.').pop() || 'jpg'
+    const ext = file.name.split('.').pop() || (isVideo ? 'mp4' : 'jpg')
     const filename = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
 
     // Upload to Supabase Storage using REST API
@@ -57,11 +57,40 @@ export async function POST(request: NextRequest) {
     )
 
     if (!uploadResponse.ok) {
-      const errorData = await uploadResponse.json()
+      let errorData: { message?: string; error?: string; statusCode?: string }
+      try {
+        errorData = await uploadResponse.json()
+      } catch {
+        errorData = { message: `HTTP ${uploadResponse.status}` }
+      }
       console.error('Supabase storage upload error:', errorData)
+
+      // Provide user-friendly error messages
+      const errorMsg = errorData.message || errorData.error || 'Unknown error'
+      let userMessage = 'Upload gagal'
+
+      if (errorMsg.includes('Bucket not found') || errorMsg.includes('bucket')) {
+        userMessage = 'Storage belum dikonfigurasi. Silakan setup storage terlebih dahulu.'
+        // Try to auto-setup storage
+        try {
+          const setupRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/setup_storage`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+              'apikey': SUPABASE_ANON_KEY,
+            },
+          })
+          console.log('[Upload] Auto-setup storage result:', setupRes.status)
+        } catch {
+          // Ignore setup errors
+        }
+      } else if (errorMsg.includes('policy') || errorMsg.includes('RLS') || errorMsg.includes('permission')) {
+        userMessage = 'Permission ditolak. Storage policy belum dikonfigurasi.'
+      }
+
       return NextResponse.json(
-        { success: false, error: 'Upload failed: ' + (errorData.message || 'Unknown error') },
-        { status: 500 }
+        { success: false, error: userMessage, detail: errorMsg },
+        { status: uploadResponse.status === 404 ? 404 : 500 }
       )
     }
 

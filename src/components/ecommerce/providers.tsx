@@ -25,12 +25,23 @@ function DataFetcher({ children }: { children: React.ReactNode }) {
   const { fetchUserData, fetchProducts, fetchCategories, isAuthenticated, login } = useAppStore()
   const initialFetchDone = useRef(false)
 
-  // Fetch global data (products, categories) on mount
+  // Fetch global data (products, categories) on mount & setup storage
   useEffect(() => {
     if (!initialFetchDone.current) {
       initialFetchDone.current = true
       fetchProducts()
       fetchCategories()
+      // Setup Supabase Storage bucket (idempotent - safe to call multiple times)
+      fetch('/api/setup/storage', { method: 'POST' })
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            console.log('[Storage] Bucket ready:', data.message)
+          } else {
+            console.warn('[Storage] Setup failed:', data.error)
+          }
+        })
+        .catch(err => console.warn('[Storage] Setup error:', err))
     }
   }, [fetchProducts, fetchCategories])
 
