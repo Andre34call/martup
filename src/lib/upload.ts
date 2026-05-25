@@ -4,6 +4,17 @@ export interface UploadResult {
   type: 'image' | 'video'
 }
 
+function getUploadAuthHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {}
+  if (typeof window !== 'undefined') {
+    const token = localStorage.getItem('authToken')
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+    }
+  }
+  return headers
+}
+
 export async function uploadFile(
   file: File,
   bucket: string = 'products',
@@ -16,6 +27,7 @@ export async function uploadFile(
 
   const response = await fetch('/api/upload', {
     method: 'POST',
+    headers: getUploadAuthHeaders(),
     body: formData,
   })
 

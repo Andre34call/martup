@@ -25,6 +25,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // SECURITY: Validate email format
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return NextResponse.json(
+        { success: false, error: 'Format email tidak valid' },
+        { status: 400 }
+      )
+    }
+
     // Find user by email
     const user = await db.user.findUnique({
       where: { email },

@@ -153,6 +153,9 @@ interface AppState {
     link: string
     position: string
     isActive: boolean
+    sortOrder: number
+    startDate?: string | null
+    endDate?: string | null
   }>
   addAdminBanner: (banner: any) => void
   updateAdminBanner: (bannerId: string, updates: Record<string, any>) => void
@@ -209,9 +212,25 @@ interface AppState {
   fetchCategories: () => Promise<void>
   categories: Array<{ id: string; name: string; slug: string; icon?: string; productCount?: number }>
   isDataLoaded: boolean
+
+  // Home Banners (public, from DB)
+  homeBanners: Array<{ id: string; title: string; image: string; link: string; position: string }>
+  fetchHomeBanners: () => Promise<void>
 }
 
 let toastTimer: ReturnType<typeof setTimeout> | null = null
+
+// Helper to get auth headers from localStorage for API calls
+function getAuthHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (typeof window !== 'undefined') {
+    const token = localStorage.getItem('authToken')
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+    }
+  }
+  return headers
+}
 
 export const useAppStore = create<AppState>()(
   persist(
@@ -281,6 +300,7 @@ export const useAppStore = create<AppState>()(
           usedVoucherIds: [],
           vouchers: [],
           searchQuery: '',
+          homeBanners: [],
         })
         // Clear cart and wishlist stores
         useCartStore.getState().clearCart()
@@ -298,7 +318,7 @@ export const useAppStore = create<AppState>()(
             // Try to register as seller
             const registerRes = await fetch('/api/seller/register', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: getAuthHeaders(),
               body: JSON.stringify({ userId, storeName }),
             })
             const registerData = await registerRes.json()
@@ -329,7 +349,7 @@ export const useAppStore = create<AppState>()(
             } else if (registerRes.status === 409) {
               // Already a seller — fetch existing seller data
               try {
-                const userDataRes = await fetch(`/api/user-data?userId=${userId}`)
+                const userDataRes = await fetch(`/api/user-data?userId=${userId}`, { headers: getAuthHeaders() })
                 const userDataRaw = await userDataRes.json()
                 const userData = userDataRaw.data || userDataRaw
 
@@ -920,7 +940,7 @@ export const useAppStore = create<AppState>()(
       divisions: [],
       fetchDivisions: async () => {
         try {
-          const res = await fetch('/api/admin/divisions')
+          const res = await fetch('/api/admin/divisions', { headers: getAuthHeaders() })
           if (!res.ok) throw new Error('Failed to fetch divisions')
           const data = await res.json()
           if (data.success) {
@@ -932,7 +952,7 @@ export const useAppStore = create<AppState>()(
       },
       fetchAdminUsers: async () => {
         try {
-          const res = await fetch('/api/admin/users')
+          const res = await fetch('/api/admin/users', { headers: getAuthHeaders() })
           if (!res.ok) throw new Error('Failed to fetch admin users')
           const data = await res.json()
           if (data.success) {
@@ -961,7 +981,7 @@ export const useAppStore = create<AppState>()(
         try {
           const res = await fetch('/api/admin/users', {
             method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getAuthHeaders(),
             body: JSON.stringify({ userId, updates: { divisionId } }),
           })
           if (!res.ok) throw new Error('Failed to assign user to division')
@@ -976,7 +996,7 @@ export const useAppStore = create<AppState>()(
         try {
           const res = await fetch('/api/admin/divisions', {
             method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getAuthHeaders(),
             body: JSON.stringify({ divisionId, updates }),
           })
           if (!res.ok) throw new Error('Failed to update division')
@@ -1016,12 +1036,29 @@ export const useAppStore = create<AppState>()(
           addresses: [],
           walletBalance: 0,
           walletHoldBalance: 0,
+          walletCoins: 0,
           walletMutations: [],
           reviews: [],
           followedStoreIds: [],
           seller: null,
           sellerStats: null,
           isDataLoaded: false,
+          sellerBalance: { availableBalance: 0, pendingBalance: 0, holdBalance: 0, totalBalance: 0, totalWithdrawn: 0 },
+          sellerBankAccounts: [],
+          withdrawRequests: [],
+          adminUsers: [],
+          adminBanners: [],
+          adminComplaints: [],
+          adminStats: null,
+          divisions: [],
+          chatRooms: [],
+          chatMessages: {},
+          totalUnreadChats: 0,
+          selectedVoucher: null,
+          usedVoucherIds: [],
+          vouchers: [],
+          searchQuery: '',
+          homeBanners: [],
         })
       },
 
@@ -1030,7 +1067,7 @@ export const useAppStore = create<AppState>()(
 
       fetchAdminStats: async () => {
         try {
-          const res = await fetch('/api/admin/stats')
+          const res = await fetch('/api/admin/stats', { headers: getAuthHeaders() })
           if (!res.ok) throw new Error('Failed to fetch admin stats')
           const data = await res.json()
           if (data.success && data.data) {
@@ -1043,7 +1080,7 @@ export const useAppStore = create<AppState>()(
 
       fetchAdminWithdrawals: async () => {
         try {
-          const res = await fetch('/api/admin/withdrawals')
+          const res = await fetch('/api/admin/withdrawals', { headers: getAuthHeaders() })
           if (!res.ok) throw new Error('Failed to fetch admin withdrawals')
           const data = await res.json()
           if (data.success && data.data) {
@@ -1059,7 +1096,7 @@ export const useAppStore = create<AppState>()(
                 id: `ba-wd-${w.id}`,
                 bankName: w.bankName || '',
                 accountNumber: w.bankAccount || '',
-                holderName: w.bankHolder || '',
+                accountHolder: w.bankHolder || '',
                 isDefault: false,
               },
               status: w.status === 'processed' ? 'completed' : (w.status as WithdrawStatus),
@@ -1077,7 +1114,7 @@ export const useAppStore = create<AppState>()(
 
       fetchAdminBanners: async () => {
         try {
-          const res = await fetch('/api/admin/banners')
+          const res = await fetch('/api/admin/banners', { headers: getAuthHeaders() })
           if (!res.ok) throw new Error('Failed to fetch admin banners')
           const data = await res.json()
           if (data.success && data.data) {
@@ -1089,6 +1126,9 @@ export const useAppStore = create<AppState>()(
                 link: b.link || '',
                 position: b.position || 'home_top',
                 isActive: b.isActive ?? true,
+                sortOrder: b.sortOrder ?? 0,
+                startDate: b.startDate || null,
+                endDate: b.endDate || null,
               }))
             })
           }
@@ -1099,7 +1139,7 @@ export const useAppStore = create<AppState>()(
 
       fetchAdminComplaints: async () => {
         try {
-          const res = await fetch('/api/admin/complaints')
+          const res = await fetch('/api/admin/complaints', { headers: getAuthHeaders() })
           if (!res.ok) throw new Error('Failed to fetch admin complaints')
           const data = await res.json()
           if (data.success && data.data) {
@@ -1147,7 +1187,7 @@ export const useAppStore = create<AppState>()(
 
       fetchUserData: async (userId: string) => {
         try {
-          const res = await fetch(`/api/user-data?userId=${userId}`)
+          const res = await fetch(`/api/user-data?userId=${userId}`, { headers: getAuthHeaders() })
           if (!res.ok) throw new Error('Failed to fetch user data')
           const raw = await res.json()
           const data = raw.data || raw  // Unwrap { success, data } response
@@ -1484,6 +1524,29 @@ export const useAppStore = create<AppState>()(
           })
         } catch (error) {
           console.error('Failed to fetch categories:', error)
+        }
+      },
+
+      // Home Banners
+      homeBanners: [],
+      fetchHomeBanners: async () => {
+        try {
+          const res = await fetch('/api/banners?position=home_top')
+          if (!res.ok) throw new Error('Failed to fetch banners')
+          const data = await res.json()
+          if (data.success && data.data) {
+            set({
+              homeBanners: data.data.map((b: any) => ({
+                id: b.id,
+                title: b.title,
+                image: b.image,
+                link: b.link || '',
+                position: b.position,
+              }))
+            })
+          }
+        } catch (error) {
+          console.error('Failed to fetch home banners:', error)
         }
       },
     }),

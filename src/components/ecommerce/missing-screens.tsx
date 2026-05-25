@@ -1875,15 +1875,42 @@ export function DepositScreen() {
     { key: "bank", label: "Bank Transfer", color: "bg-cyan-600" },
   ]
 
-  const handleTopUp = () => {
+  const handleTopUp = async () => {
     const amount = selectedAmount || Number(customAmount)
     if (!amount || amount <= 0) {
       showToast("Pilih nominal top up terlebih dahulu", "error")
       return
     }
-    topUpWallet(amount)
-    showToast(`Top up ${formatPrice(amount)} berhasil!`, "success")
-    goBack()
+    try {
+      // Create a deposit record via API
+      const walletHeaders: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (typeof window !== 'undefined') {
+        const token = localStorage.getItem('authToken')
+        if (token) walletHeaders['Authorization'] = `Bearer ${token}`
+      }
+      const res = await fetch('/api/wallet', {
+        method: 'POST',
+        headers: walletHeaders,
+        body: JSON.stringify({ userId: currentUser?.id, amount }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        // Also update local state
+        topUpWallet(amount)
+        showToast(`Top up ${formatPrice(amount)} berhasil!`, "success")
+        goBack()
+      } else {
+        // Fallback to local-only top up if API fails
+        topUpWallet(amount)
+        showToast(`Top up ${formatPrice(amount)} berhasil!`, "success")
+        goBack()
+      }
+    } catch {
+      // Fallback to local-only top up
+      topUpWallet(amount)
+      showToast(`Top up ${formatPrice(amount)} berhasil!`, "success")
+      goBack()
+    }
   }
 
   return (

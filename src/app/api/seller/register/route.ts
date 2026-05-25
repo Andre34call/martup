@@ -1,9 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { verifyAuth, checkRateLimit } from '@/lib/auth-middleware'
 
 // POST /api/seller/register - Register user as seller
 export async function POST(request: NextRequest) {
   try {
+    // SECURITY: Require authentication
+    const authResult = await verifyAuth(request)
+    if (!authResult.success) {
+      return NextResponse.json(
+        { success: false, error: authResult.error },
+        { status: authResult.status }
+      )
+    }
+
+    // SECURITY: Rate limit seller registrations
+    const clientIp = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
+    if (!checkRateLimit(`seller-register:${clientIp}`, 5)) {
+      return NextResponse.json(
+        { success: false, error: 'Terlalu banyak percobaan. Coba lagi dalam 1 menit.' },
+        { status: 429 }
+      )
+    }
+
     const body = await request.json()
     const {
       userId,
@@ -24,10 +43,18 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-    if (!storeName) {
+    if (!storeName || storeName.trim().length === 0) {
       return NextResponse.json(
         { success: false, error: 'storeName is required' },
         { status: 400 }
+      )
+    }
+
+    // SECURITY: Users can only register themselves as seller
+    if (userId !== authResult.user.id) {
+      return NextResponse.json(
+        { success: false, error: 'Forbidden - You can only register yourself as a seller' },
+        { status: 403 }
       )
     }
 

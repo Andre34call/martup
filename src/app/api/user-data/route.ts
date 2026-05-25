@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { verifyAuth } from '@/lib/auth-middleware'
 
 // Helper to safely parse JSON fields
 function parseJsonField(value: string | null | undefined): unknown[] {
@@ -24,6 +25,15 @@ function parseProductJsonFields(product: Record<string, unknown>) {
 // GET /api/user-data - Fetch ALL user-specific data in one call
 export async function GET(request: NextRequest) {
   try {
+    // SECURITY: Require authentication
+    const authResult = await verifyAuth(request)
+    if (!authResult.success) {
+      return NextResponse.json(
+        { success: false, error: authResult.error },
+        { status: authResult.status }
+      )
+    }
+
     const { searchParams } = new URL(request.url)
     const userId = searchParams.get('userId')
 
@@ -31,6 +41,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: 'userId is required' },
         { status: 400 }
+      )
+    }
+
+    // SECURITY: Users can only fetch their own data
+    if (userId !== authResult.user.id) {
+      return NextResponse.json(
+        { success: false, error: 'Forbidden - You can only access your own data' },
+        { status: 403 }
       )
     }
 

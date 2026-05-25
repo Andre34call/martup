@@ -111,10 +111,25 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Fetch updated user with all relations
+    // Fetch updated user with all relations (exclude password hash)
     const fullUser = await db.user.findUnique({
       where: { id: user.id },
-      include: {
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        phone: true,
+        avatar: true,
+        role: true,
+        isVerified: true,
+        isActive: true,
+        loyaltyPoints: true,
+        coins: true,
+        referralCode: true,
+        dailyCheckIn: true,
+        divisionId: true,
+        createdAt: true,
+        updatedAt: true,
         seller: true,
         wallet: true,
       },

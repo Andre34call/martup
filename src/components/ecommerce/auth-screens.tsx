@@ -791,20 +791,34 @@ export function OTPScreen() {
   const handleVerify = async () => {
     if (otp.length !== 6) return
     setIsVerifying(true)
-    await new Promise((resolve) => setTimeout(resolve, 800))
 
-    const mockUser: User = {
-      id: "u_otp",
-      email: "",
-      phone: "",
-      name: "New Member",
-      role: "buyer",
-      isVerified: true,
-      loyaltyPoints: 0,
-      coins: 0,
+    try {
+      // Create/sync user via API (OTP verification)
+      const res = await fetch('/api/auth/sync-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: '+628120000789', name: 'New Member' }),
+      })
+      const data = await res.json()
+      if (data.success && data.user) {
+        const user: User = {
+          id: data.user.id,
+          email: data.user.email || '',
+          phone: data.user.phone || '',
+          name: data.user.name,
+          role: data.user.role || 'buyer',
+          isVerified: true,
+          loyaltyPoints: data.user.loyaltyPoints || 0,
+          coins: data.user.coins || 0,
+        }
+        login(user)
+        const { fetchUserData } = useAppStore.getState()
+        await fetchUserData(data.user.id)
+      }
+    } catch (error) {
+      console.error('OTP verification failed:', error)
     }
 
-    login(mockUser)
     setIsVerifying(false)
   }
 

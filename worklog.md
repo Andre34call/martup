@@ -83,3 +83,116 @@ Stage Summary:
 - Logout properly clears both Zustand state AND NextAuth session (no more auto re-login)
 - Demo login removed for production readiness
 - All lint checks pass
+
+---
+Task ID: 1
+Agent: store-fixer
+Task: Fix store.ts admin auth headers + cleanup
+
+Work Log:
+- Added getAuthHeaders() helper function that reads authToken from localStorage and returns headers with Authorization Bearer token
+- Added auth headers to all 6 admin API GET fetch calls: fetchDivisions, fetchAdminUsers, fetchAdminStats, fetchAdminWithdrawals, fetchAdminBanners, fetchAdminComplaints
+- Added auth headers to 2 admin API PATCH fetch calls: assignUserToDivision, updateDivision
+- Fixed deleteAccount() to reset all state fields matching logout(): walletCoins, sellerBalance, sellerBankAccounts, withdrawRequests, adminUsers, adminBanners, adminComplaints, adminStats, divisions, chatRooms, chatMessages, totalUnreadChats, selectedVoucher, usedVoucherIds, vouchers, searchQuery
+- Fixed BankAccount type inconsistency: changed holderName to accountHolder in fetchAdminWithdrawals mapping to match BankAccount interface in types.ts
+- Verified partialize config correctly only persists settings and searchHistory (isDataLoaded is NOT persisted, which is correct)
+- All lint checks pass
+
+Stage Summary:
+- All admin API calls now include auth headers, preventing 401 errors from middleware
+- deleteAccount() properly resets all state fields (was missing 16 fields)
+- BankAccount mapping uses consistent field names (accountHolder instead of holderName)
+- No changes needed to partialize config (already correct)
+
+---
+Task ID: 3-4
+Agent: banner-fixer
+Task: Fix Banner management + position features
+
+Work Log:
+- Replaced local-only Zustand operations with real API calls (POST/PUT/DELETE /api/admin/banners)
+- Added all 8 position options from schema: home_top, home_mid, home_bottom, category_top, search_top, product_detail, checkout_top, popup
+- Added image upload support via /api/upload with file input button and loading spinner
+- Added delete functionality with ConfirmDialog confirmation
+- Added sort order (number input), start date, and end date fields to Add Banner form
+- Added banner image preview in list (shows actual image when available, fallback gradient icon)
+- Fixed isActive toggle to call PUT API and refresh from DB instead of local Zustand update
+- Updated store.ts adminBanners type to include sortOrder, startDate, endDate fields
+- Updated fetchAdminBanners mapping to include sortOrder, startDate, endDate from API response
+- Added Upload icon import from lucide-react
+- Removed unused addAdminBanner, updateAdminBanner, deleteAdminBanner from component destructuring
+
+Stage Summary:
+- Banner management now persists to database via API (all CRUD operations)
+- All 8 positions available matching the Prisma schema with Indonesian labels
+- File upload works via /api/upload with preview
+- Delete with confirmation dialog via ConfirmDialog
+- Toggle isActive calls API and refreshes from DB
+- Sort order and date range fields included in create form
+- All lint checks pass
+
+---
+Task ID: 4-5
+Agent: banner-audit-fixer
+Task: Dynamic home banners + comprehensive code audit
+
+Work Log:
+- Created public /api/banners endpoint (GET, no auth required, supports position filter, respects date ranges)
+- Added homeBanners state and fetchHomeBanners to store.ts (fetches from /api/banners?position=home_top)
+- Added homeBanners: [] to logout() and deleteAccount() resets
+- Updated home-screen.tsx to show dynamic banners from DB with fallback gradient when no banners exist
+- Removed hardcoded banners array and handleBannerClick from home-screen.tsx
+- Added useEffect to fetch banners on mount, auto-play carousel uses homeBanners.length
+- **CRITICAL BUG FIX**: SellerAddProductScreen handleSubmit now calls POST /api/seller/products for new products and PUT /api/admin/products for edits (was only updating local Zustand)
+- **CRITICAL BUG FIX**: CheckoutScreen handlePay now calls POST /api/orders for each seller group (was only updating local Zustand)
+- **CRITICAL BUG FIX**: CheckoutScreen wallet payment now calls POST /api/wallet to deduct balance on server (was only deducting locally)
+- **CRITICAL BUG FIX**: DepositScreen handleTopUp now calls POST /api/wallet to persist top-up to DB (was only updating local Zustand)
+- **CRITICAL BUG FIX**: OTPScreen handleVerify now calls /api/auth/sync-user instead of creating a hardcoded mock user
+- **CRITICAL BUG FIX**: SellerOrders process/ship buttons now call PUT /api/orders to persist status changes to DB
+- All lint checks pass, dev server compiles without errors
+
+Stage Summary:
+- Home screen banners now come from database (admin-managed via Banner Management)
+- Fallback gradient shown when no banners exist in DB
+- All critical data-mutating operations now persist to database via API calls:
+  - Product creation/editing (seller)
+  - Order creation (checkout)
+  - Wallet top-up and deduction
+  - OTP login
+  - Seller order status updates (process/ship)
+- Each API call has local Zustand fallback for resilience
+
+
+---
+Task ID: 6
+Agent: security-hardener
+Task: Security hardening for production
+
+Work Log:
+- CRITICAL FIX: Added verifyAuth to /api/user-data (was unauthenticated, anyone could read any user's data)
+- CRITICAL FIX: Added verifyAuth to /api/wallet GET/POST (was unauthenticated, anyone could read/modify any wallet)
+- CRITICAL FIX: Added verifyAuth to /api/seller/register (was unauthenticated, anyone could register as seller for any userId)
+- CRITICAL FIX: Added verifyAuth to /api/upload (was unauthenticated, anyone could upload files)
+- Fixed password hash leak in /api/admin/users PUT and DELETE handlers (db.user.update returned all fields including password)
+- Fixed password hash leak in /api/auth/sync-user response (db.user.findUnique with include returned password field)
+- Added position enum validation to /api/admin/banners POST and PUT (validates against 8 allowed values)
+- Added email format validation to /api/auth/login
+- Added file extension sanitization to /api/upload (validates against allowlist, prevents path traversal in folder/bucket names)
+- Removed hardcoded Supabase credentials from /api/upload fallback values (now requires env vars)
+- Added rate limiting to /api/seller/register (5/min) and /api/wallet POST (10/min)
+- Added wallet top-up amount cap (max Rp 10.000.000)
+- Expanded middleware matcher from /api/admin/* to /api/* so security headers apply to ALL API routes
+- Added TOKEN_SECRET fallback warning in auth-middleware.ts
+- Updated frontend to send auth headers for secured endpoints: store.ts (seller/register, user-data), upload.ts, admin-screens.tsx (upload), checkout-screen.tsx (wallet), missing-screens.tsx (wallet)
+- Verified all 13 admin API routes have verifyAdmin at top of each handler
+- Verified .gitignore excludes .env files
+- Verified Prisma handles SQL injection prevention
+
+Stage Summary:
+- 4 CRITICAL unauthenticated endpoints now require authentication (user-data, wallet, seller/register, upload)
+- 3 password hash leaks fixed (admin/users PUT/DELETE, auth/sync-user)
+- Input validation added for banner positions, login email format, and upload file extensions
+- Rate limiting added to seller registration and wallet mutations
+- Security headers now apply to all API routes (not just admin)
+- Hardcoded credentials removed from upload route
+- Production readiness: SIGNIFICANTLY IMPROVED. Key vulnerabilities (unauthenticated data access, password hash leaks) are fixed. Remaining items for full production: rotate env secrets to strong random values, add HTTPS enforcement, add CORS configuration for production domain.

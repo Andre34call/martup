@@ -528,7 +528,16 @@ export function SellerOrders() {
                     <p className="text-base font-bold text-foreground">{formatPrice(order.amount)}</p>
                     <div className="flex gap-2">
                       {order.status === "paid" && (
-                        <Button size="sm" className="h-8 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={() => { updateOrderStatus(order.id, 'processing'); showToast("Pesanan sedang diproses", "success") }}>
+                        <Button size="sm" className="h-8 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={() => {
+                          updateOrderStatus(order.id, 'processing')
+                          // Also update via API
+                          fetch('/api/orders', {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ orderId: order.id, status: 'processing' }),
+                          }).catch(() => {})
+                          showToast("Pesanan sedang diproses", "success")
+                        }}>
                           <Package className="w-3 h-3 mr-1" /> Proses
                         </Button>
                       )}
@@ -582,6 +591,12 @@ export function SellerOrders() {
                 if (trackingOrderId) {
                   updateOrderTracking(trackingOrderId, trackingNumber.trim())
                   updateOrderStatus(trackingOrderId, 'shipped')
+                  // Also update via API
+                  fetch('/api/orders', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ orderId: trackingOrderId, status: 'shipped', trackingNumber: trackingNumber.trim() }),
+                  }).catch(() => {})
                   showToast("Pesanan sedang dikirim", "success")
                 }
                 setShowTrackingDialog(false)

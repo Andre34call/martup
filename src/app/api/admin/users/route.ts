@@ -128,6 +128,22 @@ export async function PUT(request: NextRequest) {
     const user = await db.user.update({
       where: { id: userId },
       data: updateData,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        role: true,
+        isVerified: true,
+        isActive: true,
+        avatar: true,
+        divisionId: true,
+        loyaltyPoints: true,
+        coins: true,
+        referralCode: true,
+        createdAt: true,
+        updatedAt: true,
+      },
     })
 
     return NextResponse.json({ success: true, data: user })
@@ -172,6 +188,22 @@ export async function DELETE(request: NextRequest) {
     const user = await db.user.update({
       where: { id: userId },
       data: { isActive: false },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        role: true,
+        isVerified: true,
+        isActive: true,
+        avatar: true,
+        divisionId: true,
+        loyaltyPoints: true,
+        coins: true,
+        referralCode: true,
+        createdAt: true,
+        updatedAt: true,
+      },
     })
 
     return NextResponse.json({ success: true, data: user })

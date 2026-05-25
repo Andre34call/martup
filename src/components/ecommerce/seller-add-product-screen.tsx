@@ -292,7 +292,7 @@ export function SellerAddProductScreen() {
   }
 
   // Submit handler
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (productImages.length === 0 && !editingProduct?.images?.length) {
       showToast("Upload minimal 1 foto produk", "error")
       return
@@ -327,51 +327,148 @@ export function SellerAddProductScreen() {
       ? productImages.map(img => img.url)
       : (editingProduct?.images || [])
 
-    // Build ProductVariant[] from variant groups
-    const productVariants = variants.flatMap(v =>
+    // Build variant data for API
+    const apiVariants = variants.flatMap(v =>
       v.values.map(val => ({
-        id: `pv_${Date.now()}_${v.name}_${val}`,
-        productId: editingProduct?.id || `p_${Date.now()}`,
         name: v.name,
         value: val,
         stock: Math.floor(parseInt(stock) / (v.values.length || 1)),
       }))
     )
 
-    const newProduct: Product = {
-      id: editingProduct?.id || `p_${Date.now()}`,
-      sellerId: sellerId,
-      categoryId: category,
-      name: productName.trim(),
-      slug: productName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
-      description: description.trim(),
-      price: priceNumber,
-      ...(discountPriceNumber > 0 && discountPriceNumber < priceNumber ? { discountPrice: discountPriceNumber } : {}),
-      images: productImages2,
-      stock: parseInt(stock),
-      sold: editingProduct?.sold || 0,
-      minOrder: parseInt(minOrder) || 1,
-      weight: parseInt(weight) || 100,
-      condition,
-      status: 'active',
-      rating: editingProduct?.rating || 0,
-      reviewCount: editingProduct?.reviewCount || 0,
-      isFeatured: editingProduct?.isFeatured || false,
-      isFlashSale: false,
-      variants: productVariants,
-      seller: sellerInfo,
-      category: selectedCategoryObj ? { id: selectedCategoryObj.id, name: selectedCategoryObj.name, slug: selectedCategoryObj.slug } : { id: category, name: category, slug: category },
-      ...(tags.length > 0 ? { tags } : {}),
-      ...(productVideo ? { videoUrl: productVideo.url } : {}),
-    }
+    setIsUploading(true)
 
-    if (editingProduct) {
-      updateProduct(newProduct)
-    } else {
-      addProduct(newProduct)
+    try {
+      if (editingProduct) {
+        // Update existing product via API
+        const res = await fetch(`/api/admin/products`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            productId: editingProduct.id,
+            updates: {
+              name: productName.trim(),
+              slug: productName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+              description: description.trim(),
+              price: priceNumber,
+              discountPrice: discountPriceNumber > 0 && discountPriceNumber < priceNumber ? discountPriceNumber : null,
+              images: productImages2,
+              stock: parseInt(stock),
+              minOrder: parseInt(minOrder) || 1,
+              weight: parseInt(weight) || 100,
+              condition,
+              status: 'active',
+              categoryId: category,
+              tags: tags.length > 0 ? tags : null,
+              videoUrl: productVideo?.url || null,
+            },
+          }),
+        })
+        const data = await res.json()
+        if (!data.success) {
+          showToast(data.error || "Gagal memperbarui produk", "error")
+          setIsUploading(false)
+          return
+        }
+        // Also update local store
+        const productVariants = apiVariants.map((v, i) => ({
+          id: `pv_${Date.now()}_${i}`,
+          productId: editingProduct.id,
+          name: v.name,
+          value: v.value,
+          stock: v.stock,
+        }))
+        updateProduct({
+          ...editingProduct,
+          name: productName.trim(),
+          description: description.trim(),
+          price: priceNumber,
+          ...(discountPriceNumber > 0 && discountPriceNumber < priceNumber ? { discountPrice: discountPriceNumber } : {}),
+          images: productImages2,
+          stock: parseInt(stock),
+          minOrder: parseInt(minOrder) || 1,
+          weight: parseInt(weight) || 100,
+          condition,
+          status: 'active',
+          categoryId: category,
+          variants: productVariants,
+          ...(tags.length > 0 ? { tags } : {}),
+          ...(productVideo ? { videoUrl: productVideo.url } : {}),
+        })
+      } else {
+        // Create new product via API
+        const res = await fetch('/api/seller/products', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sellerId,
+            categoryId: category,
+            name: productName.trim(),
+            slug: productName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+            description: description.trim(),
+            price: priceNumber,
+            discountPrice: discountPriceNumber > 0 && discountPriceNumber < priceNumber ? discountPriceNumber : null,
+            images: productImages2,
+            stock: parseInt(stock),
+            minOrder: parseInt(minOrder) || 1,
+            weight: parseInt(weight) || 100,
+            condition,
+            status: 'active',
+            variants: apiVariants,
+            tags: tags.length > 0 ? tags : null,
+            videoUrl: productVideo?.url || null,
+          }),
+        })
+        const data = await res.json()
+        if (!data.success) {
+          showToast(data.error || "Gagal membuat produk", "error")
+          setIsUploading(false)
+          return
+        }
+        // Add to local store from API response
+        const apiProduct = data.data
+        const productVariants = (apiProduct.variants || []).map((v: any) => ({
+          id: v.id,
+          productId: apiProduct.id,
+          name: v.name,
+          value: v.value,
+          stock: v.stock || 0,
+        }))
+        const newProduct: Product = {
+          id: apiProduct.id,
+          sellerId,
+          categoryId: category,
+          name: productName.trim(),
+          slug: apiProduct.slug,
+          description: description.trim(),
+          price: priceNumber,
+          ...(discountPriceNumber > 0 && discountPriceNumber < priceNumber ? { discountPrice: discountPriceNumber } : {}),
+          images: productImages2,
+          stock: parseInt(stock),
+          sold: 0,
+          minOrder: parseInt(minOrder) || 1,
+          weight: parseInt(weight) || 100,
+          condition,
+          status: 'active',
+          rating: 0,
+          reviewCount: 0,
+          isFeatured: false,
+          isFlashSale: false,
+          variants: productVariants,
+          seller: sellerInfo,
+          category: selectedCategoryObj ? { id: selectedCategoryObj.id, name: selectedCategoryObj.name, slug: selectedCategoryObj.slug } : { id: category, name: category, slug: category },
+          ...(tags.length > 0 ? { tags } : {}),
+          ...(productVideo ? { videoUrl: productVideo.url } : {}),
+        }
+        addProduct(newProduct)
+      }
+      showToast(editingProduct ? "Produk berhasil diperbarui! 🎉" : "Produk berhasil dipublikasikan! 🎉", "success")
+      setTimeout(() => navigate("seller-products"), 1500)
+    } catch (error) {
+      console.error('Product save failed:', error)
+      showToast("Terjadi kesalahan saat menyimpan produk", "error")
     }
-    showToast(editingProduct ? "Produk berhasil diperbarui! 🎉" : "Produk berhasil dipublikasikan! 🎉", "success")
-    setTimeout(() => navigate("seller-products"), 1500)
+    setIsUploading(false)
   }
 
   const handleDraft = () => {

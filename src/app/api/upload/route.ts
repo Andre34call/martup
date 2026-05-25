@@ -1,10 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { verifyAuth } from '@/lib/auth-middleware'
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://rzrfouzuxcxdbhadbppi.supabase.co'
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_fjYg2KrdC0xNzu90xqvpZw_8lYIH18Q'
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
 export async function POST(request: NextRequest) {
   try {
+    // SECURITY: Require authentication for file uploads
+    const authResult = await verifyAuth(request)
+    if (!authResult.success) {
+      return NextResponse.json(
+        { success: false, error: authResult.error },
+        { status: authResult.status }
+      )
+    }
+
+    // SECURITY: Validate Supabase configuration
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+      return NextResponse.json(
+        { success: false, error: 'Storage belum dikonfigurasi. Hubungi admin.' },
+        { status: 500 }
+      )
+    }
+
     const formData = await request.formData()
     const file = formData.get('file') as File
     const bucket = (formData.get('bucket') as string) || 'products'
@@ -14,7 +32,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'No file provided' }, { status: 400 })
     }
 
-    // Validate file size (5MB for images, 30MB for videos)
+    // SECURITY: Validate file size (5MB for images, 30MB for videos)
     const isVideo = file.type.startsWith('video/')
     const maxSize = isVideo ? 30 * 1024 * 1024 : 5 * 1024 * 1024
     if (file.size > maxSize) {
@@ -24,7 +42,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate file type
+    // SECURITY: Validate file type
     const allowedImageTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
     const allowedVideoTypes = ['video/mp4', 'video/webm', 'video/quicktime']
     const allowedTypes = [...allowedImageTypes, ...allowedVideoTypes]
@@ -36,15 +54,23 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // SECURITY: Validate and sanitize file extension (prevent path traversal)
+    const rawExt = file.name.split('.').pop() || ''
+    const allowedExtensions = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'mp4', 'webm', 'mov']
+    const ext = allowedExtensions.includes(rawExt.toLowerCase()) ? rawExt.toLowerCase() : (isVideo ? 'mp4' : 'jpg')
+
+    // SECURITY: Sanitize folder name (prevent path traversal)
+    const safeFolder = folder.replace(/[^a-zA-Z0-9_-]/g, '')
+    const safeBucket = bucket.replace(/[^a-zA-Z0-9_-]/g, '')
+
     // Generate unique filename
-    const ext = file.name.split('.').pop() || (isVideo ? 'mp4' : 'jpg')
-    const filename = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+    const filename = `${safeFolder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
 
     // Upload to Supabase Storage using REST API
     const arrayBuffer = await file.arrayBuffer()
 
     const uploadResponse = await fetch(
-      `${SUPABASE_URL}/storage/v1/object/${bucket}/${filename}`,
+      `${SUPABASE_URL}/storage/v1/object/${safeBucket}/${filename}`,
       {
         method: 'POST',
         headers: {
@@ -95,7 +121,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Construct public URL
-    const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${filename}`
+    const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${safeBucket}/${filename}`
 
     return NextResponse.json({
       success: true,

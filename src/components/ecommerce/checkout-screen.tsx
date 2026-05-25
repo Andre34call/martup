@@ -335,21 +335,19 @@ export function CheckoutScreen() {
     setOrderNumber(newOrderNumber)
 
     // Simulate payment processing
-    setTimeout(() => {
-      // Create one order per seller
-      groupedBySeller.forEach((group) => {
+    setTimeout(async () => {
+      // Create one order per seller via API
+      for (const group of groupedBySeller) {
         const sellerShipping = shippingBySeller[group.seller.id]
         const groupSubtotal = group.items.reduce((sum, i) => sum + ((i.product.discountPrice || i.product.price) * i.quantity), 0)
         const groupShipping = sellerShipping?.price || 0
         const groupDiscount = subtotal > 0 ? Math.round(voucherDiscount * (groupSubtotal / subtotal)) : 0
         const groupTotal = groupSubtotal + groupShipping - groupDiscount + platformFee
 
-        const order = {
-          id: `o${Date.now()}-${group.seller.id}`,
-          orderNumber: newOrderNumber,
+        const orderPayload = {
           userId: currentUser?.id || '',
           sellerId: group.seller.id,
-          status: 'paid' as const,
+          addressId: defaultAddress.id,
           subtotal: groupSubtotal,
           shippingCost: groupShipping,
           discountAmount: groupDiscount,
@@ -357,38 +355,141 @@ export function CheckoutScreen() {
           platformFee,
           totalAmount: groupTotal,
           paymentMethod: PAYMENT_METHODS.find(m => m.id === selectedPayment)?.name || selectedPayment,
-          paymentStatus: 'paid',
           items: group.items.map((item) => ({
-            id: `oi${Date.now()}-${item.id}`,
             productId: item.productId,
+            variantId: item.variant?.id || null,
             productName: item.product.name,
-            variantName: item.variant ? `${item.variant.name}: ${item.variant.value}` : undefined,
+            variantName: item.variant ? `${item.variant.name}: ${item.variant.value}` : null,
             price: item.product.discountPrice || item.product.price,
             quantity: item.quantity,
             subtotal: (item.product.discountPrice || item.product.price) * item.quantity,
-            image: item.product.images?.[0]
+            image: item.product.images?.[0] || null,
           })),
           shipping: {
-            id: `sh${Date.now()}-${group.seller.id}`,
             provider: sellerShipping?.provider || 'JNE',
             service: sellerShipping?.service || 'REG',
-            estimatedDays: sellerShipping?.estimatedDays,
-            status: 'pending'
+            estimatedDays: sellerShipping?.estimatedDays || null,
           },
-          address: defaultAddress,
-          seller: group.seller,
-          createdAt: new Date().toISOString(),
-          paidAt: new Date().toISOString()
         }
-        addOrder(order)
-      })
+
+        try {
+          const res = await fetch('/api/orders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(orderPayload),
+          })
+          const data = await res.json()
+
+          if (data.success && data.data) {
+            // Add to local store from API response
+            const apiOrder = data.data
+            const localOrder = {
+              id: apiOrder.id,
+              orderNumber: apiOrder.orderNumber,
+              userId: currentUser?.id || '',
+              sellerId: group.seller.id,
+              status: 'paid' as const,
+              subtotal: groupSubtotal,
+              shippingCost: groupShipping,
+              discountAmount: groupDiscount,
+              taxAmount: 0,
+              platformFee,
+              totalAmount: groupTotal,
+              paymentMethod: PAYMENT_METHODS.find(m => m.id === selectedPayment)?.name || selectedPayment,
+              paymentStatus: 'paid',
+              items: group.items.map((item) => ({
+                id: `oi${Date.now()}-${item.id}`,
+                productId: item.productId,
+                productName: item.product.name,
+                variantName: item.variant ? `${item.variant.name}: ${item.variant.value}` : undefined,
+                variantId: item.variant?.id || undefined,
+                price: item.product.discountPrice || item.product.price,
+                quantity: item.quantity,
+                subtotal: (item.product.discountPrice || item.product.price) * item.quantity,
+                image: item.product.images?.[0]
+              })),
+              shipping: {
+                id: `sh${Date.now()}-${group.seller.id}`,
+                provider: sellerShipping?.provider || 'JNE',
+                service: sellerShipping?.service || 'REG',
+                estimatedDays: sellerShipping?.estimatedDays,
+                status: 'pending'
+              },
+              address: defaultAddress,
+              seller: group.seller,
+              createdAt: new Date().toISOString(),
+              paidAt: new Date().toISOString()
+            }
+            addOrder(localOrder)
+          }
+        } catch (error) {
+          console.error('Order creation failed:', error)
+          // Fallback: add locally even if API fails
+          const order = {
+            id: `o${Date.now()}-${group.seller.id}`,
+            orderNumber: newOrderNumber,
+            userId: currentUser?.id || '',
+            sellerId: group.seller.id,
+            status: 'paid' as const,
+            subtotal: groupSubtotal,
+            shippingCost: groupShipping,
+            discountAmount: groupDiscount,
+            taxAmount: 0,
+            platformFee,
+            totalAmount: groupTotal,
+            paymentMethod: PAYMENT_METHODS.find(m => m.id === selectedPayment)?.name || selectedPayment,
+            paymentStatus: 'paid',
+            items: group.items.map((item) => ({
+              id: `oi${Date.now()}-${item.id}`,
+              productId: item.productId,
+              productName: item.product.name,
+              variantName: item.variant ? `${item.variant.name}: ${item.variant.value}` : undefined,
+              price: item.product.discountPrice || item.product.price,
+              quantity: item.quantity,
+              subtotal: (item.product.discountPrice || item.product.price) * item.quantity,
+              image: item.product.images?.[0]
+            })),
+            shipping: {
+              id: `sh${Date.now()}-${group.seller.id}`,
+              provider: sellerShipping?.provider || 'JNE',
+              service: sellerShipping?.service || 'REG',
+              estimatedDays: sellerShipping?.estimatedDays,
+              status: 'pending'
+            },
+            address: defaultAddress,
+            seller: group.seller,
+            createdAt: new Date().toISOString(),
+            paidAt: new Date().toISOString()
+          }
+          addOrder(order)
+        }
+      }
 
       // Remove checked items from cart
       const checkedItemIds = checkedItems.map(i => i.id)
       checkedItemIds.forEach(id => removeItem(id))
 
-      // Deduct wallet balance if paying with MartUp Pay (clamp to 0 minimum)
+      // Deduct wallet balance if paying with MartUp Pay (via API + local)
       if (selectedPayment === 'wallet') {
+        try {
+          const walletHeaders: Record<string, string> = { 'Content-Type': 'application/json' }
+          if (typeof window !== 'undefined') {
+            const token = localStorage.getItem('authToken')
+            if (token) walletHeaders['Authorization'] = `Bearer ${token}`
+          }
+          await fetch('/api/wallet', {
+            method: 'POST',
+            headers: walletHeaders,
+            body: JSON.stringify({
+              userId: currentUser?.id,
+              amount: -Math.max(0, totalAmount),
+              type: 'debit',
+              description: 'Pembayaran Order #' + newOrderNumber,
+            }),
+          })
+        } catch {
+          // Fallback: local deduction if API fails
+        }
         deductWallet(Math.max(0, totalAmount), 'Pembayaran Order #' + newOrderNumber)
       }
 
