@@ -950,6 +950,7 @@ export const useAppStore = create<AppState>()(
             price: product.price,
             discountPrice: product.discountPrice || null,
             images: product.images,
+            videoUrl: product.videoUrl || null,
             stock: product.stock,
             minOrder: product.minOrder,
             weight: product.weight,
@@ -1457,7 +1458,7 @@ export const useAppStore = create<AppState>()(
           if (!res.ok) throw new Error('Failed to fetch products')
           const data = await res.json()
 
-          const products: Product[] = (data.products || []).map((p: any) => ({
+          const products: Product[] = (data.data || data.products || []).map((p: any) => ({
             id: p.id,
             sellerId: p.sellerId,
             categoryId: p.categoryId,
@@ -1467,6 +1468,7 @@ export const useAppStore = create<AppState>()(
             price: p.price,
             discountPrice: p.discountPrice || undefined,
             images: Array.isArray(p.images) ? p.images : (typeof p.images === 'string' ? JSON.parse(p.images) : []),
+            videoUrl: p.videoUrl || undefined,
             stock: p.stock,
             sold: p.sold,
             minOrder: p.minOrder || 1,

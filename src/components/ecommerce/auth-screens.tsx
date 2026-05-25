@@ -366,7 +366,7 @@ export function LoginScreen() {
         {/* Email input */}
         <div className="space-y-2">
           <label className="text-sm font-medium text-foreground">
-            Email
+            Email <span className="text-red-500">*</span>
           </label>
           <div className="relative">
             <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -386,7 +386,7 @@ export function LoginScreen() {
         {/* Password input */}
         <div className="space-y-2">
           <label className="text-sm font-medium text-foreground">
-            Password
+            Password <span className="text-red-500">*</span>
           </label>
           <div className="relative">
             <Input
@@ -627,7 +627,7 @@ export function RegisterScreen() {
       <div className="space-y-4 flex-1 overflow-y-auto">
         {/* Name */}
         <div className="space-y-2">
-          <label className="text-sm font-medium text-foreground">Nama Lengkap</label>
+          <label className="text-sm font-medium text-foreground">Nama Lengkap <span className="text-red-500">*</span></label>
           <Input
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -642,7 +642,7 @@ export function RegisterScreen() {
 
         {/* Email */}
         <div className="space-y-2">
-          <label className="text-sm font-medium text-foreground">Email</label>
+          <label className="text-sm font-medium text-foreground">Email <span className="text-red-500">*</span></label>
           <div className="relative">
             <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
@@ -660,7 +660,7 @@ export function RegisterScreen() {
 
         {/* Phone */}
         <div className="space-y-2">
-          <label className="text-sm font-medium text-foreground">No. HP</label>
+          <label className="text-sm font-medium text-foreground">No. HP <span className="text-red-500">*</span></label>
           <div className="relative">
             <Smartphone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
@@ -678,7 +678,7 @@ export function RegisterScreen() {
 
         {/* Password */}
         <div className="space-y-2">
-          <label className="text-sm font-medium text-foreground">Password</label>
+          <label className="text-sm font-medium text-foreground">Password <span className="text-red-500">*</span></label>
           <div className="relative">
             <Input
               type={showPassword ? "text" : "password"}
@@ -716,7 +716,7 @@ export function RegisterScreen() {
 
         {/* Confirm Password */}
         <div className="space-y-2">
-          <label className="text-sm font-medium text-foreground">Konfirmasi Password</label>
+          <label className="text-sm font-medium text-foreground">Konfirmasi Password <span className="text-red-500">*</span></label>
           <Input
             type={showPassword ? "text" : "password"}
             value={confirmPassword}
@@ -980,7 +980,7 @@ export function ForgotPasswordScreen() {
 
             {/* Email input */}
             <div className="space-y-2 mb-6">
-              <label className="text-sm font-medium text-foreground">Email</label>
+              <label className="text-sm font-medium text-foreground">Email <span className="text-red-500">*</span></label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input

@@ -301,16 +301,24 @@ export function SellerAddProductScreen() {
       showToast("Nama produk harus diisi", "error")
       return
     }
-    if (!priceNumber || priceNumber <= 0) {
-      showToast("Harga harus diisi", "error")
+    if (!description.trim()) {
+      showToast("Deskripsi produk harus diisi", "error")
       return
     }
     if (!category) {
       showToast("Kategori harus dipilih", "error")
       return
     }
+    if (!priceNumber || priceNumber <= 0) {
+      showToast("Harga harus diisi", "error")
+      return
+    }
     if (!stock || parseInt(stock) <= 0) {
       showToast("Stok harus diisi", "error")
+      return
+    }
+    if (!weight || parseInt(weight) <= 0) {
+      showToast("Berat produk harus diisi", "error")
       return
     }
 
@@ -563,7 +571,7 @@ export function SellerAddProductScreen() {
         {/* ============ Product Name ============ */}
         <motion.div {...fadeIn}>
           <div className="rounded-2xl border border-border/50 bg-card p-4 space-y-2">
-            <label className="text-sm font-semibold text-foreground">Nama Produk</label>
+            <label className="text-sm font-semibold text-foreground">Nama Produk <span className="text-red-500">*</span></label>
             <Input
               value={productName}
               onChange={(e) => setProductName(e.target.value)}
@@ -577,7 +585,7 @@ export function SellerAddProductScreen() {
         {/* ============ Category ============ */}
         <motion.div {...fadeIn}>
           <div className="rounded-2xl border border-border/50 bg-card p-4 space-y-2">
-            <label className="text-sm font-semibold text-foreground">Kategori</label>
+            <label className="text-sm font-semibold text-foreground">Kategori <span className="text-red-500">*</span></label>
             <div className="relative">
               <button
                 onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
@@ -622,7 +630,7 @@ export function SellerAddProductScreen() {
         {/* ============ Description ============ */}
         <motion.div {...fadeIn}>
           <div className="rounded-2xl border border-border/50 bg-card p-4 space-y-2">
-            <label className="text-sm font-semibold text-foreground">Deskripsi</label>
+            <label className="text-sm font-semibold text-foreground">Deskripsi <span className="text-red-500">*</span></label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -643,7 +651,7 @@ export function SellerAddProductScreen() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-xs font-medium text-muted-foreground">Harga Jual *</label>
+              <label className="text-xs font-medium text-muted-foreground">Harga Jual <span className="text-red-500">*</span></label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground font-medium">Rp</span>
                 <Input
@@ -698,7 +706,7 @@ export function SellerAddProductScreen() {
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <label className="text-xs font-medium text-muted-foreground">Stok *</label>
+                <label className="text-xs font-medium text-muted-foreground">Stok <span className="text-red-500">*</span></label>
                 <Input
                   type="number"
                   value={stock}
@@ -721,7 +729,7 @@ export function SellerAddProductScreen() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-xs font-medium text-muted-foreground">Berat (gram) *</label>
+              <label className="text-xs font-medium text-muted-foreground">Berat (gram) <span className="text-red-500">*</span></label>
               <Input
                 type="number"
                 value={weight}
