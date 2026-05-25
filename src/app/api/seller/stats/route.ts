@@ -110,13 +110,17 @@ export async function GET(request: NextRequest) {
     }))
 
     // Last 5 orders for this seller
-    const recentOrders = await db.order.findMany({
+    const recentOrdersRaw = await db.order.findMany({
       where: { sellerId },
       include: {
         items: {
           select: {
             id: true,
+            productId: true,
             productName: true,
+            variantName: true,
+            variantId: true,
+            price: true,
             quantity: true,
             subtotal: true,
             image: true,
@@ -129,10 +133,44 @@ export async function GET(request: NextRequest) {
             avatar: true,
           },
         },
+        shipping: {
+          select: {
+            id: true,
+            provider: true,
+            service: true,
+            trackingNumber: true,
+            estimatedDays: true,
+            status: true,
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
       take: 5,
     })
+
+    // Map orders to include buyerName and proper shape for the frontend
+    const recentOrders = recentOrdersRaw.map((o) => ({
+      id: o.id,
+      orderNumber: o.orderNumber,
+      userId: o.userId,
+      sellerId: o.sellerId,
+      status: o.status,
+      subtotal: o.subtotal,
+      shippingCost: o.shippingCost,
+      discountAmount: o.discountAmount,
+      taxAmount: o.taxAmount,
+      platformFee: o.platformFee,
+      totalAmount: o.totalAmount,
+      paymentMethod: o.paymentMethod,
+      paymentStatus: o.paymentStatus,
+      buyerName: o.user?.name || '',
+      items: o.items,
+      shipping: o.shipping,
+      createdAt: o.createdAt,
+      paidAt: o.paidAt,
+      shippedAt: o.shippedAt,
+      deliveredAt: o.deliveredAt,
+    }))
 
     return NextResponse.json({
       success: true,

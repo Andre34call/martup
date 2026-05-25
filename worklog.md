@@ -1,28 +1,27 @@
 ---
 Task ID: 1
-Agent: Main
-Task: Fix product image/video upload, products showing on homepage, and red asterisks for required fields
+Agent: main
+Task: Fix "Terjadi Kesalahan" error when switching to seller mode
 
 Work Log:
-- Found critical bug: `fetchProducts` in store.ts was reading `data.products` but API returns `data.data` — products NEVER loaded from API
-- Fixed `fetchProducts` to read from `data.data || data.products || []`
-- Fixed `addProduct` to include `videoUrl` in POST body to `/api/seller/products`
-- Added `videoUrl` mapping in `fetchProducts` product parser
-- Created `/api/setup/storage` route to initialize Supabase Storage bucket with proper RLS policies
-- The setup uses `pg` library with direct database URL for DDL operations (bucket creation + policy setup)
-- Storage setup is called automatically from DataFetcher during app initialization
-- Tested: Storage bucket creation works, file upload to Supabase works, public URL is accessible
-- Added red asterisks (*) in red-500 color to all required field labels across:
-  - seller-add-product-screen.tsx (Nama Produk, Kategori, Deskripsi, Harga Jual, Stok, Berat)
-  - auth-screens.tsx (login form, register form, forgot password form)
-  - seller-screens.tsx (store settings, bank info, campaign form, tracking number)
-  - missing-screens.tsx (change password, address form, return/refund form)
-- Added validation for description and weight in product submit handler
-- Improved upload API with better error messages in Indonesian
+- Investigated the error by tracing it to ErrorBoundary component which catches all React crashes
+- Found ROOT CAUSE: `SellerDashboard` and `SellerAnalytics` components destructure `sellerStats` and `fetchSellerStats` from the Zustand store, but these properties didn't exist in the store
+- `fetchSellerStats()` was being called in useEffect, causing `TypeError: undefined is not a function` → ErrorBoundary caught it → "Terjadi Kesalahan"
+- Also found: `switchRole('seller')` didn't auto-register a seller record when buyer switches to seller
+- Also found: Wallet model missing `pendingBalance` field referenced in `fetchUserData`
+
+Fixes Applied:
+1. **store.ts**: Added `sellerStats: SellerStats | null` and `fetchSellerStats: () => Promise<void>` to AppState interface and store implementation
+2. **store.ts**: `fetchSellerStats` gracefully returns early if no seller ID, fetches from `/api/seller/stats` when available
+3. **store.ts**: `switchRole('seller')` now auto-registers seller via `/api/seller/register` API if no seller record exists
+4. **store.ts**: Added `sellerStats: null` to logout and deleteAccount resets
+5. **seller/stats/route.ts**: Enhanced recentOrders response to include buyerName, shipping, items with full shape for frontend compatibility
+6. **prisma/schema.prisma**: Added `pendingBalance Float @default(0)` to Wallet model
+7. Ran `bun run db:push` to sync schema changes
+8. All lint checks pass, dev server compiles without errors
 
 Stage Summary:
-- Products now load from API correctly (was `data.products`, now `data.data`)
-- Supabase Storage bucket "products" auto-created with public read/upload policies
-- Image/video uploads now work end-to-end
-- videoUrl is properly persisted and fetched
-- All required form fields have red asterisks
+- Seller mode switching now works without crashing
+- Auto-registration creates seller record when buyer switches to seller
+- Seller dashboard loads with fallback stats even before API data arrives
+- Wallet pendingBalance field now properly stored in database

@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { ScreenName, UserRole, User, CartItem, Product, ProductVariant, Notification as AppNotification, ChatRoom, ChatMessage, Address, Voucher, Order, OrderStatus, WalletMutation, BankAccount, WithdrawRequest, WithdrawStatus, SellerBalance, Review, Seller, Division } from './types'
+import type { ScreenName, UserRole, User, CartItem, Product, ProductVariant, Notification as AppNotification, ChatRoom, ChatMessage, Address, Voucher, Order, OrderStatus, WalletMutation, BankAccount, WithdrawRequest, WithdrawStatus, SellerBalance, Review, Seller, Division, SellerStats } from './types'
 
 // ==================== APP STORE ====================
 interface AppState {
@@ -194,6 +194,8 @@ interface AppState {
 
   // Data fetching
   seller: Seller | null
+  sellerStats: SellerStats | null
+  fetchSellerStats: () => Promise<void>
   fetchUserData: (userId: string) => Promise<void>
   fetchProducts: () => Promise<void>
   fetchCategories: () => Promise<void>
@@ -247,6 +249,7 @@ export const useAppStore = create<AppState>()(
           reviews: [],
           followedStoreIds: [],
           seller: null,
+          sellerStats: null,
           isDataLoaded: false,
           sellerBalance: { availableBalance: 0, pendingBalance: 0, holdBalance: 0, totalBalance: 0, totalWithdrawn: 0 },
           sellerBankAccounts: [],
@@ -266,11 +269,52 @@ export const useAppStore = create<AppState>()(
         // Clear cart and wishlist stores
         useCartStore.getState().clearCart()
       },
-      switchRole: (role) => set((state) => ({
-        userRole: role,
-        currentUser: state.currentUser ? { ...state.currentUser, role } : null,
-        currentScreen: role === 'buyer' ? 'home' : role === 'seller' ? 'seller-dashboard' : 'admin-dashboard'
-      })),
+      switchRole: (role) => {
+        const state = get()
+        // If switching to seller but no seller record exists, auto-register
+        if (role === 'seller' && state.currentUser && !state.seller) {
+          const userId = state.currentUser.id
+          const storeName = state.currentUser.name ? `${state.currentUser.name}'s Store` : 'My Store'
+          // Register seller in background
+          fetch('/api/seller/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId, storeName }),
+          })
+            .then(res => res.json())
+            .then(data => {
+              if (data.success && data.data) {
+                const sellerData = data.data
+                const seller: Seller = {
+                  id: sellerData.id,
+                  userId: sellerData.userId,
+                  storeName: sellerData.storeName,
+                  storeSlug: sellerData.storeSlug,
+                  storeDesc: sellerData.storeDesc || undefined,
+                  storeAvatar: sellerData.storeAvatar || undefined,
+                  storeBanner: sellerData.storeBanner || undefined,
+                  isVerified: sellerData.isVerified || false,
+                  isPremium: sellerData.isPremium || false,
+                  rating: sellerData.rating || 0,
+                  totalSales: sellerData.totalSales || 0,
+                  totalProducts: sellerData.totalProducts || 0,
+                  responseTime: sellerData.responseTime || undefined,
+                  bankName: sellerData.bankName || undefined,
+                  bankAccount: sellerData.bankAccount || undefined,
+                  bankHolder: sellerData.bankHolder || undefined,
+                  autoReply: sellerData.autoReply || undefined,
+                }
+                set({ seller })
+              }
+            })
+            .catch(err => console.error('Auto seller register failed:', err))
+        }
+        set({
+          userRole: role,
+          currentUser: state.currentUser ? { ...state.currentUser, role } : null,
+          currentScreen: role === 'buyer' ? 'home' : role === 'seller' ? 'seller-dashboard' : 'admin-dashboard'
+        })
+      },
 
       // Selected items
       selectedProductId: null,
@@ -890,13 +934,30 @@ export const useAppStore = create<AppState>()(
         reviews: [],
         followedStoreIds: [],
         seller: null,
+        sellerStats: null,
         isDataLoaded: false,
       }),
 
       // Data fetching
       seller: null,
+      sellerStats: null,
       isDataLoaded: false,
       categories: [],
+
+      fetchSellerStats: async () => {
+        const sellerId = get().seller?.id
+        if (!sellerId) return
+        try {
+          const res = await fetch(`/api/seller/stats?sellerId=${sellerId}`)
+          if (!res.ok) throw new Error('Failed to fetch seller stats')
+          const data = await res.json()
+          if (data.success && data.data) {
+            set({ sellerStats: data.data as SellerStats })
+          }
+        } catch (error) {
+          console.error('Failed to fetch seller stats:', error)
+        }
+      },
 
       fetchUserData: async (userId: string) => {
         try {
