@@ -10,10 +10,7 @@ const MIDTRANS_SERVER_KEY = process.env.MIDTRANS_SERVER_KEY || ''
 // Midtrans webhook callback — called by Midtrans servers when payment status changes.
 // NO standard auth required (Midtrans calls this from their servers).
 // MUST verify the notification signature before processing.
-<<<<<<< HEAD
 // IDEMPOTENCY: Checks order's current status to prevent duplicate processing.
-=======
->>>>>>> e8fde0be16ee13d9b5683813059064bdd2e4c629
 
 export async function POST(request: NextRequest) {
   try {
@@ -82,7 +79,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Order not found' })
     }
 
-<<<<<<< HEAD
     // IDEMPOTENCY CHECK: If the order is already in the target state, skip processing
     // This prevents duplicate wallet mutations from Midtrans retrying notifications
     if (transaction_status === 'settlement' || (transaction_status === 'capture' && fraud_status === 'accept')) {
@@ -107,8 +103,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-=======
->>>>>>> e8fde0be16ee13d9b5683813059064bdd2e4c629
     // Step 3: Determine the new order and payment status based on transaction_status
     let newOrderStatus: string | null = null
     let newPaymentStatus: string | null = null
@@ -235,7 +229,6 @@ export async function POST(request: NextRequest) {
 
       // Step 5: On successful payment (settlement or capture+accept), process seller payout
       if (newPaymentStatus === 'paid' && (transaction_status === 'settlement' || (transaction_status === 'capture' && fraud_status === 'accept'))) {
-<<<<<<< HEAD
         // IDEMPOTENCY: Double-check no wallet mutation already exists for this order
         const existingMutation = await tx.walletMutation.findFirst({
           where: {
@@ -253,11 +246,6 @@ export async function POST(request: NextRequest) {
 
         // Calculate seller earnings: subtotal - platform fee (commission)
         const subtotal = Number(order.subtotal)
-=======
-        // Calculate seller earnings: subtotal - platform fee (commission)
-        const subtotal = Number(order.subtotal)
-        const platformFee = Number(order.platformFee)
->>>>>>> e8fde0be16ee13d9b5683813059064bdd2e4c629
         const commissionRate = Number(order.seller.commissionRate)
         const commissionAmount = Math.round(subtotal * commissionRate)
         const sellerEarnings = subtotal - commissionAmount

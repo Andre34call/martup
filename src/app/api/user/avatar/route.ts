@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middleware'
-<<<<<<< HEAD
 import { UPLOAD_LIMITS } from '@/lib/upload-limits'
-=======
->>>>>>> e8fde0be16ee13d9b5683813059064bdd2e4c629
 
 // ==================== CONFIG ====================
 
@@ -13,65 +10,11 @@ const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
 const AVATAR_BUCKET = 'avatars'
 const AVATAR_FOLDER = 'profiles'
-<<<<<<< HEAD
 const MAX_AVATAR_SIZE = UPLOAD_LIMITS.mbToBytes(UPLOAD_LIMITS.MAX_AVATAR_SIZE_MB) // Use centralized limit
 const ALLOWED_IMAGE_TYPES = [...UPLOAD_LIMITS.ALLOWED_IMAGE_TYPES]
 const ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif']
 
-// ==================== MAGIC BYTE VALIDATION ====================
-
-/**
- * Validate file content using magic bytes (file signatures).
- * This prevents attackers from uploading malicious files with spoofed extensions.
- * Common image magic bytes:
- * - JPEG: FF D8 FF
- * - PNG: 89 50 4E 47
- * - GIF: 47 49 46 38
- * - WebP: 52 49 46 46 ... 57 45 42 50
- */
-function validateImageMagicBytes(buffer: ArrayBuffer): boolean {
-  const bytes = new Uint8Array(buffer.slice(0, 12))
-
-  // JPEG: starts with FF D8 FF
-  if (bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF) {
-    return true
-  }
-
-  // PNG: starts with 89 50 4E 47 0D 0A 1A 0A
-  if (
-    bytes[0] === 0x89 && bytes[1] === 0x50 &&
-    bytes[2] === 0x4E && bytes[3] === 0x47 &&
-    bytes[4] === 0x0D && bytes[5] === 0x0A &&
-    bytes[6] === 0x1A && bytes[7] === 0x0A
-  ) {
-    return true
-  }
-
-  // GIF: starts with "GIF8"
-  if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38) {
-    return true
-  }
-
-  // WebP: RIFF....WEBP
-  if (
-    bytes[0] === 0x52 && bytes[1] === 0x49 &&
-    bytes[2] === 0x46 && bytes[3] === 0x46 &&
-    bytes[8] === 0x57 && bytes[9] === 0x45 &&
-    bytes[10] === 0x42 && bytes[11] === 0x50
-  ) {
-    return true
-  }
-
-  return false
-}
-
-=======
-const MAX_AVATAR_SIZE = 2 * 1024 * 1024 // 2MB
-const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
-const ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif']
-
->>>>>>> e8fde0be16ee13d9b5683813059064bdd2e4c629
-// ==================== HELPERS ====================
+// ==================== MAGIC BYTE VALIDATION =============// ==================== HELPERS ====================
 
 /**
  * Extract the file path from a Supabase public URL.
@@ -140,32 +83,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
-<<<<<<< HEAD
     // SECURITY: Validate file type - images ONLY
     if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
       return NextResponse.json(
         { success: false, error: `Invalid file type. Only JPG, PNG, WebP, and GIF images are allowed for avatars. Got: ${file.type}` },
-=======
-    // SECURITY: Validate file type - images ONLY (no videos for avatars)
-    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid file type. Only JPG, PNG, WebP, and GIF images are allowed for avatars.' },
->>>>>>> e8fde0be16ee13d9b5683813059064bdd2e4c629
         { status: 400 }
       )
     }
 
-<<<<<<< HEAD
     // SECURITY: Validate file size using centralized limits
     if (file.size > MAX_AVATAR_SIZE) {
       return NextResponse.json(
         { success: false, error: `File too large. Maximum avatar size is ${UPLOAD_LIMITS.MAX_AVATAR_SIZE_MB}MB.` },
-=======
-    // SECURITY: Validate file size - 2MB max for avatars
-    if (file.size > MAX_AVATAR_SIZE) {
-      return NextResponse.json(
-        { success: false, error: 'File too large. Maximum avatar size is 2MB.' },
->>>>>>> e8fde0be16ee13d9b5683813059064bdd2e4c629
         { status: 400 }
       )
     }
@@ -174,7 +103,6 @@ export async function POST(request: NextRequest) {
     const rawExt = file.name.split('.').pop() || ''
     const ext = ALLOWED_EXTENSIONS.includes(rawExt.toLowerCase()) ? rawExt.toLowerCase() : 'jpg'
 
-<<<<<<< HEAD
     // Read file buffer for magic byte validation
     const arrayBuffer = await file.arrayBuffer()
 
@@ -186,17 +114,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-=======
->>>>>>> e8fde0be16ee13d9b5683813059064bdd2e4c629
     // Generate unique filename
     const filename = `${AVATAR_FOLDER}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
 
     // Upload to Supabase Storage using REST API
-<<<<<<< HEAD
-=======
-    const arrayBuffer = await file.arrayBuffer()
-
->>>>>>> e8fde0be16ee13d9b5683813059064bdd2e4c629
     const uploadResponse = await fetch(
       `${SUPABASE_URL}/storage/v1/object/${AVATAR_BUCKET}/${filename}`,
       {
