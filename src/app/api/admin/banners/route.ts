@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 
 // GET /api/admin/banners - List all banners
-export async function GET() {
+export async function GET(request: NextRequest) {
+  // Verify admin access
+  const authResult = await verifyAdmin(request)
+  if (!authResult.success) return authErrorResponse(authResult)
+
   try {
     const banners = await db.banner.findMany({
       orderBy: { sortOrder: 'asc' },
@@ -37,6 +42,10 @@ export async function GET() {
 
 // POST /api/admin/banners - Create a new banner
 export async function POST(request: NextRequest) {
+  // Verify admin access
+  const authResult = await verifyAdmin(request)
+  if (!authResult.success) return authErrorResponse(authResult)
+
   try {
     const body = await request.json()
     const { title, image, link, position, sortOrder, isActive, startDate, endDate } = body
@@ -88,6 +97,10 @@ export async function POST(request: NextRequest) {
 
 // PATCH /api/admin/banners - Update a banner
 export async function PATCH(request: NextRequest) {
+  // Verify admin access
+  const authResult = await verifyAdmin(request)
+  if (!authResult.success) return authErrorResponse(authResult)
+
   try {
     const body = await request.json()
     const { bannerId, updates } = body
@@ -148,6 +161,10 @@ export async function PATCH(request: NextRequest) {
 
 // DELETE /api/admin/banners - Delete a banner
 export async function DELETE(request: NextRequest) {
+  // Verify admin access
+  const authResult = await verifyAdmin(request)
+  if (!authResult.success) return authErrorResponse(authResult)
+
   try {
     const { searchParams } = new URL(request.url)
     const bannerId = searchParams.get('bannerId')

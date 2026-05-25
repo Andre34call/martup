@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 
 // GET /api/admin/withdrawals - List all withdrawals with seller info
 export async function GET(request: NextRequest) {
+  // Verify admin access
+  const authResult = await verifyAdmin(request)
+  if (!authResult.success) return authErrorResponse(authResult)
+
   try {
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status') // optional filter: pending, approved, rejected, processed
@@ -84,6 +89,10 @@ export async function GET(request: NextRequest) {
 
 // PATCH /api/admin/withdrawals - Update withdrawal status
 export async function PATCH(request: NextRequest) {
+  // Verify admin access
+  const authResult = await verifyAdmin(request)
+  if (!authResult.success) return authErrorResponse(authResult)
+
   try {
     const body = await request.json()
     const { withdrawalId, updates } = body

@@ -242,6 +242,23 @@ interface AppState {
 
 let toastTimer: ReturnType<typeof setTimeout> | null = null
 
+// Helper to get auth headers for API calls
+function getAuthHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (typeof window !== 'undefined') {
+    const token = localStorage.getItem('authToken')
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+    }
+    // Also pass the current user ID for session verification
+    const state = useAppStore.getState()
+    if (state.currentUser?.id) {
+      headers['x-auth-user-id'] = state.currentUser.id
+    }
+  }
+  return headers
+}
+
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
@@ -268,28 +285,51 @@ export const useAppStore = create<AppState>()(
         userRole: user.role,
         currentScreen: 'home'
       }),
-      logout: () => set({
-        isAuthenticated: false,
-        currentUser: null,
-        userRole: 'buyer',
-        currentScreen: 'login',
-        orders: [],
-        notifications: [],
-        unreadNotificationCount: 0,
-        addresses: [],
-        walletBalance: 0,
-        walletHoldBalance: 0,
-        walletMutations: [],
-        reviews: [],
-        followedStoreIds: [],
-        seller: null,
-        isDataLoaded: false,
+      logout: () => {
+        // Clear auth token on logout
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('authToken')
+        }
+        return set({
+          isAuthenticated: false,
+          currentUser: null,
+          userRole: 'buyer',
+          currentScreen: 'login',
+          orders: [],
+          notifications: [],
+          unreadNotificationCount: 0,
+          addresses: [],
+          walletBalance: 0,
+          walletHoldBalance: 0,
+          walletMutations: [],
+          reviews: [],
+          followedStoreIds: [],
+          seller: null,
+          isDataLoaded: false,
+        })
+      },
+      // SECURITY: switchRole should ONLY change the UI view, NOT the actual role in DB
+      // The real role comes from the server. This just switches which dashboard to show.
+      switchRole: (role) => set((state) => {
+        // Only allow switching to roles the user actually has permission for
+        const currentRole = state.currentUser?.role
+        // Admin can view any dashboard
+        if (currentRole === 'admin') {
+          return {
+            userRole: role,
+            currentScreen: role === 'buyer' ? 'home' : role === 'seller' ? 'seller-dashboard' : 'admin-dashboard'
+          }
+        }
+        // Non-admin users can only switch between buyer and their assigned role
+        if (role === currentRole || role === 'buyer' || role === currentRole) {
+          return {
+            userRole: role,
+            currentScreen: role === 'buyer' ? 'home' : role === 'seller' ? 'seller-dashboard' : 'admin-dashboard'
+          }
+        }
+        // Block unauthorized role switching
+        return state
       }),
-      switchRole: (role) => set((state) => ({
-        userRole: role,
-        currentUser: state.currentUser ? { ...state.currentUser, role } : null,
-        currentScreen: role === 'buyer' ? 'home' : role === 'seller' ? 'seller-dashboard' : 'admin-dashboard'
-      })),
 
       // Selected items
       selectedProductId: null,
@@ -813,7 +853,7 @@ export const useAppStore = create<AppState>()(
       adminStats: null,
       fetchAdminStats: async () => {
         try {
-          const res = await fetch('/api/admin/stats')
+          const res = await fetch('/api/admin/stats', { headers: getAuthHeaders() })
           if (!res.ok) throw new Error('Failed to fetch admin stats')
           const data = await res.json()
           if (data.success && data.stats) {
@@ -828,7 +868,7 @@ export const useAppStore = create<AppState>()(
       adminWithdrawals: [],
       fetchAdminWithdrawals: async () => {
         try {
-          const res = await fetch('/api/admin/withdrawals')
+          const res = await fetch('/api/admin/withdrawals', { headers: getAuthHeaders() })
           if (!res.ok) throw new Error('Failed to fetch admin withdrawals')
           const data = await res.json()
           if (data.success) {
@@ -857,7 +897,7 @@ export const useAppStore = create<AppState>()(
       divisions: [],
       fetchDivisions: async () => {
         try {
-          const res = await fetch('/api/admin/divisions')
+          const res = await fetch('/api/admin/divisions', { headers: getAuthHeaders() })
           if (!res.ok) throw new Error('Failed to fetch divisions')
           const data = await res.json()
           if (data.success) {
@@ -869,7 +909,7 @@ export const useAppStore = create<AppState>()(
       },
       fetchAdminUsers: async () => {
         try {
-          const res = await fetch('/api/admin/users')
+          const res = await fetch('/api/admin/users', { headers: getAuthHeaders() })
           if (!res.ok) throw new Error('Failed to fetch admin users')
           const data = await res.json()
           if (data.success) {
@@ -895,7 +935,7 @@ export const useAppStore = create<AppState>()(
       },
       fetchAdminBanners: async () => {
         try {
-          const res = await fetch('/api/admin/banners')
+          const res = await fetch('/api/admin/banners', { headers: getAuthHeaders() })
           if (!res.ok) throw new Error('Failed to fetch admin banners')
           const data = await res.json()
           if (data.success) {
@@ -916,7 +956,7 @@ export const useAppStore = create<AppState>()(
       },
       fetchAdminComplaints: async () => {
         try {
-          const res = await fetch('/api/admin/complaints')
+          const res = await fetch('/api/admin/complaints', { headers: getAuthHeaders() })
           if (!res.ok) throw new Error('Failed to fetch admin complaints')
           const data = await res.json()
           if (data.success) {
@@ -944,7 +984,7 @@ export const useAppStore = create<AppState>()(
         try {
           const res = await fetch('/api/admin/users', {
             method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getAuthHeaders(),
             body: JSON.stringify({ userId, updates: { divisionId } }),
           })
           if (!res.ok) throw new Error('Failed to assign user to division')
@@ -959,7 +999,7 @@ export const useAppStore = create<AppState>()(
         try {
           const res = await fetch('/api/admin/divisions', {
             method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getAuthHeaders(),
             body: JSON.stringify({ divisionId, updates }),
           })
           if (!res.ok) throw new Error('Failed to update division')
@@ -982,23 +1022,29 @@ export const useAppStore = create<AppState>()(
       })),
 
       // Account
-      deleteAccount: () => set({
-        isAuthenticated: false,
-        currentUser: null,
-        userRole: 'buyer',
-        currentScreen: 'login',
-        orders: [],
-        notifications: [],
-        unreadNotificationCount: 0,
-        addresses: [],
-        walletBalance: 0,
-        walletHoldBalance: 0,
-        walletMutations: [],
-        reviews: [],
-        followedStoreIds: [],
-        seller: null,
-        isDataLoaded: false,
-      }),
+      deleteAccount: () => {
+        // Clear auth token
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('authToken')
+        }
+        return set({
+          isAuthenticated: false,
+          currentUser: null,
+          userRole: 'buyer',
+          currentScreen: 'login',
+          orders: [],
+          notifications: [],
+          unreadNotificationCount: 0,
+          addresses: [],
+          walletBalance: 0,
+          walletHoldBalance: 0,
+          walletMutations: [],
+          reviews: [],
+          followedStoreIds: [],
+          seller: null,
+          isDataLoaded: false,
+        })
+      },
 
       // Data fetching
       seller: null,

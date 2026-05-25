@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 
 // GET /api/admin/divisions - Fetch all divisions with member counts
-export async function GET() {
+export async function GET(request: NextRequest) {
+  // Verify admin access
+  const authResult = await verifyAdmin(request)
+  if (!authResult.success) return authErrorResponse(authResult)
+
   try {
     const divisions = await db.division.findMany({
       orderBy: { sortOrder: 'asc' },
@@ -54,6 +59,10 @@ export async function GET() {
 
 // POST /api/admin/divisions - Create a new division
 export async function POST(request: NextRequest) {
+  // Verify admin access
+  const authResult = await verifyAdmin(request)
+  if (!authResult.success) return authErrorResponse(authResult)
+
   try {
     const body = await request.json()
     const { name, slug, description, icon, color, headUserId, sortOrder } = body
@@ -120,6 +129,10 @@ export async function POST(request: NextRequest) {
 
 // PATCH /api/admin/divisions - Update a division
 export async function PATCH(request: NextRequest) {
+  // Verify admin access
+  const authResult = await verifyAdmin(request)
+  if (!authResult.success) return authErrorResponse(authResult)
+
   try {
     const body = await request.json()
     const { divisionId, updates } = body
@@ -179,6 +192,10 @@ export async function PATCH(request: NextRequest) {
 
 // DELETE /api/admin/divisions - Delete a division
 export async function DELETE(request: NextRequest) {
+  // Verify admin access
+  const authResult = await verifyAdmin(request)
+  if (!authResult.success) return authErrorResponse(authResult)
+
   try {
     const { searchParams } = new URL(request.url)
     const divisionId = searchParams.get('divisionId')

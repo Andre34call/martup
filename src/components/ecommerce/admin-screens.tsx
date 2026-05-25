@@ -18,11 +18,30 @@ import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useAppStore } from "@/lib/store"
 import { formatPrice, formatRelativeTime } from "@/lib/utils"
 import { PageHeader, SectionHeader, SearchBar, EmptyState } from "./shared"
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
 import { AnimatePresence } from "framer-motion"
+
+// ==================== AUTH HEADER HELPER ====================
+function getAdminAuthHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (typeof window !== 'undefined') {
+    const token = localStorage.getItem('authToken')
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+    }
+    const state = useAppStore.getState()
+    if (state.currentUser?.id) {
+      headers['x-auth-user-id'] = state.currentUser.id
+    }
+  }
+  return headers
+}
 
 // ==================== ANIMATION VARIANTS ====================
 const fadeIn = {
@@ -41,7 +60,7 @@ const stagger = {
 
 // ==================== ADMIN DASHBOARD ====================
 export function AdminDashboard() {
-  const { navigate, switchRole, userRole, showToast, withdrawRequests, products, orders, adminUsers, fetchAdminUsers, fetchDivisions, divisions } = useAppStore()
+  const { navigate, switchRole, userRole, showToast, withdrawRequests, products, orders, adminUsers, fetchAdminUsers, fetchDivisions, divisions, currentUser } = useAppStore()
 
   // Fetch admin data on mount
   useEffect(() => {
@@ -100,7 +119,10 @@ export function AdminDashboard() {
         <div className="flex items-center justify-between h-14 px-4">
           <div className="flex items-center gap-2">
             <h1 className="text-base font-bold text-foreground">MartUp Admin</h1>
-            <Badge className="bg-blue-600 text-white text-[10px] px-1.5 py-0.5">Admin</Badge>
+            <Badge className="bg-purple-600 text-white text-[10px] px-1.5 py-0.5">
+              <Shield className="w-3 h-3 mr-0.5" />
+              {currentUser?.role === 'admin' ? 'Admin' : 'Staff'}
+            </Badge>
           </div>
           <div className="flex items-center gap-2">
             <motion.button
@@ -117,47 +139,49 @@ export function AdminDashboard() {
             >
               <Settings className="w-5 h-5 text-muted-foreground" />
             </motion.button>
-            {/* Role Switcher */}
-            <div className="relative" ref={roleMenuRef}>
-              <motion.button
-                whileTap={{ scale: 0.95 }}
-                onClick={() => setShowRoleMenu(!showRoleMenu)}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
-              >
-                <span className={`w-2 h-2 rounded-full ${roleColors[userRole]}`} />
-                <span className="text-[11px] font-medium text-foreground">Switch Role</span>
-              </motion.button>
-              <AnimatePresence>
-                {showRoleMenu && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -5, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: -5, scale: 0.95 }}
-                    transition={{ duration: 0.15 }}
-                    className="absolute right-0 top-full mt-2 bg-card rounded-xl shadow-lg border border-border p-2 min-w-[160px] z-50"
-                  >
-                    <p className="text-xs text-muted-foreground px-3 py-1.5 font-medium">Switch Role</p>
-                    {(["buyer", "seller", "admin", "finance", "pr", "tech", "cs", "marketing", "operations"] as const).map((role) => (
-                      <button
-                        key={role}
-                        onClick={() => { switchRole(role); setShowRoleMenu(false) }}
-                        className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
-                          userRole === role
-                            ? "bg-purple-50 text-purple-700 dark:bg-purple-950 dark:text-purple-300"
-                            : "hover:bg-muted text-foreground"
-                        }`}
-                      >
-                        <span className={`w-2.5 h-2.5 rounded-full ${roleColors[role]}`} />
-                        <span className="font-medium capitalize">{role}</span>
-                        {userRole === role && (
-                          <Check className="w-3.5 h-3.5 ml-auto text-purple-600" />
-                        )}
-                      </button>
-                    ))}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
+            {/* View Switcher - Only switches UI view, not actual role */}
+            {currentUser?.role === 'admin' && (
+              <div className="relative" ref={roleMenuRef}>
+                <motion.button
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => setShowRoleMenu(!showRoleMenu)}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+                >
+                  <span className={`w-2 h-2 rounded-full ${roleColors[userRole]}`} />
+                  <span className="text-[11px] font-medium text-foreground">View</span>
+                </motion.button>
+                <AnimatePresence>
+                  {showRoleMenu && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -5, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -5, scale: 0.95 }}
+                      transition={{ duration: 0.15 }}
+                      className="absolute right-0 top-full mt-2 bg-card rounded-xl shadow-lg border border-border p-2 min-w-[160px] z-50"
+                    >
+                      <p className="text-xs text-muted-foreground px-3 py-1.5 font-medium">Switch View</p>
+                      {(["buyer", "seller", "admin"] as const).map((role) => (
+                        <button
+                          key={role}
+                          onClick={() => { switchRole(role); setShowRoleMenu(false) }}
+                          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
+                            userRole === role
+                              ? "bg-purple-50 text-purple-700 dark:bg-purple-950 dark:text-purple-300"
+                              : "hover:bg-muted text-foreground"
+                          }`}
+                        >
+                          <span className={`w-2.5 h-2.5 rounded-full ${roleColors[role]}`} />
+                          <span className="font-medium capitalize">{role} View</span>
+                          {userRole === role && (
+                            <Check className="w-3.5 h-3.5 ml-auto text-purple-600" />
+                          )}
+                        </button>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
           </div>
         </div>
       </motion.div>
@@ -437,7 +461,7 @@ export function AdminUsers() {
     try {
       const res = await fetch('/api/admin/users', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAdminAuthHeaders(),
         body: JSON.stringify({ userId, updates }),
       })
       const data = await res.json()
@@ -456,7 +480,7 @@ export function AdminUsers() {
 
   const handleDeleteUser = async (userId: string) => {
     try {
-      const res = await fetch(`/api/admin/users?userId=${userId}`, { method: 'DELETE' })
+      const res = await fetch(`/api/admin/users?userId=${userId}`, { method: 'DELETE', headers: getAdminAuthHeaders() })
       const data = await res.json()
       if (data.success) {
         showToast("User dihapus", "info")
@@ -785,7 +809,7 @@ export function AdminWithdraw() {
 
   const fetchWithdrawals = async () => {
     try {
-      const res = await fetch('/api/admin/withdrawals')
+      const res = await fetch('/api/admin/withdrawals', { headers: getAdminAuthHeaders() })
       const data = await res.json()
       if (data.success) {
         setWithdrawals(data.withdrawals)
@@ -809,7 +833,7 @@ export function AdminWithdraw() {
     try {
       const res = await fetch('/api/admin/withdrawals', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAdminAuthHeaders(),
         body: JSON.stringify({ withdrawalId: id, updates: { status: 'approved' } }),
       })
       const data = await res.json()
@@ -829,7 +853,7 @@ export function AdminWithdraw() {
     try {
       const res = await fetch('/api/admin/withdrawals', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAdminAuthHeaders(),
         body: JSON.stringify({ withdrawalId: showRejectModal, updates: { status: 'rejected', adminNote: rejectReason || 'Tidak memenuhi syarat' } }),
       })
       const data = await res.json()
@@ -850,7 +874,7 @@ export function AdminWithdraw() {
     try {
       const res = await fetch('/api/admin/withdrawals', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAdminAuthHeaders(),
         body: JSON.stringify({ withdrawalId: id, updates: { status: 'processed' } }),
       })
       const data = await res.json()
@@ -1078,13 +1102,13 @@ type ApiBanner = {
 }
 
 const BANNER_POSITIONS = [
-  { value: 'home_top', label: 'Home - Atas (Carousel Utama)', description: 'Banner carousel di bagian atas homepage, ukuran 800x400px' },
-  { value: 'home_mid', label: 'Home - Tengah (Setelah Kategori)', description: 'Banner di tengah homepage setelah kategori, ukuran 800x200px' },
-  { value: 'home_bottom', label: 'Home - Bawah (Sebelum Rekomendasi)', description: 'Banner di bawah homepage sebelum produk rekomendasi, ukuran 800x200px' },
-  { value: 'category_top', label: 'Kategori - Atas', description: 'Banner di halaman kategori, ukuran 800x200px' },
-  { value: 'search_top', label: 'Pencarian - Atas', description: 'Banner di halaman pencarian, ukuran 800x150px' },
-  { value: 'product_detail', label: 'Detail Produk - Bawah', description: 'Banner di halaman detail produk, ukuran 800x150px' },
-  { value: 'checkout_top', label: 'Checkout - Atas', description: 'Banner di halaman checkout, ukuran 800x100px' },
+  { value: 'home_top', label: 'Homepage Top (Hero)', description: 'Banner carousel di bagian atas homepage, ukuran 800x400px' },
+  { value: 'home_mid', label: 'Homepage Middle', description: 'Banner di tengah homepage setelah kategori, ukuran 800x200px' },
+  { value: 'home_bottom', label: 'Homepage Bottom', description: 'Banner di bawah homepage sebelum produk rekomendasi, ukuran 800x200px' },
+  { value: 'category_top', label: 'Category Page Top', description: 'Banner di halaman kategori, ukuran 800x200px' },
+  { value: 'search_top', label: 'Search Page Top', description: 'Banner di halaman pencarian, ukuran 800x150px' },
+  { value: 'product_detail', label: 'Product Detail Page', description: 'Banner di halaman detail produk, ukuran 800x150px' },
+  { value: 'checkout_top', label: 'Checkout Page Top', description: 'Banner di halaman checkout, ukuran 800x100px' },
   { value: 'popup', label: 'Popup / Modal', description: 'Banner popup yang muncul saat buka aplikasi, ukuran 400x500px' },
 ]
 
@@ -1105,12 +1129,16 @@ export function AdminBanner() {
   const [newPosition, setNewPosition] = useState('home_top')
   const [newLink, setNewLink] = useState('')
   const [newImage, setNewImage] = useState('')
+  const [newSortOrder, setNewSortOrder] = useState(0)
+  const [newIsActive, setNewIsActive] = useState(true)
+  const [newStartDate, setNewStartDate] = useState('')
+  const [newEndDate, setNewEndDate] = useState('')
   const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const fetchBanners = async () => {
     try {
-      const res = await fetch('/api/admin/banners')
+      const res = await fetch('/api/admin/banners', { headers: getAdminAuthHeaders() })
       const data = await res.json()
       if (data.success) {
         setBanners(data.banners)
@@ -1169,7 +1197,7 @@ export function AdminBanner() {
     try {
       const res = await fetch('/api/admin/banners', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAdminAuthHeaders(),
         body: JSON.stringify({ bannerId: banner.id, updates: { isActive: !banner.isActive } }),
       })
       const data = await res.json()
@@ -1190,8 +1218,8 @@ export function AdminBanner() {
     try {
       const res = await fetch('/api/admin/banners', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: newTitle, image: newImage, position: newPosition, link: newLink || null }),
+        headers: getAdminAuthHeaders(),
+        body: JSON.stringify({ title: newTitle, image: newImage, position: newPosition, link: newLink || null, sortOrder: newSortOrder, isActive: newIsActive, startDate: newStartDate || null, endDate: newEndDate || null }),
       })
       const data = await res.json()
       if (data.success) {
@@ -1201,6 +1229,10 @@ export function AdminBanner() {
         setNewPosition('home_top')
         setNewLink('')
         setNewImage('')
+        setNewSortOrder(0)
+        setNewIsActive(true)
+        setNewStartDate('')
+        setNewEndDate('')
         fetchBanners()
       } else {
         showToast(data.error || 'Gagal menambahkan banner', "error")
@@ -1212,7 +1244,7 @@ export function AdminBanner() {
 
   const handleDeleteBanner = async (bannerId: string) => {
     try {
-      const res = await fetch(`/api/admin/banners?bannerId=${bannerId}`, { method: 'DELETE' })
+      const res = await fetch(`/api/admin/banners?bannerId=${bannerId}`, { method: 'DELETE', headers: getAdminAuthHeaders() })
       const data = await res.json()
       if (data.success) {
         showToast("Banner dihapus", "info")
@@ -1258,6 +1290,24 @@ export function AdminBanner() {
                       <div>
                         <p className="text-sm font-medium text-foreground">{banner.title}</p>
                         <p className="text-xs text-muted-foreground">{getPositionLabel(banner.position)}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <Badge variant="outline" className={`text-[9px] ${banner.isActive ? 'border-emerald-300 text-emerald-600' : 'border-gray-300 text-gray-500'}`}>
+                            {banner.isActive ? 'Aktif' : 'Nonaktif'}
+                          </Badge>
+                          {banner.sortOrder > 0 && (
+                            <span className="text-[10px] text-muted-foreground">Urutan: {banner.sortOrder}</span>
+                          )}
+                          {(banner.startDate || banner.endDate) && (
+                            <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                              <Calendar className="w-2.5 h-2.5" />
+                              {banner.startDate && banner.endDate
+                                ? `${new Date(banner.startDate).toLocaleDateString('id-ID')} - ${new Date(banner.endDate).toLocaleDateString('id-ID')}`
+                                : banner.startDate
+                                  ? `Mulai ${new Date(banner.startDate).toLocaleDateString('id-ID')}`
+                                  : `Sampai ${new Date(banner.endDate!).toLocaleDateString('id-ID')}`}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -1277,34 +1327,55 @@ export function AdminBanner() {
           </div>
         </motion.div>
 
-        {/* Add New Banner Form */}
-        {showAdd && (
-          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}>
-            <SectionHeader title="Tambah Banner Baru" icon={<Plus className="w-4 h-4" />} />
-            <Card className="mt-3 p-4 space-y-4">
+        {/* Add New Banner Dialog */}
+        <Dialog open={showAdd} onOpenChange={(open) => {
+          setShowAdd(open)
+          if (!open) {
+            setNewTitle('')
+            setNewPosition('home_top')
+            setNewLink('')
+            setNewImage('')
+            setNewSortOrder(0)
+            setNewIsActive(true)
+            setNewStartDate('')
+            setNewEndDate('')
+          }
+        }}>
+          <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Megaphone className="w-5 h-5 text-blue-600" />
+                Tambah Banner Baru
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              {/* Title */}
               <div className="space-y-2">
-                <label className="text-xs font-medium text-foreground">Judul Banner</label>
-                <Input placeholder="Contoh: Flash Sale Weekend" className="rounded-xl" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} />
+                <Label htmlFor="banner-title" className="text-xs font-medium">Judul Banner</Label>
+                <Input id="banner-title" placeholder="Contoh: Flash Sale Weekend" className="rounded-xl" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} />
               </div>
 
+              {/* Position */}
               <div className="space-y-2">
-                <label className="text-xs font-medium text-foreground">Posisi</label>
-                <select
-                  value={newPosition}
-                  onChange={(e) => setNewPosition(e.target.value)}
-                  className="w-full h-10 rounded-xl border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                >
-                  {BANNER_POSITIONS.map((pos) => (
-                    <option key={pos.value} value={pos.value}>{pos.label}</option>
-                  ))}
-                </select>
+                <Label htmlFor="banner-position" className="text-xs font-medium">Posisi</Label>
+                <Select value={newPosition} onValueChange={(val) => setNewPosition(val)}>
+                  <SelectTrigger className="rounded-xl">
+                    <SelectValue placeholder="Pilih posisi" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {BANNER_POSITIONS.map((pos) => (
+                      <SelectItem key={pos.value} value={pos.value}>{pos.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 {selectedPositionDesc && (
                   <p className="text-[11px] text-muted-foreground">{selectedPositionDesc}</p>
                 )}
               </div>
 
+              {/* Image Upload */}
               <div className="space-y-2">
-                <label className="text-xs font-medium text-foreground">Gambar Banner</label>
+                <Label className="text-xs font-medium">Gambar Banner</Label>
                 <input
                   type="file"
                   accept="image/*"
@@ -1339,17 +1410,50 @@ export function AdminBanner() {
                 <Input placeholder="Paste URL gambar..." className="rounded-xl" value={newImage} onChange={(e) => setNewImage(e.target.value)} />
               </div>
 
+              {/* Link */}
               <div className="space-y-2">
-                <label className="text-xs font-medium text-foreground">Link (Opsional)</label>
-                <Input placeholder="https://..." className="rounded-xl" value={newLink} onChange={(e) => setNewLink(e.target.value)} />
+                <Label htmlFor="banner-link" className="text-xs font-medium">Link (Opsional)</Label>
+                <Input id="banner-link" placeholder="https://..." className="rounded-xl" value={newLink} onChange={(e) => setNewLink(e.target.value)} />
               </div>
 
-              <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl h-10" onClick={handleAddBanner} disabled={uploading}>
+              {/* Sort Order */}
+              <div className="space-y-2">
+                <Label htmlFor="banner-sort" className="text-xs font-medium">Urutan Tampil</Label>
+                <Input id="banner-sort" type="number" min={0} placeholder="0" className="rounded-xl" value={newSortOrder} onChange={(e) => setNewSortOrder(parseInt(e.target.value) || 0)} />
+                <p className="text-[11px] text-muted-foreground">Angka lebih kecil ditampilkan lebih dulu</p>
+              </div>
+
+              {/* Active Toggle */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-xs font-medium">Aktifkan Banner</Label>
+                  <p className="text-[11px] text-muted-foreground">Banner akan langsung tampil jika diaktifkan</p>
+                </div>
+                <Switch checked={newIsActive} onCheckedChange={setNewIsActive} />
+              </div>
+
+              {/* Date Range */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="banner-start" className="text-xs font-medium">Tanggal Mulai</Label>
+                  <Input id="banner-start" type="date" className="rounded-xl" value={newStartDate} onChange={(e) => setNewStartDate(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="banner-end" className="text-xs font-medium">Tanggal Selesai</Label>
+                  <Input id="banner-end" type="date" className="rounded-xl" value={newEndDate} onChange={(e) => setNewEndDate(e.target.value)} />
+                </div>
+              </div>
+            </div>
+            <DialogFooter className="gap-2">
+              <Button variant="outline" className="rounded-xl" onClick={() => setShowAdd(false)}>
+                Batal
+              </Button>
+              <Button className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl" onClick={handleAddBanner} disabled={uploading}>
                 {uploading ? 'Mengupload...' : 'Simpan Banner'}
               </Button>
-            </Card>
-          </motion.div>
-        )}
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   )
@@ -1383,7 +1487,7 @@ export function AdminAnalytics() {
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const res = await fetch('/api/admin/stats')
+        const res = await fetch('/api/admin/stats', { headers: getAdminAuthHeaders() })
         const data = await res.json()
         if (data.success) {
           setStats(data.stats)
@@ -1570,7 +1674,7 @@ export function AdminComplaints() {
 
   const fetchComplaints = async () => {
     try {
-      const res = await fetch('/api/admin/complaints')
+      const res = await fetch('/api/admin/complaints', { headers: getAdminAuthHeaders() })
       const data = await res.json()
       if (data.success) {
         setComplaints(data.complaints)
@@ -1588,7 +1692,7 @@ export function AdminComplaints() {
     try {
       const res = await fetch('/api/admin/complaints', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAdminAuthHeaders(),
         body: JSON.stringify({ complaintId, updates }),
       })
       const data = await res.json()

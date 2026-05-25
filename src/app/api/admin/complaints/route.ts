@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 
 // GET /api/admin/complaints - List all complaints with order/user info
 export async function GET(request: NextRequest) {
+  // Verify admin access
+  const authResult = await verifyAdmin(request)
+  if (!authResult.success) return authErrorResponse(authResult)
+
   try {
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status') // optional filter: open, processing, resolved, rejected
@@ -100,6 +105,10 @@ export async function GET(request: NextRequest) {
 
 // PATCH /api/admin/complaints - Update a complaint
 export async function PATCH(request: NextRequest) {
+  // Verify admin access
+  const authResult = await verifyAdmin(request)
+  if (!authResult.success) return authErrorResponse(authResult)
+
   try {
     const body = await request.json()
     const { complaintId, updates } = body

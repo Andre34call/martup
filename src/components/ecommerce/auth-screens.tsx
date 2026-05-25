@@ -1,7 +1,7 @@
 "use client"
 
 import { motion, AnimatePresence } from "framer-motion"
-import { Eye, EyeOff, ArrowLeft, Smartphone, Mail, Apple } from "lucide-react"
+import { Eye, EyeOff, ArrowLeft, Smartphone, Mail } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -254,46 +254,48 @@ export function OnboardingScreen() {
 
 // ==================== LOGIN SCREEN ====================
 export function LoginScreen() {
-  const { navigate, login } = useAppStore()
-  const [emailOrPhone, setEmailOrPhone] = useState("")
+  const { navigate, login, showToast } = useAppStore()
+  const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
-  const [touchedEmailOrPhone, setTouchedEmailOrPhone] = useState(false)
+  const [loginError, setLoginError] = useState("")
+  const [touchedEmail, setTouchedEmail] = useState(false)
   const [touchedPassword, setTouchedPassword] = useState(false)
 
-  const emailOrPhoneError = touchedEmailOrPhone && emailOrPhone
-    ? (!isValidEmailOrPhone(emailOrPhone) ? "Masukkan email atau nomor HP yang valid" : "")
-    : touchedEmailOrPhone && !emailOrPhone
-    ? "Email / No. HP wajib diisi"
+  const emailError = touchedEmail && !email
+    ? "Email wajib diisi"
+    : touchedEmail && email && !isValidEmail(email)
+    ? "Format email tidak valid"
     : ""
 
   const passwordError = touchedPassword && !password
     ? "Password wajib diisi"
-    : touchedPassword && password.length < 6
-    ? "Password minimal 6 karakter"
     : ""
 
-  const isFormValid = emailOrPhone && password && !emailOrPhoneError && !passwordError
+  const isFormValid = email && password && !emailError && !passwordError
 
   const handleLogin = async () => {
-    setTouchedEmailOrPhone(true)
+    setTouchedEmail(true)
     setTouchedPassword(true)
+    setLoginError("")
     if (!isFormValid) return
     setIsLoading(true)
 
-    // Simulate login delay (real auth via Google OAuth below)
-    await new Promise((resolve) => setTimeout(resolve, 800))
-
-    // For now, create a new user via API
     try {
-      const res = await fetch('/api/auth/sync-user', {
+      // Use proper login API with password verification
+      const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: emailOrPhone, name: emailOrPhone.split('@')[0] }),
+        body: JSON.stringify({ email, password }),
       })
       const data = await res.json()
+
       if (data.success && data.user) {
+        // Store auth token for API calls
+        if (data.token) {
+          localStorage.setItem('authToken', data.token)
+        }
         const user: User = {
           id: data.user.id,
           email: data.user.email,
@@ -308,8 +310,11 @@ export function LoginScreen() {
         // Fetch user data from DB
         const { fetchUserData } = useAppStore.getState()
         await fetchUserData(data.user.id)
+      } else {
+        setLoginError(data.error || 'Login gagal. Periksa email dan password Anda.')
       }
     } catch (error) {
+      setLoginError('Terjadi kesalahan koneksi. Coba lagi nanti.')
       console.error('Login failed:', error)
     }
 
@@ -345,25 +350,36 @@ export function LoginScreen() {
         </p>
       </div>
 
+      {/* Login Error Alert */}
+      {loginError && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-4 p-3 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50"
+        >
+          <p className="text-sm text-red-600 dark:text-red-400">{loginError}</p>
+        </motion.div>
+      )}
+
       {/* Form */}
       <div className="space-y-4 flex-1">
-        {/* Email/Phone input */}
+        {/* Email input */}
         <div className="space-y-2">
           <label className="text-sm font-medium text-foreground">
-            Email / No. HP
+            Email
           </label>
           <div className="relative">
             <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
-              value={emailOrPhone}
-              onChange={(e) => setEmailOrPhone(e.target.value)}
-              onBlur={() => setTouchedEmailOrPhone(true)}
-              placeholder="contoh@email.com atau 08123456789"
-              className={`pl-10 h-12 rounded-xl bg-muted/50 border-border/50 focus:border-emerald-500 focus:ring-emerald-500/20 ${emailOrPhoneError ? "border-red-500 focus:border-red-500" : ""}`}
+              value={email}
+              onChange={(e) => { setEmail(e.target.value); setLoginError("") }}
+              onBlur={() => setTouchedEmail(true)}
+              placeholder="contoh@email.com"
+              className={`pl-10 h-12 rounded-xl bg-muted/50 border-border/50 focus:border-emerald-500 focus:ring-emerald-500/20 ${emailError ? "border-red-500 focus:border-red-500" : ""}`}
             />
           </div>
-          {emailOrPhoneError && (
-            <p className="text-xs text-red-500">{emailOrPhoneError}</p>
+          {emailError && (
+            <p className="text-xs text-red-500">{emailError}</p>
           )}
         </div>
 
@@ -376,7 +392,7 @@ export function LoginScreen() {
             <Input
               type={showPassword ? "text" : "password"}
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => { setPassword(e.target.value); setLoginError("") }}
               onBlur={() => setTouchedPassword(true)}
               placeholder="Masukkan password"
               className={`pl-4 pr-10 h-12 rounded-xl bg-muted/50 border-border/50 focus:border-emerald-500 focus:ring-emerald-500/20 ${passwordError ? "border-red-500 focus:border-red-500" : ""}`}
@@ -432,7 +448,7 @@ export function LoginScreen() {
           <Separator className="flex-1" />
         </div>
 
-        {/* Social login */}
+        {/* Google login only - Apple login requires proper Apple OAuth setup */}
         <div className="space-y-3">
           <Button
             variant="outline"
@@ -460,26 +476,7 @@ export function LoginScreen() {
             </svg>
             Masuk dengan Google
           </Button>
-
-          <Button
-            variant="outline"
-            className="w-full h-12 rounded-xl font-medium text-sm border-border/50"
-            onClick={handleLogin}
-            disabled={isLoading}
-          >
-            <Apple className="w-5 h-5 mr-2" />
-            Masuk dengan Apple
-          </Button>
         </div>
-
-        {/* OTP login */}
-        <button
-          onClick={() => navigate("otp")}
-          className="w-full flex items-center justify-center gap-2 py-3 text-sm text-emerald-600 hover:text-emerald-700 font-medium transition-colors"
-        >
-          <Smartphone className="w-4 h-4" />
-          Masuk dengan OTP
-        </button>
       </div>
 
       {/* Register link */}
@@ -492,106 +489,13 @@ export function LoginScreen() {
           Daftar
         </button>
       </div>
-
-      {/* Demo Login Section */}
-      <div className="pt-6">
-        <div className="flex items-center gap-3 py-2">
-          <Separator className="flex-1" />
-          <span className="text-xs text-muted-foreground font-medium">Demo Login</span>
-          <Separator className="flex-1" />
-        </div>
-        <div className="grid grid-cols-3 gap-2 mt-2">
-          <motion.button
-            whileTap={{ scale: 0.95 }}
-            onClick={async () => {
-              setIsLoading(true)
-              try {
-                const res = await fetch('/api/auth/sync-user', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ email: 'buyer@martup.demo', name: 'Demo Buyer' }),
-                })
-                const data = await res.json()
-                if (data.success && data.user) {
-                  login({ id: data.user.id, email: data.user.email, name: data.user.name, role: data.user.role || 'buyer', isVerified: data.user.isVerified || false, loyaltyPoints: data.user.loyaltyPoints || 0, coins: data.user.coins || 0 })
-                  const { fetchUserData } = useAppStore.getState()
-                  await fetchUserData(data.user.id)
-                }
-              } catch (e) { console.error(e) }
-              setIsLoading(false)
-            }}
-            disabled={isLoading}
-            className="flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl border border-emerald-200 dark:border-emerald-800/50 bg-emerald-50 dark:bg-emerald-950/20 hover:bg-emerald-100 dark:hover:bg-emerald-950/40 transition-colors disabled:opacity-50"
-          >
-            <span className="text-lg">🛒</span>
-            <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400">Buyer</span>
-          </motion.button>
-          <motion.button
-            whileTap={{ scale: 0.95 }}
-            onClick={async () => {
-              setIsLoading(true)
-              try {
-                // Use a demo seller account
-                const res = await fetch('/api/auth/sync-user', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ email: 'gadgetpro@martup.demo', name: 'Gadget Pro Store' }),
-                })
-                const data = await res.json()
-                if (data.success && data.user) {
-                  login({ id: data.user.id, email: data.user.email, name: data.user.name, role: data.user.role || 'seller', isVerified: data.user.isVerified || false, loyaltyPoints: data.user.loyaltyPoints || 0, coins: data.user.coins || 0 })
-                  const { fetchUserData } = useAppStore.getState()
-                  await fetchUserData(data.user.id)
-                }
-              } catch (e) { console.error(e) }
-              setIsLoading(false)
-            }}
-            disabled={isLoading}
-            className="flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl border border-orange-200 dark:border-orange-800/50 bg-orange-50 dark:bg-orange-950/20 hover:bg-orange-100 dark:hover:bg-orange-950/40 transition-colors disabled:opacity-50"
-          >
-            <span className="text-lg">🏪</span>
-            <span className="text-[10px] font-bold text-orange-700 dark:text-orange-400">Seller</span>
-          </motion.button>
-          <motion.button
-            whileTap={{ scale: 0.95 }}
-            onClick={async () => {
-              setIsLoading(true)
-              try {
-                const res = await fetch('/api/auth/sync-user', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ email: 'admin@martup.demo', name: 'Admin MartUp' }),
-                })
-                const data = await res.json()
-                if (data.success && data.user) {
-                  // Update role to admin
-                  await fetch('/api/auth/sync-user', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email: 'admin@martup.demo', name: 'Admin MartUp', role: 'admin' }),
-                  })
-                  login({ id: data.user.id, email: data.user.email, name: data.user.name, role: 'admin', isVerified: true, loyaltyPoints: 0, coins: 0 })
-                  const { fetchUserData } = useAppStore.getState()
-                  await fetchUserData(data.user.id)
-                }
-              } catch (e) { console.error(e) }
-              setIsLoading(false)
-            }}
-            disabled={isLoading}
-            className="flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl border border-purple-200 dark:border-purple-800/50 bg-purple-50 dark:bg-purple-950/20 hover:bg-purple-100 dark:hover:bg-purple-950/40 transition-colors disabled:opacity-50"
-          >
-            <span className="text-lg">⚙️</span>
-            <span className="text-[10px] font-bold text-purple-700 dark:text-purple-400">Admin</span>
-          </motion.button>
-        </div>
-      </div>
     </motion.div>
   )
 }
 
 // ==================== REGISTER SCREEN ====================
 export function RegisterScreen() {
-  const { navigate, login } = useAppStore()
+  const { navigate, login, showToast } = useAppStore()
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [phone, setPhone] = useState("")
@@ -600,6 +504,7 @@ export function RegisterScreen() {
   const [showPassword, setShowPassword] = useState(false)
   const [agreeTerms, setAgreeTerms] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [registerError, setRegisterError] = useState("")
   const [touchedFields, setTouchedFields] = useState({ name: false, email: false, phone: false, password: false, confirmPassword: false })
 
   const nameError = touchedFields.name && name
@@ -638,23 +543,48 @@ export function RegisterScreen() {
 
   const handleRegister = async () => {
     setTouchedFields({ name: true, email: true, phone: true, password: true, confirmPassword: true })
+    setRegisterError("")
     if (!isFormValid) return
 
     setIsLoading(true)
-    await new Promise((resolve) => setTimeout(resolve, 800))
 
-    const mockUser: User = {
-      id: "u_new",
-      email,
-      phone,
-      name,
-      role: "buyer",
-      isVerified: false,
-      loyaltyPoints: 0,
-      coins: 0,
+    try {
+      // Use proper register API with password hashing
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, phone, password }),
+      })
+      const data = await res.json()
+
+      if (data.success && data.user) {
+        // Store auth token for API calls
+        if (data.token) {
+          localStorage.setItem('authToken', data.token)
+        }
+        const user: User = {
+          id: data.user.id,
+          email: data.user.email,
+          phone: data.user.phone || undefined,
+          name: data.user.name,
+          role: data.user.role || 'buyer',
+          isVerified: data.user.isVerified || false,
+          loyaltyPoints: data.user.loyaltyPoints || 0,
+          coins: data.user.coins || 0,
+        }
+        login(user)
+        showToast('Registrasi berhasil! Selamat datang di MartUp 🎉', 'success')
+        // Fetch user data
+        const { fetchUserData } = useAppStore.getState()
+        await fetchUserData(data.user.id)
+      } else {
+        setRegisterError(data.error || 'Registrasi gagal. Coba lagi.')
+      }
+    } catch (error) {
+      setRegisterError('Terjadi kesalahan koneksi. Coba lagi nanti.')
+      console.error('Register failed:', error)
     }
 
-    login(mockUser)
     setIsLoading(false)
   }
 
@@ -681,6 +611,17 @@ export function RegisterScreen() {
           <p className="text-xs text-muted-foreground">Isi data untuk mendaftar</p>
         </div>
       </div>
+
+      {/* Register Error Alert */}
+      {registerError && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-4 p-3 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50"
+        >
+          <p className="text-sm text-red-600 dark:text-red-400">{registerError}</p>
+        </motion.div>
+      )}
 
       {/* Form */}
       <div className="space-y-4 flex-1 overflow-y-auto">
@@ -863,21 +804,13 @@ export function OTPScreen() {
   const handleVerify = async () => {
     if (otp.length !== 6) return
     setIsVerifying(true)
-    await new Promise((resolve) => setTimeout(resolve, 800))
 
-    const mockUser: User = {
-      id: "u_otp",
-      email: "",
-      phone: "",
-      name: "New Member",
-      role: "buyer",
-      isVerified: true,
-      loyaltyPoints: 0,
-      coins: 0,
-    }
-
-    login(mockUser)
+    // OTP login requires a real phone number and SMS verification service
+    // For now, redirect to regular login since OTP service is not configured
+    await new Promise((resolve) => setTimeout(resolve, 500))
     setIsVerifying(false)
+    // Show message that OTP login is not yet available
+    // In production, this would verify the OTP code against the server
   }
 
   return (

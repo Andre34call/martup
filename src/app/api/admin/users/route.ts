@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 
 // GET /api/admin/users - Fetch all users for admin management
 export async function GET(request: NextRequest) {
+  // Verify admin access
+  const authResult = await verifyAdmin(request)
+  if (!authResult.success) return authErrorResponse(authResult)
+
   try {
     const { searchParams } = new URL(request.url)
     const role = searchParams.get('role') // optional filter
@@ -88,6 +93,10 @@ export async function GET(request: NextRequest) {
 
 // PATCH /api/admin/users - Update a user (verify, block, change role, assign division)
 export async function PATCH(request: NextRequest) {
+  // Verify admin access
+  const authResult = await verifyAdmin(request)
+  if (!authResult.success) return authErrorResponse(authResult)
+
   try {
     const body = await request.json()
     const { userId, updates } = body
@@ -143,6 +152,10 @@ export async function PATCH(request: NextRequest) {
 
 // DELETE /api/admin/users - Delete a user
 export async function DELETE(request: NextRequest) {
+  // Verify admin access
+  const authResult = await verifyAdmin(request)
+  if (!authResult.success) return authErrorResponse(authResult)
+
   try {
     const { searchParams } = new URL(request.url)
     const userId = searchParams.get('userId')

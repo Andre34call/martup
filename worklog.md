@@ -267,3 +267,78 @@ Stage Summary:
 - Banner image upload works end-to-end: client selects file → POST /api/upload → Supabase Storage → public URL
 - Banner positions are predefined with 8 options, each with label and recommended dimensions
 - All three bugs resolved with targeted edits
+
+---
+Task ID: 10
+Agent: Main Agent
+Task: Security overhaul - Fix critical vulnerabilities (anyone can login, anyone can become admin, unregistered users can access)
+
+Work Log:
+- Installed bcryptjs for password hashing with @types/bcryptjs
+- Created auth middleware utility at src/lib/auth-middleware.ts:
+  - Rate limiting (in-memory, 10 req/min for general, stricter for login/register)
+  - verifyAuth() - checks NextAuth session, custom auth header, or bearer token
+  - verifyAdmin() - verifies user has admin role
+  - verifyStaff() - verifies user has any staff role
+  - generateAuthToken() - creates base64(userId:timestamp) token for API auth
+  - authErrorResponse() - standardized error response helper
+- Fixed sync-user API (src/app/api/auth/sync-user/route.ts):
+  - Now ONLY allows OAuth providers (Google) - rejects requests without provider
+  - Added rate limiting
+  - No longer creates users from random email input
+  - Checks if user is blocked before allowing login
+  - OAuth users always get 'buyer' role (never admin)
+- Created proper login API (src/app/api/auth/login/route.ts):
+  - Password verification using bcrypt.compare
+  - Rate limiting (5 attempts/min per IP)
+  - Returns auth token for API calls
+  - Checks if user is blocked
+  - Handles OAuth-only accounts (no password set)
+  - Generic error messages (doesn't reveal if email exists)
+- Created proper register API (src/app/api/auth/register/route.ts):
+  - Password hashing with bcrypt (12 salt rounds)
+  - Email uniqueness check
+  - Rate limiting (3 attempts/min per IP)
+  - Always creates as 'buyer' role (never admin)
+  - Input validation (email format, password strength, name length)
+- Protected ALL admin API routes with verifyAdmin middleware:
+  - /api/admin/stats, /api/admin/users, /api/admin/banners, /api/admin/withdrawals, /api/admin/divisions, /api/admin/complaints
+  - Every GET/POST/PATCH/DELETE handler now verifies admin access first
+- Hardened admin setup API (src/app/api/admin/setup/route.ts):
+  - No longer has fallback secret (requires env var)
+  - Added rate limiting
+  - Logs potential breach attempts
+  - Audit logging for promotions
+  - Blocks promotion of inactive users
+- Fixed frontend auth screens (src/components/ecommerce/auth-screens.tsx):
+  - Removed Demo Login section (Buyer/Seller/Admin demo buttons) - CRITICAL security fix
+  - Login now uses /api/auth/login with password verification instead of sync-user
+  - Register now uses /api/auth/register with real API call
+  - Added login/register error alert displays
+  - Removed Apple login button (no Apple OAuth configured)
+  - Changed email/phone input to email-only input
+  - OTP screen no longer creates fake mock users
+- Fixed client-side role switching vulnerability:
+  - switchRole in store now validates - only admin can switch views
+  - Non-admin users can only switch between buyer and their assigned role
+  - Role switcher in AdminDashboard now shows "View" not "Role", only shows buyer/seller/admin views
+  - Only visible to actual admin users
+- Added auth token management:
+  - Login/register stores auth token in localStorage
+  - Store's getAuthHeaders() helper adds Authorization + x-auth-user-id headers
+  - All admin API fetch calls in store use getAuthHeaders()
+  - All admin API fetch calls in admin-screens.tsx use getAdminAuthHeaders()
+  - Logout and deleteAccount clear auth token from localStorage
+- Added NEXTAUTH_SECRET and NEXTAUTH_URL to .env
+- Lint passes cleanly
+
+Stage Summary:
+- CRITICAL: Random users can no longer login with any email
+- CRITICAL: Demo Admin button removed - no more free admin access
+- CRITICAL: All admin API routes now require authentication + admin role
+- Password-based login now verifies password against bcrypt hash
+- Registration hashes passwords with bcrypt (12 salt rounds)
+- sync-user API restricted to OAuth providers only
+- Client-side role switching restricted - can't grant admin access from UI
+- Rate limiting on all auth endpoints
+- Auth tokens passed with all admin API requests
