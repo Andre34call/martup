@@ -45,10 +45,12 @@ export function SellerDashboard() {
   const { navigate, unreadNotificationCount, switchRole, userRole, orders, sellerBalance, currentUser, products, seller, sellerStats, fetchSellerStats } = useAppStore()
   const sellerId = seller?.id || ''
 
-  // Fetch seller stats from API on mount
+  // Fetch seller stats from API when seller ID becomes available
   useEffect(() => {
-    fetchSellerStats()
-  }, [fetchSellerStats])
+    if (sellerId) {
+      fetchSellerStats()
+    }
+  }, [fetchSellerStats, sellerId])
 
   // Compute real stats from store data for current seller (fallback)
   const sellerOrders = orders.filter(o => o.sellerId === sellerId)
@@ -601,13 +603,15 @@ export function SellerOrders() {
 export function SellerAnalytics() {
   const { products, orders, seller, sellerStats, fetchSellerStats } = useAppStore()
 
-  // Fetch seller stats from API on mount
-  useEffect(() => {
-    fetchSellerStats()
-  }, [fetchSellerStats])
-
   // Derive sellerId from store seller
   const sellerId = seller?.id || ''
+
+  // Fetch seller stats from API when seller ID becomes available
+  useEffect(() => {
+    if (sellerId) {
+      fetchSellerStats()
+    }
+  }, [fetchSellerStats, sellerId])
 
   const sellerProducts = products.filter(p => p.sellerId === sellerId)
   const sellerOrders = orders.filter(o => o.sellerId === sellerId)

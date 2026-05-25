@@ -16,7 +16,7 @@ interface AppState {
   userRole: UserRole
   login: (user: User) => void
   logout: () => void
-  switchRole: (role: UserRole) => void
+  switchRole: (role: UserRole) => Promise<void>
 
   // Selected items
   selectedProductId: string | null
@@ -269,51 +269,114 @@ export const useAppStore = create<AppState>()(
         // Clear cart and wishlist stores
         useCartStore.getState().clearCart()
       },
-      switchRole: (role) => {
+      switchRole: async (role) => {
         const state = get()
-        // If switching to seller but no seller record exists, auto-register
+        set({ isLoading: true })
+
+        // If switching to seller, ensure seller record exists before navigating
         if (role === 'seller' && state.currentUser && !state.seller) {
           const userId = state.currentUser.id
           const storeName = state.currentUser.name ? `${state.currentUser.name}'s Store` : 'My Store'
-          // Register seller in background
-          fetch('/api/seller/register', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId, storeName }),
-          })
-            .then(res => res.json())
-            .then(data => {
-              if (data.success && data.data) {
-                const sellerData = data.data
-                const seller: Seller = {
-                  id: sellerData.id,
-                  userId: sellerData.userId,
-                  storeName: sellerData.storeName,
-                  storeSlug: sellerData.storeSlug,
-                  storeDesc: sellerData.storeDesc || undefined,
-                  storeAvatar: sellerData.storeAvatar || undefined,
-                  storeBanner: sellerData.storeBanner || undefined,
-                  isVerified: sellerData.isVerified || false,
-                  isPremium: sellerData.isPremium || false,
-                  rating: sellerData.rating || 0,
-                  totalSales: sellerData.totalSales || 0,
-                  totalProducts: sellerData.totalProducts || 0,
-                  responseTime: sellerData.responseTime || undefined,
-                  bankName: sellerData.bankName || undefined,
-                  bankAccount: sellerData.bankAccount || undefined,
-                  bankHolder: sellerData.bankHolder || undefined,
-                  autoReply: sellerData.autoReply || undefined,
-                }
-                set({ seller })
-              }
+
+          try {
+            // Try to register as seller
+            const registerRes = await fetch('/api/seller/register', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ userId, storeName }),
             })
-            .catch(err => console.error('Auto seller register failed:', err))
+            const registerData = await registerRes.json()
+
+            if (registerData.success && registerData.data) {
+              // New seller registered successfully
+              const sellerData = registerData.data
+              const seller: Seller = {
+                id: sellerData.id,
+                userId: sellerData.userId,
+                storeName: sellerData.storeName,
+                storeSlug: sellerData.storeSlug,
+                storeDesc: sellerData.storeDesc || undefined,
+                storeAvatar: sellerData.storeAvatar || undefined,
+                storeBanner: sellerData.storeBanner || undefined,
+                isVerified: sellerData.isVerified || false,
+                isPremium: sellerData.isPremium || false,
+                rating: sellerData.rating || 0,
+                totalSales: sellerData.totalSales || 0,
+                totalProducts: sellerData.totalProducts || 0,
+                responseTime: sellerData.responseTime || undefined,
+                bankName: sellerData.bankName || undefined,
+                bankAccount: sellerData.bankAccount || undefined,
+                bankHolder: sellerData.bankHolder || undefined,
+                autoReply: sellerData.autoReply || undefined,
+              }
+              set({ seller })
+            } else if (registerRes.status === 409) {
+              // Already a seller — fetch existing seller data
+              try {
+                const userDataRes = await fetch(`/api/user-data?userId=${userId}`)
+                const userDataRaw = await userDataRes.json()
+                const userData = userDataRaw.data || userDataRaw
+
+                if (userData.seller) {
+                  const s = userData.seller
+                  const seller: Seller = {
+                    id: s.id,
+                    userId: s.userId,
+                    storeName: s.storeName,
+                    storeSlug: s.storeSlug,
+                    storeDesc: s.storeDesc || undefined,
+                    storeAvatar: s.storeAvatar || undefined,
+                    storeBanner: s.storeBanner || undefined,
+                    isVerified: s.isVerified,
+                    isPremium: s.isPremium,
+                    rating: s.rating,
+                    totalSales: s.totalSales,
+                    totalProducts: s.totalProducts,
+                    responseTime: s.responseTime || undefined,
+                    bankName: s.bankName || undefined,
+                    bankAccount: s.bankAccount || undefined,
+                    bankHolder: s.bankHolder || undefined,
+                    autoReply: s.autoReply || undefined,
+                  }
+                  set({ seller })
+
+                  // Also update seller balance from wallet
+                  if (s.wallet) {
+                    const walletBal = s.wallet.balance || 0
+                    const walletHold = s.wallet.holdBalance || 0
+                    const walletPending = s.wallet.pendingBalance || 0
+                    set({
+                      sellerBalance: {
+                        availableBalance: walletBal,
+                        pendingBalance: walletPending,
+                        holdBalance: walletHold,
+                        totalBalance: walletBal + walletHold + walletPending,
+                        totalWithdrawn: 0,
+                      }
+                    })
+                  }
+                }
+              } catch (fetchErr) {
+                console.error('Failed to fetch existing seller data:', fetchErr)
+              }
+            }
+          } catch (err) {
+            console.error('Auto seller register failed:', err)
+          }
         }
+
+        // Now navigate after seller data is resolved
         set({
           userRole: role,
-          currentUser: state.currentUser ? { ...state.currentUser, role } : null,
-          currentScreen: role === 'buyer' ? 'home' : role === 'seller' ? 'seller-dashboard' : 'admin-dashboard'
+          currentUser: get().currentUser ? { ...get().currentUser!, role } : null,
+          currentScreen: role === 'buyer' ? 'home' : role === 'seller' ? 'seller-dashboard' : 'admin-dashboard',
+          isLoading: false,
         })
+
+        // Fetch seller stats if switching to seller and seller is now available
+        if (role === 'seller' && get().seller?.id) {
+          get().fetchSellerStats()
+        }
       },
 
       // Selected items
@@ -1305,12 +1368,13 @@ export const useAppStore = create<AppState>()(
       name: 'martup-storage',
       version: 2, // Bumped to clear stale localStorage data from mock-data era
       partialize: (state) => ({
-        // Only persist essential state, NOT user-specific data that should come from API
-        currentScreen: state.currentScreen,
-        previousScreens: state.previousScreens,
+        // Only persist non-sensitive UI preferences
+        // Do NOT persist currentScreen — it can reference protected screens (seller-dashboard, admin-dashboard)
+        // which cause crashes on reload when auth state is not yet restored
+        previousScreens: [],
         settings: state.settings,
         searchHistory: state.searchHistory,
-        // Do NOT persist: orders, notifications, products, wallet, vouchers, followedStoreIds, etc.
+        // Do NOT persist: currentScreen, orders, notifications, products, wallet, vouchers, etc.
         // These should always come from the API for consistency
       }),
     }

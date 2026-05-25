@@ -106,8 +106,13 @@ export function ProfileScreen() {
     setTheme(checked ? 'dark' : 'light')
   }
 
-  const handleRoleSwitch = (role: string) => {
-    switchRole(role as import('@/lib/types').UserRole)
+  const handleRoleSwitch = async (role: string) => {
+    showToast(role === 'seller' ? "Mempersiapkan mode Seller..." : `Beralih ke mode ${role}`, "info")
+    try {
+      await switchRole(role as import('@/lib/types').UserRole)
+    } catch {
+      showToast("Gagal beralih role", "error")
+    }
   }
 
   return (
@@ -375,7 +380,7 @@ export function ProfileScreen() {
         <div className="px-4 pb-4">
           <motion.button
             whileTap={{ scale: 0.98 }}
-            onClick={() => { handleRoleSwitch("seller"); showToast("Beralih ke mode Seller", "info") }}
+            onClick={() => handleRoleSwitch("seller")}
             className="w-full"
           >
             <div className="bg-gradient-to-r from-orange-500 to-amber-500 rounded-xl p-4 text-white text-left shadow-sm">
