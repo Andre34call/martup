@@ -450,7 +450,7 @@ model Banner {
   title     String
   image     String
   link      String?
-  position  String   @default("home_top") // home_top, home_mid, category
+  position  String   @default("home_top") // home_top, home_mid, home_bottom, category_top, search_top, product_detail, checkout_top, popup
   sortOrder Int      @default(0)
   isActive  Boolean  @default(true)
   startDate DateTime?

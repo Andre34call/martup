@@ -424,9 +424,50 @@ export function AdminDashboard() {
 
 // ==================== ADMIN USERS ====================
 export function AdminUsers() {
-  const { showToast, adminUsers, updateAdminUser, deleteAdminUser } = useAppStore()
+  const { showToast, adminUsers, fetchAdminUsers } = useAppStore()
   const [search, setSearch] = useState("")
   const [roleFilter, setRoleFilter] = useState("all")
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetchAdminUsers().finally(() => setLoading(false))
+  }, [])
+
+  const handleUpdateUser = async (userId: string, updates: Record<string, unknown>) => {
+    try {
+      const res = await fetch('/api/admin/users', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, updates }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        fetchAdminUsers()
+        return true
+      } else {
+        showToast(data.error || 'Gagal mengupdate user', "error")
+        return false
+      }
+    } catch {
+      showToast('Gagal mengupdate user', "error")
+      return false
+    }
+  }
+
+  const handleDeleteUser = async (userId: string) => {
+    try {
+      const res = await fetch(`/api/admin/users?userId=${userId}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (data.success) {
+        showToast("User dihapus", "info")
+        fetchAdminUsers()
+      } else {
+        showToast(data.error || 'Gagal menghapus user', "error")
+      }
+    } catch {
+      showToast('Gagal menghapus user', "error")
+    }
+  }
 
   // Derive status from store fields for UI compatibility
   const users = adminUsers.map(u => ({
@@ -479,7 +520,12 @@ export function AdminUsers() {
 
         {/* User Table */}
         <div className="space-y-2">
-          {filtered.length === 0 ? (
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-12 gap-3">
+              <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+              <p className="text-sm text-muted-foreground">Memuat data user...</p>
+            </div>
+          ) : filtered.length === 0 ? (
             <EmptyState
               icon={<Users className="w-10 h-10 text-muted-foreground" />}
               title="User Tidak Ditemukan"
@@ -517,33 +563,30 @@ export function AdminUsers() {
                   </div>
                   <div className="flex gap-2 mt-3 pt-3 border-t border-border/50">
                     {user.status === "pending" && (
-                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={() => {
-                        updateAdminUser(user.id, { isVerified: true })
-                        showToast("User berhasil diverifikasi", "success")
+                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={async () => {
+                        const ok = await handleUpdateUser(user.id, { isVerified: true })
+                        if (ok) showToast("User berhasil diverifikasi", "success")
                       }}>
                         <Check className="w-3 h-3 mr-0.5" /> Verify
                       </Button>
                     )}
                     {user.status === "active" && (
-                      <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-amber-600" onClick={() => {
-                        updateAdminUser(user.id, { isBlocked: true })
-                        showToast("User diblokir", "info")
+                      <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-amber-600" onClick={async () => {
+                        const ok = await handleUpdateUser(user.id, { isBlocked: true })
+                        if (ok) showToast("User diblokir", "info")
                       }}>
                         <Ban className="w-3 h-3 mr-0.5" /> Block
                       </Button>
                     )}
                     {user.status === "blocked" && (
-                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-blue-500 hover:bg-blue-600 text-white" onClick={() => {
-                        updateAdminUser(user.id, { isBlocked: false })
-                        showToast("User dibuka kembali", "success")
+                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-blue-500 hover:bg-blue-600 text-white" onClick={async () => {
+                        const ok = await handleUpdateUser(user.id, { isBlocked: false })
+                        if (ok) showToast("User dibuka kembali", "success")
                       }}>
                         <Check className="w-3 h-3 mr-0.5" /> Unblock
                       </Button>
                     )}
-                    <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20" onClick={() => {
-                      deleteAdminUser(user.id)
-                      showToast("User dihapus", "info")
-                    }}>
+                    <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20" onClick={() => handleDeleteUser(user.id)}>
                       <Trash2 className="w-3 h-3" />
                     </Button>
                   </div>
@@ -1034,6 +1077,25 @@ type ApiBanner = {
   createdAt: string
 }
 
+const BANNER_POSITIONS = [
+  { value: 'home_top', label: 'Home - Atas (Carousel Utama)', description: 'Banner carousel di bagian atas homepage, ukuran 800x400px' },
+  { value: 'home_mid', label: 'Home - Tengah (Setelah Kategori)', description: 'Banner di tengah homepage setelah kategori, ukuran 800x200px' },
+  { value: 'home_bottom', label: 'Home - Bawah (Sebelum Rekomendasi)', description: 'Banner di bawah homepage sebelum produk rekomendasi, ukuran 800x200px' },
+  { value: 'category_top', label: 'Kategori - Atas', description: 'Banner di halaman kategori, ukuran 800x200px' },
+  { value: 'search_top', label: 'Pencarian - Atas', description: 'Banner di halaman pencarian, ukuran 800x150px' },
+  { value: 'product_detail', label: 'Detail Produk - Bawah', description: 'Banner di halaman detail produk, ukuran 800x150px' },
+  { value: 'checkout_top', label: 'Checkout - Atas', description: 'Banner di halaman checkout, ukuran 800x100px' },
+  { value: 'popup', label: 'Popup / Modal', description: 'Banner popup yang muncul saat buka aplikasi, ukuran 400x500px' },
+]
+
+function getPositionLabel(value: string) {
+  return BANNER_POSITIONS.find(p => p.value === value)?.label || value
+}
+
+function getPositionDescription(value: string) {
+  return BANNER_POSITIONS.find(p => p.value === value)?.description || ''
+}
+
 export function AdminBanner() {
   const { showToast } = useAppStore()
   const [banners, setBanners] = useState<ApiBanner[]>([])
@@ -1043,6 +1105,8 @@ export function AdminBanner() {
   const [newPosition, setNewPosition] = useState('home_top')
   const [newLink, setNewLink] = useState('')
   const [newImage, setNewImage] = useState('')
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const fetchBanners = async () => {
     try {
@@ -1059,6 +1123,47 @@ export function AdminBanner() {
   }
 
   useEffect(() => { fetchBanners() }, [])
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      showToast('Hanya file gambar yang diperbolehkan', "error")
+      return
+    }
+
+    // Validate file size (5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      showToast('Ukuran file maksimal 5MB', "error")
+      return
+    }
+
+    setUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      })
+      const data = await res.json()
+      if (data.success && data.url) {
+        setNewImage(data.url)
+        showToast("Gambar berhasil diupload", "success")
+      } else {
+        showToast(data.error || 'Gagal mengupload gambar', "error")
+      }
+    } catch {
+      showToast('Gagal mengupload gambar', "error")
+    } finally {
+      setUploading(false)
+      // Reset file input so the same file can be re-selected
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
 
   const handleToggleActive = async (banner: ApiBanner) => {
     try {
@@ -1118,6 +1223,8 @@ export function AdminBanner() {
     }
   }
 
+  const selectedPositionDesc = getPositionDescription(newPosition)
+
   return (
     <div className="pb-20">
       <PageHeader title="Kelola Banner" rightAction={
@@ -1139,12 +1246,18 @@ export function AdminBanner() {
                 <Card className="p-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-blue-400 to-emerald-400 flex items-center justify-center flex-shrink-0">
-                        <ImageIcon className="w-5 h-5 text-white" />
-                      </div>
+                      {banner.image ? (
+                        <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-muted">
+                          <img src={banner.image} alt={banner.title} className="w-full h-full object-cover" />
+                        </div>
+                      ) : (
+                        <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-blue-400 to-emerald-400 flex items-center justify-center flex-shrink-0">
+                          <ImageIcon className="w-5 h-5 text-white" />
+                        </div>
+                      )}
                       <div>
                         <p className="text-sm font-medium text-foreground">{banner.title}</p>
-                        <p className="text-xs text-muted-foreground">{banner.position}</p>
+                        <p className="text-xs text-muted-foreground">{getPositionLabel(banner.position)}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -1176,22 +1289,54 @@ export function AdminBanner() {
 
               <div className="space-y-2">
                 <label className="text-xs font-medium text-foreground">Posisi</label>
-                <Input placeholder="Contoh: Home Top" className="rounded-xl" value={newPosition} onChange={(e) => setNewPosition(e.target.value)} />
+                <select
+                  value={newPosition}
+                  onChange={(e) => setNewPosition(e.target.value)}
+                  className="w-full h-10 rounded-xl border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                >
+                  {BANNER_POSITIONS.map((pos) => (
+                    <option key={pos.value} value={pos.value}>{pos.label}</option>
+                  ))}
+                </select>
+                {selectedPositionDesc && (
+                  <p className="text-[11px] text-muted-foreground">{selectedPositionDesc}</p>
+                )}
               </div>
 
               <div className="space-y-2">
                 <label className="text-xs font-medium text-foreground">Gambar Banner</label>
-                <div className="h-28 rounded-xl bg-muted/50 border-2 border-dashed border-border flex flex-col items-center justify-center cursor-pointer hover:bg-muted transition-colors" onClick={() => setNewImage(newImage ? newImage : 'https://placehold.co/800x400/e2e8f0/64748b?text=Banner')}>
-                  {newImage ? (
-                    <p className="text-xs text-muted-foreground text-center px-4 break-all">{newImage}</p>
+                <input
+                  type="file"
+                  accept="image/*"
+                  ref={fileInputRef}
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+                <div
+                  className="h-32 rounded-xl bg-muted/50 border-2 border-dashed border-border flex flex-col items-center justify-center cursor-pointer hover:bg-muted transition-colors overflow-hidden"
+                  onClick={() => !uploading && fileInputRef.current?.click()}
+                >
+                  {uploading ? (
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                      <p className="text-xs text-muted-foreground">Mengupload...</p>
+                    </div>
+                  ) : newImage ? (
+                    <img src={newImage} alt="Preview" className="w-full h-full object-contain" />
                   ) : (
                     <>
                       <ImageIcon className="w-6 h-6 text-muted-foreground mb-1" />
-                      <p className="text-xs text-muted-foreground">Upload Banner</p>
+                      <p className="text-xs text-muted-foreground">Klik untuk upload gambar</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">PNG, JPG, WEBP (maks 5MB)</p>
                     </>
                   )}
                 </div>
-                <Input placeholder="URL gambar..." className="rounded-xl" value={newImage} onChange={(e) => setNewImage(e.target.value)} />
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-px bg-border" />
+                  <span className="text-[10px] text-muted-foreground">atau</span>
+                  <div className="flex-1 h-px bg-border" />
+                </div>
+                <Input placeholder="Paste URL gambar..." className="rounded-xl" value={newImage} onChange={(e) => setNewImage(e.target.value)} />
               </div>
 
               <div className="space-y-2">
@@ -1199,8 +1344,8 @@ export function AdminBanner() {
                 <Input placeholder="https://..." className="rounded-xl" value={newLink} onChange={(e) => setNewLink(e.target.value)} />
               </div>
 
-              <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl h-10" onClick={handleAddBanner}>
-                Simpan Banner
+              <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl h-10" onClick={handleAddBanner} disabled={uploading}>
+                {uploading ? 'Mengupload...' : 'Simpan Banner'}
               </Button>
             </Card>
           </motion.div>

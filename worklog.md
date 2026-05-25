@@ -215,3 +215,55 @@ Stage Summary:
 - AdminComplaints: rich complaint data with order context, resolution/refund display, async updates
 - All components fetch data on mount and refresh after mutations
 - No more dependency on client-side-only Zustand state for these 4 screens
+
+---
+Task ID: 1-3
+Agent: Bug Fix Agent
+Task: Fix three bugs: AdminUsers empty list, Banner image upload, Banner position dropdown
+
+Work Log:
+- Bug 1: AdminUsers "User Tidak Ditemukan" empty list
+  - Added `fetchAdminUsers` to destructured store values in AdminUsers component
+  - Added `useEffect` to call `fetchAdminUsers()` on mount with loading state
+  - Added `loading` state with spinner shown while fetching users
+  - Replaced local `updateAdminUser`/`deleteAdminUser` store calls with real API calls:
+    - `handleUpdateUser` calls PATCH /api/admin/users then refreshes via `fetchAdminUsers()`
+    - `handleDeleteUser` calls DELETE /api/admin/users?userId=xxx then refreshes via `fetchAdminUsers()`
+  - Empty state ("User Tidak Ditemukan") now only shows after loading completes with no results
+
+- Bug 2: Banner image upload doesn't work
+  - Created new API endpoint at src/app/api/upload/route.ts:
+    - Accepts POST with FormData containing a file
+    - Validates file type (image only) and size (max 5MB)
+    - Creates 'banners' bucket in Supabase Storage if it doesn't exist (public bucket)
+    - Generates unique filename using Date.now() + random string + original extension
+    - Uploads to Supabase Storage and returns public URL
+    - Uses existing supabase client from src/lib/supabase.ts
+  - Updated AdminBanner component:
+    - Added hidden `<input type="file" accept="image/*">` with ref
+    - Upload area now triggers file picker on click
+    - Shows upload spinner while uploading
+    - Shows image preview after successful upload
+    - Keeps URL input as fallback (separated by "atau" divider)
+    - Client-side validation for file type and size before upload
+    - Disables submit button while uploading
+
+- Bug 3: Banner positions need to be predefined with descriptions
+  - Added BANNER_POSITIONS constant with 8 predefined positions:
+    home_top, home_mid, home_bottom, category_top, search_top, product_detail, checkout_top, popup
+  - Each position has value, label (Indonesian), and description with recommended dimensions
+  - Added `getPositionLabel()` and `getPositionDescription()` helper functions
+  - Replaced position `<Input>` with `<select>` dropdown showing position labels
+  - Shows selected position description as helper text below dropdown
+  - Banner list now shows position label instead of raw value (e.g. "Home - Atas (Carousel Utama)" instead of "home_top")
+  - Updated Banner model schema comment in prisma/schema.prisma to document all 8 positions
+  - Banner cards now show actual image thumbnail instead of gradient placeholder
+
+- Lint passes cleanly with 0 errors and 0 warnings
+- Dev server compiles successfully
+
+Stage Summary:
+- AdminUsers now fetches data from API on mount with loading state and uses real API for update/delete operations
+- Banner image upload works end-to-end: client selects file → POST /api/upload → Supabase Storage → public URL
+- Banner positions are predefined with 8 options, each with label and recommended dimensions
+- All three bugs resolved with targeted edits
