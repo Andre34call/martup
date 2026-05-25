@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
+import { sanitizeInput } from '@/lib/sanitize'
+import { serializeDecimal } from '@/lib/decimal-utils'
 
 // GET /api/admin/complaints - Fetch all complaints with order and user info
 export async function GET(request: NextRequest) {
@@ -47,7 +49,7 @@ export async function GET(request: NextRequest) {
       images: c.images,
     }))
 
-    return NextResponse.json({ success: true, data: mapped })
+    return NextResponse.json(serializeDecimal({ success: true, data: mapped }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     console.error('Admin complaints GET error:', error)
@@ -65,7 +67,10 @@ export async function PUT(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { complaintId, status, resolution, refundAmount } = body
+    const { complaintId, status, refundAmount } = body
+
+    // SECURITY: Sanitize user-generated text fields
+    const resolution = body.resolution !== undefined ? sanitizeInput(body.resolution) : undefined
 
     if (!complaintId || !status) {
       return NextResponse.json(
@@ -83,7 +88,7 @@ export async function PUT(request: NextRequest) {
       data: updateData,
     })
 
-    return NextResponse.json({ success: true, data: complaint })
+    return NextResponse.json(serializeDecimal({ success: true, data: complaint }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     console.error('Admin complaints PUT error:', error)

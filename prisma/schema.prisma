@@ -26,7 +26,7 @@ model User {
   referralCode  String?   @unique
   referredBy    String?
   loyaltyPoints Int       @default(0)
-  coins         Float     @default(0)
+  coins         Decimal   @default(0)
   dailyCheckIn  DateTime?
   fcmToken      String?
   createdAt     DateTime  @default(now())
@@ -66,7 +66,7 @@ model Seller {
   bankName        String?
   bankHolder      String?
   autoReply       String?
-  commissionRate  Float    @default(0.05)
+  commissionRate  Decimal  @default("0.05")
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -97,13 +97,14 @@ model Address {
 // ==================== WALLET & TRANSACTIONS ====================
 
 model Wallet {
-  id        String   @id @default(cuid())
-  userId    String   @unique
-  sellerId  String?  @unique
-  balance   Float    @default(0)
-  holdBalance Float  @default(0) // escrow
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  sellerId       String?  @unique
+  balance        Decimal  @default(0)
+  holdBalance    Decimal  @default(0) // escrow
+  pendingBalance Decimal  @default(0) // from orders not yet completed
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   user      User?    @relation(fields: [userId], references: [id])
   seller    Seller?  @relation(fields: [sellerId], references: [id])
@@ -114,20 +115,22 @@ model WalletMutation {
   id          String   @id @default(cuid())
   walletId    String
   type        String   // credit, debit
-  amount      Float
-  balance     Float    // balance after mutation
+  amount      Decimal
+  balance     Decimal  // balance after mutation
   description String
   refType     String?  // order, deposit, withdraw, refund, cashback
   refId       String?
   createdAt   DateTime @default(now())
 
   wallet      Wallet   @relation(fields: [walletId], references: [id])
+
+  @@index([walletId, createdAt])
 }
 
 model Deposit {
   id          String   @id @default(cuid())
   userId      String
-  amount      Float
+  amount      Decimal
   method      String   // bank_transfer, gopay, ovo, dana
   status      String   @default("pending") // pending, success, failed
   proofUrl    String?
@@ -139,7 +142,7 @@ model Deposit {
 model Withdrawal {
   id          String   @id @default(cuid())
   sellerId    String
-  amount      Float
+  amount      Decimal
   bankAccount String
   bankName    String
   bankHolder  String
@@ -148,15 +151,17 @@ model Withdrawal {
   processedAt DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@index([status, createdAt])
 }
 
 model Transaction {
   id          String    @id @default(cuid())
   userId      String
   type        String    // payment, refund, deposit, withdraw, cashback
-  amount      Float
-  fee         Float     @default(0)
-  netAmount   Float
+  amount      Decimal
+  fee         Decimal   @default(0)
+  netAmount   Decimal
   method      String?
   status      String    @default("pending")
   description String?
@@ -164,6 +169,8 @@ model Transaction {
   createdAt   DateTime  @default(now())
 
   user        User      @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
 }
 
 // ==================== CATALOG ====================
@@ -192,8 +199,8 @@ model Product {
   name          String
   slug          String    @unique
   description   String
-  price         Float
-  discountPrice Float?
+  price         Decimal
+  discountPrice Decimal?
   images        String    // JSON array of URLs
   videoUrl      String?
   stock         Int       @default(0)
@@ -218,6 +225,11 @@ model Product {
   orderItems    OrderItem[]
   reviews       Review[]
   wishlists     Wishlist[]
+
+  @@index([categoryId, status])
+  @@index([sellerId, status])
+  @@index([isFlashSale, status])
+  @@index([status, createdAt])
 }
 
 model ProductVariant {
@@ -226,7 +238,7 @@ model ProductVariant {
   name      String   // Color, Size, etc.
   value     String   // Red, XL, etc.
   sku       String?
-  price     Float?
+  price     Decimal?
   stock     Int      @default(0)
   image     String?
 
@@ -250,6 +262,9 @@ model CartItem {
   user      User     @relation(fields: [userId], references: [id])
   product   Product  @relation(fields: [productId], references: [id])
   variant   ProductVariant? @relation(fields: [variantId], references: [id])
+
+  @@unique([userId, productId, variantId])
+  @@index([userId])
 }
 
 model Order {
@@ -259,12 +274,12 @@ model Order {
   sellerId        String
   addressId       String
   status          String     @default("pending") // pending, paid, processing, shipped, delivered, cancelled, refunded
-  subtotal        Float
-  shippingCost    Float
-  discountAmount  Float      @default(0)
-  taxAmount       Float      @default(0)
-  platformFee     Float      @default(0)
-  totalAmount     Float
+  subtotal        Decimal
+  shippingCost    Decimal
+  discountAmount  Decimal    @default(0)
+  taxAmount       Decimal    @default(0)
+  platformFee     Decimal    @default(0)
+  totalAmount     Decimal
   paymentMethod   String?
   paymentStatus   String     @default("unpaid")
   paidAt          DateTime?
@@ -282,6 +297,10 @@ model Order {
   shipping        Shipping?
   voucherUsages   VoucherUsage[]
   complaint       Complaint?
+
+  @@index([userId, status])
+  @@index([status])
+  @@index([createdAt])
 }
 
 model OrderItem {
@@ -291,9 +310,9 @@ model OrderItem {
   variantId   String?
   productName String
   variantName String?
-  price       Float
+  price       Decimal
   quantity    Int
-  subtotal    Float
+  subtotal    Decimal
   image       String?
 
   order       Order   @relation(fields: [orderId], references: [id])
@@ -331,6 +350,8 @@ model Review {
   user      User       @relation(fields: [userId], references: [id])
   product   Product    @relation(fields: [productId], references: [id])
   orderItem OrderItem? @relation(fields: [orderItemId], references: [id])
+
+  @@index([productId, createdAt])
 }
 
 model Wishlist {
@@ -365,6 +386,8 @@ model ChatParticipant {
 
   room     ChatRoom @relation(fields: [roomId], references: [id])
   user     User     @relation(fields: [userId], references: [id])
+
+  @@unique([roomId, userId])
 }
 
 model ChatMessage {
@@ -377,6 +400,8 @@ model ChatMessage {
   createdAt DateTime @default(now())
 
   room      ChatRoom @relation(fields: [roomId], references: [id])
+
+  @@index([roomId, createdAt])
 }
 
 // ==================== NOTIFICATIONS ====================
@@ -393,6 +418,9 @@ model Notification {
   createdAt DateTime @default(now())
 
   user      User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
 }
 
 // ==================== VOUCHER & PROMO ====================
@@ -403,9 +431,9 @@ model Voucher {
   name          String
   description   String?
   type          String    // percentage, fixed
-  value         Float
-  minPurchase   Float     @default(0)
-  maxDiscount   Float?
+  value         Decimal
+  minPurchase   Decimal   @default(0)
+  maxDiscount   Decimal?
   usageLimit    Int?
   usageCount    Int       @default(0)
   perUserLimit  Int       @default(1)
@@ -427,6 +455,8 @@ model VoucherUsage {
 
   voucher   Voucher  @relation(fields: [voucherId], references: [id])
   order     Order    @relation(fields: [orderId], references: [id])
+
+  @@index([voucherId, userId])
 }
 
 model Campaign {
@@ -436,7 +466,7 @@ model Campaign {
   type        String   // flash_sale, banner, boost
   startDate   DateTime
   endDate     DateTime
-  discount    Float?
+  discount    Decimal?
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
 
@@ -470,7 +500,7 @@ model Complaint {
   images      String?  // JSON array
   status      String   @default("open") // open, processing, resolved, rejected
   resolution  String?
-  refundAmount Float?
+  refundAmount Decimal?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -483,7 +513,7 @@ model Referral {
   id          String   @id @default(cuid())
   referrerId  String
   referredId  String
-  reward      Float    @default(0)
+  reward      Decimal  @default(0)
   isClaimed   Boolean  @default(false)
   createdAt   DateTime @default(now())
 

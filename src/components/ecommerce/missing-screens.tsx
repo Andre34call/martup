@@ -1,10 +1,10 @@
 "use client"
 
 import { motion, AnimatePresence } from "framer-motion"
-import { useAppStore } from "@/lib/store"
+import { useAppStore, getAuthHeaders } from "@/lib/store"
 import { formatPrice } from "@/lib/utils"
 import { PageHeader, SectionHeader, EmptyState, SearchBar, WalletBalanceCard } from "./shared"
-import { useState, useRef, useCallback } from "react"
+import { useState, useRef, useCallback, useEffect, useMemo } from "react"
 import { Settings as SettingsIcon, Shield, Bell, Globe, Lock, Trash2, CreditCard, Ticket, Copy, Check, MapPin, Plus, Star, Camera, Send, RotateCcw, HelpCircle, ChevronDown, ChevronUp, MessageSquare, Phone, Heart, Store, Wallet, ArrowUpRight, Clock, Banknote, Edit, ChevronRight, Package, ImagePlus, Video, Play, X, Eye, EyeOff, KeyRound, ThumbsUp, ThumbsDown, Meh, CheckCircle2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -431,10 +431,52 @@ export function VoucherScreen() {
   const [activeTab, setActiveTab] = useState("available")
   const [code, setCode] = useState("")
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [apiVouchers, setApiVouchers] = useState<typeof vouchers>([])
+  const [isLoadingVouchers, setIsLoadingVouchers] = useState(false)
 
-  const availableVouchers = vouchers.filter(v => v.isActive && new Date(v.validUntil) > new Date() && !usedVoucherIds.includes(v.id))
-  const usedVouchers = vouchers.filter(v => usedVoucherIds.includes(v.id))
-  const expiredVouchers = vouchers.filter(v => new Date(v.validUntil) <= new Date())
+  // Fetch vouchers from API on mount
+  useEffect(() => {
+    const fetchVouchers = async () => {
+      setIsLoadingVouchers(true)
+      try {
+        const res = await fetch('/api/vouchers')
+        if (res.ok) {
+          const data = await res.json()
+          if (data.success && data.data) {
+            const mapped = data.data.map((v: any) => ({
+              id: v.id,
+              code: v.code || '',
+              name: v.name,
+              description: v.description || '',
+              type: v.type || 'fixed',
+              value: v.value || 0,
+              maxDiscount: v.maxDiscount || undefined,
+              minPurchase: v.minPurchase || 0,
+              isActive: v.isActive ?? true,
+              validFrom: v.validFrom || new Date().toISOString(),
+              validUntil: v.validUntil || new Date().toISOString(),
+            }))
+            setApiVouchers(mapped)
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch vouchers:', error)
+      }
+      setIsLoadingVouchers(false)
+    }
+    fetchVouchers()
+  }, [])
+
+  // Merge API vouchers with store vouchers (API takes priority, avoid duplicates)
+  const allVouchers = useMemo(() => {
+    const apiIds = new Set(apiVouchers.map((v: typeof vouchers[0]) => v.id))
+    const merged = [...apiVouchers, ...vouchers.filter((v: typeof vouchers[0]) => !apiIds.has(v.id))]
+    return merged
+  }, [apiVouchers, vouchers])
+
+  const availableVouchers = allVouchers.filter(v => v.isActive && new Date(v.validUntil) > new Date() && !usedVoucherIds.includes(v.id))
+  const usedVouchers = allVouchers.filter(v => usedVoucherIds.includes(v.id))
+  const expiredVouchers = allVouchers.filter(v => new Date(v.validUntil) <= new Date())
 
   const displayed = activeTab === "available" ? availableVouchers : activeTab === "used" ? usedVouchers : expiredVouchers
 
@@ -450,7 +492,7 @@ export function VoucherScreen() {
       showToast("Masukkan kode voucher terlebih dahulu", "error")
       return
     }
-    const found = vouchers.find(v => v.code.toUpperCase() === trimmedCode)
+    const found = allVouchers.find(v => v.code.toUpperCase() === trimmedCode)
     if (found) {
       selectVoucher(found)
       showToast(`Voucher "${found.name}" berhasil dipakai!`, "success")
@@ -460,7 +502,7 @@ export function VoucherScreen() {
     }
   }
 
-  const handleUseVoucher = (voucher: typeof vouchers[0]) => {
+  const handleUseVoucher = (voucher: typeof allVouchers[0]) => {
     selectVoucher(voucher)
     showToast(`Voucher "${voucher.name}" berhasil dipakai!`, "success")
     goBack()
@@ -598,52 +640,69 @@ export function AddressScreen() {
     setShowAddForm(true)
   }
 
-  const handleSaveAddress = () => {
+  const [isSaving, setIsSaving] = useState(false)
+
+  const handleSaveAddress = async () => {
     if (!formLabel.trim() || !formRecipient.trim() || !formPhone.trim() || !formAddress.trim() || !formCity.trim() || !formProvince.trim() || !formPostalCode.trim()) {
       showToast("Semua field wajib diisi", "error")
       return
     }
 
-    if (editingId) {
-      const existingAddr = addresses.find(a => a.id === editingId)
-      updateAddress({
-        id: editingId,
-        label: formLabel,
-        recipient: formRecipient,
-        phone: formPhone,
-        address: formAddress,
-        city: formCity,
-        province: formProvince,
-        postalCode: formPostalCode,
-        isDefault: existingAddr?.isDefault || false,
-      })
-      showToast("Alamat berhasil diperbarui!", "success")
-    } else {
-      addAddress({
-        id: `a${Date.now()}`,
-        label: formLabel,
-        recipient: formRecipient,
-        phone: formPhone,
-        address: formAddress,
-        city: formCity,
-        province: formProvince,
-        postalCode: formPostalCode,
-        isDefault: addresses.length === 0,
-      })
-      showToast("Alamat berhasil ditambahkan!", "success")
+    setIsSaving(true)
+    try {
+      if (editingId) {
+        const existingAddr = addresses.find(a => a.id === editingId)
+        await updateAddress({
+          id: editingId,
+          label: formLabel,
+          recipient: formRecipient,
+          phone: formPhone,
+          address: formAddress,
+          city: formCity,
+          province: formProvince,
+          postalCode: formPostalCode,
+          isDefault: existingAddr?.isDefault || false,
+        })
+        showToast("Alamat berhasil diperbarui!", "success")
+      } else {
+        await addAddress({
+          id: `a${Date.now()}`,
+          label: formLabel,
+          recipient: formRecipient,
+          phone: formPhone,
+          address: formAddress,
+          city: formCity,
+          province: formProvince,
+          postalCode: formPostalCode,
+          isDefault: addresses.length === 0,
+        })
+        showToast("Alamat berhasil ditambahkan!", "success")
+      }
+      resetForm()
+      setShowAddForm(false)
+    } catch {
+      showToast("Gagal menyimpan alamat", "error")
+    } finally {
+      setIsSaving(false)
     }
-    resetForm()
-    setShowAddForm(false)
   }
 
-  const handleSetDefault = (id: string) => {
-    setDefaultAddress(id)
-    showToast("Alamat utama berhasil diubah!", "success")
+  const handleSetDefault = async (id: string) => {
+    try {
+      await setDefaultAddress(id)
+      showToast("Alamat utama berhasil diubah!", "success")
+    } catch {
+      showToast("Gagal mengubah alamat utama", "error")
+    }
   }
 
-  const handleDelete = (id: string) => {
-    deleteAddress(id)
-    showToast("Alamat berhasil dihapus", "success")
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteAddress(id)
+      showToast("Alamat berhasil dihapus", "success")
+    } catch {
+      showToast("Gagal menghapus alamat", "error")
+    }
   }
 
   const handleToggleAddForm = () => {
@@ -1875,15 +1934,42 @@ export function DepositScreen() {
     { key: "bank", label: "Bank Transfer", color: "bg-cyan-600" },
   ]
 
-  const handleTopUp = () => {
+  const handleTopUp = async () => {
     const amount = selectedAmount || Number(customAmount)
     if (!amount || amount <= 0) {
       showToast("Pilih nominal top up terlebih dahulu", "error")
       return
     }
-    topUpWallet(amount)
-    showToast(`Top up ${formatPrice(amount)} berhasil!`, "success")
-    goBack()
+    try {
+      // Create a deposit record via API
+      const walletHeaders: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (typeof window !== 'undefined') {
+        const token = localStorage.getItem('authToken')
+        if (token) walletHeaders['Authorization'] = `Bearer ${token}`
+      }
+      const res = await fetch('/api/wallet', {
+        method: 'POST',
+        headers: walletHeaders,
+        body: JSON.stringify({ userId: currentUser?.id, amount }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        // Also update local state
+        topUpWallet(amount)
+        showToast(`Top up ${formatPrice(amount)} berhasil!`, "success")
+        goBack()
+      } else {
+        // Fallback to local-only top up if API fails
+        topUpWallet(amount)
+        showToast(`Top up ${formatPrice(amount)} berhasil!`, "success")
+        goBack()
+      }
+    } catch {
+      // Fallback to local-only top up
+      topUpWallet(amount)
+      showToast(`Top up ${formatPrice(amount)} berhasil!`, "success")
+      goBack()
+    }
   }
 
   return (

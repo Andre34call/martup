@@ -1,0 +1,135 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { db } from '@/lib/db'
+import { checkRateLimit } from '@/lib/auth-middleware'
+import crypto from 'crypto'
+
+// OTP configuration
+const OTP_LENGTH = 6
+const OTP_EXPIRY_MINUTES = 5
+const OTP_MAX_ATTEMPTS_PER_HOUR = 5
+
+// POST /api/auth/otp/send - Send OTP to a phone number
+// Generates a 6-digit OTP, stores it in the user record, and returns a requestId
+// In production, this would send the OTP via SMS gateway
+export async function POST(request: NextRequest) {
+  try {
+    // Rate limit: max 5 OTP requests per phone per hour
+    const clientIp = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
+    if (!checkRateLimit(`otp-send:${clientIp}`, OTP_MAX_ATTEMPTS_PER_HOUR)) {
+      return NextResponse.json(
+        { success: false, error: 'Terlalu banyak permintaan OTP. Coba lagi dalam 1 jam.' },
+        { status: 429 }
+      )
+    }
+
+    const body = await request.json()
+    const { phone } = body
+
+    if (!phone || typeof phone !== 'string') {
+      return NextResponse.json(
+        { success: false, error: 'Nomor HP wajib diisi' },
+        { status: 400 }
+      )
+    }
+
+    // Validate phone format (Indonesian)
+    const normalizedPhone = phone.replace(/[\s-]/g, '')
+    if (!/^(0|\+62|62)\d{9,12}$/.test(normalizedPhone)) {
+      return NextResponse.json(
+        { success: false, error: 'Format nomor HP tidak valid' },
+        { status: 400 }
+      )
+    }
+
+    // Generate 6-digit OTP
+    const otpCode = crypto.randomInt(0, Math.pow(10, OTP_LENGTH)).toString().padStart(OTP_LENGTH, '0')
+
+    // Set expiry time
+    const otpExpiry = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000)
+
+    // Find or create user with this phone number
+    let user = await db.user.findFirst({
+      where: { phone: normalizedPhone },
+    })
+
+    if (user) {
+      // Check if user is blocked
+      if (!user.isActive) {
+        return NextResponse.json(
+          { success: false, error: 'Akun Anda telah diblokir. Hubungi admin.' },
+          { status: 403 }
+        )
+      }
+
+      // Update existing user's OTP
+      await db.user.update({
+        where: { id: user.id },
+        data: {
+          otpCode,
+          otpExpiry,
+        },
+      })
+    } else {
+      // Create new user with OTP (will be completed after verification)
+      const internalEmail = `phone_${normalizedPhone.replace(/\+/g, '')}@martup.internal`
+      user = await db.user.create({
+        data: {
+          email: internalEmail,
+          phone: normalizedPhone,
+          name: 'New Member',
+          role: 'buyer',
+          isVerified: false,
+          otpCode,
+          otpExpiry,
+          wallet: {
+            create: {
+              balance: 0,
+              holdBalance: 0,
+            },
+          },
+        },
+      })
+    }
+
+    // Generate a verification request ID (HMAC-signed to prevent tampering)
+    const requestId = Buffer.from(
+      `${user.id}:${Date.now()}:${crypto.createHmac('sha256', process.env.NEXTAUTH_SECRET || 'dev-secret').update(`${user.id}:${otpCode}`).digest('hex').slice(0, 16)}`
+    ).toString('base64url')
+
+    // In production: Send OTP via SMS gateway (Twilio, Vonage, etc.)
+    // For now: Log it and return it in dev mode
+    console.log(`[OTP] Code ${otpCode} sent to ${normalizedPhone} (expires in ${OTP_EXPIRY_MINUTES} min)`)
+
+    const isDev = process.env.NODE_ENV === 'development'
+
+    return NextResponse.json({
+      success: true,
+      message: `Kode OTP telah dikirim ke ${maskPhone(normalizedPhone)}`,
+      requestId,
+      // Only include OTP in development for testing
+      ...(isDev ? { devOtp: otpCode } : {}),
+    })
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Internal server error'
+    console.error('OTP send error:', error)
+    return NextResponse.json(
+      { success: false, error: 'Terjadi kesalahan server. Coba lagi nanti.' },
+      { status: 500 }
+    )
+  }
+}
+
+function maskPhone(phone: string): string {
+  const digits = phone.replace(/\D/g, '')
+  if (digits.length < 8) return phone
+  const visibleStart = digits.slice(0, 4)
+  const visibleEnd = digits.slice(-3)
+  const maskedMiddle = '*'.repeat(Math.min(digits.length - 7, 4))
+  if (digits.startsWith('62')) {
+    return `+62 ${digits.slice(2, 4)}${maskedMiddle}${visibleEnd}`
+  }
+  if (digits.startsWith('0')) {
+    return `0${digits.slice(1, 3)}${maskedMiddle}${visibleEnd}`
+  }
+  return `${visibleStart}${maskedMiddle}${visibleEnd}`
+}

@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { useAppStore } from "@/lib/store"
+import { useAppStore, getAuthHeaders } from "@/lib/store"
 import { formatPrice, formatRelativeTime } from "@/lib/utils"
 import { PageHeader, SectionHeader, StatusBadge, SearchBar, EmptyState, WalletBalanceCard } from "./shared"
 import type { Order } from "@/lib/types"
@@ -45,10 +45,12 @@ export function SellerDashboard() {
   const { navigate, unreadNotificationCount, switchRole, userRole, orders, sellerBalance, currentUser, products, seller, sellerStats, fetchSellerStats } = useAppStore()
   const sellerId = seller?.id || ''
 
-  // Fetch seller stats from API on mount
+  // Fetch seller stats from API when seller ID becomes available
   useEffect(() => {
-    fetchSellerStats()
-  }, [fetchSellerStats])
+    if (sellerId) {
+      fetchSellerStats()
+    }
+  }, [fetchSellerStats, sellerId])
 
   // Compute real stats from store data for current seller (fallback)
   const sellerOrders = orders.filter(o => o.sellerId === sellerId)
@@ -416,9 +418,23 @@ export function SellerProducts() {
                     }}>
                       <Edit className="w-3 h-3 mr-1" /> Edit
                     </Button>
-                    <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20" onClick={() => {
-                      showToast("Produk dihapus", "info")
-                      removeProduct(product.id)
+                    <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20" onClick={async () => {
+                      try {
+                        const res = await fetch('/api/seller/products', {
+                          method: 'DELETE',
+                          headers: getAuthHeaders(),
+                          body: JSON.stringify({ productId: product.id }),
+                        })
+                        const data = await res.json()
+                        if (data.success) {
+                          removeProduct(product.id)
+                          showToast("Produk berhasil dihapus", "success")
+                        } else {
+                          showToast(data.error || "Gagal menghapus produk", "error")
+                        }
+                      } catch {
+                        showToast("Gagal menghapus produk", "error")
+                      }
                     }}>
                       <Trash2 className="w-3 h-3" />
                     </Button>
@@ -526,7 +542,16 @@ export function SellerOrders() {
                     <p className="text-base font-bold text-foreground">{formatPrice(order.amount)}</p>
                     <div className="flex gap-2">
                       {order.status === "paid" && (
-                        <Button size="sm" className="h-8 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={() => { updateOrderStatus(order.id, 'processing'); showToast("Pesanan sedang diproses", "success") }}>
+                        <Button size="sm" className="h-8 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={() => {
+                          updateOrderStatus(order.id, 'processing')
+                          // Also update via API
+                          fetch('/api/orders', {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ orderId: order.id, status: 'processing' }),
+                          }).catch(() => {})
+                          showToast("Pesanan sedang diproses", "success")
+                        }}>
                           <Package className="w-3 h-3 mr-1" /> Proses
                         </Button>
                       )}
@@ -580,6 +605,12 @@ export function SellerOrders() {
                 if (trackingOrderId) {
                   updateOrderTracking(trackingOrderId, trackingNumber.trim())
                   updateOrderStatus(trackingOrderId, 'shipped')
+                  // Also update via API
+                  fetch('/api/orders', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ orderId: trackingOrderId, status: 'shipped', trackingNumber: trackingNumber.trim() }),
+                  }).catch(() => {})
                   showToast("Pesanan sedang dikirim", "success")
                 }
                 setShowTrackingDialog(false)
@@ -601,13 +632,15 @@ export function SellerOrders() {
 export function SellerAnalytics() {
   const { products, orders, seller, sellerStats, fetchSellerStats } = useAppStore()
 
-  // Fetch seller stats from API on mount
-  useEffect(() => {
-    fetchSellerStats()
-  }, [fetchSellerStats])
-
   // Derive sellerId from store seller
   const sellerId = seller?.id || ''
+
+  // Fetch seller stats from API when seller ID becomes available
+  useEffect(() => {
+    if (sellerId) {
+      fetchSellerStats()
+    }
+  }, [fetchSellerStats, sellerId])
 
   const sellerProducts = products.filter(p => p.sellerId === sellerId)
   const sellerOrders = orders.filter(o => o.sellerId === sellerId)

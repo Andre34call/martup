@@ -1,0 +1,274 @@
+import type { ScreenName, UserRole, User, CartItem, Product, ProductVariant, Notification as AppNotification, ChatRoom, ChatMessage, Address, Voucher, Order, OrderStatus, WalletMutation, BankAccount, WithdrawRequest, WithdrawStatus, SellerBalance, Review, Seller, Division, SellerStats, AdminStats } from '../types'
+
+// ==================== SLICE INTERFACES ====================
+
+export interface NavigationSlice {
+  currentScreen: ScreenName
+  previousScreens: ScreenName[]
+  otpPhoneNumber: string
+  navigate: (screen: ScreenName) => void
+  goBack: () => void
+}
+
+export interface AuthSlice {
+  isAuthenticated: boolean
+  currentUser: User | null
+  userRole: UserRole
+  login: (user: User) => void
+  logout: () => Promise<void>
+  switchRole: (role: UserRole) => Promise<void>
+  deleteAccount: () => void
+}
+
+export interface SelectionSlice {
+  selectedProductId: string | null
+  selectedCategoryId: string | null
+  selectedOrderId: string | null
+  selectedChatRoomId: string | null
+  selectedSellerId: string | null
+  setSelectedProduct: (id: string | null) => void
+  setSelectedCategory: (id: string | null) => void
+  setSelectedOrder: (id: string | null) => void
+  setSelectedChatRoom: (id: string | null) => void
+  setSelectedSeller: (id: string | null) => void
+}
+
+export interface UISlice {
+  isLoading: boolean
+  showSplash: boolean
+  setShowSplash: (v: boolean) => void
+  toast: { message: string; type: 'success' | 'error' | 'info' } | null
+  showToast: (message: string, type?: 'success' | 'error' | 'info') => void
+  hideToast: () => void
+}
+
+export interface NotificationSlice {
+  notifications: AppNotification[]
+  unreadNotificationCount: number
+  markNotificationRead: (id: string) => void
+  markAllNotificationsRead: () => void
+}
+
+export interface ChatSlice {
+  chatRooms: ChatRoom[]
+  chatMessages: Record<string, ChatMessage[]>
+  totalUnreadChats: number
+  isSocketConnected: boolean
+  typingUsers: Record<string, string[]>  // roomId → userIds currently typing
+  addChatMessage: (roomId: string, message: ChatMessage) => void
+  addChatRoom: (room: ChatRoom) => void
+  markChatRead: (roomId: string) => void
+  fetchChatRooms: () => Promise<void>
+  fetchChatMessages: (roomId: string) => Promise<void>
+  sendChatMessage: (roomId: string, content: string, type?: string) => Promise<void>
+  createChatRoom: (sellerId: string, productId?: string) => Promise<string | null>
+  connectSocket: () => void
+  disconnectSocket: () => void
+  emitTyping: (roomId: string, isTyping: boolean) => void
+}
+
+export interface OrderSlice {
+  orders: Order[]
+  addOrder: (order: Order) => void
+  updateOrderStatus: (orderId: string, status: OrderStatus) => void
+  payForOrder: (orderId: string) => void
+  cancelOrder: (orderId: string) => void
+  updateOrderTracking: (orderId: string, trackingNumber: string) => void
+}
+
+export interface AddressSlice {
+  addresses: Address[]
+  selectedAddressId: string | null
+  addAddress: (address: Address) => void
+  updateAddress: (address: Address) => void
+  deleteAddress: (id: string) => void
+  setDefaultAddress: (id: string) => void
+  fetchAddresses: (userId: string) => Promise<void>
+}
+
+export interface WalletSlice {
+  walletBalance: number
+  walletHoldBalance: number
+  walletCoins: number
+  walletMutations: WalletMutation[]
+  topUpWallet: (amount: number) => void
+  withdrawWallet: (amount: number, bankAccount: string) => void
+  deductWallet: (amount: number, description: string) => void
+}
+
+export interface VoucherSlice {
+  vouchers: Voucher[]
+  selectedVoucher: Voucher | null
+  selectVoucher: (voucher: Voucher | null) => void
+  usedVoucherIds: string[]
+  useVoucher: (voucherId: string) => void
+}
+
+export interface FollowedStoresSlice {
+  followedStoreIds: string[]
+  toggleFollowStore: (storeId: string) => void
+  isFollowingStore: (storeId: string) => boolean
+}
+
+export interface SearchSlice {
+  searchQuery: string
+  searchHistory: string[]
+  setSearchQuery: (q: string) => void
+  addSearchHistory: (q: string) => void
+  clearSearchHistory: () => void
+}
+
+export interface ProfileSlice {
+  avatarUrl: string | null
+  updateAvatar: (url: string | null) => void
+  updateProfile: (data: { name?: string; email?: string; phone?: string }) => void
+  uploadAvatar: (file: File) => Promise<void>
+  removeAvatar: () => Promise<void>
+}
+
+export interface SellerSlice {
+  sellerBalance: SellerBalance
+  sellerBankAccounts: BankAccount[]
+  withdrawRequests: WithdrawRequest[]
+  addBankAccount: (account: BankAccount) => void
+  removeBankAccount: (id: string) => void
+  setDefaultBankAccount: (id: string) => void
+  requestWithdraw: (amount: number, bankAccountId: string) => void
+  updateWithdrawStatus: (id: string, status: WithdrawStatus, rejectionReason?: string) => void
+  getSellerAvailableForWithdraw: () => number
+  seller: Seller | null
+  sellerStats: SellerStats | null
+  fetchSellerStats: () => Promise<void>
+  fetchWithdrawHistory: (sellerId: string) => Promise<void>
+}
+
+export interface ProductSlice {
+  products: Product[]
+  addProduct: (product: Product) => void
+  updateProduct: (product: Product) => void
+  removeProduct: (id: string) => void
+  categories: Array<{
+    id: string
+    name: string
+    slug: string
+    icon?: string
+    image?: string
+    parentId?: string | null
+    productCount?: number
+    children?: Array<{
+      id: string
+      name: string
+      slug: string
+      icon?: string
+      parentId?: string | null
+      productCount?: number
+      children?: any[]
+    }>
+  }>
+  fetchProducts: () => Promise<void>
+  fetchCategories: () => Promise<void>
+}
+
+export interface ReviewSlice {
+  reviews: Review[]
+  reviewedOrderIds: string[]
+  addReview: (review: Review, orderId: string) => void
+  deleteReview: (reviewId: string) => void
+  updateReview: (reviewId: string, updates: Partial<Review>) => void
+  fetchProductReviews: (productId: string) => Promise<void>
+}
+
+export interface AdminSlice {
+  adminUsers: Array<{
+    id: string
+    name: string
+    email: string
+    phone: string
+    role: string
+    isVerified: boolean
+    isBlocked: boolean
+    joinDate: string
+    totalSpent: number
+    totalOrders: number
+    divisionId?: string | null
+  }>
+  updateAdminUser: (userId: string, updates: Record<string, any>) => void
+  deleteAdminUser: (userId: string) => void
+  adminBanners: Array<{
+    id: string
+    title: string
+    image: string
+    link: string
+    position: string
+    isActive: boolean
+    sortOrder: number
+    startDate?: string | null
+    endDate?: string | null
+  }>
+  addAdminBanner: (banner: any) => void
+  updateAdminBanner: (bannerId: string, updates: Record<string, any>) => void
+  deleteAdminBanner: (bannerId: string) => void
+  adminComplaints: Array<{
+    id: string
+    userId: string
+    userName: string
+    type: string
+    description: string
+    status: string
+    createdAt: string
+    response?: string
+    orderId?: string
+    buyer?: string
+    seller?: string
+  }>
+  updateAdminComplaint: (complaintId: string, updates: Record<string, any>) => void
+  divisions: Division[]
+  fetchDivisions: () => Promise<void>
+  fetchAdminUsers: () => Promise<void>
+  assignUserToDivision: (userId: string, divisionId: string | null) => Promise<void>
+  updateDivision: (divisionId: string, updates: Record<string, any>) => Promise<void>
+  adminStats: AdminStats | null
+  fetchAdminStats: () => Promise<void>
+  fetchAdminWithdrawals: () => Promise<void>
+  fetchAdminBanners: () => Promise<void>
+  fetchAdminComplaints: () => Promise<void>
+}
+
+export interface SettingsSlice {
+  settings: {
+    twoFactor: boolean
+    pushNotif: boolean
+    emailNotif: boolean
+    dataSharing: boolean
+  }
+  updateSettings: (settings: Partial<SettingsSlice['settings']>) => void
+}
+
+export interface DataFetchSlice {
+  isDataLoaded: boolean
+  fetchUserData: (userId: string) => Promise<void>
+  fetchHomeBanners: () => Promise<void>
+  homeBanners: Array<{ id: string; title: string; image: string; link: string; position: string }>
+}
+
+// ==================== COMBINED STORE TYPE ====================
+
+export type AppStore = NavigationSlice &
+  AuthSlice &
+  SelectionSlice &
+  UISlice &
+  NotificationSlice &
+  ChatSlice &
+  OrderSlice &
+  AddressSlice &
+  WalletSlice &
+  VoucherSlice &
+  FollowedStoresSlice &
+  SearchSlice &
+  ProfileSlice &
+  SellerSlice &
+  ProductSlice &
+  ReviewSlice &
+  AdminSlice &
+  SettingsSlice &
+  DataFetchSlice

@@ -1,17 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 
 // Seed endpoint - creates demo sellers with products and categories
-// This should only be called once or when you want to reset demo data
+// SECURITY: Requires admin authentication
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { secret } = body
-
-    // Simple protection
-    if (secret !== 'martup-seed-2024') {
-      return NextResponse.json({ error: 'Invalid secret' }, { status: 403 })
+    // SECURITY: Require admin authentication
+    const authResult = await verifyAdmin(request)
+    if (!authResult.success) {
+      return authErrorResponse(authResult)
     }
+
+    // Legacy secret check removed - admin auth is now required
 
     // 1. Create demo seller users
     const sellerUsers = []

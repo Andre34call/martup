@@ -39,6 +39,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // SECURITY: Validate position enum
+    const validPositions = ['home_top', 'home_mid', 'home_bottom', 'category_top', 'search_top', 'product_detail', 'checkout_top', 'popup']
+    if (position !== undefined && !validPositions.includes(position)) {
+      return NextResponse.json(
+        { success: false, error: `Invalid position. Must be one of: ${validPositions.join(', ')}` },
+        { status: 400 }
+      )
+    }
+
     const createData: Record<string, unknown> = { title, image }
     if (link !== undefined) createData.link = link
     if (position !== undefined) createData.position = position
@@ -72,6 +81,15 @@ export async function PUT(request: NextRequest) {
     if (!bannerId) {
       return NextResponse.json(
         { success: false, error: 'bannerId is required' },
+        { status: 400 }
+      )
+    }
+
+    // SECURITY: Validate position enum
+    const validPositions = ['home_top', 'home_mid', 'home_bottom', 'category_top', 'search_top', 'product_detail', 'checkout_top', 'popup']
+    if (position !== undefined && !validPositions.includes(position)) {
+      return NextResponse.json(
+        { success: false, error: `Invalid position. Must be one of: ${validPositions.join(', ')}` },
         { status: 400 }
       )
     }

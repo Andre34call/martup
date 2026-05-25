@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
+import { serializeDecimal } from '@/lib/decimal-utils'
 
 // Helper to safely parse JSON fields
 function parseJsonField(value: string | null | undefined): unknown[] {
@@ -15,6 +17,10 @@ function parseJsonField(value: string | null | undefined): unknown[] {
 // GET /api/orders - Fetch orders for a user
 export async function GET(request: NextRequest) {
   try {
+    // SECURITY: Require authentication
+    const authResult = await verifyAuth(request)
+    if (!authResult.success) return authErrorResponse(authResult)
+
     const { searchParams } = new URL(request.url)
     const userId = searchParams.get('userId')
     const status = searchParams.get('status')
@@ -25,6 +31,27 @@ export async function GET(request: NextRequest) {
         { success: false, error: 'userId is required' },
         { status: 400 }
       )
+    }
+
+    // SECURITY: Users can only read their own orders
+    if (userId !== authResult.user.id) {
+      return NextResponse.json(
+        { success: false, error: 'Forbidden - You can only view your own orders' },
+        { status: 403 }
+      )
+    }
+
+    // SECURITY: If sellerId is provided, verify the authenticated user owns this seller
+    if (sellerId) {
+      const seller = await db.seller.findFirst({
+        where: { userId: authResult.user.id },
+      })
+      if (!seller || seller.id !== sellerId) {
+        return NextResponse.json(
+          { success: false, error: 'Forbidden - You can only view your own seller orders' },
+          { status: 403 }
+        )
+      }
     }
 
     const where: Record<string, unknown> = { userId }
@@ -81,10 +108,10 @@ export async function GET(request: NextRequest) {
       })),
     }))
 
-    return NextResponse.json({
+    return NextResponse.json(serializeDecimal({
       success: true,
       data: parsedOrders,
-    })
+    }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     console.error('Orders GET error:', error)
@@ -98,6 +125,10 @@ export async function GET(request: NextRequest) {
 // PUT /api/orders - Update order status
 export async function PUT(request: NextRequest) {
   try {
+    // SECURITY: Require authentication
+    const authResult = await verifyAuth(request)
+    if (!authResult.success) return authErrorResponse(authResult)
+
     const body = await request.json()
     const { orderId, status, paymentStatus, trackingNumber } = body
 
@@ -118,6 +149,36 @@ export async function PUT(request: NextRequest) {
         { success: false, error: 'Order not found' },
         { status: 404 }
       )
+    }
+
+    // SECURITY: Verify ownership based on role
+    if (authResult.user.role === 'admin') {
+      // Admin can update any order - no additional checks needed
+    } else if (authResult.user.role === 'buyer') {
+      // Buyers can only cancel their own orders
+      if (existingOrder.userId !== authResult.user.id) {
+        return NextResponse.json(
+          { success: false, error: 'Forbidden - You can only update your own orders' },
+          { status: 403 }
+        )
+      }
+      if (status !== 'cancelled') {
+        return NextResponse.json(
+          { success: false, error: 'Forbidden - Buyers can only cancel orders' },
+          { status: 403 }
+        )
+      }
+    } else {
+      // Sellers: verify they own the order's seller
+      const seller = await db.seller.findFirst({
+        where: { userId: authResult.user.id },
+      })
+      if (!seller || seller.id !== existingOrder.sellerId) {
+        return NextResponse.json(
+          { success: false, error: 'Forbidden - You can only update orders for your own store' },
+          { status: 403 }
+        )
+      }
     }
 
     // Build update data
@@ -238,10 +299,10 @@ export async function PUT(request: NextRequest) {
         }
       : updatedOrder
 
-    return NextResponse.json({
+    return NextResponse.json(serializeDecimal({
       success: true,
       data: parsedOrder,
-    })
+    }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     console.error('Orders PUT error:', error)
@@ -255,6 +316,10 @@ export async function PUT(request: NextRequest) {
 // POST /api/orders - Create a new order
 export async function POST(request: NextRequest) {
   try {
+    // SECURITY: Require authentication
+    const authResult = await verifyAuth(request)
+    if (!authResult.success) return authErrorResponse(authResult)
+
     const body = await request.json()
     const {
       userId,
@@ -296,6 +361,48 @@ export async function POST(request: NextRequest) {
         { success: false, error: 'addressId is required' },
         { status: 400 }
       )
+    }
+
+    // SECURITY: Users can only create orders for themselves
+    if (userId !== authResult.user.id) {
+      return NextResponse.json(
+        { success: false, error: 'Forbidden - You can only create orders for yourself' },
+        { status: 403 }
+      )
+    }
+
+    // SECURITY: Validate stock before decrementing
+    for (const item of items as Array<{ productId: string; quantity: number; variantId?: string | null }>) {
+      const product = await db.product.findUnique({
+        where: { id: item.productId },
+        select: { id: true, name: true, stock: true },
+      })
+      if (!product) {
+        return NextResponse.json(
+          { success: false, error: `Product not found: ${item.productId}` },
+          { status: 400 }
+        )
+      }
+      if (product.stock < item.quantity) {
+        return NextResponse.json(
+          { success: false, error: `Insufficient stock for "${product.name}". Available: ${product.stock}, Requested: ${item.quantity}` },
+          { status: 400 }
+        )
+      }
+
+      // Also check variant stock if variantId is provided
+      if (item.variantId) {
+        const variant = await db.productVariant.findUnique({
+          where: { id: item.variantId },
+          select: { id: true, name: true, stock: true },
+        })
+        if (variant && variant.stock < item.quantity) {
+          return NextResponse.json(
+            { success: false, error: `Insufficient stock for variant "${variant.name}". Available: ${variant.stock}, Requested: ${item.quantity}` },
+            { status: 400 }
+          )
+        }
+      }
     }
 
     // Generate order number
@@ -429,10 +536,10 @@ export async function POST(request: NextRequest) {
         }
       : order
 
-    return NextResponse.json({
+    return NextResponse.json(serializeDecimal({
       success: true,
       data: parsedOrder,
-    }, { status: 201 })
+    }), { status: 201 })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     console.error('Orders POST error:', error)

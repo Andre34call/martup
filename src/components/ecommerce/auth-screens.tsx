@@ -1,13 +1,13 @@
 "use client"
 
 import { motion, AnimatePresence } from "framer-motion"
-import { Eye, EyeOff, ArrowLeft, Smartphone, Mail } from "lucide-react"
+import { Eye, EyeOff, ArrowLeft, Smartphone, Mail, Apple } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Separator } from "@/components/ui/separator"
 import { InputOTP, InputOTPGroup, InputOTPSlot, InputOTPSeparator } from "@/components/ui/input-otp"
-import { useAppStore } from "@/lib/store"
+import { useAppStore, useCartStore } from "@/lib/store"
 import { signIn } from "next-auth/react"
 import { useState, useEffect, useCallback } from "react"
 import type { User } from "@/lib/types"
@@ -255,50 +255,60 @@ export function OnboardingScreen() {
 // ==================== LOGIN SCREEN ====================
 export function LoginScreen() {
   const { navigate, login, showToast } = useAppStore()
-  const [email, setEmail] = useState("")
+  const [emailOrPhone, setEmailOrPhone] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
-  const [loginError, setLoginError] = useState("")
-  const [touchedEmail, setTouchedEmail] = useState(false)
+  const [touchedEmailOrPhone, setTouchedEmailOrPhone] = useState(false)
   const [touchedPassword, setTouchedPassword] = useState(false)
 
-  const emailError = touchedEmail && !email
-    ? "Email wajib diisi"
-    : touchedEmail && email && !isValidEmail(email)
-    ? "Format email tidak valid"
+  const emailOrPhoneError = touchedEmailOrPhone && emailOrPhone
+    ? (!isValidEmailOrPhone(emailOrPhone) ? "Masukkan email atau nomor HP yang valid" : "")
+    : touchedEmailOrPhone && !emailOrPhone
+    ? "Email / No. HP wajib diisi"
     : ""
 
   const passwordError = touchedPassword && !password
     ? "Password wajib diisi"
+    : touchedPassword && password.length < 8
+    ? "Password minimal 8 karakter"
     : ""
 
-  const isFormValid = email && password && !emailError && !passwordError
+  const isFormValid = emailOrPhone && password && !emailOrPhoneError && !passwordError
 
   const handleLogin = async () => {
-    setTouchedEmail(true)
+    setTouchedEmailOrPhone(true)
     setTouchedPassword(true)
-    setLoginError("")
     if (!isFormValid) return
     setIsLoading(true)
 
     try {
-      // Use proper login API with password verification
+      // If input is a phone number, redirect to OTP flow with the phone number
+      if (isValidPhone(emailOrPhone)) {
+        // Navigate to OTP screen - the phone number will be passed via store
+        useAppStore.setState({ otpPhoneNumber: emailOrPhone })
+        navigate('otp')
+        setIsLoading(false)
+        return
+      }
+
+      // Email + password login
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: emailOrPhone, password }),
       })
       const data = await res.json()
 
       if (data.success && data.user) {
-        // Store auth token for API calls
+        // Store auth token
         if (data.token) {
           localStorage.setItem('authToken', data.token)
         }
         const user: User = {
           id: data.user.id,
           email: data.user.email,
+          phone: data.user.phone || undefined,
           name: data.user.name,
           avatar: data.user.avatar || undefined,
           role: data.user.role || 'buyer',
@@ -307,15 +317,17 @@ export function LoginScreen() {
           coins: data.user.coins || 0,
         }
         login(user)
-        // Fetch user data from DB
-        const { fetchUserData } = useAppStore.getState()
+        const { fetchUserData, connectSocket } = useAppStore.getState()
         await fetchUserData(data.user.id)
+        // Merge local cart to server & connect WebSocket
+        useCartStore.getState().mergeLocalToServer(data.user.id)
+        connectSocket()
       } else {
-        setLoginError(data.error || 'Login gagal. Periksa email dan password Anda.')
+        showToast(data.error || 'Login gagal. Periksa email dan password Anda.', 'error')
       }
     } catch (error) {
-      setLoginError('Terjadi kesalahan koneksi. Coba lagi nanti.')
       console.error('Login failed:', error)
+      showToast('Terjadi kesalahan koneksi. Coba lagi nanti.', 'error')
     }
 
     setIsLoading(false)
@@ -350,49 +362,38 @@ export function LoginScreen() {
         </p>
       </div>
 
-      {/* Login Error Alert */}
-      {loginError && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-4 p-3 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50"
-        >
-          <p className="text-sm text-red-600 dark:text-red-400">{loginError}</p>
-        </motion.div>
-      )}
-
       {/* Form */}
       <div className="space-y-4 flex-1">
-        {/* Email input */}
+        {/* Email/Phone input */}
         <div className="space-y-2">
           <label className="text-sm font-medium text-foreground">
-            Email <span className="text-red-500">*</span>
+            Email / No. HP
           </label>
           <div className="relative">
             <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
-              value={email}
-              onChange={(e) => { setEmail(e.target.value); setLoginError("") }}
-              onBlur={() => setTouchedEmail(true)}
-              placeholder="contoh@email.com"
-              className={`pl-10 h-12 rounded-xl bg-muted/50 border-border/50 focus:border-emerald-500 focus:ring-emerald-500/20 ${emailError ? "border-red-500 focus:border-red-500" : ""}`}
+              value={emailOrPhone}
+              onChange={(e) => setEmailOrPhone(e.target.value)}
+              onBlur={() => setTouchedEmailOrPhone(true)}
+              placeholder="contoh@email.com atau 08123456789"
+              className={`pl-10 h-12 rounded-xl bg-muted/50 border-border/50 focus:border-emerald-500 focus:ring-emerald-500/20 ${emailOrPhoneError ? "border-red-500 focus:border-red-500" : ""}`}
             />
           </div>
-          {emailError && (
-            <p className="text-xs text-red-500">{emailError}</p>
+          {emailOrPhoneError && (
+            <p className="text-xs text-red-500">{emailOrPhoneError}</p>
           )}
         </div>
 
         {/* Password input */}
         <div className="space-y-2">
           <label className="text-sm font-medium text-foreground">
-            Password <span className="text-red-500">*</span>
+            Password
           </label>
           <div className="relative">
             <Input
               type={showPassword ? "text" : "password"}
               value={password}
-              onChange={(e) => { setPassword(e.target.value); setLoginError("") }}
+              onChange={(e) => setPassword(e.target.value)}
               onBlur={() => setTouchedPassword(true)}
               placeholder="Masukkan password"
               className={`pl-4 pr-10 h-12 rounded-xl bg-muted/50 border-border/50 focus:border-emerald-500 focus:ring-emerald-500/20 ${passwordError ? "border-red-500 focus:border-red-500" : ""}`}
@@ -448,7 +449,7 @@ export function LoginScreen() {
           <Separator className="flex-1" />
         </div>
 
-        {/* Google login only - Apple login requires proper Apple OAuth setup */}
+        {/* Social login */}
         <div className="space-y-3">
           <Button
             variant="outline"
@@ -476,7 +477,26 @@ export function LoginScreen() {
             </svg>
             Masuk dengan Google
           </Button>
+
+          <Button
+            variant="outline"
+            className="w-full h-12 rounded-xl font-medium text-sm border-border/50"
+            onClick={() => showToast("Apple Sign-In segera hadir!", "info")}
+            disabled={isLoading}
+          >
+            <Apple className="w-5 h-5 mr-2" />
+            Masuk dengan Apple
+          </Button>
         </div>
+
+        {/* OTP login */}
+        <button
+          onClick={() => navigate("otp")}
+          className="w-full flex items-center justify-center gap-2 py-3 text-sm text-emerald-600 hover:text-emerald-700 font-medium transition-colors"
+        >
+          <Smartphone className="w-4 h-4" />
+          Masuk dengan OTP
+        </button>
       </div>
 
       {/* Register link */}
@@ -504,7 +524,6 @@ export function RegisterScreen() {
   const [showPassword, setShowPassword] = useState(false)
   const [agreeTerms, setAgreeTerms] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
-  const [registerError, setRegisterError] = useState("")
   const [touchedFields, setTouchedFields] = useState({ name: false, email: false, phone: false, password: false, confirmPassword: false })
 
   const nameError = touchedFields.name && name
@@ -543,13 +562,11 @@ export function RegisterScreen() {
 
   const handleRegister = async () => {
     setTouchedFields({ name: true, email: true, phone: true, password: true, confirmPassword: true })
-    setRegisterError("")
     if (!isFormValid) return
 
     setIsLoading(true)
 
     try {
-      // Use proper register API with password hashing
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -558,7 +575,7 @@ export function RegisterScreen() {
       const data = await res.json()
 
       if (data.success && data.user) {
-        // Store auth token for API calls
+        // Store auth token if provided
         if (data.token) {
           localStorage.setItem('authToken', data.token)
         }
@@ -567,22 +584,25 @@ export function RegisterScreen() {
           email: data.user.email,
           phone: data.user.phone || undefined,
           name: data.user.name,
+          avatar: data.user.avatar || undefined,
           role: data.user.role || 'buyer',
           isVerified: data.user.isVerified || false,
           loyaltyPoints: data.user.loyaltyPoints || 0,
           coins: data.user.coins || 0,
         }
         login(user)
-        showToast('Registrasi berhasil! Selamat datang di MartUp 🎉', 'success')
-        // Fetch user data
-        const { fetchUserData } = useAppStore.getState()
+        const { fetchUserData, connectSocket } = useAppStore.getState()
         await fetchUserData(data.user.id)
+        // Merge local cart to server & connect WebSocket
+        useCartStore.getState().mergeLocalToServer(data.user.id)
+        connectSocket()
+        showToast("Registrasi berhasil! 🎉", "success")
       } else {
-        setRegisterError(data.error || 'Registrasi gagal. Coba lagi.')
+        showToast(data.error || 'Registrasi gagal. Coba lagi.', "error")
       }
     } catch (error) {
-      setRegisterError('Terjadi kesalahan koneksi. Coba lagi nanti.')
       console.error('Register failed:', error)
+      showToast('Terjadi kesalahan koneksi. Coba lagi nanti.', "error")
     }
 
     setIsLoading(false)
@@ -612,22 +632,11 @@ export function RegisterScreen() {
         </div>
       </div>
 
-      {/* Register Error Alert */}
-      {registerError && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-4 p-3 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50"
-        >
-          <p className="text-sm text-red-600 dark:text-red-400">{registerError}</p>
-        </motion.div>
-      )}
-
       {/* Form */}
       <div className="space-y-4 flex-1 overflow-y-auto">
         {/* Name */}
         <div className="space-y-2">
-          <label className="text-sm font-medium text-foreground">Nama Lengkap <span className="text-red-500">*</span></label>
+          <label className="text-sm font-medium text-foreground">Nama Lengkap</label>
           <Input
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -642,7 +651,7 @@ export function RegisterScreen() {
 
         {/* Email */}
         <div className="space-y-2">
-          <label className="text-sm font-medium text-foreground">Email <span className="text-red-500">*</span></label>
+          <label className="text-sm font-medium text-foreground">Email</label>
           <div className="relative">
             <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
@@ -660,7 +669,7 @@ export function RegisterScreen() {
 
         {/* Phone */}
         <div className="space-y-2">
-          <label className="text-sm font-medium text-foreground">No. HP <span className="text-red-500">*</span></label>
+          <label className="text-sm font-medium text-foreground">No. HP</label>
           <div className="relative">
             <Smartphone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
@@ -678,7 +687,7 @@ export function RegisterScreen() {
 
         {/* Password */}
         <div className="space-y-2">
-          <label className="text-sm font-medium text-foreground">Password <span className="text-red-500">*</span></label>
+          <label className="text-sm font-medium text-foreground">Password</label>
           <div className="relative">
             <Input
               type={showPassword ? "text" : "password"}
@@ -716,7 +725,7 @@ export function RegisterScreen() {
 
         {/* Confirm Password */}
         <div className="space-y-2">
-          <label className="text-sm font-medium text-foreground">Konfirmasi Password <span className="text-red-500">*</span></label>
+          <label className="text-sm font-medium text-foreground">Konfirmasi Password</label>
           <Input
             type={showPassword ? "text" : "password"}
             value={confirmPassword}
@@ -782,11 +791,39 @@ export function RegisterScreen() {
 }
 
 // ==================== OTP SCREEN ====================
+function maskPhone(phone: string): string {
+  const digits = phone.replace(/\D/g, '')
+  if (digits.length < 8) return phone
+  const visibleStart = digits.slice(0, 4)
+  const visibleEnd = digits.slice(-3)
+  const maskedMiddle = '*'.repeat(Math.min(digits.length - 7, 4))
+  // Format: +62 812****789
+  if (digits.startsWith('62')) {
+    return `+62 ${digits.slice(2, 4)}${maskedMiddle}${visibleEnd}`
+  }
+  if (digits.startsWith('0')) {
+    return `0${digits.slice(1, 3)}${maskedMiddle}${visibleEnd}`
+  }
+  return `${visibleStart}${maskedMiddle}${visibleEnd}`
+}
+
 export function OTPScreen() {
-  const { navigate, login, goBack } = useAppStore()
+  const { navigate, login, goBack, showToast } = useAppStore()
+  const passedPhone = useAppStore((s) => s.otpPhoneNumber) || ""
+  const [phone, setPhone] = useState(passedPhone)
+  const [step, setStep] = useState<'phone' | 'otp'>(passedPhone && isValidPhone(passedPhone) ? 'otp' : 'phone')
   const [otp, setOtp] = useState("")
-  const [countdown, setCountdown] = useState(60)
+  const [countdown, setCountdown] = useState(0)
+  const [isSending, setIsSending] = useState(false)
   const [isVerifying, setIsVerifying] = useState(false)
+  const [touchedPhone, setTouchedPhone] = useState(false)
+  const [devOtp, setDevOtp] = useState<string | null>(null)
+
+  const phoneError = touchedPhone && !phone
+    ? "Nomor HP wajib diisi"
+    : touchedPhone && phone && !isValidPhone(phone)
+    ? "Nomor HP harus dimulai dengan 0 atau +62, minimal 10 digit"
+    : ""
 
   useEffect(() => {
     if (countdown <= 0) return
@@ -796,21 +833,94 @@ export function OTPScreen() {
     return () => clearInterval(timer)
   }, [countdown])
 
-  const handleResend = () => {
-    if (countdown > 0) return
-    setCountdown(60)
+  const handleResend = async () => {
+    if (countdown > 0 || !phone || !isValidPhone(phone)) return
+    await handlePhoneSubmit()
+  }
+
+  const handlePhoneSubmit = async () => {
+    setTouchedPhone(true)
+    if (!phone || !isValidPhone(phone)) return
+    setIsSending(true)
+
+    try {
+      const formattedPhone = phone.startsWith('+') ? phone : phone.startsWith('0') ? '+62' + phone.substring(1) : '+62' + phone
+
+      const res = await fetch('/api/auth/otp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: formattedPhone }),
+      })
+      const data = await res.json()
+
+      if (data.success) {
+        setStep('otp')
+        setCountdown(60)
+        // In dev mode, show the OTP for testing
+        if (data.devOtp) {
+          setDevOtp(data.devOtp)
+          setOtp(data.devOtp) // Auto-fill in dev mode
+        }
+        showToast(data.message || 'Kode OTP telah dikirim', 'success')
+      } else {
+        showToast(data.error || 'Gagal mengirim OTP. Coba lagi.', 'error')
+      }
+    } catch (error) {
+      console.error('OTP send failed:', error)
+      showToast('Terjadi kesalahan koneksi. Coba lagi nanti.', 'error')
+    }
+
+    setIsSending(false)
   }
 
   const handleVerify = async () => {
     if (otp.length !== 6) return
+    if (!phone) {
+      showToast('Masukkan nomor HP terlebih dahulu', 'error')
+      return
+    }
     setIsVerifying(true)
 
-    // OTP login requires a real phone number and SMS verification service
-    // For now, redirect to regular login since OTP service is not configured
-    await new Promise((resolve) => setTimeout(resolve, 500))
+    try {
+      const formattedPhone = phone.startsWith('+') ? phone : phone.startsWith('0') ? '+62' + phone.substring(1) : '+62' + phone
+
+      const res = await fetch('/api/auth/otp/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: formattedPhone, otpCode: otp }),
+      })
+      const data = await res.json()
+      if (data.success && data.user) {
+        if (data.token) {
+          localStorage.setItem('authToken', data.token)
+        }
+        const user: User = {
+          id: data.user.id,
+          email: data.user.email || '',
+          phone: data.user.phone || formattedPhone,
+          name: data.user.name,
+          avatar: data.user.avatar || undefined,
+          role: data.user.role || 'buyer',
+          isVerified: true,
+          loyaltyPoints: data.user.loyaltyPoints || 0,
+          coins: data.user.coins || 0,
+        }
+        login(user)
+        const { fetchUserData, connectSocket } = useAppStore.getState()
+        await fetchUserData(data.user.id)
+        // Merge local cart to server & connect WebSocket
+        useCartStore.getState().mergeLocalToServer(data.user.id)
+        connectSocket()
+        showToast('Login berhasil! 🎉', 'success')
+      } else {
+        showToast(data.error || 'Verifikasi OTP gagal. Coba lagi.', 'error')
+      }
+    } catch (error) {
+      console.error('OTP verification failed:', error)
+      showToast('Terjadi kesalahan koneksi. Coba lagi nanti.', 'error')
+    }
+
     setIsVerifying(false)
-    // Show message that OTP login is not yet available
-    // In production, this would verify the OTP code against the server
   }
 
   return (
@@ -826,7 +936,7 @@ export function OTPScreen() {
       <div className="flex items-center gap-3 mb-8">
         <motion.button
           whileTap={{ scale: 0.9 }}
-          onClick={goBack}
+          onClick={step === 'otp' ? () => setStep('phone') : goBack}
           className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-muted transition-colors"
         >
           <ArrowLeft className="w-5 h-5" />
@@ -845,67 +955,121 @@ export function OTPScreen() {
           <Smartphone className="w-10 h-10 text-emerald-500" />
         </motion.div>
 
-        <h1 className="text-2xl font-bold text-foreground text-center mb-2">
-          Masukkan kode OTP
-        </h1>
-        <p className="text-sm text-muted-foreground text-center mb-8">
-          Kode telah dikirim ke <span className="font-medium text-foreground">+62 812****789</span>
-        </p>
-
-        {/* OTP Input */}
-        <div className="flex justify-center mb-8">
-          <InputOTP
-            maxLength={6}
-            value={otp}
-            onChange={setOtp}
-          >
-            <InputOTPGroup>
-              <InputOTPSlot index={0} className="w-12 h-14 text-lg font-bold rounded-xl border-2 data-[active=true]:border-emerald-500 data-[active=true]:ring-emerald-500/20" />
-              <InputOTPSlot index={1} className="w-12 h-14 text-lg font-bold rounded-xl border-2 data-[active=true]:border-emerald-500 data-[active=true]:ring-emerald-500/20" />
-              <InputOTPSlot index={2} className="w-12 h-14 text-lg font-bold rounded-xl border-2 data-[active=true]:border-emerald-500 data-[active=true]:ring-emerald-500/20" />
-            </InputOTPGroup>
-            <InputOTPSeparator />
-            <InputOTPGroup>
-              <InputOTPSlot index={3} className="w-12 h-14 text-lg font-bold rounded-xl border-2 data-[active=true]:border-emerald-500 data-[active=true]:ring-emerald-500/20" />
-              <InputOTPSlot index={4} className="w-12 h-14 text-lg font-bold rounded-xl border-2 data-[active=true]:border-emerald-500 data-[active=true]:ring-emerald-500/20" />
-              <InputOTPSlot index={5} className="w-12 h-14 text-lg font-bold rounded-xl border-2 data-[active=true]:border-emerald-500 data-[active=true]:ring-emerald-500/20" />
-            </InputOTPGroup>
-          </InputOTP>
-        </div>
-
-        {/* Resend */}
-        <div className="text-center mb-8">
-          {countdown > 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Kirim ulang dalam{" "}
-              <span className="font-semibold text-emerald-600">{countdown}s</span>
+        {step === 'phone' ? (
+          <>
+            <h1 className="text-2xl font-bold text-foreground text-center mb-2">
+              Masukkan Nomor HP
+            </h1>
+            <p className="text-sm text-muted-foreground text-center mb-8">
+              Kami akan mengirimkan kode OTP ke nomor HP Anda
             </p>
-          ) : (
-            <button
-              onClick={handleResend}
-              className="text-sm text-emerald-600 hover:text-emerald-700 font-semibold transition-colors"
-            >
-              Kirim Ulang Kode
-            </button>
-          )}
-        </div>
 
-        {/* Verify button */}
-        <Button
-          onClick={handleVerify}
-          disabled={isVerifying || otp.length !== 6}
-          className="w-full h-12 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-semibold text-base disabled:opacity-50"
-        >
-          {isVerifying ? (
-            <motion.div
-              animate={{ rotate: 360 }}
-              transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-              className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full"
-            />
-          ) : (
-            "Verifikasi"
-          )}
-        </Button>
+            {/* Phone input */}
+            <div className="space-y-2 mb-6">
+              <label className="text-sm font-medium text-foreground">No. HP</label>
+              <div className="relative">
+                <Smartphone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  onBlur={() => setTouchedPhone(true)}
+                  placeholder="08123456789"
+                  className={`pl-10 h-12 rounded-xl bg-muted/50 border-border/50 focus:border-emerald-500 focus:ring-emerald-500/20 ${phoneError ? "border-red-500 focus:border-red-500" : ""}`}
+                />
+              </div>
+              {phoneError && (
+                <p className="text-xs text-red-500">{phoneError}</p>
+              )}
+            </div>
+
+            {/* Submit phone button */}
+            <Button
+              onClick={handlePhoneSubmit}
+              disabled={isSending || !phone || !isValidPhone(phone)}
+              className="w-full h-12 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-semibold text-base disabled:opacity-50"
+            >
+              {isSending ? (
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                  className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full"
+                />
+              ) : (
+                "Kirim Kode OTP"
+              )}
+            </Button>
+            {/* Dev mode OTP hint */}
+            {devOtp && (
+              <p className="text-xs text-center text-amber-600 dark:text-amber-400 mt-2">
+                🔧 Dev mode — OTP: <span className="font-mono font-bold">{devOtp}</span>
+              </p>
+            )}
+          </>
+        ) : (
+          <>
+            <h1 className="text-2xl font-bold text-foreground text-center mb-2">
+              Masukkan kode OTP
+            </h1>
+            <p className="text-sm text-muted-foreground text-center mb-8">
+              Kode telah dikirim ke <span className="font-medium text-foreground">{maskPhone(phone)}</span>
+            </p>
+
+            {/* OTP Input */}
+            <div className="flex justify-center mb-8">
+              <InputOTP
+                maxLength={6}
+                value={otp}
+                onChange={setOtp}
+              >
+                <InputOTPGroup>
+                  <InputOTPSlot index={0} className="w-12 h-14 text-lg font-bold rounded-xl border-2 data-[active=true]:border-emerald-500 data-[active=true]:ring-emerald-500/20" />
+                  <InputOTPSlot index={1} className="w-12 h-14 text-lg font-bold rounded-xl border-2 data-[active=true]:border-emerald-500 data-[active=true]:ring-emerald-500/20" />
+                  <InputOTPSlot index={2} className="w-12 h-14 text-lg font-bold rounded-xl border-2 data-[active=true]:border-emerald-500 data-[active=true]:ring-emerald-500/20" />
+                </InputOTPGroup>
+                <InputOTPSeparator />
+                <InputOTPGroup>
+                  <InputOTPSlot index={3} className="w-12 h-14 text-lg font-bold rounded-xl border-2 data-[active=true]:border-emerald-500 data-[active=true]:ring-emerald-500/20" />
+                  <InputOTPSlot index={4} className="w-12 h-14 text-lg font-bold rounded-xl border-2 data-[active=true]:border-emerald-500 data-[active=true]:ring-emerald-500/20" />
+                  <InputOTPSlot index={5} className="w-12 h-14 text-lg font-bold rounded-xl border-2 data-[active=true]:border-emerald-500 data-[active=true]:ring-emerald-500/20" />
+                </InputOTPGroup>
+              </InputOTP>
+            </div>
+
+            {/* Resend */}
+            <div className="text-center mb-8">
+              {countdown > 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Kirim ulang dalam{" "}
+                  <span className="font-semibold text-emerald-600">{countdown}s</span>
+                </p>
+              ) : (
+                <button
+                  onClick={handleResend}
+                  className="text-sm text-emerald-600 hover:text-emerald-700 font-semibold transition-colors"
+                >
+                  Kirim Ulang Kode
+                </button>
+              )}
+            </div>
+
+            {/* Verify button */}
+            <Button
+              onClick={handleVerify}
+              disabled={isVerifying || otp.length !== 6}
+              className="w-full h-12 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-semibold text-base disabled:opacity-50"
+            >
+              {isVerifying ? (
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                  className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full"
+                />
+              ) : (
+                "Verifikasi"
+              )}
+            </Button>
+          </>
+        )}
       </div>
 
       {/* Back to login */}
@@ -980,7 +1144,7 @@ export function ForgotPasswordScreen() {
 
             {/* Email input */}
             <div className="space-y-2 mb-6">
-              <label className="text-sm font-medium text-foreground">Email <span className="text-red-500">*</span></label>
+              <label className="text-sm font-medium text-foreground">Email</label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input

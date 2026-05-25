@@ -42,7 +42,13 @@ setInterval(() => {
 
 // ==================== TOKEN SIGNING ====================
 
-const TOKEN_SECRET = process.env.TOKEN_SECRET || process.env.NEXTAUTH_SECRET || 'fallback-dev-only-secret'
+const TOKEN_SECRET = (() => {
+  const secret = process.env.TOKEN_SECRET || process.env.NEXTAUTH_SECRET
+  if (!secret) {
+    throw new Error('[FATAL] TOKEN_SECRET or NEXTAUTH_SECRET environment variable must be set. Application cannot start without it.')
+  }
+  return secret
+})()
 const TOKEN_EXPIRY = 24 * 60 * 60 * 1000 // 24 hours
 
 /**
@@ -64,7 +70,7 @@ export function generateAuthToken(userId: string): string {
  * Verify an HMAC-signed auth token.
  * Returns the userId if valid, null otherwise.
  */
-function verifyAuthToken(token: string): string | null {
+export function verifyAuthToken(token: string): string | null {
   try {
     const decoded = Buffer.from(token, 'base64').toString()
     const [userId, timestamp, signature] = decoded.split(':')

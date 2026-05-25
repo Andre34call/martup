@@ -8,6 +8,8 @@ import {
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
+import { Textarea } from "@/components/ui/textarea"
 import { useAppStore, useCartStore, useWishlistStore } from "@/lib/store"
 import { formatPrice } from "@/lib/utils"
 import { SHIPPING_OPTIONS } from "@/lib/constants"
@@ -16,28 +18,9 @@ import {
   FlashSaleTimer, RatingStars, AvatarWithName, SellerBadge
 } from "./shared"
 import type { Product, ProductVariant } from "@/lib/types"
-import { useState, useRef, useCallback, useMemo } from "react"
+import { useState, useRef, useCallback, useMemo, useEffect } from "react"
 
-// ==================== MOCK REVIEWS (fallback) ====================
-const FALLBACK_REVIEWS = [
-  {
-    id: "r1", userName: "Budi Santoso", userAvatar: "", rating: 5,
-    content: "Produk sangat bagus, sesuai deskripsi. Pengiriman cepat dan packing aman. Recommended seller!",
-    createdAt: "2024-12-15T10:00:00Z"
-  },
-  {
-    id: "r2", userName: "Siti Rahayu", userAvatar: "", rating: 4,
-    content: "Barang bagus, cuma packagingnya bisa lebih rapi lagi. Overall puas dengan pembelian ini.",
-    createdAt: "2024-12-10T14:30:00Z"
-  },
-  {
-    id: "r3", userName: "Andi Wijaya", userAvatar: "", rating: 5,
-    content: "Kualitas premium, worth the price! Seller juga ramah dan responsif. Pasti beli lagi.",
-    createdAt: "2024-12-05T08:15:00Z"
-  },
-]
-
-// Rating distribution is now computed dynamically from store reviews
+// Rating distribution is computed dynamically from store reviews
 
 // ==================== IMAGE GALLERY ====================
 function ImageGallery({ images, videoUrl, isFlashSale }: { images: string[]; videoUrl?: string; isFlashSale: boolean }) {
@@ -247,9 +230,14 @@ function VariantSelector({
 
 // ==================== MAIN COMPONENT ====================
 export function ProductDetailScreen() {
-  const { selectedProductId, navigate, goBack, setSelectedProduct, setSelectedSeller, setSelectedChatRoom, showToast, toggleFollowStore, isFollowingStore, chatRooms, products, reviews: storeReviews, addChatRoom } = useAppStore()
+  const { selectedProductId, navigate, goBack, setSelectedProduct, setSelectedSeller, setSelectedChatRoom, showToast, toggleFollowStore, isFollowingStore, chatRooms, products, reviews: storeReviews, addReview, createChatRoom, fetchProductReviews, isAuthenticated, currentUser } = useAppStore()
   const { addItem } = useCartStore()
   const { toggleWishlist, isWishlisted } = useWishlistStore()
+
+  const [showReviewDialog, setShowReviewDialog] = useState(false)
+  const [reviewRating, setReviewRating] = useState(5)
+  const [reviewContent, setReviewContent] = useState("")
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false)
 
   const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null)
   const [quantity, setQuantity] = useState(1)
@@ -257,6 +245,13 @@ export function ProductDetailScreen() {
   const [showShippingModal, setShowShippingModal] = useState(false)
 
   const product = products.find(p => p.id === selectedProductId)
+
+  // Fetch reviews from API when product changes
+  useEffect(() => {
+    if (selectedProductId) {
+      fetchProductReviews(selectedProductId)
+    }
+  }, [selectedProductId, fetchProductReviews])
 
   // Derive effective variant - if selected variant doesn't belong to current product, treat as null
   const effectiveVariant = selectedVariant && product?.variants.some(v => v.id === selectedVariant.id)
@@ -307,14 +302,16 @@ export function ProductDetailScreen() {
 
   const handleAddToCart = () => {
     addItem(product, effectiveVariant || undefined, quantity)
+    setShowAddedToast(true)
     showToast("Ditambahkan ke keranjang!", "success")
+    setTimeout(() => setShowAddedToast(false), 2000)
   }
 
   const handleBuyNow = () => {
     addItem(product, effectiveVariant || undefined, quantity)
     // Uncheck other items, only check the newly added one for checkout
-    const { items, toggleAllCheck, toggleCheck } = useCartStore.getState()
-    toggleAllCheck(false)
+    const { items, checkAll, toggleCheck } = useCartStore.getState()
+    checkAll(false)
     // Find the just-added/updated item
     const targetItem = items.find(i =>
       i.productId === product.id && i.variantId === (effectiveVariant?.id || undefined)
@@ -637,10 +634,20 @@ export function ProductDetailScreen() {
           >
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold">Ulasan Pembeli</h3>
-              <button className="text-xs text-emerald-600 font-medium flex items-center gap-0.5" onClick={() => showToast("Semua ulasan ditampilkan", "info")}>
-                Lihat Semua
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
+              <div className="flex items-center gap-2">
+                {isAuthenticated && (
+                  <button
+                    className="text-xs text-emerald-600 font-medium flex items-center gap-0.5"
+                    onClick={() => setShowReviewDialog(true)}
+                  >
+                    Tulis Ulasan
+                  </button>
+                )}
+                <button className="text-xs text-emerald-600 font-medium flex items-center gap-0.5" onClick={() => showToast("Semua ulasan ditampilkan", "info")}>
+                  Lihat Semua
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
 
             {/* Overall rating */}
@@ -675,10 +682,8 @@ export function ProductDetailScreen() {
 
             {/* Review cards */}
             <div className="space-y-3">
-              {(storeReviews.filter(r => r.productId === product.id).length > 0
-                ? storeReviews.filter(r => r.productId === product.id)
-                : FALLBACK_REVIEWS
-              ).map((review) => (
+              {storeReviews.filter(r => r.productId === product.id).length > 0 ? (
+                storeReviews.filter(r => r.productId === product.id).map((review) => (
                 <motion.div
                   key={review.id}
                   initial={{ opacity: 0, y: 5 }}
@@ -701,7 +706,10 @@ export function ProductDetailScreen() {
                     })}
                   </p>
                 </motion.div>
-              ))}
+              ))
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-4">Belum ada ulasan</p>
+              )}
             </div>
           </motion.div>
 
@@ -787,6 +795,96 @@ export function ProductDetailScreen() {
         )}
       </AnimatePresence>
 
+      {/* Write Review Dialog */}
+      <Dialog open={showReviewDialog} onOpenChange={setShowReviewDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Tulis Ulasan</DialogTitle>
+            <DialogDescription>Bagikan pengalamanmu tentang produk ini</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {/* Star Rating */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Rating</label>
+              <div className="flex items-center gap-1">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    onClick={() => setReviewRating(star)}
+                    className="p-1 hover:scale-110 transition-transform"
+                  >
+                    <Star
+                      className={`w-7 h-7 transition-colors ${
+                        star <= reviewRating
+                          ? "fill-amber-400 text-amber-400"
+                          : "text-muted-foreground"
+                      }`}
+                    />
+                  </button>
+                ))}
+                <span className="ml-2 text-sm font-medium text-muted-foreground">
+                  {reviewRating}/5
+                </span>
+              </div>
+            </div>
+            {/* Review Content */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Ulasan</label>
+              <Textarea
+                value={reviewContent}
+                onChange={(e) => setReviewContent(e.target.value)}
+                placeholder="Tulis pengalamanmu tentang produk ini..."
+                className="min-h-[100px] resize-none"
+                maxLength={1000}
+              />
+              <p className="text-[10px] text-muted-foreground text-right">
+                {reviewContent.length}/1000
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowReviewDialog(false)}
+              className="rounded-lg"
+            >
+              Batal
+            </Button>
+            <Button
+              className="bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg"
+              disabled={isSubmittingReview || !reviewContent.trim()}
+              onClick={async () => {
+                if (!product || !currentUser) return
+                setIsSubmittingReview(true)
+                try {
+                  const review = {
+                    id: `review-${Date.now()}`,
+                    userId: currentUser.id,
+                    productId: product.id,
+                    rating: reviewRating,
+                    content: reviewContent.trim(),
+                    userName: currentUser.name,
+                    userAvatar: currentUser.avatar,
+                    createdAt: new Date().toISOString(),
+                  }
+                  addReview(review, '')
+                  setShowReviewDialog(false)
+                  setReviewContent('')
+                  setReviewRating(5)
+                  showToast('Ulasan berhasil ditambahkan!', 'success')
+                } catch {
+                  showToast('Gagal menambahkan ulasan', 'error')
+                } finally {
+                  setIsSubmittingReview(false)
+                }
+              }}
+            >
+              {isSubmittingReview ? 'Mengirim...' : 'Kirim Ulasan'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* 9. Sticky Bottom CTA */}
       <div className="fixed bottom-0 left-0 right-0 z-40 glass border-t border-border/50 pb-safe">
         <div className="flex items-center gap-2 px-4 py-3">
@@ -802,22 +900,19 @@ export function ProductDetailScreen() {
 
           <motion.button
             whileTap={{ scale: 0.95 }}
-            onClick={() => {
+            onClick={async () => {
               const room = chatRooms.find(r => r.seller.id === product.sellerId)
               if (room) {
                 setSelectedChatRoom(room.id)
               } else {
-                // Create a new chat room for this seller
-                const newRoom = {
-                  id: `chat-${Date.now()}`,
-                  seller: product.seller,
-                  lastMessage: '',
-                  lastMessageTime: new Date().toISOString(),
-                  unreadCount: 0,
-                  product: product,
+                // Create a new chat room via API
+                const roomId = await createChatRoom(product.sellerId, product.id)
+                if (roomId) {
+                  setSelectedChatRoom(roomId)
+                } else {
+                  showToast("Gagal membuat chat room", "error")
+                  return
                 }
-                addChatRoom(newRoom)
-                setSelectedChatRoom(newRoom.id)
               }
               navigate('chat-room')
             }}

@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { checkRateLimit } from '@/lib/auth-middleware'
+import { checkRateLimit, generateAuthToken } from '@/lib/auth-middleware'
 
-// POST /api/auth/sync-user - Sync user from Google OAuth ONLY
-// This endpoint is ONLY meant to be called by NextAuth signIn callback
-// for Google OAuth users. It should NOT be used for email/password auth.
+// POST /api/auth/sync-user - Sync user from Google OAuth
+// For Google: called by NextAuth signIn callback (requires x-internal-secret)
+// For Phone: DEPRECATED - use /api/auth/otp/send and /api/auth/otp/verify instead
+// This endpoint should NOT be used for email/password login - use /api/auth/login instead.
+// SECURITY: Phone OTP login no longer goes through this endpoint.
 export async function POST(request: NextRequest) {
   try {
     // Rate limit check
@@ -17,23 +19,19 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { email, name, avatar, provider, providerAccountId } = body
+    const { email, name, avatar, phone, provider, providerAccountId } = body
 
-    if (!email) {
-      return NextResponse.json({ success: false, error: 'Email is required' }, { status: 400 })
-    }
-
-    // SECURITY: Only allow this endpoint for OAuth providers (Google, etc.)
-    // NOT for email/password login - that goes through /api/auth/login
+    // SECURITY: Only allow this endpoint for OAuth providers
+    // Phone OTP should use /api/auth/otp/send + /api/auth/otp/verify
     const allowedProviders = ['google']
     if (provider && !allowedProviders.includes(provider)) {
       return NextResponse.json(
-        { success: false, error: 'This endpoint is only for OAuth authentication. Use /api/auth/login for email/password.' },
+        { success: false, error: 'This endpoint is only for OAuth authentication. Use /api/auth/otp for phone login or /api/auth/login for email/password.' },
         { status: 400 }
       )
     }
 
-    // If no provider specified, also reject (prevents random email creation)
+    // If no provider specified, reject (prevents random account creation)
     if (!provider) {
       return NextResponse.json(
         { success: false, error: 'Provider is required. Use /api/auth/login for email/password authentication.' },
@@ -41,7 +39,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // SECURITY: Verify internal secret - only NextAuth callback should call this
+    // SECURITY: For Google OAuth, verify internal secret (only NextAuth callback should call this)
     const internalSecret = request.headers.get('x-internal-secret')
     const expectedSecret = process.env.NEXTAUTH_SECRET
     if (!expectedSecret || internalSecret !== expectedSecret) {
@@ -52,7 +50,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if user exists
+    // Validate required fields based on provider
+    if (provider === 'google' && !email) {
+      return NextResponse.json({ success: false, error: 'Email is required' }, { status: 400 })
+    }
+
+    // Google OAuth flow (existing logic)
+    // Check if user exists by email
     let user = await db.user.findUnique({
       where: { email },
       include: {
@@ -111,10 +115,25 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Fetch updated user with all relations
+    // Fetch updated user with all relations (exclude password hash)
     const fullUser = await db.user.findUnique({
       where: { id: user.id },
-      include: {
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        phone: true,
+        avatar: true,
+        role: true,
+        isVerified: true,
+        isActive: true,
+        loyaltyPoints: true,
+        coins: true,
+        referralCode: true,
+        dailyCheckIn: true,
+        divisionId: true,
+        createdAt: true,
+        updatedAt: true,
         seller: true,
         wallet: true,
       },

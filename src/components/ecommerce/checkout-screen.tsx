@@ -9,7 +9,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { useAppStore, useCartStore } from "@/lib/store"
+import { useAppStore, useCartStore, getAuthHeaders } from "@/lib/store"
 import { formatPrice } from "@/lib/utils"
 import { SHIPPING_OPTIONS } from "@/lib/constants"
 import {
@@ -229,8 +229,8 @@ function ShippingSelector({
 
 // ==================== MAIN COMPONENT ====================
 export function CheckoutScreen() {
-  const { navigate, addresses, selectedAddressId, selectedVoucher, addOrder, showToast, walletBalance, deductWallet, useVoucher: markVoucherUsed } = useAppStore()
-  const { items, getCheckedItems, getCheckedTotal, getCheckedCount, clearCart, removeItems } = useCartStore()
+  const { navigate, addresses, selectedAddressId, selectedVoucher, addOrder, showToast, walletBalance, deductWallet, useVoucher: markVoucherUsed, currentUser, selectVoucher } = useAppStore()
+  const { items, getCheckedItems, getCheckedTotal, getCheckedCount, clearCart, removeItem } = useCartStore()
 
   const [selectedPayment, setSelectedPayment] = useState<string | null>(null)
   const [shippingBySeller, setShippingBySeller] = useState<Record<string, ShippingOption>>({})
@@ -300,7 +300,7 @@ export function CheckoutScreen() {
     )
   }, [selectedPayment, defaultAddress, shippingBySeller, groupedBySeller, checkedCount, walletBalance, totalAmount])
 
-  const handlePay = () => {
+  const handlePay = async () => {
     if (!selectedPayment) {
       showToast("Pilih metode pembayaran terlebih dahulu", "error")
       return
@@ -319,10 +319,42 @@ export function CheckoutScreen() {
     }
 
     // Stock validation
-    const outOfStockItem = checkedItems.find(item => item.quantity > item.product.stock)
+    const outOfStockItem = checkedItems.find(item => {
+      const maxStock = item.variant ? item.variant.stock : item.product.stock
+      return item.quantity > maxStock
+    })
     if (outOfStockItem) {
-      showToast(`Stok "${outOfStockItem.product.name}" tidak mencukupi (tersedia: ${outOfStockItem.product.stock})`, "error")
+      const maxStock = outOfStockItem.variant ? outOfStockItem.variant.stock : outOfStockItem.product.stock
+      showToast(`Stok "${outOfStockItem.product.name}" tidak mencukupi (tersedia: ${maxStock})`, "error")
       return
+    }
+
+    // Server-side voucher validation
+    let validatedVoucherDiscount = voucherDiscount
+    if (selectedVoucher) {
+      try {
+        const validateRes = await fetch('/api/vouchers/validate', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({
+            code: selectedVoucher.code,
+            userId: currentUser?.id,
+            cartSubtotal: subtotal,
+          }),
+        })
+        const validateData = await validateRes.json()
+        if (validateData.success && validateData.data) {
+          if (!validateData.data.valid) {
+            showToast(validateData.data.message || "Voucher tidak valid", "error")
+            selectVoucher(null)
+            return
+          }
+          // Use server-computed discount amount
+          validatedVoucherDiscount = validateData.data.discountAmount
+        }
+      } catch {
+        // Fallback: use local calculation
+      }
     }
 
     setIsProcessing(true)
@@ -331,21 +363,19 @@ export function CheckoutScreen() {
     setOrderNumber(newOrderNumber)
 
     // Simulate payment processing
-    setTimeout(() => {
-      // Create one order per seller
-      groupedBySeller.forEach((group) => {
+    setTimeout(async () => {
+      // Create one order per seller via API
+      for (const group of groupedBySeller) {
         const sellerShipping = shippingBySeller[group.seller.id]
         const groupSubtotal = group.items.reduce((sum, i) => sum + ((i.product.discountPrice || i.product.price) * i.quantity), 0)
         const groupShipping = sellerShipping?.price || 0
-        const groupDiscount = subtotal > 0 ? Math.round(voucherDiscount * (groupSubtotal / subtotal)) : 0
+        const groupDiscount = subtotal > 0 ? Math.round(validatedVoucherDiscount * (groupSubtotal / subtotal)) : 0
         const groupTotal = groupSubtotal + groupShipping - groupDiscount + platformFee
 
-        const order = {
-          id: `o${Date.now()}-${group.seller.id}`,
-          orderNumber: newOrderNumber,
-          userId: 'u1',
+        const orderPayload = {
+          userId: currentUser?.id || '',
           sellerId: group.seller.id,
-          status: 'paid' as const,
+          addressId: defaultAddress.id,
           subtotal: groupSubtotal,
           shippingCost: groupShipping,
           discountAmount: groupDiscount,
@@ -353,39 +383,159 @@ export function CheckoutScreen() {
           platformFee,
           totalAmount: groupTotal,
           paymentMethod: PAYMENT_METHODS.find(m => m.id === selectedPayment)?.name || selectedPayment,
-          paymentStatus: 'paid',
           items: group.items.map((item) => ({
-            id: `oi${Date.now()}-${item.id}`,
             productId: item.productId,
+            variantId: item.variant?.id || null,
             productName: item.product.name,
-            variantName: item.variant ? `${item.variant.name}: ${item.variant.value}` : undefined,
+            variantName: item.variant ? `${item.variant.name}: ${item.variant.value}` : null,
             price: item.product.discountPrice || item.product.price,
             quantity: item.quantity,
             subtotal: (item.product.discountPrice || item.product.price) * item.quantity,
-            image: item.product.images?.[0]
+            image: item.product.images?.[0] || null,
           })),
           shipping: {
-            id: `sh${Date.now()}-${group.seller.id}`,
             provider: sellerShipping?.provider || 'JNE',
             service: sellerShipping?.service || 'REG',
-            estimatedDays: sellerShipping?.estimatedDays,
-            status: 'pending'
+            estimatedDays: sellerShipping?.estimatedDays || null,
           },
-          address: defaultAddress,
-          seller: group.seller,
-          createdAt: new Date().toISOString(),
-          paidAt: new Date().toISOString()
         }
-        addOrder(order)
-      })
+
+        // SECURITY: Determine correct order status based on payment method
+        // - Wallet: 'paid' (immediate deduction)
+        // - Midtrans/Card: 'pending' (awaiting payment confirmation via webhook)
+        // - COD: 'pending' (payment on delivery)
+        const isImmediatePayment = selectedPayment === 'wallet'
+        const orderStatus = isImmediatePayment ? 'paid' as const : 'pending' as const
+        const orderPaymentStatus = isImmediatePayment ? 'paid' : 'pending'
+
+        try {
+          // SECURITY: Include auth headers for authenticated order creation
+          const orderHeaders: Record<string, string> = {
+            'Content-Type': 'application/json',
+          }
+          if (typeof window !== 'undefined') {
+            const token = localStorage.getItem('authToken')
+            if (token) orderHeaders['Authorization'] = `Bearer ${token}`
+          }
+
+          const res = await fetch('/api/orders', {
+            method: 'POST',
+            headers: orderHeaders,
+            body: JSON.stringify(orderPayload),
+          })
+          const data = await res.json()
+
+          if (data.success && data.data) {
+            // Add to local store from API response — use server-returned status
+            const apiOrder = data.data
+            const localOrder = {
+              id: apiOrder.id,
+              orderNumber: apiOrder.orderNumber,
+              userId: currentUser?.id || '',
+              sellerId: group.seller.id,
+              status: orderStatus,
+              subtotal: groupSubtotal,
+              shippingCost: groupShipping,
+              discountAmount: groupDiscount,
+              taxAmount: 0,
+              platformFee,
+              totalAmount: groupTotal,
+              paymentMethod: PAYMENT_METHODS.find(m => m.id === selectedPayment)?.name || selectedPayment,
+              paymentStatus: orderPaymentStatus,
+              items: group.items.map((item) => ({
+                id: `oi${Date.now()}-${item.id}`,
+                productId: item.productId,
+                productName: item.product.name,
+                variantName: item.variant ? `${item.variant.name}: ${item.variant.value}` : undefined,
+                variantId: item.variant?.id || undefined,
+                price: item.product.discountPrice || item.product.price,
+                quantity: item.quantity,
+                subtotal: (item.product.discountPrice || item.product.price) * item.quantity,
+                image: item.product.images?.[0]
+              })),
+              shipping: {
+                id: `sh${Date.now()}-${group.seller.id}`,
+                provider: sellerShipping?.provider || 'JNE',
+                service: sellerShipping?.service || 'REG',
+                estimatedDays: sellerShipping?.estimatedDays,
+                status: 'pending'
+              },
+              address: defaultAddress,
+              seller: group.seller,
+              createdAt: new Date().toISOString(),
+              paidAt: isImmediatePayment ? new Date().toISOString() : undefined
+            }
+            addOrder(localOrder)
+          }
+        } catch (error) {
+          console.error('Order creation failed:', error)
+          // Fallback: add locally even if API fails — use correct status
+          const order = {
+            id: `o${Date.now()}-${group.seller.id}`,
+            orderNumber: newOrderNumber,
+            userId: currentUser?.id || '',
+            sellerId: group.seller.id,
+            status: orderStatus,
+            subtotal: groupSubtotal,
+            shippingCost: groupShipping,
+            discountAmount: groupDiscount,
+            taxAmount: 0,
+            platformFee,
+            totalAmount: groupTotal,
+            paymentMethod: PAYMENT_METHODS.find(m => m.id === selectedPayment)?.name || selectedPayment,
+            paymentStatus: orderPaymentStatus,
+            items: group.items.map((item) => ({
+              id: `oi${Date.now()}-${item.id}`,
+              productId: item.productId,
+              productName: item.product.name,
+              variantName: item.variant ? `${item.variant.name}: ${item.variant.value}` : undefined,
+              price: item.product.discountPrice || item.product.price,
+              quantity: item.quantity,
+              subtotal: (item.product.discountPrice || item.product.price) * item.quantity,
+              image: item.product.images?.[0]
+            })),
+            shipping: {
+              id: `sh${Date.now()}-${group.seller.id}`,
+              provider: sellerShipping?.provider || 'JNE',
+              service: sellerShipping?.service || 'REG',
+              estimatedDays: sellerShipping?.estimatedDays,
+              status: 'pending'
+            },
+            address: defaultAddress,
+            seller: group.seller,
+            createdAt: new Date().toISOString(),
+            paidAt: isImmediatePayment ? new Date().toISOString() : undefined
+          }
+          addOrder(order)
+        }
+      }
 
       // Remove checked items from cart
       const checkedItemIds = checkedItems.map(i => i.id)
-      removeItems(checkedItemIds)
+      checkedItemIds.forEach(id => removeItem(id))
 
-      // Deduct wallet balance if paying with MartUp Pay
+      // Deduct wallet balance if paying with MartUp Pay (via API + local)
       if (selectedPayment === 'wallet') {
-        deductWallet(totalAmount, 'Pembayaran Order #' + newOrderNumber)
+        try {
+          const walletHeaders: Record<string, string> = { 'Content-Type': 'application/json' }
+          if (typeof window !== 'undefined') {
+            const token = localStorage.getItem('authToken')
+            if (token) walletHeaders['Authorization'] = `Bearer ${token}`
+          }
+          await fetch('/api/wallet', {
+            method: 'POST',
+            headers: walletHeaders,
+            body: JSON.stringify({
+              userId: currentUser?.id,
+              amount: -Math.max(0, totalAmount),
+              type: 'debit',
+              description: 'Pembayaran Order #' + newOrderNumber,
+            }),
+          })
+        } catch {
+          // Fallback: local deduction if API fails
+        }
+        deductWallet(Math.max(0, totalAmount), 'Pembayaran Order #' + newOrderNumber)
       }
 
       // Mark voucher as used
@@ -782,9 +932,16 @@ export function CheckoutScreen() {
               </motion.div>
 
               <div className="space-y-1">
-                <h3 className="text-lg font-bold text-foreground">Pembayaran Berhasil!</h3>
+                <h3 className="text-lg font-bold text-foreground">
+                  {selectedPayment === 'wallet' ? 'Pembayaran Berhasil!' : 'Pesanan Dibuat!'}
+                </h3>
                 <p className="text-sm text-muted-foreground">
-                  Terima kasih atas pesananmu. Pesanan sedang diproses oleh penjual.
+                  {selectedPayment === 'wallet'
+                    ? 'Terima kasih atas pesananmu. Pesanan sedang diproses oleh penjual.'
+                    : selectedPayment === 'cod'
+                      ? 'Pesanan berhasil dibuat. Pembayaran akan dilakukan saat barang diterima.'
+                      : 'Pesanan berhasil dibuat. Silakan selesaikan pembayaran sebelum batas waktu.'
+                  }
                 </p>
               </div>
 

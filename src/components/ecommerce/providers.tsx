@@ -22,7 +22,7 @@ function ZustandHydration({ children }: { children: React.ReactNode }) {
 
 function DataFetcher({ children }: { children: React.ReactNode }) {
   const { data: session, status } = useSession()
-  const { fetchUserData, fetchProducts, fetchCategories, isAuthenticated, login } = useAppStore()
+  const { fetchUserData, fetchProducts, fetchCategories, isAuthenticated, login, connectSocket, disconnectSocket } = useAppStore()
   const initialFetchDone = useRef(false)
 
   // Fetch global data (products, categories) on mount & setup storage
@@ -69,13 +69,23 @@ function DataFetcher({ children }: { children: React.ReactNode }) {
             })
             // Now fetch all user-specific data
             fetchUserData(data.user.id)
+            // Merge local cart to server & connect WebSocket
+            useCartStore.getState().mergeLocalToServer(data.user.id)
+            connectSocket()
           }
         })
         .catch(err => {
           console.error('Failed to fetch user data:', err)
         })
     }
-  }, [status, session, fetchUserData, isAuthenticated, login])
+  }, [status, session, fetchUserData, isAuthenticated, login, connectSocket])
+
+  // Disconnect socket when user logs out
+  useEffect(() => {
+    if (!isAuthenticated) {
+      disconnectSocket()
+    }
+  }, [isAuthenticated, disconnectSocket])
 
   return <>{children}</>
 }

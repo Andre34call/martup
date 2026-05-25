@@ -154,6 +154,7 @@ export interface OrderItem {
   productId: string
   productName: string
   variantName?: string
+  variantId?: string
   price: number
   quantity: number
   subtotal: number

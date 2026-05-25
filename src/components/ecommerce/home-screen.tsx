@@ -7,33 +7,7 @@ import { ProductCard, FlashSaleTimer, CategoryPill, SectionHeader, EmptyState } 
 import type { Product } from "@/lib/types"
 import { useState, useEffect, useCallback, useRef } from "react"
 
-// ==================== BANNER DATA ====================
-const banners = [
-  {
-    id: "b1",
-    title: "Mega Sale 🔥",
-    subtitle: "Diskon hingga 70%",
-    gradient: "from-emerald-600 to-teal-500",
-  },
-  {
-    id: "b2",
-    title: "Diskon 70%",
-    subtitle: "Khusus hari ini!",
-    gradient: "from-orange-500 to-amber-400",
-  },
-  {
-    id: "b3",
-    title: "Gratis Ongkir 🚚",
-    subtitle: "Min. belanja Rp50.000",
-    gradient: "from-cyan-500 to-blue-500",
-  },
-  {
-    id: "b4",
-    title: "Cashback 20% 💰",
-    subtitle: "Bayar pakai MartUp Pay",
-    gradient: "from-violet-500 to-purple-500",
-  },
-]
+// ==================== (banners now from DB via homeBanners) ====================
 
 // ==================== QUICK ACTIONS DATA ====================
 const quickActionsRow1 = [
@@ -54,7 +28,7 @@ const quickActionsRow2 = [
 
 // ==================== HOME SCREEN ====================
 export function HomeScreen() {
-  const { navigate, unreadNotificationCount, totalUnreadChats, setSelectedProduct, setSelectedCategory, setSearchQuery, showToast, products, categories, isAuthenticated } = useAppStore()
+  const { navigate, unreadNotificationCount, totalUnreadChats, setSelectedProduct, setSelectedCategory, setSearchQuery, showToast, products, categories, isAuthenticated, homeBanners, fetchHomeBanners } = useAppStore()
   const [currentBanner, setCurrentBanner] = useState(0)
   const [showLoadingMore, setShowLoadingMore] = useState(false)
 
@@ -97,25 +71,19 @@ export function HomeScreen() {
     }
   }, [setSearchQuery, navigate, showToast])
 
-  // Handle banner click
-  const handleBannerClick = useCallback(() => {
-    if (currentBanner === 0 || currentBanner === 1) {
-      setSearchQuery("Flash Sale")
-      navigate("search")
-    } else if (currentBanner === 2) {
-      navigate("voucher")
-    } else if (currentBanner === 3) {
-      navigate("wallet")
-    }
-  }, [currentBanner, setSearchQuery, navigate])
+  // Fetch home banners on mount
+  useEffect(() => {
+    fetchHomeBanners()
+  }, [fetchHomeBanners])
 
   // Auto-play banner carousel
   useEffect(() => {
+    if (homeBanners.length <= 1) return
     const timer = setInterval(() => {
-      setCurrentBanner((prev) => (prev + 1) % banners.length)
+      setCurrentBanner((prev) => (prev + 1) % homeBanners.length)
     }, 3500)
     return () => clearInterval(timer)
-  }, [])
+  }, [homeBanners.length])
 
   // Filter products for flash sale
   const flashSaleProducts = products.filter((p) => p.isFlashSale)
@@ -214,44 +182,58 @@ export function HomeScreen() {
       {/* ===== BANNER CAROUSEL ===== */}
       <div className="px-4 pt-3">
         <div className="relative h-36 rounded-2xl overflow-hidden">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={currentBanner}
-              initial={{ opacity: 0, x: 50 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -50 }}
-              transition={{ duration: 0.4 }}
-              onClick={handleBannerClick}
-              className={`absolute inset-0 bg-gradient-to-r ${banners[currentBanner].gradient} flex flex-col items-center justify-center text-white cursor-pointer`}
-            >
-              <h2 className="text-2xl font-extrabold drop-shadow-sm">
-                {banners[currentBanner].title}
-              </h2>
-              <p className="text-sm font-medium opacity-90 mt-1">
-                {banners[currentBanner].subtitle}
-              </p>
-            </motion.div>
-          </AnimatePresence>
-
-          {/* Dot indicators */}
-          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5">
-            {banners.map((_, idx) => (
-              <button
-                key={idx}
-                onClick={() => setCurrentBanner(idx)}
-                className="focus:outline-none"
-              >
+          {homeBanners.length > 0 ? (
+            <>
+              <AnimatePresence mode="wait">
                 <motion.div
-                  animate={{
-                    width: idx === currentBanner ? 20 : 6,
-                    backgroundColor: idx === currentBanner ? "#ffffff" : "rgba(255,255,255,0.5)",
+                  key={currentBanner}
+                  initial={{ opacity: 0, x: 50 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -50 }}
+                  transition={{ duration: 0.4 }}
+                  onClick={() => {
+                    const banner = homeBanners[currentBanner]
+                    if (banner?.link) {
+                      window.open(banner.link, '_blank')
+                    }
                   }}
-                  transition={{ duration: 0.3 }}
-                  className="h-1.5 rounded-full"
-                />
-              </button>
-            ))}
-          </div>
+                  className="absolute inset-0 cursor-pointer"
+                >
+                  <img
+                    src={homeBanners[currentBanner].image}
+                    alt={homeBanners[currentBanner].title}
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
+                  <div className="absolute bottom-4 left-4 right-4">
+                    <h2 className="text-lg font-bold text-white drop-shadow-sm">
+                      {homeBanners[currentBanner].title}
+                    </h2>
+                  </div>
+                </motion.div>
+              </AnimatePresence>
+              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5">
+                {homeBanners.map((_, idx) => (
+                  <button key={idx} onClick={() => setCurrentBanner(idx)} className="focus:outline-none">
+                    <motion.div
+                      animate={{
+                        width: idx === currentBanner ? 20 : 6,
+                        backgroundColor: idx === currentBanner ? "#ffffff" : "rgba(255,255,255,0.5)",
+                      }}
+                      transition={{ duration: 0.3 }}
+                      className="h-1.5 rounded-full"
+                    />
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : (
+            /* Fallback gradient banner when no dynamic banners exist */
+            <div className="absolute inset-0 bg-gradient-to-r from-emerald-600 to-teal-500 flex flex-col items-center justify-center text-white">
+              <h2 className="text-2xl font-extrabold drop-shadow-sm">MartUp 🔥</h2>
+              <p className="text-sm font-medium opacity-90 mt-1">Belanja Mudah & Hemat!</p>
+            </div>
+          )}
         </div>
       </div>
 

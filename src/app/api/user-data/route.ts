@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { verifyAuth } from '@/lib/auth-middleware'
+import { serializeDecimal } from '@/lib/decimal-utils'
 
 // Helper to safely parse JSON fields
 function parseJsonField(value: string | null | undefined): unknown[] {
@@ -24,6 +26,15 @@ function parseProductJsonFields(product: Record<string, unknown>) {
 // GET /api/user-data - Fetch ALL user-specific data in one call
 export async function GET(request: NextRequest) {
   try {
+    // SECURITY: Require authentication
+    const authResult = await verifyAuth(request)
+    if (!authResult.success) {
+      return NextResponse.json(
+        { success: false, error: authResult.error },
+        { status: authResult.status }
+      )
+    }
+
     const { searchParams } = new URL(request.url)
     const userId = searchParams.get('userId')
 
@@ -31,6 +42,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: 'userId is required' },
         { status: 400 }
+      )
+    }
+
+    // SECURITY: Users can only fetch their own data
+    if (userId !== authResult.user.id) {
+      return NextResponse.json(
+        { success: false, error: 'Forbidden - You can only access your own data' },
+        { status: 403 }
       )
     }
 
@@ -107,10 +126,15 @@ export async function GET(request: NextRequest) {
           seller: {
             select: {
               id: true,
+              userId: true,
               storeName: true,
               storeSlug: true,
               storeAvatar: true,
               isVerified: true,
+              isPremium: true,
+              rating: true,
+              totalSales: true,
+              totalProducts: true,
             },
           },
         },
@@ -165,7 +189,7 @@ export async function GET(request: NextRequest) {
       items: order.items.map((item) => ({
         ...item,
         product: item.product
-          ? parseProductJsonFields(item.product as unknown as Record<string, unknown>) as typeof item.product
+          ? parseProductJsonFields(item.product as unknown as Record<string, unknown>) as unknown as typeof item.product
           : item.product,
       })),
     }))
@@ -175,7 +199,7 @@ export async function GET(request: NextRequest) {
       ...review,
       images: parseJsonField(review.images),
       product: review.product
-        ? parseProductJsonFields(review.product as unknown as Record<string, unknown>) as typeof review.product
+        ? parseProductJsonFields(review.product as unknown as Record<string, unknown>) as unknown as typeof review.product
         : review.product,
     }))
 
@@ -185,7 +209,7 @@ export async function GET(request: NextRequest) {
     // Count unread notifications
     const unreadNotificationCount = notifications.filter((n) => !n.isRead).length
 
-    return NextResponse.json({
+    return NextResponse.json(serializeDecimal({
       success: true,
       data: {
         user,
@@ -198,7 +222,7 @@ export async function GET(request: NextRequest) {
         reviews: parsedReviews,
         wishlistProductIds,
       },
-    })
+    }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     console.error('User Data GET error:', error)

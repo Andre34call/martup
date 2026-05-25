@@ -1,9 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { verifyAuth, checkRateLimit } from '@/lib/auth-middleware'
+import { serializeDecimal } from '@/lib/decimal-utils'
 
 // GET /api/wallet - Fetch wallet for a user
 export async function GET(request: NextRequest) {
   try {
+    // SECURITY: Require authentication
+    const authResult = await verifyAuth(request)
+    if (!authResult.success) {
+      return NextResponse.json(
+        { success: false, error: authResult.error },
+        { status: authResult.status }
+      )
+    }
+
     const { searchParams } = new URL(request.url)
     const userId = searchParams.get('userId')
 
@@ -11,6 +22,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: 'userId is required' },
         { status: 400 }
+      )
+    }
+
+    // SECURITY: Users can only access their own wallet
+    if (userId !== authResult.user.id) {
+      return NextResponse.json(
+        { success: false, error: 'Forbidden - You can only access your own wallet' },
+        { status: 403 }
       )
     }
 
@@ -31,10 +50,10 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    return NextResponse.json({
+    return NextResponse.json(serializeDecimal({
       success: true,
       data: wallet,
-    })
+    }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     console.error('Wallet GET error:', error)
@@ -48,6 +67,24 @@ export async function GET(request: NextRequest) {
 // POST /api/wallet - Top up wallet
 export async function POST(request: NextRequest) {
   try {
+    // SECURITY: Require authentication
+    const authResult = await verifyAuth(request)
+    if (!authResult.success) {
+      return NextResponse.json(
+        { success: false, error: authResult.error },
+        { status: authResult.status }
+      )
+    }
+
+    // SECURITY: Rate limit wallet mutations
+    const clientIp = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
+    if (!checkRateLimit(`wallet:${clientIp}`, 10)) {
+      return NextResponse.json(
+        { success: false, error: 'Terlalu banyak request. Coba lagi dalam 1 menit.' },
+        { status: 429 }
+      )
+    }
+
     const body = await request.json()
     const { userId, amount } = body
 
@@ -58,9 +95,25 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // SECURITY: Users can only top up their own wallet
+    if (userId !== authResult.user.id) {
+      return NextResponse.json(
+        { success: false, error: 'Forbidden - You can only top up your own wallet' },
+        { status: 403 }
+      )
+    }
+
     if (!amount || amount <= 0) {
       return NextResponse.json(
         { success: false, error: 'amount must be a positive number' },
+        { status: 400 }
+      )
+    }
+
+    // SECURITY: Cap top-up amount to prevent abuse
+    if (amount > 10000000) {
+      return NextResponse.json(
+        { success: false, error: 'Top up amount exceeds maximum limit (Rp 10.000.000)' },
         { status: 400 }
       )
     }
@@ -80,13 +133,14 @@ export async function POST(request: NextRequest) {
         })
       }
 
-      const newBalance = existingWallet.balance + amount
-
-      // Update wallet balance
+      // SECURITY: Use atomic increment to prevent race condition on concurrent top-ups
       const updatedWallet = await tx.wallet.update({
         where: { userId },
-        data: { balance: newBalance },
+        data: { balance: { increment: amount } },
       })
+      // Get the new balance for the mutation record
+      const freshWallet = await tx.wallet.findUnique({ where: { userId } })
+      const newBalance = freshWallet!.balance
 
       // Create mutation record
       await tx.walletMutation.create({
@@ -114,10 +168,10 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    return NextResponse.json({
+    return NextResponse.json(serializeDecimal({
       success: true,
       data: walletWithMutations,
-    }, { status: 201 })
+    }), { status: 201 })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     console.error('Wallet POST error:', error)
