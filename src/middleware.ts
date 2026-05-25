@@ -19,12 +19,14 @@ export function middleware(request: NextRequest) {
   response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
 
   // Block direct access to admin API routes without any auth header
+  // Exception: /api/admin/setup allows secret key for initial setup
   // This is a first line of defense - actual auth verification happens in the route handlers
   if (pathname.startsWith('/api/admin/')) {
+    const isSetupRoute = pathname === '/api/admin/setup'
     const hasAuth = request.headers.get('authorization') ||
       request.headers.get('cookie')?.includes('next-auth.session-token')
 
-    if (!hasAuth) {
+    if (!hasAuth && !isSetupRoute) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized - Authentication required' },
         { status: 401 }
