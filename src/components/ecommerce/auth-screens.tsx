@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Separator } from "@/components/ui/separator"
 import { InputOTP, InputOTPGroup, InputOTPSlot, InputOTPSeparator } from "@/components/ui/input-otp"
-import { useAppStore } from "@/lib/store"
+import { useAppStore, useCartStore } from "@/lib/store"
 import { signIn } from "next-auth/react"
 import { useState, useEffect, useCallback } from "react"
 import type { User } from "@/lib/types"
@@ -317,8 +317,11 @@ export function LoginScreen() {
           coins: data.user.coins || 0,
         }
         login(user)
-        const { fetchUserData } = useAppStore.getState()
+        const { fetchUserData, connectSocket } = useAppStore.getState()
         await fetchUserData(data.user.id)
+        // Merge local cart to server & connect WebSocket
+        useCartStore.getState().mergeLocalToServer(data.user.id)
+        connectSocket()
       } else {
         showToast(data.error || 'Login gagal. Periksa email dan password Anda.', 'error')
       }
@@ -588,6 +591,11 @@ export function RegisterScreen() {
           coins: data.user.coins || 0,
         }
         login(user)
+        const { fetchUserData, connectSocket } = useAppStore.getState()
+        await fetchUserData(data.user.id)
+        // Merge local cart to server & connect WebSocket
+        useCartStore.getState().mergeLocalToServer(data.user.id)
+        connectSocket()
         showToast("Registrasi berhasil! 🎉", "success")
       } else {
         showToast(data.error || 'Registrasi gagal. Coba lagi.', "error")
@@ -898,8 +906,11 @@ export function OTPScreen() {
           coins: data.user.coins || 0,
         }
         login(user)
-        const { fetchUserData } = useAppStore.getState()
+        const { fetchUserData, connectSocket } = useAppStore.getState()
         await fetchUserData(data.user.id)
+        // Merge local cart to server & connect WebSocket
+        useCartStore.getState().mergeLocalToServer(data.user.id)
+        connectSocket()
         showToast('Login berhasil! 🎉', 'success')
       } else {
         showToast(data.error || 'Verifikasi OTP gagal. Coba lagi.', 'error')

@@ -53,6 +53,8 @@ export interface ChatSlice {
   chatRooms: ChatRoom[]
   chatMessages: Record<string, ChatMessage[]>
   totalUnreadChats: number
+  isSocketConnected: boolean
+  typingUsers: Record<string, string[]>  // roomId → userIds currently typing
   addChatMessage: (roomId: string, message: ChatMessage) => void
   addChatRoom: (room: ChatRoom) => void
   markChatRead: (roomId: string) => void
@@ -60,6 +62,9 @@ export interface ChatSlice {
   fetchChatMessages: (roomId: string) => Promise<void>
   sendChatMessage: (roomId: string, content: string, type?: string) => Promise<void>
   createChatRoom: (sellerId: string, productId?: string) => Promise<string | null>
+  connectSocket: () => void
+  disconnectSocket: () => void
+  emitTyping: (roomId: string, isTyping: boolean) => void
 }
 
 export interface OrderSlice {
@@ -78,6 +83,7 @@ export interface AddressSlice {
   updateAddress: (address: Address) => void
   deleteAddress: (id: string) => void
   setDefaultAddress: (id: string) => void
+  fetchAddresses: (userId: string) => Promise<void>
 }
 
 export interface WalletSlice {
@@ -116,6 +122,8 @@ export interface ProfileSlice {
   avatarUrl: string | null
   updateAvatar: (url: string | null) => void
   updateProfile: (data: { name?: string; email?: string; phone?: string }) => void
+  uploadAvatar: (file: File) => Promise<void>
+  removeAvatar: () => Promise<void>
 }
 
 export interface SellerSlice {
@@ -131,6 +139,7 @@ export interface SellerSlice {
   seller: Seller | null
   sellerStats: SellerStats | null
   fetchSellerStats: () => Promise<void>
+  fetchWithdrawHistory: (sellerId: string) => Promise<void>
 }
 
 export interface ProductSlice {

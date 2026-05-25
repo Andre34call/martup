@@ -1,0 +1,240 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { db } from '@/lib/db'
+import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middleware'
+
+// ==================== CONFIG ====================
+
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+const AVATAR_BUCKET = 'avatars'
+const AVATAR_FOLDER = 'profiles'
+const MAX_AVATAR_SIZE = 2 * 1024 * 1024 // 2MB
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+const ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif']
+
+// ==================== HELPERS ====================
+
+/**
+ * Extract the file path from a Supabase public URL.
+ * Returns null if the URL does not point to our Supabase instance.
+ */
+function extractSupabasePath(url: string): string | null {
+  if (!SUPABASE_URL) return null
+  const prefix = `${SUPABASE_URL}/storage/v1/object/public/${AVATAR_BUCKET}/`
+  if (!url.startsWith(prefix)) return null
+  return url.slice(prefix.length)
+}
+
+/**
+ * Delete a file from Supabase Storage.
+ * Silently ignores errors (best-effort cleanup).
+ */
+async function deleteFromSupabase(filePath: string): Promise<void> {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return
+  try {
+    await fetch(`${SUPABASE_URL}/storage/v1/object/${AVATAR_BUCKET}/${filePath}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'apikey': SUPABASE_ANON_KEY,
+      },
+    })
+  } catch {
+    // Best-effort: don't fail the request if old file deletion fails
+  }
+}
+
+// ==================== POST /api/user/avatar ====================
+// Upload a new avatar, delete old one, update User record
+
+export async function POST(request: NextRequest) {
+  try {
+    // Auth required
+    const authResult = await verifyAuth(request)
+    if (!authResult.success) return authErrorResponse(authResult)
+
+    // Rate limit: 10/min per user
+    const clientIp = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
+    if (!checkRateLimit(`avatar-post:${clientIp}:${authResult.user.id}`, 10)) {
+      return NextResponse.json(
+        { success: false, error: 'Too many requests. Please try again in 1 minute.' },
+        { status: 429 }
+      )
+    }
+
+    // Validate Supabase configuration
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+      return NextResponse.json(
+        { success: false, error: 'Storage not configured. Contact admin.' },
+        { status: 500 }
+      )
+    }
+
+    // Parse FormData
+    const formData = await request.formData()
+    const file = formData.get('file') as File | null
+
+    if (!file) {
+      return NextResponse.json(
+        { success: false, error: 'No file provided' },
+        { status: 400 }
+      )
+    }
+
+    // SECURITY: Validate file type - images ONLY (no videos for avatars)
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid file type. Only JPG, PNG, WebP, and GIF images are allowed for avatars.' },
+        { status: 400 }
+      )
+    }
+
+    // SECURITY: Validate file size - 2MB max for avatars
+    if (file.size > MAX_AVATAR_SIZE) {
+      return NextResponse.json(
+        { success: false, error: 'File too large. Maximum avatar size is 2MB.' },
+        { status: 400 }
+      )
+    }
+
+    // SECURITY: Sanitize file extension (prevent path traversal)
+    const rawExt = file.name.split('.').pop() || ''
+    const ext = ALLOWED_EXTENSIONS.includes(rawExt.toLowerCase()) ? rawExt.toLowerCase() : 'jpg'
+
+    // Generate unique filename
+    const filename = `${AVATAR_FOLDER}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+
+    // Upload to Supabase Storage using REST API
+    const arrayBuffer = await file.arrayBuffer()
+
+    const uploadResponse = await fetch(
+      `${SUPABASE_URL}/storage/v1/object/${AVATAR_BUCKET}/${filename}`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+          'apikey': SUPABASE_ANON_KEY,
+          'Content-Type': file.type,
+        },
+        body: arrayBuffer,
+      }
+    )
+
+    if (!uploadResponse.ok) {
+      let errorData: { message?: string; error?: string; statusCode?: string }
+      try {
+        errorData = await uploadResponse.json()
+      } catch {
+        errorData = { message: `HTTP ${uploadResponse.status}` }
+      }
+      console.error('Avatar upload error:', errorData)
+
+      const errorMsg = errorData.message || errorData.error || 'Unknown error'
+      let userMessage = 'Avatar upload failed'
+
+      if (errorMsg.includes('Bucket not found') || errorMsg.includes('bucket')) {
+        userMessage = 'Avatar storage not configured. Please setup storage first.'
+      } else if (errorMsg.includes('policy') || errorMsg.includes('RLS') || errorMsg.includes('permission')) {
+        userMessage = 'Permission denied. Storage policy not configured.'
+      }
+
+      return NextResponse.json(
+        { success: false, error: userMessage, detail: errorMsg },
+        { status: uploadResponse.status === 404 ? 404 : 500 }
+      )
+    }
+
+    // Construct public URL
+    const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${AVATAR_BUCKET}/${filename}`
+
+    // Fetch current user to check for old avatar
+    const currentUser = await db.user.findUnique({
+      where: { id: authResult.user.id },
+      select: { avatar: true },
+    })
+
+    // SECURITY: Delete old avatar from Supabase Storage if it points to our Supabase
+    if (currentUser?.avatar) {
+      const oldPath = extractSupabasePath(currentUser.avatar)
+      if (oldPath) {
+        await deleteFromSupabase(oldPath)
+      }
+    }
+
+    // Update User record with new avatar URL
+    await db.user.update({
+      where: { id: authResult.user.id },
+      data: { avatar: publicUrl },
+    })
+
+    return NextResponse.json({
+      success: true,
+      data: { avatar: publicUrl },
+    })
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Internal server error'
+    console.error('Avatar POST error:', error)
+    return NextResponse.json(
+      { success: false, error: message },
+      { status: 500 }
+    )
+  }
+}
+
+// ==================== DELETE /api/user/avatar ====================
+// Remove avatar from storage and set User.avatar to null
+
+export async function DELETE(request: NextRequest) {
+  try {
+    // Auth required
+    const authResult = await verifyAuth(request)
+    if (!authResult.success) return authErrorResponse(authResult)
+
+    // Rate limit: 5/min per user
+    const clientIp = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
+    if (!checkRateLimit(`avatar-delete:${clientIp}:${authResult.user.id}`, 5)) {
+      return NextResponse.json(
+        { success: false, error: 'Too many requests. Please try again in 1 minute.' },
+        { status: 429 }
+      )
+    }
+
+    // Fetch current user to get avatar URL
+    const currentUser = await db.user.findUnique({
+      where: { id: authResult.user.id },
+      select: { avatar: true },
+    })
+
+    if (!currentUser?.avatar) {
+      return NextResponse.json(
+        { success: false, error: 'No avatar to remove' },
+        { status: 400 }
+      )
+    }
+
+    // SECURITY: Delete avatar from Supabase Storage only if URL points to our Supabase
+    const filePath = extractSupabasePath(currentUser.avatar)
+    if (filePath) {
+      await deleteFromSupabase(filePath)
+    }
+
+    // Set User.avatar to null
+    await db.user.update({
+      where: { id: authResult.user.id },
+      data: { avatar: null },
+    })
+
+    return NextResponse.json({
+      success: true,
+      message: 'Avatar removed',
+    })
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Internal server error'
+    console.error('Avatar DELETE error:', error)
+    return NextResponse.json(
+      { success: false, error: message },
+      { status: 500 }
+    )
+  }
+}

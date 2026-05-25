@@ -640,52 +640,69 @@ export function AddressScreen() {
     setShowAddForm(true)
   }
 
-  const handleSaveAddress = () => {
+  const [isSaving, setIsSaving] = useState(false)
+
+  const handleSaveAddress = async () => {
     if (!formLabel.trim() || !formRecipient.trim() || !formPhone.trim() || !formAddress.trim() || !formCity.trim() || !formProvince.trim() || !formPostalCode.trim()) {
       showToast("Semua field wajib diisi", "error")
       return
     }
 
-    if (editingId) {
-      const existingAddr = addresses.find(a => a.id === editingId)
-      updateAddress({
-        id: editingId,
-        label: formLabel,
-        recipient: formRecipient,
-        phone: formPhone,
-        address: formAddress,
-        city: formCity,
-        province: formProvince,
-        postalCode: formPostalCode,
-        isDefault: existingAddr?.isDefault || false,
-      })
-      showToast("Alamat berhasil diperbarui!", "success")
-    } else {
-      addAddress({
-        id: `a${Date.now()}`,
-        label: formLabel,
-        recipient: formRecipient,
-        phone: formPhone,
-        address: formAddress,
-        city: formCity,
-        province: formProvince,
-        postalCode: formPostalCode,
-        isDefault: addresses.length === 0,
-      })
-      showToast("Alamat berhasil ditambahkan!", "success")
+    setIsSaving(true)
+    try {
+      if (editingId) {
+        const existingAddr = addresses.find(a => a.id === editingId)
+        await updateAddress({
+          id: editingId,
+          label: formLabel,
+          recipient: formRecipient,
+          phone: formPhone,
+          address: formAddress,
+          city: formCity,
+          province: formProvince,
+          postalCode: formPostalCode,
+          isDefault: existingAddr?.isDefault || false,
+        })
+        showToast("Alamat berhasil diperbarui!", "success")
+      } else {
+        await addAddress({
+          id: `a${Date.now()}`,
+          label: formLabel,
+          recipient: formRecipient,
+          phone: formPhone,
+          address: formAddress,
+          city: formCity,
+          province: formProvince,
+          postalCode: formPostalCode,
+          isDefault: addresses.length === 0,
+        })
+        showToast("Alamat berhasil ditambahkan!", "success")
+      }
+      resetForm()
+      setShowAddForm(false)
+    } catch {
+      showToast("Gagal menyimpan alamat", "error")
+    } finally {
+      setIsSaving(false)
     }
-    resetForm()
-    setShowAddForm(false)
   }
 
-  const handleSetDefault = (id: string) => {
-    setDefaultAddress(id)
-    showToast("Alamat utama berhasil diubah!", "success")
+  const handleSetDefault = async (id: string) => {
+    try {
+      await setDefaultAddress(id)
+      showToast("Alamat utama berhasil diubah!", "success")
+    } catch {
+      showToast("Gagal mengubah alamat utama", "error")
+    }
   }
 
-  const handleDelete = (id: string) => {
-    deleteAddress(id)
-    showToast("Alamat berhasil dihapus", "success")
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteAddress(id)
+      showToast("Alamat berhasil dihapus", "success")
+    } catch {
+      showToast("Gagal menghapus alamat", "error")
+    }
   }
 
   const handleToggleAddForm = () => {

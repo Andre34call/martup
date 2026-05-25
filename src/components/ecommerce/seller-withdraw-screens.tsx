@@ -258,17 +258,20 @@ export function SellerWithdrawScreen() {
     showToast("Rekening berhasil ditambahkan", "success")
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!canSubmit) return
     setIsSubmitting(true)
-    setTimeout(() => {
-      requestWithdraw(parsedAmount, selectedBankId!)
+    try {
+      await requestWithdraw(parsedAmount, selectedBankId!)
       setIsSubmitting(false)
       showToast("Permintaan penarikan berhasil diajukan!", "success")
       setTimeout(() => {
         navigate('seller-wallet')
       }, 1500)
-    }, 1500)
+    } catch {
+      setIsSubmitting(false)
+      showToast("Gagal mengajukan penarikan dana", "error")
+    }
   }
 
   const selectedBank = sellerBankAccounts.find(a => a.id === selectedBankId)
