@@ -51,3 +51,35 @@ Stage Summary:
 - Seller role switch is now robust: awaits data before navigating, handles 409 conflict, prevents stale state
 - No more crashes on reload because currentScreen is no longer persisted
 - Seller stats properly fetched when seller ID becomes available
+
+---
+Task ID: 3
+Agent: main
+Task: Fix categories disappeared, logout not working, remove demo login
+
+Work Log:
+- Issue 1: Categories disappeared - fetchCategories read `data.categories` but API returns `data.data`
+  - Same bug existed in fetchProducts (`data.products` → `data.data`) and fetchAdminUsers (`data.users` → `data.data`)
+  - Fixed all 3 with fallback pattern: `data.data || data.X || []`
+- Issue 2: Logout not working - `logout()` cleared Zustand state but NOT the NextAuth session cookie
+  - DataFetcher detected `status=authenticated + !isAuthenticated` and immediately re-authenticated user
+  - Added `signOut({ redirect: false })` from next-auth/react to both `logout` and `deleteAccount` functions
+  - Changed logout type from `() => void` to `() => Promise<void>`
+- Issue 3: Removed demo login section from auth-screens.tsx (Buyer/Seller/Admin demo buttons)
+  - App is now production, demo login is no longer needed
+
+Fixes Applied:
+1. **store.ts fetchCategories**: `data.categories` → `data.data || data.categories || []`
+2. **store.ts fetchProducts**: `data.products` → `data.data || data.products || []`
+3. **store.ts fetchAdminUsers**: `data.users` → `data.data || data.users || []`
+4. **store.ts logout**: Added `await signOut({ redirect: false })` to clear NextAuth session
+5. **store.ts deleteAccount**: Same signOut fix
+6. **store.ts**: Added `import { signOut } from 'next-auth/react'`
+7. **auth-screens.tsx**: Removed entire Demo Login section (lines 496-587)
+8. Git pushed to main, triggering auto-deploy on Vercel
+
+Stage Summary:
+- Categories, products, and admin users now properly load from API (response key mismatch fixed)
+- Logout properly clears both Zustand state AND NextAuth session (no more auto re-login)
+- Demo login removed for production readiness
+- All lint checks pass
