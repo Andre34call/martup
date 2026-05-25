@@ -1,17 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { checkRateLimit, verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
+import { checkRateLimit, verifyAuth, verifyAdmin, authErrorResponse, AuthResult } from '@/lib/auth-middleware'
 
 // POST /api/admin/setup - Promote a user to admin role
-// SECURITY: Requires a secret key AND the requester must already be authenticated
-// This prevents random people from making themselves admin
+// SECURITY: Requires EITHER:
+// 1. An existing admin making the request (recommended for production), OR
+// 2. The secret key (only for initial setup when no admin exists yet)
+// Once at least one admin exists, the secret key method is DISABLED
 export async function POST(request: NextRequest) {
   try {
     // Rate limit - very strict for admin setup (2 per minute)
     const clientIp = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
-    if (!checkRateLimit(`admin-setup:${clientIp}`)) {
+    if (!checkRateLimit(`admin-setup:${clientIp}`, 2)) {
       return NextResponse.json(
-        { success: false, error: 'Too many requests. Please try again later.' },
+        { success: false, error: 'Terlalu banyak percobaan. Coba lagi nanti.' },
         { status: 429 }
       )
     }
@@ -19,28 +21,49 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { email, secret } = body
 
-    // Validate secret - MUST use env var, no fallback in production
-    const adminSecret = process.env.ADMIN_SETUP_SECRET
-    if (!adminSecret) {
-      console.error('[SECURITY] ADMIN_SETUP_SECRET not set in environment!')
-      return NextResponse.json(
-        { success: false, error: 'Admin setup is not configured. Set ADMIN_SETUP_SECRET env variable.' },
-        { status: 500 }
-      )
-    }
+    // Check if any admin exists in the system
+    const adminCount = await db.user.count({ where: { role: 'admin', isActive: true } })
+    const hasExistingAdmin = adminCount > 0
 
-    if (secret !== adminSecret) {
-      // Log potential security breach attempt
-      console.warn(`[SECURITY] Invalid admin setup attempt from IP: ${clientIp}`)
-      return NextResponse.json(
-        { success: false, error: 'Invalid secret key' },
-        { status: 403 }
-      )
+    let authResult: AuthResult | null = null
+
+    if (hasExistingAdmin) {
+      // SECURITY: If admin(s) already exist, require authenticated admin to promote
+      // Secret key method is disabled once at least one admin exists
+      const result = await verifyAdmin(request)
+      if (!result.success) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Akses ditolak. Hanya admin yang sudah ada yang bisa mempromosikan user lain. Gunakan panel admin untuk mengubah role user.',
+          },
+          { status: 403 }
+        )
+      }
+      authResult = result
+    } else {
+      // No admin exists yet - allow secret key for initial setup ONLY
+      const adminSecret = process.env.ADMIN_SETUP_SECRET
+      if (!adminSecret) {
+        console.error('[SECURITY] ADMIN_SETUP_SECRET not set in environment!')
+        return NextResponse.json(
+          { success: false, error: 'Admin setup is not configured. Set ADMIN_SETUP_SECRET env variable.' },
+          { status: 500 }
+        )
+      }
+
+      if (!secret || secret !== adminSecret) {
+        console.warn(`[SECURITY] Invalid admin setup attempt from IP: ${clientIp}`)
+        return NextResponse.json(
+          { success: false, error: 'Secret key tidak valid' },
+          { status: 403 }
+        )
+      }
     }
 
     if (!email) {
       return NextResponse.json(
-        { success: false, error: 'Email is required' },
+        { success: false, error: 'Email wajib diisi' },
         { status: 400 }
       )
     }
@@ -53,7 +76,7 @@ export async function POST(request: NextRequest) {
 
     if (!user) {
       return NextResponse.json(
-        { success: false, error: `User with email "${email}" not found. The user must register/login first, then be promoted to admin.` },
+        { success: false, error: `User dengan email "${email}" tidak ditemukan. User harus register/login terlebih dahulu, baru bisa dipromosikan.` },
         { status: 404 }
       )
     }
@@ -61,7 +84,7 @@ export async function POST(request: NextRequest) {
     // Check if user is active
     if (!user.isActive) {
       return NextResponse.json(
-        { success: false, error: 'Cannot promote a blocked/inactive user to admin.' },
+        { success: false, error: 'Tidak bisa mempromosikan user yang diblokir/tidak aktif.' },
         { status: 403 }
       )
     }
@@ -70,7 +93,7 @@ export async function POST(request: NextRequest) {
     if (user.role === 'admin') {
       return NextResponse.json({
         success: true,
-        message: 'User is already an admin',
+        message: 'User sudah menjadi admin',
         user: {
           id: user.id,
           email: user.email,
@@ -91,7 +114,8 @@ export async function POST(request: NextRequest) {
     })
 
     // Log the promotion for audit
-    console.log(`[AUDIT] User "${email}" promoted to admin by secret key from IP: ${clientIp}`)
+    const promoter = authResult ? `admin "${authResult.user.email}"` : `secret key from IP: ${clientIp}`
+    console.log(`[AUDIT] User "${email}" promoted to admin by ${promoter}`)
 
     // Create welcome notification
     await db.notification.create({
@@ -106,7 +130,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: `User "${email}" has been promoted to admin successfully!`,
+      message: `User "${email}" berhasil dipromosikan menjadi admin!`,
       user: {
         id: updatedUser.id,
         email: updatedUser.email,

@@ -243,17 +243,14 @@ interface AppState {
 let toastTimer: ReturnType<typeof setTimeout> | null = null
 
 // Helper to get auth headers for API calls
+// SECURITY: Only uses HMAC-signed bearer token from login/register
+// REMOVED: x-auth-user-id header (was a critical security vulnerability - allowed impersonation)
 function getAuthHeaders(): Record<string, string> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (typeof window !== 'undefined') {
     const token = localStorage.getItem('authToken')
     if (token) {
       headers['Authorization'] = `Bearer ${token}`
-    }
-    // Also pass the current user ID for session verification
-    const state = useAppStore.getState()
-    if (state.currentUser?.id) {
-      headers['x-auth-user-id'] = state.currentUser.id
     }
   }
   return headers

@@ -30,9 +30,14 @@ export const authOptions: NextAuthOptions = {
     async signIn({ user, account, profile }) {
       // Sync user to our database
       try {
+        // SECURITY: Add internal secret to verify this is from NextAuth callback, not external caller
+        const internalSecret = process.env.NEXTAUTH_SECRET || ''
         const response = await fetch(`${process.env.NEXTAUTH_URL || ''}/api/auth/sync-user`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'x-internal-secret': internalSecret,
+          },
           body: JSON.stringify({
             email: user.email,
             name: user.name,

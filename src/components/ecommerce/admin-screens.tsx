@@ -28,16 +28,14 @@ import { useState, useRef, useEffect, useCallback } from "react"
 import { AnimatePresence } from "framer-motion"
 
 // ==================== AUTH HEADER HELPER ====================
+// SECURITY: Only uses HMAC-signed bearer token
+// REMOVED: x-auth-user-id header (critical security vulnerability - allowed impersonation)
 function getAdminAuthHeaders(): Record<string, string> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (typeof window !== 'undefined') {
     const token = localStorage.getItem('authToken')
     if (token) {
       headers['Authorization'] = `Bearer ${token}`
-    }
-    const state = useAppStore.getState()
-    if (state.currentUser?.id) {
-      headers['x-auth-user-id'] = state.currentUser.id
     }
   }
   return headers

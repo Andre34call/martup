@@ -41,6 +41,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // SECURITY: Verify internal secret - only NextAuth callback should call this
+    const internalSecret = request.headers.get('x-internal-secret')
+    const expectedSecret = process.env.NEXTAUTH_SECRET
+    if (!expectedSecret || internalSecret !== expectedSecret) {
+      console.warn(`[SECURITY] sync-user called without valid internal secret from IP: ${clientIp}`)
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized - Invalid internal authentication' },
+        { status: 401 }
+      )
+    }
+
     // Check if user exists
     let user = await db.user.findUnique({
       where: { email },
