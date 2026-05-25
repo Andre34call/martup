@@ -5,6 +5,7 @@ import crypto from 'crypto'
 // ==================== CONFIGURATION ====================
 
 const PORT = 3004
+<<<<<<< HEAD
 
 // SECURITY: TOKEN_SECRET must come from environment, no fallback
 const TOKEN_SECRET = (() => {
@@ -16,6 +17,9 @@ const TOKEN_SECRET = (() => {
   return secret
 })()
 
+=======
+const TOKEN_SECRET = process.env.TOKEN_SECRET || 'martup-hmac-token-secret-2024-x9k3m7p2q8'
+>>>>>>> e8fde0be16ee13d9b5683813059064bdd2e4c629
 const TOKEN_EXPIRY = 24 * 60 * 60 * 1000 // 24 hours
 const MAX_MESSAGE_LENGTH = 2000
 const VALID_MESSAGE_TYPES = ['text', 'image', 'product', 'order']
@@ -30,10 +34,17 @@ const STALE_TIMEOUT = 5 * 60 * 1000 // 5 minutes of no activity = stale
 
 // ==================== PRISMA CLIENT ====================
 
+<<<<<<< HEAD
 // SECURITY: DATABASE_URL must come from environment — NO hardcoded credentials
 if (!process.env.DATABASE_URL) {
   console.error('[FATAL] DATABASE_URL environment variable must be set. Chat service cannot start without it.')
   process.exit(1)
+=======
+// Set DATABASE_URL before importing PrismaClient
+// The chat service uses the same Supabase PostgreSQL database as the main app
+if (!process.env.DATABASE_URL) {
+  process.env.DATABASE_URL = 'postgresql://postgres.rzrfouzuxcxdbhadbppi:Wordpress3%24supabase@aws-1-ap-northeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true'
+>>>>>>> e8fde0be16ee13d9b5683813059064bdd2e4c629
 }
 
 import { PrismaClient } from '@prisma/client'
@@ -154,6 +165,7 @@ function sanitizeInput(input: string): string {
     .trim()
 }
 
+<<<<<<< HEAD
 // ==================== ALLOWED ORIGINS ====================
 
 const ALLOWED_ORIGINS = [
@@ -163,6 +175,8 @@ const ALLOWED_ORIGINS = [
   'http://localhost:3000',
 ].filter(Boolean) as string[]
 
+=======
+>>>>>>> e8fde0be16ee13d9b5683813059064bdd2e4c629
 // ==================== SOCKET.IO SERVER ====================
 
 const httpServer = createServer()
@@ -170,9 +184,14 @@ const io = new Server(httpServer, {
   // DO NOT change the path, it is used by Caddy to forward the request to the correct port
   path: '/',
   cors: {
+<<<<<<< HEAD
     origin: ALLOWED_ORIGINS.length > 0 ? ALLOWED_ORIGINS : ['https://martup-seven.vercel.app'],
     methods: ['GET', 'POST'],
     credentials: true,
+=======
+    origin: '*',
+    methods: ['GET', 'POST'],
+>>>>>>> e8fde0be16ee13d9b5683813059064bdd2e4c629
   },
   pingTimeout: 60000,
   pingInterval: 25000,
@@ -707,8 +726,12 @@ httpServer.listen(PORT, () => {
   console.log(`[ChatService] MartUp Chat WebSocket server running on port ${PORT}`)
   console.log(`[ChatService] Path: / (for Caddy gateway compatibility)`)
   console.log(`[ChatService] Auth: HMAC token verification enabled`)
+<<<<<<< HEAD
   console.log(`[ChatService] DB: Environment-based Prisma access (no hardcoded credentials)`)
   console.log(`[ChatService] CORS: Restricted to allowed origins only`)
+=======
+  console.log(`[ChatService] DB: Direct Prisma access`)
+>>>>>>> e8fde0be16ee13d9b5683813059064bdd2e4c629
 })
 
 // ==================== GRACEFUL SHUTDOWN ====================

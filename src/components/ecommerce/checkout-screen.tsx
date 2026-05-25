@@ -400,6 +400,7 @@ export function CheckoutScreen() {
           },
         }
 
+<<<<<<< HEAD
         // SECURITY: Determine correct order status based on payment method
         // - Wallet: 'paid' (immediate deduction)
         // - Midtrans/Card: 'pending' (awaiting payment confirmation via webhook)
@@ -421,19 +422,33 @@ export function CheckoutScreen() {
           const res = await fetch('/api/orders', {
             method: 'POST',
             headers: orderHeaders,
+=======
+        try {
+          const res = await fetch('/api/orders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+>>>>>>> e8fde0be16ee13d9b5683813059064bdd2e4c629
             body: JSON.stringify(orderPayload),
           })
           const data = await res.json()
 
           if (data.success && data.data) {
+<<<<<<< HEAD
             // Add to local store from API response — use server-returned status
+=======
+            // Add to local store from API response
+>>>>>>> e8fde0be16ee13d9b5683813059064bdd2e4c629
             const apiOrder = data.data
             const localOrder = {
               id: apiOrder.id,
               orderNumber: apiOrder.orderNumber,
               userId: currentUser?.id || '',
               sellerId: group.seller.id,
+<<<<<<< HEAD
               status: orderStatus,
+=======
+              status: 'paid' as const,
+>>>>>>> e8fde0be16ee13d9b5683813059064bdd2e4c629
               subtotal: groupSubtotal,
               shippingCost: groupShipping,
               discountAmount: groupDiscount,
@@ -441,7 +456,11 @@ export function CheckoutScreen() {
               platformFee,
               totalAmount: groupTotal,
               paymentMethod: PAYMENT_METHODS.find(m => m.id === selectedPayment)?.name || selectedPayment,
+<<<<<<< HEAD
               paymentStatus: orderPaymentStatus,
+=======
+              paymentStatus: 'paid',
+>>>>>>> e8fde0be16ee13d9b5683813059064bdd2e4c629
               items: group.items.map((item) => ({
                 id: `oi${Date.now()}-${item.id}`,
                 productId: item.productId,
@@ -463,19 +482,31 @@ export function CheckoutScreen() {
               address: defaultAddress,
               seller: group.seller,
               createdAt: new Date().toISOString(),
+<<<<<<< HEAD
               paidAt: isImmediatePayment ? new Date().toISOString() : undefined
+=======
+              paidAt: new Date().toISOString()
+>>>>>>> e8fde0be16ee13d9b5683813059064bdd2e4c629
             }
             addOrder(localOrder)
           }
         } catch (error) {
           console.error('Order creation failed:', error)
+<<<<<<< HEAD
           // Fallback: add locally even if API fails — use correct status
+=======
+          // Fallback: add locally even if API fails
+>>>>>>> e8fde0be16ee13d9b5683813059064bdd2e4c629
           const order = {
             id: `o${Date.now()}-${group.seller.id}`,
             orderNumber: newOrderNumber,
             userId: currentUser?.id || '',
             sellerId: group.seller.id,
+<<<<<<< HEAD
             status: orderStatus,
+=======
+            status: 'paid' as const,
+>>>>>>> e8fde0be16ee13d9b5683813059064bdd2e4c629
             subtotal: groupSubtotal,
             shippingCost: groupShipping,
             discountAmount: groupDiscount,
@@ -483,7 +514,11 @@ export function CheckoutScreen() {
             platformFee,
             totalAmount: groupTotal,
             paymentMethod: PAYMENT_METHODS.find(m => m.id === selectedPayment)?.name || selectedPayment,
+<<<<<<< HEAD
             paymentStatus: orderPaymentStatus,
+=======
+            paymentStatus: 'paid',
+>>>>>>> e8fde0be16ee13d9b5683813059064bdd2e4c629
             items: group.items.map((item) => ({
               id: `oi${Date.now()}-${item.id}`,
               productId: item.productId,
@@ -504,7 +539,11 @@ export function CheckoutScreen() {
             address: defaultAddress,
             seller: group.seller,
             createdAt: new Date().toISOString(),
+<<<<<<< HEAD
             paidAt: isImmediatePayment ? new Date().toISOString() : undefined
+=======
+            paidAt: new Date().toISOString()
+>>>>>>> e8fde0be16ee13d9b5683813059064bdd2e4c629
           }
           addOrder(order)
         }

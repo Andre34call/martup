@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middleware'
+<<<<<<< HEAD
 import { UPLOAD_LIMITS } from '@/lib/upload-limits'
+=======
+>>>>>>> e8fde0be16ee13d9b5683813059064bdd2e4c629
 
 // ==================== CONFIG ====================
 
@@ -10,6 +13,7 @@ const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
 const AVATAR_BUCKET = 'avatars'
 const AVATAR_FOLDER = 'profiles'
+<<<<<<< HEAD
 const MAX_AVATAR_SIZE = UPLOAD_LIMITS.mbToBytes(UPLOAD_LIMITS.MAX_AVATAR_SIZE_MB) // Use centralized limit
 const ALLOWED_IMAGE_TYPES = [...UPLOAD_LIMITS.ALLOWED_IMAGE_TYPES]
 const ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif']
@@ -61,6 +65,12 @@ function validateImageMagicBytes(buffer: ArrayBuffer): boolean {
   return false
 }
 
+=======
+const MAX_AVATAR_SIZE = 2 * 1024 * 1024 // 2MB
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+const ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif']
+
+>>>>>>> e8fde0be16ee13d9b5683813059064bdd2e4c629
 // ==================== HELPERS ====================
 
 /**
@@ -130,18 +140,32 @@ export async function POST(request: NextRequest) {
       )
     }
 
+<<<<<<< HEAD
     // SECURITY: Validate file type - images ONLY
     if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
       return NextResponse.json(
         { success: false, error: `Invalid file type. Only JPG, PNG, WebP, and GIF images are allowed for avatars. Got: ${file.type}` },
+=======
+    // SECURITY: Validate file type - images ONLY (no videos for avatars)
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid file type. Only JPG, PNG, WebP, and GIF images are allowed for avatars.' },
+>>>>>>> e8fde0be16ee13d9b5683813059064bdd2e4c629
         { status: 400 }
       )
     }
 
+<<<<<<< HEAD
     // SECURITY: Validate file size using centralized limits
     if (file.size > MAX_AVATAR_SIZE) {
       return NextResponse.json(
         { success: false, error: `File too large. Maximum avatar size is ${UPLOAD_LIMITS.MAX_AVATAR_SIZE_MB}MB.` },
+=======
+    // SECURITY: Validate file size - 2MB max for avatars
+    if (file.size > MAX_AVATAR_SIZE) {
+      return NextResponse.json(
+        { success: false, error: 'File too large. Maximum avatar size is 2MB.' },
+>>>>>>> e8fde0be16ee13d9b5683813059064bdd2e4c629
         { status: 400 }
       )
     }
@@ -150,6 +174,7 @@ export async function POST(request: NextRequest) {
     const rawExt = file.name.split('.').pop() || ''
     const ext = ALLOWED_EXTENSIONS.includes(rawExt.toLowerCase()) ? rawExt.toLowerCase() : 'jpg'
 
+<<<<<<< HEAD
     // Read file buffer for magic byte validation
     const arrayBuffer = await file.arrayBuffer()
 
@@ -161,10 +186,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
+=======
+>>>>>>> e8fde0be16ee13d9b5683813059064bdd2e4c629
     // Generate unique filename
     const filename = `${AVATAR_FOLDER}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
 
     // Upload to Supabase Storage using REST API
+<<<<<<< HEAD
+=======
+    const arrayBuffer = await file.arrayBuffer()
+
+>>>>>>> e8fde0be16ee13d9b5683813059064bdd2e4c629
     const uploadResponse = await fetch(
       `${SUPABASE_URL}/storage/v1/object/${AVATAR_BUCKET}/${filename}`,
       {
