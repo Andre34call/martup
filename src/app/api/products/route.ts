@@ -56,7 +56,6 @@ export async function GET(request: NextRequest) {
           seller: {
             select: {
               id: true,
-              userId: true,
               storeName: true,
               storeSlug: true,
               storeAvatar: true,
@@ -67,10 +66,6 @@ export async function GET(request: NextRequest) {
               totalSales: true,
               totalProducts: true,
               responseTime: true,
-              bankName: true,
-              bankAccount: true,
-              bankHolder: true,
-              autoReply: true,
             },
           },
           category: {

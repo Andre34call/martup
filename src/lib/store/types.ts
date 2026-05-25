@@ -5,6 +5,7 @@ import type { ScreenName, UserRole, User, CartItem, Product, ProductVariant, Not
 export interface NavigationSlice {
   currentScreen: ScreenName
   previousScreens: ScreenName[]
+  otpPhoneNumber: string
   navigate: (screen: ScreenName) => void
   goBack: () => void
 }

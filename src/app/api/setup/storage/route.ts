@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
+import { db } from '@/lib/db'
 
 /**
  * Setup Supabase Storage bucket for product uploads.
  * Creates the "products" bucket with public read access and upload policies.
  * Called once during app initialization.
+ * SECURITY: Requires admin authentication.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -14,22 +16,10 @@ export async function POST(request: NextRequest) {
       return authErrorResponse(authResult)
     }
 
-    // Dynamic import of pg to avoid issues
-    const { Pool } = await import('pg')
-
-    const directUrl = process.env.SUPABASE_DIRECT_URL
-    if (!directUrl) {
-      return NextResponse.json(
-        { success: false, error: 'SUPABASE_DIRECT_URL not configured' },
-        { status: 500 }
-      )
-    }
-
-    const pool = new Pool({ connectionString: directUrl, max: 1 })
-
+    // Use Prisma's raw query instead of pg Pool to avoid dependency issues
     try {
       // Create the products bucket if it doesn't exist
-      await pool.query(`
+      await db.$executeRawUnsafe(`
         INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
         VALUES ('products', 'products', true, 31457280, NULL)
         ON CONFLICT (id) DO NOTHING
@@ -53,15 +43,20 @@ export async function POST(request: NextRequest) {
       ]
 
       for (const sql of policies) {
-        await pool.query(sql)
+        await db.$executeRawUnsafe(sql)
       }
 
       return NextResponse.json({
         success: true,
         message: 'Storage bucket "products" created with public access policies',
       })
-    } finally {
-      await pool.end()
+    } catch (dbError: unknown) {
+      const errorMsg = dbError instanceof Error ? dbError.message : 'Unknown error'
+      console.error('Storage setup DB error:', errorMsg)
+      return NextResponse.json(
+        { success: false, error: `Storage setup failed: ${errorMsg}` },
+        { status: 500 }
+      )
     }
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'

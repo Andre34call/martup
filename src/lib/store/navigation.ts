@@ -4,6 +4,7 @@ import type { NavigationSlice, AppStore } from './types'
 export const createNavigationSlice: StateCreator<AppStore, [], [], NavigationSlice> = (set) => ({
   currentScreen: 'splash',
   previousScreens: [],
+  otpPhoneNumber: '',
   navigate: (screen) => set((state) => ({
     currentScreen: screen,
     previousScreens: [...state.previousScreens, state.currentScreen]

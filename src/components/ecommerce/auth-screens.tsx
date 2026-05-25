@@ -283,8 +283,10 @@ export function LoginScreen() {
     setIsLoading(true)
 
     try {
-      // If input is a phone number, redirect to OTP flow
+      // If input is a phone number, redirect to OTP flow with the phone number
       if (isValidPhone(emailOrPhone)) {
+        // Navigate to OTP screen - the phone number will be passed via store
+        useAppStore.setState({ otpPhoneNumber: emailOrPhone })
         navigate('otp')
         setIsLoading(false)
         return
@@ -799,12 +801,15 @@ function maskPhone(phone: string): string {
 
 export function OTPScreen() {
   const { navigate, login, goBack, showToast } = useAppStore()
-  const [phone, setPhone] = useState("")
-  const [step, setStep] = useState<'phone' | 'otp'>('phone')
+  const passedPhone = useAppStore((s) => s.otpPhoneNumber) || ""
+  const [phone, setPhone] = useState(passedPhone)
+  const [step, setStep] = useState<'phone' | 'otp'>(passedPhone && isValidPhone(passedPhone) ? 'otp' : 'phone')
   const [otp, setOtp] = useState("")
-  const [countdown, setCountdown] = useState(60)
+  const [countdown, setCountdown] = useState(0)
+  const [isSending, setIsSending] = useState(false)
   const [isVerifying, setIsVerifying] = useState(false)
   const [touchedPhone, setTouchedPhone] = useState(false)
+  const [devOtp, setDevOtp] = useState<string | null>(null)
 
   const phoneError = touchedPhone && !phone
     ? "Nomor HP wajib diisi"
@@ -820,16 +825,44 @@ export function OTPScreen() {
     return () => clearInterval(timer)
   }, [countdown])
 
-  const handleResend = () => {
-    if (countdown > 0) return
-    setCountdown(60)
+  const handleResend = async () => {
+    if (countdown > 0 || !phone || !isValidPhone(phone)) return
+    await handlePhoneSubmit()
   }
 
-  const handlePhoneSubmit = () => {
+  const handlePhoneSubmit = async () => {
     setTouchedPhone(true)
     if (!phone || !isValidPhone(phone)) return
-    setStep('otp')
-    setCountdown(60)
+    setIsSending(true)
+
+    try {
+      const formattedPhone = phone.startsWith('+') ? phone : phone.startsWith('0') ? '+62' + phone.substring(1) : '+62' + phone
+
+      const res = await fetch('/api/auth/otp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: formattedPhone }),
+      })
+      const data = await res.json()
+
+      if (data.success) {
+        setStep('otp')
+        setCountdown(60)
+        // In dev mode, show the OTP for testing
+        if (data.devOtp) {
+          setDevOtp(data.devOtp)
+          setOtp(data.devOtp) // Auto-fill in dev mode
+        }
+        showToast(data.message || 'Kode OTP telah dikirim', 'success')
+      } else {
+        showToast(data.error || 'Gagal mengirim OTP. Coba lagi.', 'error')
+      }
+    } catch (error) {
+      console.error('OTP send failed:', error)
+      showToast('Terjadi kesalahan koneksi. Coba lagi nanti.', 'error')
+    }
+
+    setIsSending(false)
   }
 
   const handleVerify = async () => {
@@ -841,13 +874,12 @@ export function OTPScreen() {
     setIsVerifying(true)
 
     try {
-      // Format phone number to international format
       const formattedPhone = phone.startsWith('+') ? phone : phone.startsWith('0') ? '+62' + phone.substring(1) : '+62' + phone
 
-      const res = await fetch('/api/auth/sync-user', {
+      const res = await fetch('/api/auth/otp/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: formattedPhone, name: 'New Member', provider: 'phone' }),
+        body: JSON.stringify({ phone: formattedPhone, otpCode: otp }),
       })
       const data = await res.json()
       if (data.success && data.user) {
@@ -859,6 +891,7 @@ export function OTPScreen() {
           email: data.user.email || '',
           phone: data.user.phone || formattedPhone,
           name: data.user.name,
+          avatar: data.user.avatar || undefined,
           role: data.user.role || 'buyer',
           isVerified: true,
           loyaltyPoints: data.user.loyaltyPoints || 0,
@@ -867,6 +900,7 @@ export function OTPScreen() {
         login(user)
         const { fetchUserData } = useAppStore.getState()
         await fetchUserData(data.user.id)
+        showToast('Login berhasil! 🎉', 'success')
       } else {
         showToast(data.error || 'Verifikasi OTP gagal. Coba lagi.', 'error')
       }
@@ -940,11 +974,25 @@ export function OTPScreen() {
             {/* Submit phone button */}
             <Button
               onClick={handlePhoneSubmit}
-              disabled={!phone || !isValidPhone(phone)}
+              disabled={isSending || !phone || !isValidPhone(phone)}
               className="w-full h-12 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-semibold text-base disabled:opacity-50"
             >
-              Kirim Kode OTP
+              {isSending ? (
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                  className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full"
+                />
+              ) : (
+                "Kirim Kode OTP"
+              )}
             </Button>
+            {/* Dev mode OTP hint */}
+            {devOtp && (
+              <p className="text-xs text-center text-amber-600 dark:text-amber-400 mt-2">
+                🔧 Dev mode — OTP: <span className="font-mono font-bold">{devOtp}</span>
+              </p>
+            )}
           </>
         ) : (
           <>
