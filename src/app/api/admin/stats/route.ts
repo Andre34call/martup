@@ -3,7 +3,6 @@ import { db } from '@/lib/db'
 import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 
 export async function GET(request: NextRequest) {
-  // Verify admin access
   const authResult = await verifyAdmin(request)
   if (!authResult.success) return authErrorResponse(authResult)
 
@@ -13,23 +12,31 @@ export async function GET(request: NextRequest) {
       totalUsers,
       totalSellers,
       totalOrders,
-      totalRevenueResult,
-      activeProducts,
+      revenueResult,
       pendingWithdrawals,
+      activeProducts,
+      openComplaints,
+      unverifiedSellers,
+      pendingWithdrawalAmount,
       totalDivisions,
       totalStaff,
-      pendingSellerVerifications,
-      openComplaints,
+      paymentMethodRaw,
     ] = await Promise.all([
       db.user.count(),
-      db.user.count({ where: { role: 'seller' } }),
+      db.seller.count(),
       db.order.count(),
       db.order.aggregate({
         _sum: { totalAmount: true },
-        where: { status: { in: ['paid', 'delivered'] } },
+        where: { paymentStatus: 'paid' },
       }),
-      db.product.count({ where: { status: 'active' } }),
       db.withdrawal.count({ where: { status: 'pending' } }),
+      db.product.count({ where: { status: 'active' } }),
+      db.complaint.count({ where: { status: 'open' } }),
+      db.seller.count({ where: { isVerified: false } }),
+      db.withdrawal.aggregate({
+        _sum: { amount: true },
+        where: { status: 'pending' },
+      }),
       db.division.count(),
       db.user.count({
         where: {
@@ -38,53 +45,94 @@ export async function GET(request: NextRequest) {
           },
         },
       }),
-      db.seller.count({ where: { isVerified: false } }),
-      db.complaint.count({ where: { status: 'open' } }),
+      db.$queryRaw<
+        Array<{ paymentMethod: string; count: bigint }>
+      >`
+        SELECT "paymentMethod", COUNT(*) AS count
+        FROM "Order"
+        WHERE "paymentStatus" = 'paid'
+          AND "paymentMethod" IS NOT NULL
+        GROUP BY "paymentMethod"
+        ORDER BY count DESC
+      `,
     ])
 
-    const totalRevenue = totalRevenueResult._sum.totalAmount ?? 0
+    const totalRevenue = revenueResult._sum.totalAmount ?? 0
+    const totalPendingWithdrawal = pendingWithdrawalAmount._sum.amount ?? 0
 
-    // ============ Revenue Chart - last 6 months ============
-    const revenueChartRaw: { date: string; revenue: number }[] = await db.$queryRaw`
-      SELECT TO_CHAR("createdAt", 'YYYY-MM') AS date, COALESCE(SUM("totalAmount"), 0) AS revenue
-      FROM "Order"
-      WHERE status IN ('paid', 'delivered', 'shipped')
-        AND "createdAt" >= DATE_TRUNC('month', CURRENT_DATE - INTERVAL '5 months')
-      GROUP BY TO_CHAR("createdAt", 'YYYY-MM')
-      ORDER BY date ASC
-    `
+    const paymentMethodDistribution = paymentMethodRaw.map((row) => ({
+      paymentMethod: row.paymentMethod,
+      count: Number(row.count),
+    }))
 
-    // Fill in missing months with zero
-    const revenueChart = fillMissingMonths(revenueChartRaw, 'revenue')
-
-    // ============ User Growth Chart - cumulative by month ============
-    const userGrowthRaw: { date: string; users: bigint }[] = await db.$queryRaw`
-      SELECT TO_CHAR("createdAt", 'YYYY-MM') AS date, COUNT(*) AS users
-      FROM "User"
-      WHERE "createdAt" >= DATE_TRUNC('month', CURRENT_DATE - INTERVAL '5 months')
-      GROUP BY TO_CHAR("createdAt", 'YYYY-MM')
-      ORDER BY date ASC
-    `
-
-    // Get total users before the 6-month window for cumulative calculation
+    // Revenue chart for last 6 months
     const sixMonthsAgo = new Date()
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5)
     sixMonthsAgo.setDate(1)
     sixMonthsAgo.setHours(0, 0, 0, 0)
 
-    const usersBeforeWindow = await db.user.count({
-      where: { createdAt: { lt: sixMonthsAgo } },
-    })
+    const revenueChartRaw: Array<{ month: Date; revenue: bigint }> =
+      await db.$queryRaw`
+        SELECT
+          DATE_TRUNC('month', "createdAt") AS month,
+          COALESCE(SUM("totalAmount"), 0) AS revenue
+        FROM "Order"
+        WHERE "paymentStatus" = 'paid'
+          AND "createdAt" >= ${sixMonthsAgo}
+        GROUP BY DATE_TRUNC('month', "createdAt")
+        ORDER BY month ASC
+      `
 
-    // Build cumulative user growth
-    const userGrowth = buildCumulativeUserGrowth(userGrowthRaw, usersBeforeWindow)
+    // User growth for last 6 months
+    const userGrowthRaw: Array<{ month: Date; users: bigint }> =
+      await db.$queryRaw`
+        SELECT
+          DATE_TRUNC('month', "createdAt") AS month,
+          COUNT(*) AS users
+        FROM "User"
+        WHERE "createdAt" >= ${sixMonthsAgo}
+        GROUP BY DATE_TRUNC('month', "createdAt")
+        ORDER BY month ASC
+      `
 
-    // ============ Top Sellers by revenue ============
+    // Build month labels for last 6 months to fill gaps
+    const revenueChartMap = new Map<string, number>()
+    for (const row of revenueChartRaw) {
+      const key = row.month.toISOString().slice(0, 7) // YYYY-MM
+      revenueChartMap.set(key, Number(row.revenue))
+    }
+
+    const userGrowthMap = new Map<string, number>()
+    for (const row of userGrowthRaw) {
+      const key = row.month.toISOString().slice(0, 7) // YYYY-MM
+      userGrowthMap.set(key, Number(row.users))
+    }
+
+    const revenueChart: Array<{ date: string; revenue: number }> = []
+    const userGrowth: Array<{ date: string; users: number }> = []
+
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date()
+      d.setMonth(d.getMonth() - i)
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+
+      revenueChart.push({
+        date: key,
+        revenue: revenueChartMap.get(key) ?? 0,
+      })
+
+      userGrowth.push({
+        date: key,
+        users: userGrowthMap.get(key) ?? 0,
+      })
+    }
+
+    // Top Sellers by revenue
     const topSellersRaw: { name: string; revenue: number; orders: bigint }[] = await db.$queryRaw`
       SELECT s."storeName" AS name, COALESCE(SUM(o."totalAmount"), 0) AS revenue, COUNT(o.id) AS orders
       FROM "Seller" s
       JOIN "Order" o ON o."sellerId" = s.id
-      WHERE o.status IN ('paid', 'delivered', 'shipped')
+      WHERE o."paymentStatus" = 'paid'
       GROUP BY s.id, s."storeName"
       ORDER BY revenue DESC
       LIMIT 5
@@ -96,14 +144,14 @@ export async function GET(request: NextRequest) {
       orders: Number(s.orders),
     }))
 
-    // ============ Category Performance ============
+    // Category Performance
     const categoryPerformanceRaw: { name: string; revenue: number }[] = await db.$queryRaw`
       SELECT c.name, COALESCE(SUM(oi.subtotal), 0) AS revenue
       FROM "Category" c
       JOIN "Product" p ON p."categoryId" = c.id
       JOIN "OrderItem" oi ON oi."productId" = p.id
       JOIN "Order" o ON o.id = oi."orderId"
-      WHERE o.status IN ('paid', 'delivered', 'shipped')
+      WHERE o."paymentStatus" = 'paid'
       GROUP BY c.id, c.name
       ORDER BY revenue DESC
     `
@@ -119,7 +167,7 @@ export async function GET(request: NextRequest) {
       percentage: totalCategoryRevenue > 0 ? Math.round((Number(c.revenue) / totalCategoryRevenue) * 100) : 0,
     }))
 
-    // ============ Recent Activity ============
+    // Recent Activity
     const [recentOrders, recentUsers] = await Promise.all([
       db.order.findMany({
         take: 5,
@@ -145,25 +193,23 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      stats: {
-        // Summary metrics
+      data: {
         totalUsers,
         totalSellers,
         totalOrders,
         totalRevenue,
-        activeProducts,
         pendingWithdrawals,
+        activeProducts,
+        openComplaints,
+        unverifiedSellers,
+        pendingWithdrawalAmount: totalPendingWithdrawal,
         totalDivisions,
         totalStaff,
-        pendingSellerVerifications,
-        openComplaints,
-        // Chart data
+        paymentMethodDistribution,
         revenueChart,
         userGrowth,
-        // Performance data
         topSellers,
         categoryPerformance,
-        // Recent activity
         recentOrders: recentOrders.map((o) => ({
           ...o,
           totalAmount: Number(o.totalAmount),
@@ -175,51 +221,12 @@ export async function GET(request: NextRequest) {
         })),
       },
     })
-  } catch (error) {
-    console.error('[Admin Stats API] Error:', error)
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Internal server error'
+    console.error('Admin stats GET error:', error)
     return NextResponse.json(
-      { success: false, error: 'Failed to fetch admin stats' },
+      { success: false, error: message },
       { status: 500 }
     )
   }
-}
-
-// ============ Helper: Fill missing months in time-series ============
-function getLast6Months(): string[] {
-  const months: string[] = []
-  const now = new Date()
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-    months.push(
-      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-    )
-  }
-  return months
-}
-
-function fillMissingMonths(
-  data: { date: string; revenue: number }[],
-  valueKey: string
-): { date: string; revenue: number }[] {
-  const months = getLast6Months()
-  const dataMap = new Map(data.map((d) => [d.date, d[valueKey]]))
-  return months.map((month) => ({
-    date: month,
-    revenue: Number(dataMap.get(month) ?? 0),
-  }))
-}
-
-// ============ Helper: Build cumulative user growth ============
-function buildCumulativeUserGrowth(
-  raw: { date: string; users: bigint }[],
-  usersBeforeWindow: number
-): { date: string; users: number }[] {
-  const months = getLast6Months()
-  const monthlyMap = new Map(raw.map((r) => [r.date, Number(r.users)]))
-
-  let cumulative = usersBeforeWindow
-  return months.map((month) => {
-    cumulative += monthlyMap.get(month) ?? 0
-    return { date: month, users: cumulative }
-  })
 }

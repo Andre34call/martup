@@ -53,10 +53,11 @@ import {
 } from '@/components/ecommerce/admin-screens'
 import { AdminOrdersScreen } from '@/components/ecommerce/admin-orders-screen'
 import { AdminDivisions } from '@/components/ecommerce/admin-divisions-screen'
+import { AdminCategories, AdminVouchers, AdminDeposits, AdminCampaigns, AdminSettings } from '@/components/ecommerce/admin-new-screens'
 
 const AUTH_SCREENS = ['splash', 'onboarding', 'login', 'register', 'otp', 'forgot-password']
 const SELLER_SCREENS = ['seller-dashboard', 'seller-products', 'seller-add-product', 'seller-orders', 'seller-analytics', 'seller-wallet', 'seller-chat', 'seller-settings', 'seller-campaign', 'seller-withdraw', 'seller-withdraw-history']
-const ADMIN_SCREENS = ['admin-dashboard', 'admin-users', 'admin-products', 'admin-orders', 'admin-withdraw', 'admin-banner', 'admin-analytics', 'admin-complaints', 'admin-divisions']
+const ADMIN_SCREENS = ['admin-dashboard', 'admin-users', 'admin-products', 'admin-orders', 'admin-withdraw', 'admin-banner', 'admin-analytics', 'admin-complaints', 'admin-divisions', 'admin-categories', 'admin-vouchers', 'admin-deposits', 'admin-campaigns', 'admin-settings']
 
 // Sub-screens that should hide the bottom nav (they have their own back navigation headers)
 const SUB_SCREENS = [
@@ -102,6 +103,33 @@ function GlobalToast() {
 
 function ScreenRenderer() {
   const currentScreen = useAppStore((s) => s.currentScreen)
+  const currentUser = useAppStore((s) => s.currentUser)
+  const navigate = useAppStore((s) => s.navigate)
+
+  // Security: If currentScreen is an admin screen but user is not actually an admin, redirect to home
+  // Use useEffect to avoid calling navigate during render
+  const isAdminScreen = ADMIN_SCREENS.includes(currentScreen)
+  const isActualAdmin = currentUser?.role === 'admin'
+
+  // Redirect non-admin users away from admin screens
+  if (isAdminScreen && !isActualAdmin) {
+    // Use a key change to trigger re-render with home screen
+    return (
+      <AnimatePresence mode="wait">
+        <motion.div
+          key="home-redirect"
+          variants={{ initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0 } }}
+          initial="initial"
+          animate="animate"
+          exit="exit"
+          transition={{ duration: 0.2 }}
+          className="flex-1 overflow-y-auto no-scrollbar"
+        >
+          <HomeScreen />
+        </motion.div>
+      </AnimatePresence>
+    )
+  }
 
   const screenVariants = {
     initial: { opacity: 0, x: 20 },
@@ -169,6 +197,11 @@ function ScreenRenderer() {
       case 'admin-analytics': return <AdminAnalytics />
       case 'admin-complaints': return <AdminComplaints />
       case 'admin-divisions': return <AdminDivisions />
+      case 'admin-categories': return <AdminCategories />
+      case 'admin-vouchers': return <AdminVouchers />
+      case 'admin-deposits': return <AdminDeposits />
+      case 'admin-campaigns': return <AdminCampaigns />
+      case 'admin-settings': return <AdminSettings />
 
       default: return <HomeScreen />
     }

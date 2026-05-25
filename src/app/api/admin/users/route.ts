@@ -2,9 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 
-// GET /api/admin/users - Fetch all users for admin management
+// GET /api/admin/users - Fetch all users with seller info, order count, total spent
 export async function GET(request: NextRequest) {
-  // Verify admin access
   const authResult = await verifyAdmin(request)
   if (!authResult.success) return authErrorResponse(authResult)
 
@@ -12,8 +11,6 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const role = searchParams.get('role') // optional filter
     const search = searchParams.get('search') // optional search
-    const page = parseInt(searchParams.get('page') || '1')
-    const limit = parseInt(searchParams.get('limit') || '50')
 
     const where: Record<string, unknown> = {}
 
@@ -28,59 +25,41 @@ export async function GET(request: NextRequest) {
       ]
     }
 
-    const [users, total] = await Promise.all([
-      db.user.findMany({
-        where,
-        select: {
-          id: true,
-          email: true,
-          phone: true,
-          name: true,
-          avatar: true,
-          role: true,
-          isVerified: true,
-          isActive: true,
-          divisionId: true,
-          createdAt: true,
-          updatedAt: true,
-          _count: {
-            select: {
-              orders: true,
-              reviews: true,
-            },
-          },
-          orders: {
-            select: { totalAmount: true },
-          },
+    const users = await db.user.findMany({
+      where,
+      include: {
+        seller: true,
+        orders: {
+          select: { totalAmount: true },
         },
-        orderBy: { createdAt: 'desc' },
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-      db.user.count({ where }),
-    ])
-
-    const formattedUsers = users.map((user) => ({
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      phone: user.phone || '',
-      role: user.role,
-      isVerified: user.isVerified,
-      isBlocked: !user.isActive,
-      joinDate: user.createdAt,
-      totalSpent: user.orders.reduce((sum, o) => sum + o.totalAmount, 0),
-      totalOrders: user._count.orders,
-      divisionId: user.divisionId,
-    }))
-
-    return NextResponse.json({
-      success: true,
-      users: formattedUsers,
-      total,
-      page,
-      limit,
+      },
+      orderBy: { createdAt: 'desc' },
     })
+
+    const mapped = users.map((user) => {
+      const totalSpent = user.orders.reduce(
+        (sum, order) => sum + order.totalAmount,
+        0
+      )
+      const totalOrders = user.orders.length
+
+      return {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        isVerified: user.isVerified,
+        isBlocked: !user.isActive,
+        joinDate: user.createdAt,
+        totalSpent,
+        totalOrders,
+        seller: user.seller,
+        divisionId: user.divisionId,
+      }
+    })
+
+    return NextResponse.json({ success: true, data: mapped })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     console.error('Admin users GET error:', error)
@@ -91,15 +70,14 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// PATCH /api/admin/users - Update a user (verify, block, change role, assign division)
-export async function PATCH(request: NextRequest) {
-  // Verify admin access
+// PUT /api/admin/users - Update user (verify, block, unblock, change role)
+export async function PUT(request: NextRequest) {
   const authResult = await verifyAdmin(request)
   if (!authResult.success) return authErrorResponse(authResult)
 
   try {
     const body = await request.json()
-    const { userId, updates } = body
+    const { userId, isVerified, isActive, role, updates } = body
 
     if (!userId) {
       return NextResponse.json(
@@ -108,41 +86,54 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
-    const allowedFields = ['role', 'isVerified', 'isActive', 'divisionId']
-    const filteredUpdates: Record<string, unknown> = {}
+    const updateData: Record<string, unknown> = {}
 
-    for (const key of allowedFields) {
-      if (updates[key] !== undefined) {
-        filteredUpdates[key] = updates[key]
+    // Support both flat fields and updates object
+    if (isVerified !== undefined) updateData.isVerified = isVerified
+    if (isActive !== undefined) updateData.isActive = isActive
+
+    // Handle isBlocked -> isActive mapping
+    if (updates?.isBlocked !== undefined) {
+      updateData.isActive = !updates.isBlocked
+    }
+    if (updates?.isVerified !== undefined) {
+      updateData.isVerified = updates.isVerified
+    }
+
+    if (role !== undefined || updates?.role !== undefined) {
+      const roleValue = role || updates?.role
+      // Validate role value
+      const validRoles = ['buyer', 'seller', 'admin', 'finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr']
+      if (!validRoles.includes(roleValue)) {
+        return NextResponse.json(
+          { success: false, error: `Invalid role. Must be one of: ${validRoles.join(', ')}` },
+          { status: 400 }
+        )
       }
+      // Prevent admin from removing their own admin role
+      if (roleValue !== 'admin' && userId === authResult.user.id) {
+        return NextResponse.json(
+          { success: false, error: 'Cannot remove your own admin role' },
+          { status: 400 }
+        )
+      }
+      updateData.role = roleValue
     }
 
-    // Map isBlocked to isActive
-    if (updates.isBlocked !== undefined) {
-      filteredUpdates.isActive = !updates.isBlocked
+    // Support divisionId updates
+    if (updates?.divisionId !== undefined) {
+      updateData.divisionId = updates.divisionId
     }
 
-    const updatedUser = await db.user.update({
+    const user = await db.user.update({
       where: { id: userId },
-      data: filteredUpdates,
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        isVerified: true,
-        isActive: true,
-        divisionId: true,
-      },
+      data: updateData,
     })
 
-    return NextResponse.json({
-      success: true,
-      user: updatedUser,
-    })
+    return NextResponse.json({ success: true, data: user })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Admin users PATCH error:', error)
+    console.error('Admin users PUT error:', error)
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -150,15 +141,26 @@ export async function PATCH(request: NextRequest) {
   }
 }
 
-// DELETE /api/admin/users - Delete a user
+// DELETE /api/admin/users - Soft delete user (set isActive = false)
 export async function DELETE(request: NextRequest) {
-  // Verify admin access
   const authResult = await verifyAdmin(request)
   if (!authResult.success) return authErrorResponse(authResult)
 
   try {
+    let userId: string | null = null
+
+    // Support both query param and body
     const { searchParams } = new URL(request.url)
-    const userId = searchParams.get('userId')
+    userId = searchParams.get('userId')
+
+    if (!userId) {
+      try {
+        const body = await request.json()
+        userId = body.userId
+      } catch {
+        // No body or invalid JSON
+      }
+    }
 
     if (!userId) {
       return NextResponse.json(
@@ -167,13 +169,12 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    // Prevent deleting self
-    await db.user.delete({ where: { id: userId } })
-
-    return NextResponse.json({
-      success: true,
-      message: 'User deleted successfully',
+    const user = await db.user.update({
+      where: { id: userId },
+      data: { isActive: false },
     })
+
+    return NextResponse.json({ success: true, data: user })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     console.error('Admin users DELETE error:', error)

@@ -22,7 +22,7 @@ const navItems = [
 ]
 
 export function BottomNav() {
-  const { currentScreen, navigate, userRole, switchRole, totalUnreadChats } = useAppStore()
+  const { currentScreen, navigate, userRole, currentUser, switchRole, totalUnreadChats } = useAppStore()
   const { getTotalItemCount } = useCartStore()
   const [showRoleMenu, setShowRoleMenu] = useState(false)
   const roleMenuRef = useRef<HTMLDivElement>(null)
@@ -178,7 +178,7 @@ export function BottomNav() {
               className="absolute bottom-20 right-4 bg-card rounded-xl shadow-lg border border-border p-2 min-w-[160px]"
             >
               <p className="text-xs text-muted-foreground px-3 py-1.5 font-medium">Switch Role</p>
-              {(["buyer", "seller", "admin"] as const).map((role) => (
+              {(["buyer", "seller", ...(currentUser?.role === 'admin' ? ["admin" as const] : [])] as const).map((role) => (
                 <button
                   key={role}
                   onClick={() => handleRoleSwitch(role)}
@@ -1386,7 +1386,7 @@ export function StoreCard({
 
 // ==================== ADMIN BOTTOM NAV ====================
 export function AdminBottomNav() {
-  const { currentScreen, navigate, userRole, switchRole } = useAppStore()
+  const { currentScreen, navigate, userRole, currentUser, switchRole } = useAppStore()
   const [showRoleMenu, setShowRoleMenu] = useState(false)
   const roleMenuRef = useRef<HTMLDivElement>(null)
 
@@ -1462,7 +1462,7 @@ export function AdminBottomNav() {
               className="absolute bottom-20 right-4 bg-card rounded-xl shadow-lg border border-border p-2 min-w-[160px]"
             >
               <p className="text-xs text-muted-foreground px-3 py-1.5 font-medium">Switch Role</p>
-              {(["buyer", "seller", "admin"] as const).map((role) => (
+              {(["buyer", "seller", ...(currentUser?.role === 'admin' ? ["admin" as const] : [])] as const).map((role) => (
                 <button
                   key={role}
                   onClick={() => handleRoleSwitch(role)}
@@ -1489,7 +1489,7 @@ export function AdminBottomNav() {
 
 // ==================== SELLER BOTTOM NAV ====================
 export function SellerBottomNav() {
-  const { currentScreen, navigate, userRole, switchRole } = useAppStore()
+  const { currentScreen, navigate, userRole, currentUser, switchRole } = useAppStore()
   const [showRoleMenu, setShowRoleMenu] = useState(false)
   const roleMenuRef = useRef<HTMLDivElement>(null)
 
@@ -1565,7 +1565,7 @@ export function SellerBottomNav() {
               className="absolute bottom-20 right-4 bg-card rounded-xl shadow-lg border border-border p-2 min-w-[160px]"
             >
               <p className="text-xs text-muted-foreground px-3 py-1.5 font-medium">Switch Role</p>
-              {(["buyer", "seller", "admin"] as const).map((role) => (
+              {(["buyer", "seller", ...(currentUser?.role === 'admin' ? ["admin" as const] : [])] as const).map((role) => (
                 <button
                   key={role}
                   onClick={() => handleRoleSwitch(role)}

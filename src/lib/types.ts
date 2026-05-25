@@ -15,6 +15,7 @@ export type ScreenName =
   | 'admin-dashboard' | 'admin-users' | 'admin-products' | 'admin-orders'
   | 'admin-withdraw' | 'admin-banner' | 'admin-analytics' | 'admin-complaints'
   | 'admin-divisions'
+  | 'admin-categories' | 'admin-vouchers' | 'admin-deposits' | 'admin-campaigns' | 'admin-settings'
 
 export interface User {
   id: string
@@ -139,6 +140,7 @@ export interface Order {
   shipping?: Shipping
   address: Address
   seller: Seller
+  buyerName?: string
   createdAt: string
   paidAt?: string
   shippedAt?: string
@@ -278,8 +280,12 @@ export interface AdminStats {
   totalRevenue: number
   pendingWithdrawals: number
   activeProducts: number
+  openComplaints: number
+  unverifiedSellers: number
+  pendingWithdrawalAmount: number
   revenueChart: { date: string; revenue: number }[]
   userGrowth: { date: string; users: number }[]
+  paymentMethodDistribution: { method: string; count: number; percentage: number }[]
 }
 
 // ==================== SELLER FINANCIAL TYPES ====================

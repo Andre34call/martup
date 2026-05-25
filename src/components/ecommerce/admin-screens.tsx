@@ -10,6 +10,7 @@ import {
   ChevronRight, Shield, Eye, Trash2, Check, X, AlertTriangle,
   TrendingUp, Megaphone, ImageIcon, Calendar, BarChart3, MessageSquare,
   Ban, FileText, ArrowUpRight, ArrowDownLeft, Clock, CreditCard, Plus,
+  Store, FolderTree, Tag, Wallet,
   Building2
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -18,14 +19,13 @@ import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useAppStore } from "@/lib/store"
 import { formatPrice, formatRelativeTime } from "@/lib/utils"
 import { PageHeader, SectionHeader, SearchBar, EmptyState } from "./shared"
 import { useState, useRef, useEffect, useCallback } from "react"
 import { AnimatePresence } from "framer-motion"
+import { ConfirmDialog } from "./confirm-dialog"
+import { LoadingSpinner } from "./loading-spinner"
 
 // ==================== AUTH HEADER HELPER ====================
 // SECURITY: Only uses HMAC-signed bearer token
@@ -56,32 +56,89 @@ const stagger = {
   })
 }
 
+// ==================== HELPER: Compute top sellers from store data ====================
+function computeTopSellers(products: { sellerId: string; seller: { storeName: string }; price: number; sold: number; rating: number; reviewCount: number }[]) {
+  const sellerMap = new Map<string, { name: string; revenue: number; orders: number; rating: number; ratingCount: number }>()
+  for (const p of products) {
+    const existing = sellerMap.get(p.sellerId)
+    const revenue = p.sold * p.price
+    if (existing) {
+      existing.revenue += revenue
+      existing.orders += p.sold
+      existing.rating += p.rating * p.reviewCount
+      existing.ratingCount += p.reviewCount
+    } else {
+      sellerMap.set(p.sellerId, {
+        name: p.seller.storeName,
+        revenue,
+        orders: p.sold,
+        rating: p.rating * p.reviewCount,
+        ratingCount: p.reviewCount,
+      })
+    }
+  }
+  return Array.from(sellerMap.values())
+    .map(s => ({ ...s, rating: s.ratingCount > 0 ? Math.round((s.rating / s.ratingCount) * 10) / 10 : 0 }))
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 5)
+}
+
+function computeCategoryPerformance(products: { categoryId: string; category: { name: string }; price: number; sold: number }[]) {
+  const catMap = new Map<string, { name: string; revenue: number }>()
+  for (const p of products) {
+    const existing = catMap.get(p.categoryId)
+    const revenue = p.sold * p.price
+    if (existing) {
+      existing.revenue += revenue
+    } else {
+      catMap.set(p.categoryId, { name: p.category.name, revenue })
+    }
+  }
+  const entries = Array.from(catMap.values()).sort((a, b) => b.revenue - a.revenue)
+  const totalRevenue = entries.reduce((sum, e) => sum + e.revenue, 0)
+  return entries.map(e => ({
+    name: e.name,
+    revenue: e.revenue,
+    percentage: totalRevenue > 0 ? Math.round((e.revenue / totalRevenue) * 100) : 0,
+  }))
+}
+
 // ==================== ADMIN DASHBOARD ====================
 export function AdminDashboard() {
-  const { navigate, switchRole, userRole, showToast, withdrawRequests, products, orders, adminUsers, fetchAdminUsers, fetchDivisions, divisions, currentUser } = useAppStore()
+  const { navigate, switchRole, userRole, currentUser, showToast, withdrawRequests, products, orders, adminUsers, adminStats, fetchAdminStats, fetchAdminUsers, fetchAdminWithdrawals, fetchDivisions, divisions } = useAppStore()
 
-  // Fetch admin data on mount
+  const [isLoading, setIsLoading] = useState(true)
+
   useEffect(() => {
-    fetchAdminUsers()
-    fetchDivisions()
-  }, [])
+    Promise.all([fetchAdminStats(), fetchAdminUsers(), fetchAdminWithdrawals(), fetchDivisions()]).finally(() => setIsLoading(false))
+  }, [fetchAdminStats, fetchAdminUsers, fetchAdminWithdrawals, fetchDivisions])
 
-  // Stats derived from real data
-  const stats = {
+  const stats = adminStats ? {
+    totalUsers: adminStats.totalUsers,
+    totalSellers: adminStats.totalSellers,
+    totalOrders: adminStats.totalOrders,
+    totalRevenue: adminStats.totalRevenue,
+    pendingWithdrawals: adminStats.pendingWithdrawals,
+    activeProducts: adminStats.activeProducts,
+    revenueChart: adminStats.revenueChart,
+    userGrowth: adminStats.userGrowth,
+    totalDivisions: adminStats.totalDivisions ?? divisions.length,
+    totalStaff: adminStats.totalStaff ?? adminUsers.filter(u => ['admin', 'finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr'].includes(u.role)).length,
+    pendingSellerVerifications: adminStats.unverifiedSellers ?? adminUsers.filter(u => u.role === 'seller' && !u.isVerified).length,
+    openComplaints: adminStats.openComplaints ?? 0,
+    topSellers: adminStats.topSellers ?? [],
+    categoryPerformance: adminStats.categoryPerformance ?? [],
+    recentOrders: adminStats.recentOrders ?? [],
+    recentUsers: adminStats.recentUsers ?? [],
+  } : {
     totalUsers: adminUsers.length,
-    totalSellers: adminUsers.filter(u => u.role === 'seller').length,
+    totalSellers: 0,
     totalOrders: orders.length,
     totalRevenue: orders.reduce((sum, o) => sum + o.totalAmount, 0),
     pendingWithdrawals: withdrawRequests.filter(w => w.status === 'pending').length,
     activeProducts: products.filter(p => p.status === 'active').length,
     revenueChart: [] as { date: string; revenue: number }[],
     userGrowth: [] as { date: string; users: number }[],
-    totalDivisions: divisions.length,
-    totalStaff: adminUsers.filter(u => ['admin', 'finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr'].includes(u.role)).length,
-    pendingSellerVerifications: adminUsers.filter(u => u.role === 'seller' && !u.isVerified).length,
-    openComplaints: 0,
-    recentOrders: [] as { orderNumber: string; totalAmount: number; status: string; createdAt: string }[],
-    recentUsers: [] as { name: string; email: string; role: string; createdAt: string }[],
   }
   const [showRoleMenu, setShowRoleMenu] = useState(false)
   const roleMenuRef = useRef<HTMLDivElement>(null)
@@ -100,15 +157,9 @@ export function AdminDashboard() {
     buyer: "bg-emerald-500",
     seller: "bg-orange-500",
     admin: "bg-purple-500",
-    finance: "bg-emerald-600",
-    pr: "bg-blue-500",
-    tech: "bg-purple-600",
-    cs: "bg-orange-600",
-    marketing: "bg-pink-500",
-    operations: "bg-amber-500",
-    legal: "bg-red-500",
-    hr: "bg-teal-500",
   }
+
+  if (isLoading) return <div className="pb-20"><PageHeader title="MartUp Admin" /><div className="px-4"><LoadingSpinner message="Memuat dashboard..." /></div></div>
 
   return (
     <div className="pb-20">
@@ -117,10 +168,7 @@ export function AdminDashboard() {
         <div className="flex items-center justify-between h-14 px-4">
           <div className="flex items-center gap-2">
             <h1 className="text-base font-bold text-foreground">MartUp Admin</h1>
-            <Badge className="bg-purple-600 text-white text-[10px] px-1.5 py-0.5">
-              <Shield className="w-3 h-3 mr-0.5" />
-              {currentUser?.role === 'admin' ? 'Admin' : 'Staff'}
-            </Badge>
+            <Badge className="bg-blue-600 text-white text-[10px] px-1.5 py-0.5">Admin</Badge>
           </div>
           <div className="flex items-center gap-2">
             <motion.button
@@ -132,78 +180,70 @@ export function AdminDashboard() {
             </motion.button>
             <motion.button
               whileTap={{ scale: 0.9 }}
-              onClick={() => navigate("admin-analytics")}
+              onClick={() => navigate("admin-settings")}
               className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-muted transition-colors"
             >
               <Settings className="w-5 h-5 text-muted-foreground" />
             </motion.button>
             {/* View Switcher - Only switches UI view, not actual role */}
             {currentUser?.role === 'admin' && (
-              <div className="relative" ref={roleMenuRef}>
-                <motion.button
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => setShowRoleMenu(!showRoleMenu)}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
-                >
-                  <span className={`w-2 h-2 rounded-full ${roleColors[userRole]}`} />
-                  <span className="text-[11px] font-medium text-foreground">View</span>
-                </motion.button>
-                <AnimatePresence>
-                  {showRoleMenu && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -5, scale: 0.95 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: -5, scale: 0.95 }}
-                      transition={{ duration: 0.15 }}
-                      className="absolute right-0 top-full mt-2 bg-card rounded-xl shadow-lg border border-border p-2 min-w-[160px] z-50"
-                    >
-                      <p className="text-xs text-muted-foreground px-3 py-1.5 font-medium">Switch View</p>
-                      {(["buyer", "seller", "admin"] as const).map((role) => (
-                        <button
-                          key={role}
-                          onClick={() => { switchRole(role); setShowRoleMenu(false) }}
-                          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
-                            userRole === role
-                              ? "bg-purple-50 text-purple-700 dark:bg-purple-950 dark:text-purple-300"
-                              : "hover:bg-muted text-foreground"
-                          }`}
-                        >
-                          <span className={`w-2.5 h-2.5 rounded-full ${roleColors[role]}`} />
-                          <span className="font-medium capitalize">{role} View</span>
-                          {userRole === role && (
-                            <Check className="w-3.5 h-3.5 ml-auto text-purple-600" />
-                          )}
-                        </button>
-                      ))}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
+            <div className="relative" ref={roleMenuRef}>
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setShowRoleMenu(!showRoleMenu)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+              >
+                <span className={`w-2 h-2 rounded-full ${roleColors[userRole]}`} />
+                <span className="text-[11px] font-medium text-foreground">View</span>
+              </motion.button>
+              <AnimatePresence>
+                {showRoleMenu && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -5, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -5, scale: 0.95 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute right-0 top-full mt-2 bg-card rounded-xl shadow-lg border border-border p-2 min-w-[160px] z-50"
+                  >
+                    <p className="text-xs text-muted-foreground px-3 py-1.5 font-medium">Switch View</p>
+                    {(["buyer", "seller", "admin"] as const).map((role) => (
+                      <button
+                        key={role}
+                        onClick={() => { switchRole(role); setShowRoleMenu(false) }}
+                        className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
+                          userRole === role
+                            ? "bg-purple-50 text-purple-700 dark:bg-purple-950 dark:text-purple-300"
+                            : "hover:bg-muted text-foreground"
+                        }`}
+                      >
+                        <span className={`w-2.5 h-2.5 rounded-full ${roleColors[role]}`} />
+                        <span className="font-medium capitalize">{role}</span>
+                        {userRole === role && (
+                          <Check className="w-3.5 h-3.5 ml-auto text-purple-600" />
+                        )}
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
             )}
           </div>
         </div>
       </motion.div>
 
       <div className="px-4 pt-4 space-y-6">
-        {/* Loading State */}
-        {!stats && (
-          <motion.div {...fadeIn} className="flex items-center justify-center py-12">
-            <div className="flex flex-col items-center gap-3">
-              <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-              <p className="text-sm text-muted-foreground">Loading dashboard data...</p>
-            </div>
-          </motion.div>
-        )}
-
         {/* Key Metrics Grid */}
         <motion.div {...fadeIn} className="grid grid-cols-2 gap-3">
           {[
             { label: "Total Users", value: (stats?.totalUsers ?? 0).toLocaleString(), icon: Users, color: "text-blue-600 bg-blue-50 dark:bg-blue-900/30 dark:text-blue-400" },
-            { label: "Total Revenue", value: formatPrice(stats?.totalRevenue ?? 0), icon: DollarSign, color: "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 dark:text-emerald-400" },
+            { label: "Total Sellers", value: (stats?.totalSellers ?? 0).toLocaleString(), icon: Store, color: "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 dark:text-emerald-400" },
             { label: "Total Orders", value: (stats?.totalOrders ?? 0).toLocaleString(), icon: Package, color: "text-orange-600 bg-orange-50 dark:bg-orange-900/30 dark:text-orange-400" },
+            { label: "Active Products", value: (stats?.activeProducts ?? 0).toLocaleString(), icon: Box, color: "text-purple-600 bg-purple-50 dark:bg-purple-900/30 dark:text-purple-400" },
+            { label: "Total Revenue", value: formatPrice(stats?.totalRevenue ?? 0), icon: DollarSign, color: "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 dark:text-emerald-400" },
             { label: "Divisions", value: (stats?.totalDivisions ?? 0).toString(), icon: Building2, color: "text-teal-600 bg-teal-50 dark:bg-teal-900/30 dark:text-teal-400" },
             { label: "Staff Members", value: (stats?.totalStaff ?? 0).toString(), icon: Shield, color: "text-purple-600 bg-purple-50 dark:bg-purple-900/30 dark:text-purple-400" },
-            { label: "Active Products", value: (stats?.activeProducts ?? 0).toLocaleString(), icon: Box, color: "text-pink-600 bg-pink-50 dark:bg-pink-900/30 dark:text-pink-400" },
+            { label: "Pending Withdrawals", value: (stats?.pendingWithdrawals ?? 0).toLocaleString(), icon: Clock, color: "text-amber-600 bg-amber-50 dark:bg-amber-900/30 dark:text-amber-400" },
           ].map((item, i) => (
             <motion.div key={item.label} custom={i} variants={stagger} initial="initial" animate="animate">
               <Card className="p-4">
@@ -225,42 +265,31 @@ export function AdminDashboard() {
         <motion.div {...fadeIn}>
           <SectionHeader title="Revenue Overview" icon={<DollarSign className="w-4 h-4" />} />
           <Card className="mt-3 p-4">
-            {(stats?.revenueChart && stats.revenueChart.length > 0) ? (
-              <div className="h-56">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={stats.revenueChart} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
-                    <defs>
-                      <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
-                    <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                    <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v: number) => {
-                      if (v >= 1000000000) return `${(v / 1000000000).toFixed(1)}B`
-                      if (v >= 1000000) return `${(v / 1000000).toFixed(1)}M`
-                      if (v >= 1000) return `${(v / 1000).toFixed(0)}K`
-                      return v.toString()
-                    }} />
-                    <Tooltip
-                      formatter={(value: number) => [formatPrice(value), "Revenue"]}
-                      contentStyle={{
-                        backgroundColor: "hsl(var(--card))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "8px",
-                        fontSize: "12px"
-                      }}
-                    />
-                    <Area type="monotone" dataKey="revenue" stroke="#10b981" fill="url(#revenueGradient)" strokeWidth={2} />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            ) : (
-              <div className="h-56 flex items-center justify-center">
-                <p className="text-sm text-muted-foreground">No revenue data yet</p>
-              </div>
-            )}
+            <div className="h-56">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={stats.revenueChart} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+                  <defs>
+                    <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                  <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
+                  <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v: number) => `${(v / 1000000000).toFixed(1)}B`} />
+                  <Tooltip
+                    formatter={(value: number) => [formatPrice(value), "Revenue"]}
+                    contentStyle={{
+                      backgroundColor: "hsl(var(--card))",
+                      border: "1px solid hsl(var(--border))",
+                      borderRadius: "8px",
+                      fontSize: "12px"
+                    }}
+                  />
+                  <Area type="monotone" dataKey="revenue" stroke="#10b981" fill="url(#revenueGradient)" strokeWidth={2} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
           </Card>
         </motion.div>
 
@@ -268,34 +297,25 @@ export function AdminDashboard() {
         <motion.div {...fadeIn}>
           <SectionHeader title="User Growth" icon={<Users className="w-4 h-4" />} />
           <Card className="mt-3 p-4">
-            {(stats?.userGrowth && stats.userGrowth.length > 0) ? (
-              <div className="h-48">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={stats.userGrowth} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
-                    <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                    <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v: number) => {
-                      if (v >= 1000) return `${(v / 1000).toFixed(0)}K`
-                      return v.toString()
-                    }} />
-                    <Tooltip
-                      formatter={(value: number) => [value.toLocaleString(), "Users"]}
-                      contentStyle={{
-                        backgroundColor: "hsl(var(--card))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "8px",
-                        fontSize: "12px"
-                      }}
-                    />
-                    <Line type="monotone" dataKey="users" stroke="#3b82f6" strokeWidth={2} dot={{ fill: "#3b82f6", r: 3 }} activeDot={{ r: 5 }} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            ) : (
-              <div className="h-48 flex items-center justify-center">
-                <p className="text-sm text-muted-foreground">No user growth data yet</p>
-              </div>
-            )}
+            <div className="h-48">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={stats.userGrowth} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                  <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
+                  <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}K`} />
+                  <Tooltip
+                    formatter={(value: number) => [value.toLocaleString(), "Users"]}
+                    contentStyle={{
+                      backgroundColor: "hsl(var(--card))",
+                      border: "1px solid hsl(var(--border))",
+                      borderRadius: "8px",
+                      fontSize: "12px"
+                    }}
+                  />
+                  <Line type="monotone" dataKey="users" stroke="#3b82f6" strokeWidth={2} dot={{ fill: "#3b82f6", r: 3 }} activeDot={{ r: 5 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
           </Card>
         </motion.div>
 
@@ -304,7 +324,7 @@ export function AdminDashboard() {
           <SectionHeader title="Tindakan Diperlukan" icon={<AlertTriangle className="w-4 h-4" />} />
           <div className="space-y-2 mt-3">
             {[
-              { label: "Permintaan Penarikan", count: stats?.pendingWithdrawals ?? 0, icon: DollarSign, color: "text-amber-600 bg-amber-50 dark:bg-amber-900/30", screen: "admin-withdraw" as const },
+              { label: "Permintaan Penarikan", count: stats?.pendingWithdrawals ?? withdrawRequests.filter(w => w.status === 'pending').length, icon: DollarSign, color: "text-amber-600 bg-amber-50 dark:bg-amber-900/30", screen: "admin-withdraw" as const },
               { label: "Verifikasi Seller", count: stats?.pendingSellerVerifications ?? 0, icon: Shield, color: "text-blue-600 bg-blue-50 dark:bg-blue-900/30", screen: "admin-users" as const },
               { label: "Laporan Produk", count: 0, icon: Eye, color: "text-red-600 bg-red-50 dark:bg-red-900/30", screen: "admin-products" as const },
               { label: "Keluhan Terbuka", count: stats?.openComplaints ?? 0, icon: MessageSquare, color: "text-orange-600 bg-orange-50 dark:bg-orange-900/30", screen: "admin-complaints" as const },
@@ -336,82 +356,6 @@ export function AdminDashboard() {
           </div>
         </motion.div>
 
-        {/* Recent Activity */}
-        {stats && (stats.recentOrders.length > 0 || stats.recentUsers.length > 0) && (
-          <motion.div {...fadeIn}>
-            <SectionHeader title="Aktivitas Terbaru" icon={<Clock className="w-4 h-4" />} />
-            <div className="space-y-3 mt-3">
-              {/* Recent Orders */}
-              {stats.recentOrders.length > 0 && (
-                <div>
-                  <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider">Pesanan Terbaru</p>
-                  <div className="space-y-2">
-                    {stats.recentOrders.map((order, i) => (
-                      <motion.div key={order.orderNumber} custom={i} variants={stagger} initial="initial" animate="animate">
-                        <Card className="p-3">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-orange-50 dark:bg-orange-900/30 text-orange-600">
-                                <Package className="w-4 h-4" />
-                              </div>
-                              <div>
-                                <p className="text-sm font-medium text-foreground">#{order.orderNumber}</p>
-                                <p className="text-xs text-muted-foreground">{formatPrice(order.totalAmount)}</p>
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <Badge variant="outline" className={`text-[9px] ${
-                                order.status === 'paid' ? 'border-emerald-300 text-emerald-600' :
-                                order.status === 'delivered' ? 'border-blue-300 text-blue-600' :
-                                order.status === 'pending' ? 'border-amber-300 text-amber-600' :
-                                'border-gray-300 text-gray-600'
-                              }`}>
-                                {order.status}
-                              </Badge>
-                              <p className="text-[10px] text-muted-foreground mt-1">{formatRelativeTime(order.createdAt)}</p>
-                            </div>
-                          </div>
-                        </Card>
-                      </motion.div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {/* Recent Users */}
-              {stats.recentUsers.length > 0 && (
-                <div>
-                  <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider">User Terbaru</p>
-                  <div className="space-y-2">
-                    {stats.recentUsers.map((user, i) => (
-                      <motion.div key={user.email} custom={i} variants={stagger} initial="initial" animate="animate">
-                        <Card className="p-3">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <div className="w-9 h-9 rounded-full bg-blue-500 text-white font-bold flex items-center justify-center text-sm">
-                                {user.name.charAt(0)}
-                              </div>
-                              <div>
-                                <p className="text-sm font-medium text-foreground">{user.name}</p>
-                                <p className="text-xs text-muted-foreground">{user.email}</p>
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <Badge variant="outline" className="text-[9px] border-emerald-300 text-emerald-600">
-                                {user.role}
-                              </Badge>
-                              <p className="text-[10px] text-muted-foreground mt-1">{formatRelativeTime(user.createdAt)}</p>
-                            </div>
-                          </div>
-                        </Card>
-                      </motion.div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </motion.div>
-        )}
-
         {/* Quick Navigation */}
         <motion.div {...fadeIn}>
           <SectionHeader title="Menu Admin" />
@@ -420,10 +364,16 @@ export function AdminDashboard() {
               { label: "Users", icon: Users, screen: "admin-users" as const, color: "bg-blue-50 text-blue-600 dark:bg-blue-900/30" },
               { label: "Divisions", icon: Building2, screen: "admin-divisions" as const, color: "bg-teal-50 text-teal-600 dark:bg-teal-900/30" },
               { label: "Products", icon: Box, screen: "admin-products" as const, color: "bg-purple-50 text-purple-600 dark:bg-purple-900/30" },
+              { label: "Orders", icon: Package, screen: "admin-orders" as const, color: "bg-orange-50 text-orange-600 dark:bg-orange-900/30" },
               { label: "Withdraw", icon: DollarSign, screen: "admin-withdraw" as const, color: "bg-amber-50 text-amber-600 dark:bg-amber-900/30" },
               { label: "Banners", icon: ImageIcon, screen: "admin-banner" as const, color: "bg-cyan-50 text-cyan-600 dark:bg-cyan-900/30" },
               { label: "Analytics", icon: BarChart3, screen: "admin-analytics" as const, color: "bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30" },
               { label: "Complaints", icon: MessageSquare, screen: "admin-complaints" as const, color: "bg-red-50 text-red-600 dark:bg-red-900/30" },
+              { label: "Categories", icon: FolderTree, screen: "admin-categories" as const, color: "bg-teal-50 text-teal-600 dark:bg-teal-900/30" },
+              { label: "Vouchers", icon: Tag, screen: "admin-vouchers" as const, color: "bg-pink-50 text-pink-600 dark:bg-pink-900/30" },
+              { label: "Deposits", icon: Wallet, screen: "admin-deposits" as const, color: "bg-lime-50 text-lime-600 dark:bg-lime-900/30" },
+              { label: "Campaigns", icon: Megaphone, screen: "admin-campaigns" as const, color: "bg-violet-50 text-violet-600 dark:bg-violet-900/30" },
+              { label: "Settings", icon: Settings, screen: "admin-settings" as const, color: "bg-slate-50 text-slate-600 dark:bg-slate-900/30" },
             ].map((item) => (
               <motion.button
                 key={item.label}
@@ -446,19 +396,20 @@ export function AdminDashboard() {
 
 // ==================== ADMIN USERS ====================
 export function AdminUsers() {
-  const { showToast, adminUsers, fetchAdminUsers } = useAppStore()
+  const { showToast, adminUsers, updateAdminUser, deleteAdminUser, fetchAdminUsers, currentUser } = useAppStore()
   const [search, setSearch] = useState("")
   const [roleFilter, setRoleFilter] = useState("all")
-  const [loading, setLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(true)
+  const [confirmAction, setConfirmAction] = useState<{action: () => void, title: string, message: string} | null>(null)
 
   useEffect(() => {
-    fetchAdminUsers().finally(() => setLoading(false))
-  }, [])
+    fetchAdminUsers().finally(() => setIsLoading(false))
+  }, [fetchAdminUsers])
 
   const handleUpdateUser = async (userId: string, updates: Record<string, unknown>) => {
     try {
       const res = await fetch('/api/admin/users', {
-        method: 'PATCH',
+        method: 'PUT',
         headers: getAdminAuthHeaders(),
         body: JSON.stringify({ userId, updates }),
       })
@@ -478,7 +429,7 @@ export function AdminUsers() {
 
   const handleDeleteUser = async (userId: string) => {
     try {
-      const res = await fetch(`/api/admin/users?userId=${userId}`, { method: 'DELETE', headers: getAdminAuthHeaders() })
+      const res = await fetch('/api/admin/users', { method: 'DELETE', headers: getAdminAuthHeaders(), body: JSON.stringify({ userId }) })
       const data = await res.json()
       if (data.success) {
         showToast("User dihapus", "info")
@@ -503,6 +454,8 @@ export function AdminUsers() {
     const matchesRole = roleFilter === "all" || u.role === roleFilter
     return matchesSearch && matchesRole
   })
+
+  if (isLoading) return <div className="pb-20"><PageHeader title="Kelola Users" /><LoadingSpinner message="Memuat users..." /></div>
 
   return (
     <div className="pb-20">
@@ -542,12 +495,7 @@ export function AdminUsers() {
 
         {/* User Table */}
         <div className="space-y-2">
-          {loading ? (
-            <div className="flex flex-col items-center justify-center py-12 gap-3">
-              <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-              <p className="text-sm text-muted-foreground">Memuat data user...</p>
-            </div>
-          ) : filtered.length === 0 ? (
+          {filtered.length === 0 ? (
             <EmptyState
               icon={<Users className="w-10 h-10 text-muted-foreground" />}
               title="User Tidak Ditemukan"
@@ -565,7 +513,9 @@ export function AdminUsers() {
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-medium text-foreground truncate">{user.name}</p>
                         <Badge variant="outline" className={`text-[9px] ${
-                          user.role === "seller" ? "border-orange-300 text-orange-600" : "border-emerald-300 text-emerald-600"
+                          user.role === "admin" ? "border-purple-300 text-purple-600" :
+                          user.role === "seller" ? "border-orange-300 text-orange-600" :
+                          "border-emerald-300 text-emerald-600"
                         }`}>
                           {user.role}
                         </Badge>
@@ -585,30 +535,55 @@ export function AdminUsers() {
                   </div>
                   <div className="flex gap-2 mt-3 pt-3 border-t border-border/50">
                     {user.status === "pending" && (
-                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={async () => {
-                        const ok = await handleUpdateUser(user.id, { isVerified: true })
-                        if (ok) showToast("User berhasil diverifikasi", "success")
+                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={() => {
+                        handleUpdateUser(user.id, { isVerified: true })
+                        showToast("User berhasil diverifikasi", "success")
                       }}>
                         <Check className="w-3 h-3 mr-0.5" /> Verify
                       </Button>
                     )}
                     {user.status === "active" && (
-                      <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-amber-600" onClick={async () => {
-                        const ok = await handleUpdateUser(user.id, { isBlocked: true })
-                        if (ok) showToast("User diblokir", "info")
-                      }}>
+                      <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-amber-600" onClick={() => setConfirmAction({
+                        action: () => { handleUpdateUser(user.id, { isBlocked: true }).then(() => showToast("User diblokir", "info")) },
+                        title: 'Blokir User',
+                        message: `Apakah Anda yakin ingin memblokir ${user.name}? User tidak akan dapat mengakses akunnya.`
+                      })}>
                         <Ban className="w-3 h-3 mr-0.5" /> Block
                       </Button>
                     )}
                     {user.status === "blocked" && (
-                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-blue-500 hover:bg-blue-600 text-white" onClick={async () => {
-                        const ok = await handleUpdateUser(user.id, { isBlocked: false })
-                        if (ok) showToast("User dibuka kembali", "success")
+                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-blue-500 hover:bg-blue-600 text-white" onClick={() => {
+                        handleUpdateUser(user.id, { isBlocked: false })
+                        showToast("User dibuka kembali", "success")
                       }}>
                         <Check className="w-3 h-3 mr-0.5" /> Unblock
                       </Button>
                     )}
-                    <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20" onClick={() => handleDeleteUser(user.id)}>
+                    {/* Make Admin button - only show for non-admin users when current user is admin */}
+                    {user.role !== 'admin' && currentUser?.role === 'admin' && (
+                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-purple-500 hover:bg-purple-600 text-white" onClick={() => setConfirmAction({
+                        action: () => { handleUpdateUser(user.id, { role: 'admin' }).then(() => showToast(`${user.name} telah dijadikan admin`, "success")) },
+                        title: 'Jadikan Admin',
+                        message: `Apakah Anda yakin ingin menjadikan ${user.name} sebagai admin? User akan memiliki akses penuh ke panel admin.`
+                      })}>
+                        <Shield className="w-3 h-3 mr-0.5" /> Make Admin
+                      </Button>
+                    )}
+                    {/* Remove Admin button - only show for admin users when current user is admin */}
+                    {user.role === 'admin' && currentUser?.role === 'admin' && user.id !== currentUser.id && (
+                      <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-purple-600 hover:text-purple-700 hover:bg-purple-50 dark:hover:bg-purple-900/20" onClick={() => setConfirmAction({
+                        action: () => { handleUpdateUser(user.id, { role: 'buyer' }).then(() => showToast(`${user.name} telah dihapus dari admin`, "info")) },
+                        title: 'Hapus Admin',
+                        message: `Apakah Anda yakin ingin menghapus akses admin ${user.name}? User akan kembali menjadi buyer.`
+                      })}>
+                        <Shield className="w-3 h-3 mr-0.5" /> Remove Admin
+                      </Button>
+                    )}
+                    <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20" onClick={() => setConfirmAction({
+                      action: () => { handleDeleteUser(user.id) },
+                      title: 'Hapus User',
+                      message: `Apakah Anda yakin ingin menghapus ${user.name}? Tindakan ini tidak dapat dibatalkan.`
+                    })}>
                       <Trash2 className="w-3 h-3" />
                     </Button>
                   </div>
@@ -618,32 +593,111 @@ export function AdminUsers() {
           )}
         </div>
       </div>
+      <ConfirmDialog
+        isOpen={!!confirmAction}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={() => confirmAction?.action()}
+        title={confirmAction?.title || ''}
+        message={confirmAction?.message || ''}
+      />
     </div>
   )
 }
 
 // ==================== ADMIN PRODUCTS ====================
+interface AdminProductItem {
+  id: string
+  name: string
+  sellerName: string
+  price: number
+  status: string
+  sold: number
+  isFeatured: boolean
+}
+
 export function AdminProducts() {
-  const { showToast, products, updateProduct, removeProduct } = useAppStore()
+  const { showToast } = useAppStore()
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
+  const [adminProducts, setAdminProducts] = useState<AdminProductItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [confirmAction, setConfirmAction] = useState<{action: () => void, title: string, message: string} | null>(null)
 
-  // Derive admin product list from store products
-  const adminProducts = products.map(p => ({
-    id: p.id,
-    name: p.name,
-    seller: p.seller.storeName,
-    price: p.price,
-    status: p.status as 'active' | 'blocked' | 'draft',
-  }))
+  const fetchAdminProducts = useCallback(async () => {
+    try {
+      setLoading(true)
+      const res = await fetch('/api/admin/products?limit=500')
+      const data = await res.json()
+      if (data.success) {
+        const mapped: AdminProductItem[] = (data.data || []).map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          sellerName: p.seller?.storeName || 'Unknown',
+          price: p.price,
+          status: p.status,
+          sold: p.sold,
+          isFeatured: p.isFeatured,
+        }))
+        setAdminProducts(mapped)
+      }
+    } catch {
+      showToast("Gagal memuat produk", "error")
+    } finally {
+      setLoading(false)
+    }
+  }, [showToast])
+
+  useEffect(() => {
+    fetchAdminProducts()
+  }, [fetchAdminProducts])
+
+  const handleStatusChange = async (productId: string, newStatus: string) => {
+    try {
+      const res = await fetch('/api/admin/products', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productId, status: newStatus }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setAdminProducts(prev => prev.map(p => p.id === productId ? { ...p, status: newStatus } : p))
+        showToast(newStatus === 'active' ? "Produk diapprove" : "Produk diblokir", "success")
+      } else {
+        showToast(data.error || "Gagal mengubah status produk", "error")
+      }
+    } catch {
+      showToast("Gagal mengubah status produk", "error")
+    }
+  }
+
+  const handleDelete = async (productId: string) => {
+    try {
+      const res = await fetch('/api/admin/products', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productId }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setAdminProducts(prev => prev.filter(p => p.id !== productId))
+        showToast("Produk dihapus", "info")
+      } else {
+        showToast(data.error || "Gagal menghapus produk", "error")
+      }
+    } catch {
+      showToast("Gagal menghapus produk", "error")
+    }
+  }
 
   const filtered = adminProducts.filter(p => {
-    const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) || p.seller.toLowerCase().includes(search.toLowerCase())
+    const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) || p.sellerName.toLowerCase().includes(search.toLowerCase())
     const matchesStatus = statusFilter === "all" || p.status === statusFilter
     return matchesSearch && matchesStatus
   })
 
   const flaggedProducts = adminProducts.filter(p => p.status === "blocked")
+
+  if (loading) return <div className="pb-20"><PageHeader title="Moderasi Produk" /><LoadingSpinner message="Memuat produk..." /></div>
 
   return (
     <div className="pb-20">
@@ -658,6 +712,7 @@ export function AdminProducts() {
             { key: "all", label: "Semua" },
             { key: "active", label: "Aktif" },
             { key: "blocked", label: "Diblokir" },
+            { key: "draft", label: "Draft" },
           ].map((filter) => (
             <motion.button
               key={filter.key}
@@ -691,21 +746,18 @@ export function AdminProducts() {
                           <p className="text-sm font-medium text-foreground truncate">{product.name}</p>
                           <Badge variant="outline" className="text-[9px] border-red-300 text-red-600">Blocked</Badge>
                         </div>
-                        <p className="text-xs text-muted-foreground">{product.seller} · {formatPrice(product.price)}</p>
+                        <p className="text-xs text-muted-foreground">{product.sellerName} · {formatPrice(product.price)}</p>
                       </div>
                     </div>
                     <div className="flex gap-2 mt-3 pt-2 border-t border-red-100 dark:border-red-900/30">
-                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={() => {
-                        const storeProduct = products.find(sp => sp.id === product.id)
-                        if (storeProduct) updateProduct({ ...storeProduct, status: 'active' })
-                        showToast("Produk diapprove", "success")
-                      }}>
+                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={() => handleStatusChange(product.id, 'active')}>
                         <Check className="w-3 h-3 mr-0.5" /> Approve
                       </Button>
-                      <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500" onClick={() => {
-                        removeProduct(product.id)
-                        showToast("Produk dihapus", "info")
-                      }}>
+                      <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500" onClick={() => setConfirmAction({
+                        action: () => handleDelete(product.id),
+                        title: 'Hapus Produk',
+                        message: `Apakah Anda yakin ingin menghapus "${product.name}"? Tindakan ini tidak dapat dibatalkan.`
+                      })}>
                         <Trash2 className="w-3 h-3 mr-0.5" /> Delete
                       </Button>
                     </div>
@@ -736,37 +788,36 @@ export function AdminProducts() {
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-medium text-foreground truncate">{product.name}</p>
                         <Badge variant="outline" className={`text-[9px] ${
-                          product.status === "active" ? "border-emerald-300 text-emerald-600" : "border-red-300 text-red-600"
+                          product.status === "active" ? "border-emerald-300 text-emerald-600" :
+                          product.status === "draft" ? "border-amber-300 text-amber-600" :
+                          "border-red-300 text-red-600"
                         }`}>
-                          {product.status === "active" ? "Aktif" : "Blocked"}
+                          {product.status === "active" ? "Aktif" : product.status === "draft" ? "Draft" : "Blocked"}
                         </Badge>
                       </div>
-                      <p className="text-xs text-muted-foreground">{product.seller}</p>
+                      <p className="text-xs text-muted-foreground">{product.sellerName} · Terjual {product.sold}</p>
                       <p className="text-sm font-bold text-emerald-600 mt-0.5">{formatPrice(product.price)}</p>
                     </div>
                   </div>
                   <div className="flex gap-2 mt-3 pt-2 border-t border-border/50">
                     {product.status === "blocked" ? (
-                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={() => {
-                        const storeProduct = products.find(sp => sp.id === product.id)
-                        if (storeProduct) updateProduct({ ...storeProduct, status: 'active' })
-                        showToast("Produk diapprove", "success")
-                      }}>
+                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={() => handleStatusChange(product.id, 'active')}>
                         <Check className="w-3 h-3 mr-0.5" /> Approve
                       </Button>
                     ) : (
-                      <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500" onClick={() => {
-                        const storeProduct = products.find(sp => sp.id === product.id)
-                        if (storeProduct) updateProduct({ ...storeProduct, status: 'blocked' })
-                        showToast("Produk diblokir", "info")
-                      }}>
+                      <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500" onClick={() => setConfirmAction({
+                        action: () => handleStatusChange(product.id, 'blocked'),
+                        title: 'Blokir Produk',
+                        message: `Apakah Anda yakin ingin memblokir "${product.name}"? Produk tidak akan terlihat oleh pembeli.`
+                      })}>
                         <Ban className="w-3 h-3 mr-0.5" /> Block
                       </Button>
                     )}
-                    <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500" onClick={() => {
-                      removeProduct(product.id)
-                      showToast("Produk dihapus", "info")
-                    }}>
+                    <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500" onClick={() => setConfirmAction({
+                      action: () => handleDelete(product.id),
+                      title: 'Hapus Produk',
+                      message: `Apakah Anda yakin ingin menghapus "${product.name}"? Tindakan ini tidak dapat dibatalkan.`
+                    })}>
                       <Trash2 className="w-3 h-3" />
                     </Button>
                   </div>
@@ -776,134 +827,73 @@ export function AdminProducts() {
           )}
         </div>
       </div>
+      <ConfirmDialog
+        isOpen={!!confirmAction}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={() => confirmAction?.action()}
+        title={confirmAction?.title || ''}
+        message={confirmAction?.message || ''}
+      />
     </div>
   )
 }
 
 // ==================== ADMIN WITHDRAW ====================
-type ApiWithdrawal = {
-  id: string
-  sellerId: string
-  sellerName: string
-  sellerEmail: string
-  amount: number
-  bankAccount: string
-  bankName: string
-  bankHolder: string
-  status: string
-  adminNote: string | null
-  processedAt: string | null
-  createdAt: string
-  updatedAt: string
-}
-
 export function AdminWithdraw() {
-  const { showToast } = useAppStore()
-  const [withdrawals, setWithdrawals] = useState<ApiWithdrawal[]>([])
-  const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<"pending" | "approved" | "processed" | "rejected" | "all">("pending")
+  const { showToast, withdrawRequests, updateWithdrawStatus, fetchAdminWithdrawals } = useAppStore()
+  const [activeTab, setActiveTab] = useState<"pending" | "approved" | "completed" | "rejected" | "all">("pending")
+  const [isLoading, setIsLoading] = useState(true)
+  const [confirmAction, setConfirmAction] = useState<{action: () => void, title: string, message: string} | null>(null)
+
+  useEffect(() => {
+    fetchAdminWithdrawals().finally(() => setIsLoading(false))
+  }, [fetchAdminWithdrawals])
   const [showRejectModal, setShowRejectModal] = useState<string | null>(null)
   const [rejectReason, setRejectReason] = useState('')
 
-  const fetchWithdrawals = async () => {
-    try {
-      const res = await fetch('/api/admin/withdrawals', { headers: getAdminAuthHeaders() })
-      const data = await res.json()
-      if (data.success) {
-        setWithdrawals(data.withdrawals)
-      }
-    } catch {
-      console.error('Failed to fetch withdrawals')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => { fetchWithdrawals() }, [])
-
-  const pendingWithdrawals = withdrawals.filter(w => w.status === 'pending')
+  const pendingWithdrawals = withdrawRequests.filter(w => w.status === 'pending')
+  const historyWithdrawals = withdrawRequests.filter(w => w.status !== 'pending')
 
   const displayed = activeTab === 'pending' ? pendingWithdrawals
-    : activeTab === 'all' ? withdrawals
-    : withdrawals.filter(w => w.status === activeTab)
+    : activeTab === 'all' ? withdrawRequests
+    : withdrawRequests.filter(w => w.status === activeTab)
 
-  const handleApprove = async (id: string) => {
-    try {
-      const res = await fetch('/api/admin/withdrawals', {
-        method: 'PATCH',
-        headers: getAdminAuthHeaders(),
-        body: JSON.stringify({ withdrawalId: id, updates: { status: 'approved' } }),
-      })
-      const data = await res.json()
-      if (data.success) {
-        showToast("Penarikan disetujui", "success")
-        fetchWithdrawals()
-      } else {
-        showToast(data.error || 'Gagal menyetujui', "error")
-      }
-    } catch {
-      showToast('Gagal menyetujui', "error")
-    }
+  const handleApprove = (id: string) => {
+    updateWithdrawStatus(id, 'approved')
+    showToast("Penarikan disetujui", "success")
   }
 
-  const handleReject = async () => {
+  const handleReject = () => {
     if (!showRejectModal) return
-    try {
-      const res = await fetch('/api/admin/withdrawals', {
-        method: 'PATCH',
-        headers: getAdminAuthHeaders(),
-        body: JSON.stringify({ withdrawalId: showRejectModal, updates: { status: 'rejected', adminNote: rejectReason || 'Tidak memenuhi syarat' } }),
-      })
-      const data = await res.json()
-      if (data.success) {
-        showToast("Penarikan ditolak", "info")
-        fetchWithdrawals()
-      } else {
-        showToast(data.error || 'Gagal menolak', "error")
-      }
-    } catch {
-      showToast('Gagal menolak', "error")
-    }
-    setShowRejectModal(null)
-    setRejectReason('')
+    setConfirmAction({
+      action: () => { updateWithdrawStatus(showRejectModal, 'rejected', rejectReason || 'Tidak memenuhi syarat'); showToast("Penarikan ditolak", "info"); setShowRejectModal(null); setRejectReason('') },
+      title: 'Tolak Penarikan',
+      message: 'Apakah Anda yakin ingin menolak permintaan penarikan ini? Dana tidak akan ditransfer ke penjual.'
+    })
   }
 
-  const handleMarkProcessed = async (id: string) => {
-    try {
-      const res = await fetch('/api/admin/withdrawals', {
-        method: 'PATCH',
-        headers: getAdminAuthHeaders(),
-        body: JSON.stringify({ withdrawalId: id, updates: { status: 'processed' } }),
-      })
-      const data = await res.json()
-      if (data.success) {
-        showToast("Penarikan selesai - dana telah ditransfer", "success")
-        fetchWithdrawals()
-      } else {
-        showToast(data.error || 'Gagal memproses', "error")
-      }
-    } catch {
-      showToast('Gagal memproses', "error")
-    }
+  const handleMarkCompleted = (id: string) => {
+    updateWithdrawStatus(id, 'completed')
+    showToast("Penarikan selesai - dana telah ditransfer", "success")
   }
 
-  const statusColorMap: Record<string, string> = {
+  const statusColorMap: Record<WithdrawStatus, string> = {
     pending: "border-amber-300 text-amber-600",
     approved: "border-blue-300 text-blue-600",
     processing: "border-purple-300 text-purple-600",
-    processed: "border-emerald-300 text-emerald-600",
     completed: "border-emerald-300 text-emerald-600",
     rejected: "border-red-300 text-red-600",
   }
 
-  const statusLabelMap: Record<string, string> = {
+  const statusLabelMap: Record<WithdrawStatus, string> = {
     pending: "Pending",
     approved: "Disetujui",
     processing: "Diproses",
-    processed: "Selesai",
     completed: "Selesai",
     rejected: "Ditolak",
   }
+
+  if (isLoading) return <div className="pb-20"><PageHeader title="Penarikan Dana" /><LoadingSpinner message="Memuat penarikan..." /></div>
 
   return (
     <div className="pb-20">
@@ -919,11 +909,11 @@ export function AdminWithdraw() {
             <p className="text-[10px] text-amber-600 font-medium">Pending</p>
           </div>
           <div className="bg-emerald-50 dark:bg-emerald-950/30 rounded-xl p-3 text-center">
-            <p className="text-lg font-bold text-emerald-600">{withdrawals.filter(w => w.status === 'processed' || w.status === 'completed').length}</p>
+            <p className="text-lg font-bold text-emerald-600">{withdrawRequests.filter(w => w.status === 'completed').length}</p>
             <p className="text-[10px] text-emerald-600 font-medium">Selesai</p>
           </div>
           <div className="bg-red-50 dark:bg-red-950/30 rounded-xl p-3 text-center">
-            <p className="text-lg font-bold text-red-600">{withdrawals.filter(w => w.status === 'rejected').length}</p>
+            <p className="text-lg font-bold text-red-600">{withdrawRequests.filter(w => w.status === 'rejected').length}</p>
             <p className="text-[10px] text-red-600 font-medium">Ditolak</p>
           </div>
         </div>
@@ -933,7 +923,7 @@ export function AdminWithdraw() {
           {[
             { key: "pending" as const, label: "Pending" },
             { key: "approved" as const, label: "Approved" },
-            { key: "processed" as const, label: "Selesai" },
+            { key: "completed" as const, label: "Selesai" },
             { key: "rejected" as const, label: "Ditolak" },
             { key: "all" as const, label: "Semua" },
           ].map((tab) => (
@@ -988,23 +978,24 @@ export function AdminWithdraw() {
                         </Badge>
                       </div>
                       <p className="text-base font-bold text-foreground mt-0.5">{formatPrice(withdrawal.amount)}</p>
+                      <p className="text-[10px] text-muted-foreground">Net: {formatPrice(withdrawal.netAmount)} · Fee: {formatPrice(withdrawal.adminFee)}</p>
                     </div>
-                    <span className="text-[10px] text-muted-foreground flex-shrink-0">{formatRelativeTime(withdrawal.createdAt)}</span>
+                    <span className="text-[10px] text-muted-foreground flex-shrink-0">{formatRelativeTime(withdrawal.requestDate)}</span>
                   </div>
                   <Separator className="my-3" />
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-muted-foreground">Bank</span>
-                      <span className="text-xs font-medium text-foreground">{withdrawal.bankName} - ****{(withdrawal.bankAccount || '').slice(-4)}</span>
+                      <span className="text-xs font-medium text-foreground">{withdrawal.bankAccount.bankName} - ****{withdrawal.bankAccount.accountNumber.slice(-4)}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-muted-foreground">Pemilik</span>
-                      <span className="text-xs text-foreground">{withdrawal.bankHolder}</span>
+                      <span className="text-xs text-foreground">{withdrawal.bankAccount.accountHolder}</span>
                     </div>
-                    {withdrawal.adminNote && (
+                    {withdrawal.rejectionReason && (
                       <div className="flex items-start gap-1.5 mt-1 p-2 bg-red-50 dark:bg-red-950/30 rounded-lg">
                         <AlertTriangle className="w-3 h-3 text-red-500 mt-0.5 flex-shrink-0" />
-                        <span className="text-[10px] text-red-600 dark:text-red-400">{withdrawal.adminNote}</span>
+                        <span className="text-[10px] text-red-600 dark:text-red-400">{withdrawal.rejectionReason}</span>
                       </div>
                     )}
                   </div>
@@ -1020,7 +1011,7 @@ export function AdminWithdraw() {
                   )}
                   {withdrawal.status === 'approved' && (
                     <div className="mt-3 pt-3 border-t border-border/50">
-                      <Button size="sm" className="w-full h-8 text-xs rounded-lg bg-blue-500 hover:bg-blue-600 text-white" onClick={() => handleMarkProcessed(withdrawal.id)}>
+                      <Button size="sm" className="w-full h-8 text-xs rounded-lg bg-blue-500 hover:bg-blue-600 text-white" onClick={() => handleMarkCompleted(withdrawal.id)}>
                         <Check className="w-3 h-3 mr-1" /> Tandai Selesai Transfer
                       </Button>
                     </div>
@@ -1081,179 +1072,32 @@ export function AdminWithdraw() {
           </motion.div>
         )}
       </AnimatePresence>
+      <ConfirmDialog
+        isOpen={!!confirmAction}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={() => confirmAction?.action()}
+        title={confirmAction?.title || ''}
+        message={confirmAction?.message || ''}
+      />
     </div>
   )
 }
 
 // ==================== ADMIN BANNER ====================
-type ApiBanner = {
-  id: string
-  title: string
-  image: string
-  link: string | null
-  position: string
-  sortOrder: number
-  isActive: boolean
-  startDate: string | null
-  endDate: string | null
-  createdAt: string
-}
-
-const BANNER_POSITIONS = [
-  { value: 'home_top', label: 'Homepage Top (Hero)', description: 'Banner carousel di bagian atas homepage, ukuran 800x400px' },
-  { value: 'home_mid', label: 'Homepage Middle', description: 'Banner di tengah homepage setelah kategori, ukuran 800x200px' },
-  { value: 'home_bottom', label: 'Homepage Bottom', description: 'Banner di bawah homepage sebelum produk rekomendasi, ukuran 800x200px' },
-  { value: 'category_top', label: 'Category Page Top', description: 'Banner di halaman kategori, ukuran 800x200px' },
-  { value: 'search_top', label: 'Search Page Top', description: 'Banner di halaman pencarian, ukuran 800x150px' },
-  { value: 'product_detail', label: 'Product Detail Page', description: 'Banner di halaman detail produk, ukuran 800x150px' },
-  { value: 'checkout_top', label: 'Checkout Page Top', description: 'Banner di halaman checkout, ukuran 800x100px' },
-  { value: 'popup', label: 'Popup / Modal', description: 'Banner popup yang muncul saat buka aplikasi, ukuran 400x500px' },
-]
-
-function getPositionLabel(value: string) {
-  return BANNER_POSITIONS.find(p => p.value === value)?.label || value
-}
-
-function getPositionDescription(value: string) {
-  return BANNER_POSITIONS.find(p => p.value === value)?.description || ''
-}
-
 export function AdminBanner() {
-  const { showToast } = useAppStore()
-  const [banners, setBanners] = useState<ApiBanner[]>([])
-  const [loading, setLoading] = useState(true)
+  const { showToast, adminBanners, addAdminBanner, updateAdminBanner, deleteAdminBanner, fetchAdminBanners } = useAppStore()
   const [showAdd, setShowAdd] = useState(false)
-  const [newTitle, setNewTitle] = useState('')
-  const [newPosition, setNewPosition] = useState('home_top')
-  const [newLink, setNewLink] = useState('')
-  const [newImage, setNewImage] = useState('')
-  const [newSortOrder, setNewSortOrder] = useState(0)
-  const [newIsActive, setNewIsActive] = useState(true)
-  const [newStartDate, setNewStartDate] = useState('')
-  const [newEndDate, setNewEndDate] = useState('')
-  const [uploading, setUploading] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [newBannerTitle, setNewBannerTitle] = useState("")
+  const [newBannerPosition, setNewBannerPosition] = useState("home_top")
+  const [newBannerImageUrl, setNewBannerImageUrl] = useState("")
+  const [newBannerLink, setNewBannerLink] = useState("")
 
-  const fetchBanners = async () => {
-    try {
-      const res = await fetch('/api/admin/banners', { headers: getAdminAuthHeaders() })
-      const data = await res.json()
-      if (data.success) {
-        setBanners(data.banners)
-      }
-    } catch {
-      console.error('Failed to fetch banners')
-    } finally {
-      setLoading(false)
-    }
-  }
+  useEffect(() => {
+    fetchAdminBanners().finally(() => setIsLoading(false))
+  }, [fetchAdminBanners])
 
-  useEffect(() => { fetchBanners() }, [])
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    // Validate file type
-    if (!file.type.startsWith('image/')) {
-      showToast('Hanya file gambar yang diperbolehkan', "error")
-      return
-    }
-
-    // Validate file size (5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      showToast('Ukuran file maksimal 5MB', "error")
-      return
-    }
-
-    setUploading(true)
-    try {
-      const formData = new FormData()
-      formData.append('file', file)
-
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-      })
-      const data = await res.json()
-      if (data.success && data.url) {
-        setNewImage(data.url)
-        showToast("Gambar berhasil diupload", "success")
-      } else {
-        showToast(data.error || 'Gagal mengupload gambar', "error")
-      }
-    } catch {
-      showToast('Gagal mengupload gambar', "error")
-    } finally {
-      setUploading(false)
-      // Reset file input so the same file can be re-selected
-      if (fileInputRef.current) fileInputRef.current.value = ''
-    }
-  }
-
-  const handleToggleActive = async (banner: ApiBanner) => {
-    try {
-      const res = await fetch('/api/admin/banners', {
-        method: 'PATCH',
-        headers: getAdminAuthHeaders(),
-        body: JSON.stringify({ bannerId: banner.id, updates: { isActive: !banner.isActive } }),
-      })
-      const data = await res.json()
-      if (data.success) {
-        showToast(!banner.isActive ? "Banner diaktifkan" : "Banner dinonaktifkan", "success")
-        fetchBanners()
-      }
-    } catch {
-      showToast('Gagal mengubah status banner', "error")
-    }
-  }
-
-  const handleAddBanner = async () => {
-    if (!newTitle || !newImage) {
-      showToast('Judul dan gambar wajib diisi', "error")
-      return
-    }
-    try {
-      const res = await fetch('/api/admin/banners', {
-        method: 'POST',
-        headers: getAdminAuthHeaders(),
-        body: JSON.stringify({ title: newTitle, image: newImage, position: newPosition, link: newLink || null, sortOrder: newSortOrder, isActive: newIsActive, startDate: newStartDate || null, endDate: newEndDate || null }),
-      })
-      const data = await res.json()
-      if (data.success) {
-        showToast("Banner berhasil ditambahkan", "success")
-        setShowAdd(false)
-        setNewTitle('')
-        setNewPosition('home_top')
-        setNewLink('')
-        setNewImage('')
-        setNewSortOrder(0)
-        setNewIsActive(true)
-        setNewStartDate('')
-        setNewEndDate('')
-        fetchBanners()
-      } else {
-        showToast(data.error || 'Gagal menambahkan banner', "error")
-      }
-    } catch {
-      showToast('Gagal menambahkan banner', "error")
-    }
-  }
-
-  const handleDeleteBanner = async (bannerId: string) => {
-    try {
-      const res = await fetch(`/api/admin/banners?bannerId=${bannerId}`, { method: 'DELETE', headers: getAdminAuthHeaders() })
-      const data = await res.json()
-      if (data.success) {
-        showToast("Banner dihapus", "info")
-        fetchBanners()
-      }
-    } catch {
-      showToast('Gagal menghapus banner', "error")
-    }
-  }
-
-  const selectedPositionDesc = getPositionDescription(newPosition)
+  if (isLoading) return <div className="pb-20"><PageHeader title="Kelola Banner" /><LoadingSpinner message="Memuat banner..." /></div>
 
   return (
     <div className="pb-20">
@@ -1271,53 +1115,23 @@ export function AdminBanner() {
         <motion.div {...fadeIn}>
           <SectionHeader title="Banner Aktif" icon={<ImageIcon className="w-4 h-4" />} />
           <div className="space-y-2 mt-3">
-            {banners.map((banner, i) => (
+            {adminBanners.map((banner, i) => (
               <motion.div key={banner.id} custom={i} variants={stagger} initial="initial" animate="animate">
                 <Card className="p-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      {banner.image ? (
-                        <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-muted">
-                          <img src={banner.image} alt={banner.title} className="w-full h-full object-cover" />
-                        </div>
-                      ) : (
-                        <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-blue-400 to-emerald-400 flex items-center justify-center flex-shrink-0">
-                          <ImageIcon className="w-5 h-5 text-white" />
-                        </div>
-                      )}
+                      <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-blue-400 to-emerald-400 flex items-center justify-center flex-shrink-0">
+                        <ImageIcon className="w-5 h-5 text-white" />
+                      </div>
                       <div>
                         <p className="text-sm font-medium text-foreground">{banner.title}</p>
-                        <p className="text-xs text-muted-foreground">{getPositionLabel(banner.position)}</p>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <Badge variant="outline" className={`text-[9px] ${banner.isActive ? 'border-emerald-300 text-emerald-600' : 'border-gray-300 text-gray-500'}`}>
-                            {banner.isActive ? 'Aktif' : 'Nonaktif'}
-                          </Badge>
-                          {banner.sortOrder > 0 && (
-                            <span className="text-[10px] text-muted-foreground">Urutan: {banner.sortOrder}</span>
-                          )}
-                          {(banner.startDate || banner.endDate) && (
-                            <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-                              <Calendar className="w-2.5 h-2.5" />
-                              {banner.startDate && banner.endDate
-                                ? `${new Date(banner.startDate).toLocaleDateString('id-ID')} - ${new Date(banner.endDate).toLocaleDateString('id-ID')}`
-                                : banner.startDate
-                                  ? `Mulai ${new Date(banner.startDate).toLocaleDateString('id-ID')}`
-                                  : `Sampai ${new Date(banner.endDate!).toLocaleDateString('id-ID')}`}
-                            </span>
-                          )}
-                        </div>
+                        <p className="text-xs text-muted-foreground">{banner.position}</p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Switch checked={banner.isActive} onCheckedChange={() => handleToggleActive(banner)} />
-                      <motion.button
-                        whileTap={{ scale: 0.9 }}
-                        onClick={() => handleDeleteBanner(banner.id)}
-                        className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                      >
-                        <Trash2 className="w-3.5 h-3.5 text-red-500" />
-                      </motion.button>
-                    </div>
+                    <Switch checked={banner.isActive} onCheckedChange={(checked) => {
+                      updateAdminBanner(banner.id, { isActive: checked })
+                      showToast(checked ? "Banner diaktifkan" : "Banner dinonaktifkan", "success")
+                    }} />
                   </div>
                 </Card>
               </motion.div>
@@ -1325,182 +1139,109 @@ export function AdminBanner() {
           </div>
         </motion.div>
 
-        {/* Add New Banner Dialog */}
-        <Dialog open={showAdd} onOpenChange={(open) => {
-          setShowAdd(open)
-          if (!open) {
-            setNewTitle('')
-            setNewPosition('home_top')
-            setNewLink('')
-            setNewImage('')
-            setNewSortOrder(0)
-            setNewIsActive(true)
-            setNewStartDate('')
-            setNewEndDate('')
-          }
-        }}>
-          <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Megaphone className="w-5 h-5 text-blue-600" />
-                Tambah Banner Baru
-              </DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 py-2">
-              {/* Title */}
+        {/* Add New Banner Form */}
+        {showAdd && (
+          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}>
+            <SectionHeader title="Tambah Banner Baru" icon={<Plus className="w-4 h-4" />} />
+            <Card className="mt-3 p-4 space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="banner-title" className="text-xs font-medium">Judul Banner</Label>
-                <Input id="banner-title" placeholder="Contoh: Flash Sale Weekend" className="rounded-xl" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} />
+                <label className="text-xs font-medium text-foreground">Judul Banner</label>
+                <Input value={newBannerTitle} onChange={(e) => setNewBannerTitle(e.target.value)} placeholder="Contoh: Flash Sale Weekend" className="rounded-xl" />
               </div>
 
-              {/* Position */}
               <div className="space-y-2">
-                <Label htmlFor="banner-position" className="text-xs font-medium">Posisi</Label>
-                <Select value={newPosition} onValueChange={(val) => setNewPosition(val)}>
-                  <SelectTrigger className="rounded-xl">
-                    <SelectValue placeholder="Pilih posisi" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {BANNER_POSITIONS.map((pos) => (
-                      <SelectItem key={pos.value} value={pos.value}>{pos.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {selectedPositionDesc && (
-                  <p className="text-[11px] text-muted-foreground">{selectedPositionDesc}</p>
+                <label className="text-xs font-medium text-foreground">Posisi</label>
+                <select
+                  value={newBannerPosition}
+                  onChange={(e) => setNewBannerPosition(e.target.value)}
+                  className="w-full h-10 rounded-xl border border-input bg-background px-3 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <option value="home_top">Home Top</option>
+                  <option value="home_mid">Home Middle</option>
+                  <option value="category">Category</option>
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-foreground">URL Gambar</label>
+                <Input value={newBannerImageUrl} onChange={(e) => setNewBannerImageUrl(e.target.value)} placeholder="https://example.com/banner.jpg" className="rounded-xl" />
+                {newBannerImageUrl && (
+                  <div className="h-28 rounded-xl overflow-hidden bg-muted">
+                    <img src={newBannerImageUrl} alt="Preview" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                  </div>
                 )}
               </div>
 
-              {/* Image Upload */}
               <div className="space-y-2">
-                <Label className="text-xs font-medium">Gambar Banner</Label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  ref={fileInputRef}
-                  onChange={handleFileUpload}
-                  className="hidden"
-                />
-                <div
-                  className="h-32 rounded-xl bg-muted/50 border-2 border-dashed border-border flex flex-col items-center justify-center cursor-pointer hover:bg-muted transition-colors overflow-hidden"
-                  onClick={() => !uploading && fileInputRef.current?.click()}
-                >
-                  {uploading ? (
-                    <div className="flex flex-col items-center gap-2">
-                      <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                      <p className="text-xs text-muted-foreground">Mengupload...</p>
-                    </div>
-                  ) : newImage ? (
-                    <img src={newImage} alt="Preview" className="w-full h-full object-contain" />
-                  ) : (
-                    <>
-                      <ImageIcon className="w-6 h-6 text-muted-foreground mb-1" />
-                      <p className="text-xs text-muted-foreground">Klik untuk upload gambar</p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">PNG, JPG, WEBP (maks 5MB)</p>
-                    </>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 h-px bg-border" />
-                  <span className="text-[10px] text-muted-foreground">atau</span>
-                  <div className="flex-1 h-px bg-border" />
-                </div>
-                <Input placeholder="Paste URL gambar..." className="rounded-xl" value={newImage} onChange={(e) => setNewImage(e.target.value)} />
+                <label className="text-xs font-medium text-foreground">Link (Opsional)</label>
+                <Input value={newBannerLink} onChange={(e) => setNewBannerLink(e.target.value)} placeholder="https://..." className="rounded-xl" />
               </div>
 
-              {/* Link */}
-              <div className="space-y-2">
-                <Label htmlFor="banner-link" className="text-xs font-medium">Link (Opsional)</Label>
-                <Input id="banner-link" placeholder="https://..." className="rounded-xl" value={newLink} onChange={(e) => setNewLink(e.target.value)} />
-              </div>
-
-              {/* Sort Order */}
-              <div className="space-y-2">
-                <Label htmlFor="banner-sort" className="text-xs font-medium">Urutan Tampil</Label>
-                <Input id="banner-sort" type="number" min={0} placeholder="0" className="rounded-xl" value={newSortOrder} onChange={(e) => setNewSortOrder(parseInt(e.target.value) || 0)} />
-                <p className="text-[11px] text-muted-foreground">Angka lebih kecil ditampilkan lebih dulu</p>
-              </div>
-
-              {/* Active Toggle */}
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label className="text-xs font-medium">Aktifkan Banner</Label>
-                  <p className="text-[11px] text-muted-foreground">Banner akan langsung tampil jika diaktifkan</p>
-                </div>
-                <Switch checked={newIsActive} onCheckedChange={setNewIsActive} />
-              </div>
-
-              {/* Date Range */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <Label htmlFor="banner-start" className="text-xs font-medium">Tanggal Mulai</Label>
-                  <Input id="banner-start" type="date" className="rounded-xl" value={newStartDate} onChange={(e) => setNewStartDate(e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="banner-end" className="text-xs font-medium">Tanggal Selesai</Label>
-                  <Input id="banner-end" type="date" className="rounded-xl" value={newEndDate} onChange={(e) => setNewEndDate(e.target.value)} />
-                </div>
-              </div>
-            </div>
-            <DialogFooter className="gap-2">
-              <Button variant="outline" className="rounded-xl" onClick={() => setShowAdd(false)}>
-                Batal
+              <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl h-10" onClick={() => {
+                if (!newBannerTitle || !newBannerPosition) {
+                  showToast('Judul dan posisi wajib diisi', 'error')
+                  return
+                }
+                addAdminBanner({
+                  id: `banner-${Date.now()}`,
+                  title: newBannerTitle,
+                  image: newBannerImageUrl || '/placeholder-banner.jpg',
+                  link: newBannerLink || '',
+                  position: newBannerPosition,
+                  isActive: true,
+                })
+                showToast('Banner berhasil ditambahkan', 'success')
+                setNewBannerTitle('')
+                setNewBannerPosition('home_top')
+                setNewBannerImageUrl('')
+                setNewBannerLink('')
+                setShowAdd(false)
+              }}>
+                Simpan Banner
               </Button>
-              <Button className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl" onClick={handleAddBanner} disabled={uploading}>
-                {uploading ? 'Mengupload...' : 'Simpan Banner'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+            </Card>
+          </motion.div>
+        )}
       </div>
     </div>
   )
 }
 
 // ==================== ADMIN ANALYTICS ====================
-type AdminStats = {
-  totalUsers: number
-  totalSellers: number
-  totalOrders: number
-  totalRevenue: number
-  activeProducts: number
-  pendingWithdrawals: number
-  totalDivisions: number
-  totalStaff: number
-  pendingSellerVerifications: number
-  openComplaints: number
-  revenueChart: { date: string; revenue: number }[]
-  userGrowth: { date: string; users: number }[]
-  topSellers: { name: string; revenue: number; orders: number }[]
-  categoryPerformance: { name: string; revenue: number; percentage: number }[]
-  recentOrders: { orderNumber: string; totalAmount: number; status: string; createdAt: string }[]
-  recentUsers: { name: string; email: string; role: string; createdAt: string }[]
-}
-
 export function AdminAnalytics() {
-  const [stats, setStats] = useState<AdminStats | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [dateRange, setDateRange] = useState("30d")
+  const { products, orders, withdrawRequests, adminStats, fetchAdminStats } = useAppStore()
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const res = await fetch('/api/admin/stats', { headers: getAdminAuthHeaders() })
-        const data = await res.json()
-        if (data.success) {
-          setStats(data.stats)
-        }
-      } catch {
-        console.error('Failed to fetch admin stats')
-      } finally {
-        setLoading(false)
-      }
-    }
-    fetchStats()
-  }, [])
+    fetchAdminStats().finally(() => setIsLoading(false))
+  }, [fetchAdminStats])
 
-  const topSellers = stats?.topSellers || []
-  const categoryPerformance = stats?.categoryPerformance || []
+  // Compute real data from store
+  const topSellers = computeTopSellers(products)
+  const categoryPerformance = computeCategoryPerformance(products)
+
+  const stats = adminStats ? {
+    totalUsers: adminStats.totalUsers,
+    totalSellers: adminStats.totalSellers,
+    totalOrders: adminStats.totalOrders,
+    totalRevenue: adminStats.totalRevenue,
+    pendingWithdrawals: adminStats.pendingWithdrawals,
+    activeProducts: adminStats.activeProducts,
+    revenueChart: adminStats.revenueChart,
+    userGrowth: adminStats.userGrowth,
+  } : {
+    totalUsers: 0,
+    totalSellers: 0,
+    totalOrders: orders.length,
+    totalRevenue: orders.reduce((sum, o) => sum + o.totalAmount, 0),
+    pendingWithdrawals: withdrawRequests.filter(w => w.status === 'pending').length,
+    activeProducts: products.filter(p => p.status === 'active').length,
+    revenueChart: [] as { date: string; revenue: number }[],
+    userGrowth: [] as { date: string; users: number }[],
+  }
+  const [dateRange, setDateRange] = useState("30d")
+
+  if (isLoading) return <div className="pb-20"><PageHeader title="Analitik Lengkap" /><LoadingSpinner message="Memuat analitik..." /></div>
 
   return (
     <div className="pb-20">
@@ -1536,7 +1277,7 @@ export function AdminAnalytics() {
           <Card className="mt-3 p-4">
             <div className="h-56">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={stats?.revenueChart || []} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+                <AreaChart data={stats.revenueChart} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
                   <defs>
                     <linearGradient id="adminRevenueGradient" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
@@ -1573,7 +1314,7 @@ export function AdminAnalytics() {
                     <th className="text-left text-xs font-medium text-muted-foreground px-4 py-2.5">#</th>
                     <th className="text-left text-xs font-medium text-muted-foreground px-4 py-2.5">Toko</th>
                     <th className="text-right text-xs font-medium text-muted-foreground px-4 py-2.5">Revenue</th>
-                    <th className="text-right text-xs font-medium text-muted-foreground px-4 py-2.5">Pesanan</th>
+                    <th className="text-right text-xs font-medium text-muted-foreground px-4 py-2.5">Rating</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1590,7 +1331,7 @@ export function AdminAnalytics() {
                           <p className="text-[10px] text-muted-foreground">{seller.orders.toLocaleString()} pesanan</p>
                         </td>
                         <td className="px-4 py-3 text-sm text-right font-medium text-emerald-600">{formatPrice(seller.revenue)}</td>
-                        <td className="px-4 py-3 text-sm text-right text-muted-foreground">{seller.orders} pesanan</td>
+                        <td className="px-4 py-3 text-sm text-right text-foreground">{seller.rating}</td>
                       </tr>
                     ))
                   )}
@@ -1630,8 +1371,27 @@ export function AdminAnalytics() {
         {/* Payment Method Distribution */}
         <motion.div {...fadeIn}>
           <SectionHeader title="Distribusi Metode Pembayaran" icon={<CreditCard className="w-4 h-4" />} />
-          <Card className="mt-3 p-4">
-            <p className="text-sm text-muted-foreground text-center py-4">Data belum tersedia</p>
+          <Card className="mt-3 p-4 space-y-3">
+            {(adminStats?.paymentMethodDistribution && adminStats.paymentMethodDistribution.length > 0) ? (
+              adminStats.paymentMethodDistribution.map((pm, i) => (
+                <div key={pm.method}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-medium text-foreground capitalize">{pm.method || 'Lainnya'}</span>
+                    <span className="text-xs text-muted-foreground">{pm.percentage}% ({pm.count})</span>
+                  </div>
+                  <div className="h-2 bg-muted rounded-full overflow-hidden">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${pm.percentage}%` }}
+                      transition={{ delay: i * 0.1, duration: 0.5 }}
+                      className="h-full bg-blue-500 rounded-full"
+                    />
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-4">Data belum tersedia</p>
+            )}
           </Card>
         </motion.div>
       </div>
@@ -1640,76 +1400,18 @@ export function AdminAnalytics() {
 }
 
 // ==================== ADMIN COMPLAINTS ====================
-type ApiComplaint = {
-  id: string
-  orderId: string
-  orderNumber: string
-  orderStatus: string
-  orderTotal: number
-  paymentStatus: string
-  userId: string
-  userName: string
-  userEmail: string
-  userAvatar: string | null
-  sellerId: string
-  sellerName: string
-  type: string
-  reason: string
-  description: string
-  images: string[]
-  status: string
-  resolution: string | null
-  refundAmount: number | null
-  createdAt: string
-  updatedAt: string
-}
-
 export function AdminComplaints() {
-  const { showToast } = useAppStore()
-  const [complaints, setComplaints] = useState<ApiComplaint[]>([])
-  const [loading, setLoading] = useState(true)
+  const { showToast, adminComplaints, updateAdminComplaint, fetchAdminComplaints } = useAppStore()
   const [activeTab, setActiveTab] = useState("open")
+  const [isLoading, setIsLoading] = useState(true)
 
-  const fetchComplaints = async () => {
-    try {
-      const res = await fetch('/api/admin/complaints', { headers: getAdminAuthHeaders() })
-      const data = await res.json()
-      if (data.success) {
-        setComplaints(data.complaints)
-      }
-    } catch {
-      console.error('Failed to fetch complaints')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => { fetchComplaints() }, [])
-
-  const handleUpdateComplaint = async (complaintId: string, updates: Record<string, unknown>) => {
-    try {
-      const res = await fetch('/api/admin/complaints', {
-        method: 'PATCH',
-        headers: getAdminAuthHeaders(),
-        body: JSON.stringify({ complaintId, updates }),
-      })
-      const data = await res.json()
-      if (data.success) {
-        fetchComplaints()
-        return true
-      } else {
-        showToast(data.error || 'Gagal memperbarui keluhan', "error")
-        return false
-      }
-    } catch {
-      showToast('Gagal memperbarui keluhan', "error")
-      return false
-    }
-  }
+  useEffect(() => {
+    fetchAdminComplaints().finally(() => setIsLoading(false))
+  }, [fetchAdminComplaints])
 
   const filtered = activeTab === "all"
-    ? complaints
-    : complaints.filter(c => c.status === activeTab)
+    ? adminComplaints
+    : adminComplaints.filter(c => c.status === activeTab)
 
   const statusLabel: Record<string, string> = {
     open: "Terbuka",
@@ -1722,8 +1424,10 @@ export function AdminComplaints() {
     open: "border-red-300 text-red-600",
     processing: "border-amber-300 text-amber-600",
     resolved: "border-emerald-300 text-emerald-600",
-    rejected: "border-gray-300 text-gray-500",
+    rejected: "border-red-300 text-red-600",
   }
+
+  if (isLoading) return <div className="pb-20"><PageHeader title="Keluhan" /><LoadingSpinner message="Memuat keluhan..." /></div>
 
   return (
     <div className="pb-20">
@@ -1737,6 +1441,7 @@ export function AdminComplaints() {
             { key: "open", label: "Terbuka" },
             { key: "processing", label: "Diproses" },
             { key: "resolved", label: "Diselesaikan" },
+            { key: "rejected", label: "Ditolak" },
           ].map((tab) => (
             <motion.button
               key={tab.key}
@@ -1766,24 +1471,19 @@ export function AdminComplaints() {
               <motion.div key={complaint.id} custom={i} variants={stagger} initial="initial" animate="animate">
                 <Card className="p-4">
                   <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <p className="text-xs font-mono text-muted-foreground">{complaint.orderNumber || complaint.orderId}</p>
-                      {complaint.orderTotal > 0 && (
-                        <span className="text-[10px] text-muted-foreground">· {formatPrice(complaint.orderTotal)}</span>
-                      )}
-                    </div>
+                    <p className="text-xs font-mono text-muted-foreground">{complaint.orderId}</p>
                     <Badge variant="outline" className={`text-[10px] ${statusColor[complaint.status]}`}>
-                      {statusLabel[complaint.status] || complaint.status}
+                      {statusLabel[complaint.status]}
                     </Badge>
                   </div>
                   <div className="flex items-center gap-4 mb-2">
                     <div>
                       <p className="text-[10px] text-muted-foreground">Pembeli</p>
-                      <p className="text-xs font-medium text-foreground">{complaint.userName}</p>
+                      <p className="text-xs font-medium text-foreground">{complaint.buyer || complaint.userName}</p>
                     </div>
                     <div>
                       <p className="text-[10px] text-muted-foreground">Seller</p>
-                      <p className="text-xs font-medium text-foreground">{complaint.sellerName}</p>
+                      <p className="text-xs font-medium text-foreground">{complaint.seller}</p>
                     </div>
                   </div>
                   <div className="mb-2">
@@ -1791,41 +1491,27 @@ export function AdminComplaints() {
                       {complaint.type}
                     </Badge>
                   </div>
-                  {complaint.reason && (
-                    <p className="text-xs font-medium text-foreground mb-1">{complaint.reason}</p>
-                  )}
                   <p className="text-sm text-foreground">{complaint.description}</p>
-                  {complaint.resolution && (
-                    <div className="mt-2 p-2 bg-emerald-50 dark:bg-emerald-950/30 rounded-lg">
-                      <p className="text-[10px] text-emerald-600 font-medium">Resolusi:</p>
-                      <p className="text-xs text-emerald-700 dark:text-emerald-400">{complaint.resolution}</p>
-                    </div>
-                  )}
-                  {complaint.refundAmount && complaint.refundAmount > 0 && (
-                    <div className="mt-1 p-2 bg-blue-50 dark:bg-blue-950/30 rounded-lg">
-                      <p className="text-[10px] text-blue-600 font-medium">Refund: {formatPrice(complaint.refundAmount)}</p>
-                    </div>
-                  )}
 
-                  {complaint.status !== "resolved" && complaint.status !== "rejected" && (
+                  {complaint.status !== "resolved" && (
                     <div className="flex gap-2 mt-3 pt-3 border-t border-border/50">
                       {complaint.status === "open" && (
-                        <Button size="sm" className="h-7 text-[11px] rounded-lg bg-amber-500 hover:bg-amber-600 text-white" onClick={async () => {
-                          const ok = await handleUpdateComplaint(complaint.id, { status: "processing" })
-                          if (ok) showToast("Keluhan sedang diproses", "info")
+                        <Button size="sm" className="h-7 text-[11px] rounded-lg bg-amber-500 hover:bg-amber-600 text-white" onClick={() => {
+                          updateAdminComplaint(complaint.id, { status: "processing" })
+                          showToast("Keluhan sedang diproses", "info")
                         }}>
                           <Clock className="w-3 h-3 mr-0.5" /> Proses
                         </Button>
                       )}
-                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={async () => {
-                        const ok = await handleUpdateComplaint(complaint.id, { status: "resolved" })
-                        if (ok) showToast("Keluhan diselesaikan", "success")
+                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={() => {
+                        updateAdminComplaint(complaint.id, { status: "resolved" })
+                        showToast("Keluhan diselesaikan", "success")
                       }}>
                         <Check className="w-3 h-3 mr-0.5" /> Resolve
                       </Button>
-                      <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500" onClick={async () => {
-                        const ok = await handleUpdateComplaint(complaint.id, { status: "rejected" })
-                        if (ok) showToast("Keluhan ditolak", "info")
+                      <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500" onClick={() => {
+                        updateAdminComplaint(complaint.id, { status: "rejected" })
+                        showToast("Keluhan ditolak", "info")
                       }}>
                         <X className="w-3 h-3 mr-0.5" /> Reject
                       </Button>

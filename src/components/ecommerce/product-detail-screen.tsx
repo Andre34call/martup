@@ -3,7 +3,7 @@
 import { motion, AnimatePresence } from "framer-motion"
 import {
   Heart, MessageCircle, ShoppingCart, Star, Truck, Shield, RotateCcw,
-  Zap, Check, ChevronRight, Share2, MapPin, Clock, Award, Minus, Plus
+  Zap, Check, ChevronRight, Share2, MapPin, Clock, Award, Minus, Plus, Video
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -40,7 +40,19 @@ const FALLBACK_REVIEWS = [
 // Rating distribution is now computed dynamically from store reviews
 
 // ==================== IMAGE GALLERY ====================
-function ImageGallery({ images, isFlashSale }: { images: string[]; isFlashSale: boolean }) {
+function ImageGallery({ images, videoUrl, isFlashSale }: { images: string[]; videoUrl?: string; isFlashSale: boolean }) {
+  // Build media list: video first, then images
+  const mediaItems: { type: 'video' | 'image'; url: string }[] = []
+  if (videoUrl) {
+    mediaItems.push({ type: 'video', url: videoUrl })
+  }
+  images.forEach(url => {
+    mediaItems.push({ type: 'image', url })
+  })
+
+  const totalItems = mediaItems.length
+  const hasMedia = totalItems > 0
+
   const [activeIndex, setActiveIndex] = useState(0)
   const touchStartX = useRef(0)
   const touchEndX = useRef(0)
@@ -57,7 +69,7 @@ function ImageGallery({ images, isFlashSale }: { images: string[]; isFlashSale: 
   const handleTouchEnd = () => {
     const diff = touchStartX.current - touchEndX.current
     if (Math.abs(diff) > 50) {
-      if (diff > 0 && activeIndex < images.length - 1) {
+      if (diff > 0 && activeIndex < totalItems - 1) {
         setActiveIndex(prev => prev + 1)
       } else if (diff < 0 && activeIndex > 0) {
         setActiveIndex(prev => prev - 1)
@@ -89,12 +101,22 @@ function ImageGallery({ images, isFlashSale }: { images: string[]; isFlashSale: 
             transition={{ duration: 0.25 }}
             className="absolute inset-0"
           >
-            {images && images.length > 0 ? (
-              <img
-                src={images[activeIndex]}
-                alt={`Product image ${activeIndex + 1}`}
-                className="w-full h-full object-cover"
-              />
+            {hasMedia && mediaItems[activeIndex] ? (
+              mediaItems[activeIndex].type === 'video' ? (
+                <video
+                  src={mediaItems[activeIndex].url}
+                  className="w-full h-full object-cover"
+                  controls
+                  preload="metadata"
+                  playsInline
+                />
+              ) : (
+                <img
+                  src={mediaItems[activeIndex].url}
+                  alt={`Product image ${activeIndex + 1}`}
+                  className="w-full h-full object-cover"
+                />
+              )
             ) : (
               <div className={`w-full h-full flex items-center justify-center ${colors[activeIndex % colors.length]}`}>
                 <span className="text-6xl font-bold text-emerald-600/50">P</span>
@@ -111,23 +133,35 @@ function ImageGallery({ images, isFlashSale }: { images: string[]; isFlashSale: 
           </div>
         )}
 
-        {/* Image counter */}
+        {/* Video indicator badge */}
+        {hasMedia && mediaItems[activeIndex]?.type === 'video' && (
+          <div className="absolute top-3 left-3 bg-purple-500 text-white text-xs font-bold px-2.5 py-1 rounded-lg flex items-center gap-1">
+            <Video className="w-3 h-3" />
+            VIDEO
+          </div>
+        )}
+
+        {/* Media counter */}
         <div className="absolute top-3 right-3 bg-black/50 text-white text-[10px] font-medium px-2 py-0.5 rounded-full backdrop-blur-sm">
-          {activeIndex + 1}/{images?.length || 1}
+          {activeIndex + 1}/{totalItems || 1}
         </div>
       </div>
 
       {/* Dot indicators */}
-      {(images?.length || 0) > 1 && (
+      {totalItems > 1 && (
         <div className="flex items-center justify-center gap-1.5 py-3">
-          {images.map((_, idx) => (
+          {mediaItems.map((item, idx) => (
             <button
               key={idx}
               onClick={() => setActiveIndex(idx)}
               className={`transition-all duration-300 rounded-full ${
                 idx === activeIndex
-                  ? "w-6 h-2 bg-emerald-500"
-                  : "w-2 h-2 bg-gray-300 dark:bg-gray-600"
+                  ? item.type === 'video'
+                    ? "w-6 h-2 bg-purple-500"
+                    : "w-6 h-2 bg-emerald-500"
+                  : item.type === 'video'
+                    ? "w-2 h-2 bg-purple-300 dark:bg-purple-600"
+                    : "w-2 h-2 bg-gray-300 dark:bg-gray-600"
               }`}
             />
           ))}
@@ -336,6 +370,7 @@ export function ProductDetailScreen() {
         {/* 1. Image Gallery */}
         <ImageGallery
           images={product.images}
+          videoUrl={product.videoUrl}
           isFlashSale={product.isFlashSale}
         />
 

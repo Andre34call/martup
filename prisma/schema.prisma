@@ -508,3 +508,10 @@ model Division {
   members     User[]
   headUser    User?    @relation("DivisionHead", fields: [headUserId], references: [id])
 }
+
+// ==================== PLATFORM SETTINGS ====================
+
+model PlatformSetting {
+  key   String @id
+  value String // JSON string
+}

@@ -393,8 +393,8 @@ export function ProfileScreen() {
           </motion.button>
         </div>
 
-        {/* Admin Panel */}
-        {(userRole === "admin" || userRole === "seller") && (
+        {/* Admin Panel - Only show if user is actually an admin */}
+        {currentUser?.role === 'admin' && (
           <div className="px-4 pb-4">
             <motion.button
               whileTap={{ scale: 0.98 }}
@@ -422,7 +422,7 @@ export function ProfileScreen() {
           <div className="bg-card rounded-xl border border-border/50 p-4">
             <h3 className="text-sm font-bold text-foreground mb-3">Switch Role (Demo)</h3>
             <div className="flex gap-2">
-              {(["buyer", "seller", "admin"] as const).map((role) => {
+              {(["buyer", "seller", ...(currentUser?.role === 'admin' ? ["admin" as const] : [])] as const).map((role) => {
                 const roleIcons = { buyer: User, seller: Store, admin: LayoutDashboard }
                 const RoleIcon = roleIcons[role]
                 const roleColors = {

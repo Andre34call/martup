@@ -1402,15 +1402,9 @@ export function RefundScreen() {
   const [previewImage, setPreviewImage] = useState<string | null>(null)
   const evidenceInputRef = useRef<HTMLInputElement>(null)
 
-  const activeRefunds = [
-    { id: "rf1", orderNumber: "ORD-2024-201", product: "Lipstik Matte Velvet", reason: "Barang rusak", status: "Diproses", date: "20 Des 2024", timeline: ["Pengajuan diajukan", "Menunggu review seller", "Diproses admin"] },
-    { id: "rf2", orderNumber: "ORD-2024-202", product: "Skincare Set Glowing", reason: "Tidak sesuai deskripsi", status: "Dikirim balik", date: "18 Des 2024", timeline: ["Pengajuan diajukan", "Seller menyetujui", "Barang dikirim balik"] },
-  ]
+  const activeRefunds: { id: string; orderNumber: string; product: string; reason: string; status: string; date: string; timeline: string[] }[] = []
 
-  const refundHistory = [
-    { id: "rh1", orderNumber: "ORD-2024-100", product: "T-Shirt Premium", amount: 150000, status: "Selesai", date: "10 Nov 2024" },
-    { id: "rh2", orderNumber: "ORD-2024-085", product: "Headset Bluetooth", amount: 350000, status: "Ditolak", date: "5 Okt 2024" },
-  ]
+  const refundHistory: { id: string; orderNumber: string; product: string; amount: number; status: string; date: string }[] = []
 
   const handleSubmitRefund = () => {
     evidenceImages.forEach(img => URL.revokeObjectURL(img.url))
@@ -1984,16 +1978,22 @@ export function DepositScreen() {
 
 // ==================== WITHDRAW SCREEN ====================
 export function WithdrawScreen() {
-  const { currentUser, walletBalance, walletHoldBalance, withdrawWallet, showToast, goBack } = useAppStore()
+  const { currentUser, walletBalance, walletHoldBalance, withdrawWallet, sellerBankAccounts, withdrawRequests, showToast, goBack } = useAppStore()
   const [amount, setAmount] = useState("")
 
-  const bankAccount = "BCA ****1234 - Ahmad Fauzi"
+  const defaultBankAccount = sellerBankAccounts.find(a => a.isDefault) || sellerBankAccounts[0]
+  const bankAccountLabel = defaultBankAccount
+    ? `${defaultBankAccount.bankName} ****${defaultBankAccount.accountNumber.slice(-4)} - ${defaultBankAccount.accountHolder}`
+    : "Belum ada rekening bank"
 
-  const withdrawHistory = [
-    { id: "wh1", amount: 500000, bank: "BCA ****1234", status: "Berhasil", date: "15 Des 2024" },
-    { id: "wh2", amount: 1000000, bank: "BCA ****1234", status: "Berhasil", date: "1 Des 2024" },
-    { id: "wh3", amount: 300000, bank: "BCA ****1234", status: "Berhasil", date: "20 Nov 2024" },
-  ]
+  const statusLabels: Record<string, string> = { pending: "Menunggu", approved: "Disetujui", rejected: "Ditolak", processing: "Diproses", completed: "Berhasil" }
+  const withdrawHistory = withdrawRequests.map(w => ({
+    id: w.id,
+    amount: w.amount,
+    bank: `${w.bankAccount.bankName} ****${w.bankAccount.accountNumber.slice(-4)}`,
+    status: statusLabels[w.status] || w.status,
+    date: new Date(w.requestDate).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" }),
+  }))
 
   const handleWithdraw = () => {
     const withdrawAmount = Number(amount)
@@ -2001,11 +2001,15 @@ export function WithdrawScreen() {
       showToast("Masukkan jumlah penarikan yang valid", "error")
       return
     }
+    if (!defaultBankAccount) {
+      showToast("Tambahkan rekening bank terlebih dahulu", "error")
+      return
+    }
     if (withdrawAmount > walletBalance) {
       showToast("Jumlah penarikan melebihi saldo tersedia", "error")
       return
     }
-    withdrawWallet(withdrawAmount, bankAccount)
+    withdrawWallet(withdrawAmount, bankAccountLabel)
     showToast(`Penarikan ${formatPrice(withdrawAmount)} berhasil diajukan!`, "success")
     goBack()
   }
@@ -2044,16 +2048,25 @@ export function WithdrawScreen() {
         <motion.div {...fadeIn}>
           <SectionHeader title="Rekening Tujuan" icon={<Banknote className="w-4 h-4" />} />
           <Card className="mt-3 p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center">
-                <Banknote className="w-5 h-5 text-blue-600" />
+            {defaultBankAccount ? (
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center">
+                  <Banknote className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-foreground">{defaultBankAccount.bankName}</p>
+                  <p className="text-xs text-muted-foreground">****{defaultBankAccount.accountNumber.slice(-4)} - {defaultBankAccount.accountHolder}</p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-muted-foreground ml-auto" />
               </div>
-              <div>
-                <p className="text-sm font-medium text-foreground">BCA</p>
-                <p className="text-xs text-muted-foreground">****1234 - Ahmad Fauzi</p>
+            ) : (
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center">
+                  <Banknote className="w-5 h-5 text-muted-foreground" />
+                </div>
+                <p className="text-sm text-muted-foreground">Belum ada rekening bank</p>
               </div>
-              <ChevronRight className="w-4 h-4 text-muted-foreground ml-auto" />
-            </div>
+            )}
           </Card>
         </motion.div>
 

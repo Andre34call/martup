@@ -95,6 +95,163 @@ export async function GET(request: NextRequest) {
   }
 }
 
+// PUT /api/orders - Update order status
+export async function PUT(request: NextRequest) {
+  try {
+    const body = await request.json()
+    const { orderId, status, paymentStatus, trackingNumber } = body
+
+    if (!orderId) {
+      return NextResponse.json(
+        { success: false, error: 'orderId is required' },
+        { status: 400 }
+      )
+    }
+
+    // Find the order
+    const existingOrder = await db.order.findUnique({
+      where: { id: orderId },
+    })
+
+    if (!existingOrder) {
+      return NextResponse.json(
+        { success: false, error: 'Order not found' },
+        { status: 404 }
+      )
+    }
+
+    // Build update data
+    const updateData: Record<string, unknown> = {}
+
+    if (status) {
+      updateData.status = status
+      // Set timestamp fields based on status
+      if (status === 'paid') {
+        updateData.paidAt = new Date()
+      }
+      if (status === 'shipped') {
+        updateData.shippedAt = new Date()
+      }
+      if (status === 'delivered') {
+        updateData.deliveredAt = new Date()
+      }
+    }
+
+    if (paymentStatus) {
+      updateData.paymentStatus = paymentStatus
+    }
+
+    // Update order in a transaction (also update shipping if tracking number provided)
+    const updatedOrder = await db.$transaction(async (tx) => {
+      const order = await tx.order.update({
+        where: { id: orderId },
+        data: updateData,
+        include: {
+          items: {
+            include: {
+              product: {
+                select: {
+                  id: true,
+                  name: true,
+                  images: true,
+                  slug: true,
+                },
+              },
+              variant: true,
+            },
+          },
+          shipping: true,
+          seller: {
+            select: {
+              id: true,
+              storeName: true,
+              storeSlug: true,
+              storeAvatar: true,
+              isVerified: true,
+            },
+          },
+        },
+      })
+
+      // If tracking number provided, update the shipping record
+      if (trackingNumber) {
+        const shipping = await tx.shipping.findUnique({
+          where: { orderId },
+        })
+
+        if (shipping) {
+          await tx.shipping.update({
+            where: { orderId },
+            data: { trackingNumber },
+          })
+        }
+      }
+
+      return order
+    })
+
+    // Re-fetch to get updated shipping if tracking number was set
+    const finalOrder = trackingNumber
+      ? await db.order.findUnique({
+          where: { id: orderId },
+          include: {
+            items: {
+              include: {
+                product: {
+                  select: {
+                    id: true,
+                    name: true,
+                    images: true,
+                    slug: true,
+                  },
+                },
+                variant: true,
+              },
+            },
+            shipping: true,
+            seller: {
+              select: {
+                id: true,
+                storeName: true,
+                storeSlug: true,
+                storeAvatar: true,
+                isVerified: true,
+              },
+            },
+          },
+        })
+      : updatedOrder
+
+    // Parse JSON fields
+    const parsedOrder = finalOrder
+      ? {
+          ...finalOrder,
+          items: finalOrder.items.map((item) => ({
+            ...item,
+            product: item.product
+              ? {
+                  ...item.product,
+                  images: parseJsonField(item.product.images),
+                }
+              : item.product,
+          })),
+        }
+      : updatedOrder
+
+    return NextResponse.json({
+      success: true,
+      data: parsedOrder,
+    })
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Internal server error'
+    console.error('Orders PUT error:', error)
+    return NextResponse.json(
+      { success: false, error: message },
+      { status: 500 }
+    )
+  }
+}
+
 // POST /api/orders - Create a new order
 export async function POST(request: NextRequest) {
   try {
