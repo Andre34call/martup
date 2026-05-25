@@ -22,7 +22,7 @@ function ZustandHydration({ children }: { children: React.ReactNode }) {
 
 function DataFetcher({ children }: { children: React.ReactNode }) {
   const { data: session, status } = useSession()
-  const { fetchUserData, fetchProducts, fetchCategories, isDataLoaded, isAuthenticated, login } = useAppStore()
+  const { fetchUserData, fetchProducts, fetchCategories, isAuthenticated, login } = useAppStore()
   const initialFetchDone = useRef(false)
 
   // Fetch global data (products, categories) on mount
@@ -34,46 +34,37 @@ function DataFetcher({ children }: { children: React.ReactNode }) {
     }
   }, [fetchProducts, fetchCategories])
 
-  // Handle auth session
+  // Handle auth session - Google OAuth
   useEffect(() => {
-    if (status === 'authenticated' && session?.user) {
-      const userId = (session.user as any).id
-      if (userId && !isDataLoaded) {
-        // Sync user with our DB and fetch user data
-        fetch('/api/auth/sync-user', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: session.user.email,
-            name: session.user.name,
-            avatar: session.user.image,
-            provider: 'google',
-          }),
+    if (status === 'authenticated' && session?.user && !isAuthenticated) {
+      // Fetch user data from our DB using the NextAuth session
+      // Note: sync-user is called server-side by NextAuth callback,
+      // we just need to fetch the user data here
+      fetch('/api/auth/me')
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && data.user) {
+            login({
+              id: data.user.id,
+              email: data.user.email,
+              name: data.user.name,
+              phone: data.user.phone || undefined,
+              avatar: data.user.avatar || undefined,
+              role: data.user.role || 'buyer',
+              isVerified: data.user.isVerified || false,
+              loyaltyPoints: data.user.loyaltyPoints || 0,
+              coins: data.user.coins || 0,
+              referralCode: data.user.referralCode || undefined,
+            })
+            // Now fetch all user-specific data
+            fetchUserData(data.user.id)
+          }
         })
-          .then(res => res.json())
-          .then(data => {
-            if (data.success && data.user) {
-              login({
-                id: data.user.id,
-                email: data.user.email,
-                name: data.user.name,
-                avatar: data.user.avatar || undefined,
-                role: data.user.role || 'buyer',
-                isVerified: data.user.isVerified || false,
-                loyaltyPoints: data.user.loyaltyPoints || 0,
-                coins: data.user.coins || 0,
-                referralCode: data.user.referralCode || undefined,
-              })
-              // Now fetch all user-specific data
-              fetchUserData(data.user.id)
-            }
-          })
-          .catch(err => {
-            console.error('Failed to sync user:', err)
-          })
-      }
+        .catch(err => {
+          console.error('Failed to fetch user data:', err)
+        })
     }
-  }, [status, session, fetchUserData, isDataLoaded, login])
+  }, [status, session, fetchUserData, isAuthenticated, login])
 
   return <>{children}</>
 }
