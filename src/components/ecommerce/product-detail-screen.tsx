@@ -307,14 +307,16 @@ export function ProductDetailScreen() {
 
   const handleAddToCart = () => {
     addItem(product, effectiveVariant || undefined, quantity)
+    setShowAddedToast(true)
     showToast("Ditambahkan ke keranjang!", "success")
+    setTimeout(() => setShowAddedToast(false), 2000)
   }
 
   const handleBuyNow = () => {
     addItem(product, effectiveVariant || undefined, quantity)
     // Uncheck other items, only check the newly added one for checkout
-    const { items, toggleAllCheck, toggleCheck } = useCartStore.getState()
-    toggleAllCheck(false)
+    const { items, checkAll, toggleCheck } = useCartStore.getState()
+    checkAll(false)
     // Find the just-added/updated item
     const targetItem = items.find(i =>
       i.productId === product.id && i.variantId === (effectiveVariant?.id || undefined)

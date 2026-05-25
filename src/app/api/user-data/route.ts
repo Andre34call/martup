@@ -107,10 +107,15 @@ export async function GET(request: NextRequest) {
           seller: {
             select: {
               id: true,
+              userId: true,
               storeName: true,
               storeSlug: true,
               storeAvatar: true,
               isVerified: true,
+              isPremium: true,
+              rating: true,
+              totalSales: true,
+              totalProducts: true,
             },
           },
         },
@@ -165,7 +170,7 @@ export async function GET(request: NextRequest) {
       items: order.items.map((item) => ({
         ...item,
         product: item.product
-          ? parseProductJsonFields(item.product as unknown as Record<string, unknown>) as typeof item.product
+          ? parseProductJsonFields(item.product as unknown as Record<string, unknown>) as unknown as typeof item.product
           : item.product,
       })),
     }))
@@ -175,7 +180,7 @@ export async function GET(request: NextRequest) {
       ...review,
       images: parseJsonField(review.images),
       product: review.product
-        ? parseProductJsonFields(review.product as unknown as Record<string, unknown>) as typeof review.product
+        ? parseProductJsonFields(review.product as unknown as Record<string, unknown>) as unknown as typeof review.product
         : review.product,
     }))
 

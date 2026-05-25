@@ -88,8 +88,8 @@ export function ProfileScreen() {
   const isDarkMode = theme === 'dark'
 
   const user = currentUser || MOCK_USER
-  const userName = user.name || MOCK_USER.name
-  const userEmail = user.email || MOCK_USER.email
+  const userName = user.name || 'Pengguna'
+  const userEmail = user.email || ''
   const memberSince = currentUser?.id
     ? new Date().toLocaleDateString('id-ID', { month: 'short', year: 'numeric' })
     : MOCK_USER.memberSince
@@ -106,8 +106,8 @@ export function ProfileScreen() {
     setTheme(checked ? 'dark' : 'light')
   }
 
-  const handleRoleSwitch = (role: "buyer" | "seller" | "admin") => {
-    switchRole(role)
+  const handleRoleSwitch = (role: string) => {
+    switchRole(role as import('@/lib/types').UserRole)
   }
 
   return (

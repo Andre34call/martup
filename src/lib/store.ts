@@ -173,6 +173,13 @@ interface AppState {
   }>
   updateAdminComplaint: (complaintId: string, updates: Record<string, any>) => void
 
+  // Admin Divisions
+  divisions: Division[]
+  fetchDivisions: () => Promise<void>
+  fetchAdminUsers: () => Promise<void>
+  assignUserToDivision: (userId: string, divisionId: string | null) => Promise<void>
+  updateDivision: (divisionId: string, updates: Record<string, any>) => Promise<void>
+
   // Settings
   settings: {
     twoFactor: boolean
@@ -192,140 +199,9 @@ interface AppState {
   fetchCategories: () => Promise<void>
   categories: Array<{ id: string; name: string; slug: string; icon?: string; productCount?: number }>
   isDataLoaded: boolean
-
-  // Seller Stats (fetched from API)
-  sellerStats: {
-    totalRevenue: number
-    totalOrders: number
-    totalProducts: number
-    totalVisitors: number
-    pendingOrders: number
-    monthlyRevenue: { month: string; revenue: number }[]
-    topProducts: { name: string; sold: number; revenue: number }[]
-    recentOrders: Order[]
-  } | null
-  fetchSellerStats: () => Promise<void>
-
-  // Admin Stats (fetched from API)
-  adminStats: {
-    totalUsers: number
-    totalSellers: number
-    totalOrders: number
-    totalRevenue: number
-    pendingWithdrawals: number
-    activeProducts: number
-    revenueChart: { date: string; revenue: number }[]
-    userGrowth: { date: string; users: number }[]
-    openComplaints: number
-    unverifiedSellers: number
-    pendingWithdrawalAmount: number
-    paymentMethodDistribution: { method: string; count: number; percentage: number }[]
-    totalDivisions: number
-    totalStaff: number
-    topSellers: { name: string; revenue: number; orders: number }[]
-    categoryPerformance: { name: string; revenue: number; percentage: number }[]
-    recentOrders: { orderNumber: string; totalAmount: number; status: string; createdAt: string }[]
-    recentUsers: { name: string; email: string; role: string; createdAt: string }[]
-  } | null
-  fetchAdminStats: () => Promise<void>
-
-  // Admin Orders (with buyer name from User relation)
-  adminOrders: Order[]
-  fetchAdminOrders: () => Promise<void>
-
-  // Admin Categories
-  adminCategories: Array<{
-    id: string
-    name: string
-    slug: string
-    icon?: string
-    parentId?: string
-    parentName?: string
-    productCount: number
-    sortOrder: number
-    isActive: boolean
-  }>
-  fetchAdminCategories: () => Promise<void>
-
-  // Admin Vouchers
-  adminVouchers: Array<{
-    id: string
-    code: string
-    name: string
-    type: string
-    value: number
-    minPurchase: number
-    maxDiscount?: number
-    usageCount: number
-    usageLimit?: number
-    validFrom: string
-    validUntil: string
-    isActive: boolean
-    sellerName?: string
-  }>
-  fetchAdminVouchers: () => Promise<void>
-
-  // Admin Deposits
-  adminDeposits: Array<{
-    id: string
-    userId: string
-    userName: string
-    amount: number
-    method: string
-    status: string
-    proofUrl?: string
-    adminNote?: string
-    createdAt: string
-  }>
-  fetchAdminDeposits: () => Promise<void>
-
-  // Admin Campaigns
-  adminCampaigns: Array<{
-    id: string
-    sellerId: string
-    sellerName: string
-    name: string
-    type: string
-    startDate: string
-    endDate: string
-    discount?: number
-    isActive: boolean
-    isExpired: boolean
-  }>
-  fetchAdminCampaigns: () => Promise<void>
-
-  // Admin Settings
-  adminSettings: Record<string, any>
-  fetchAdminSettings: () => Promise<void>
-
-  // Admin Divisions
-  divisions: Division[]
-  fetchDivisions: () => Promise<void>
-  assignUserToDivision: (userId: string, divisionId: string | null) => Promise<void>
-  updateDivision: (divisionId: string, updates: Record<string, any>) => Promise<void>
-
-  // Admin data fetching
-  fetchAdminUsers: () => Promise<void>
-  fetchAdminWithdrawals: () => Promise<void>
-  fetchAdminBanners: () => Promise<void>
-  fetchAdminComplaints: () => Promise<void>
 }
 
 let toastTimer: ReturnType<typeof setTimeout> | null = null
-
-// Helper to get auth headers for API calls
-// SECURITY: Only uses HMAC-signed bearer token from login/register
-// REMOVED: x-auth-user-id header (was a critical security vulnerability - allowed impersonation)
-function getAuthHeaders(): Record<string, string> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('authToken')
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`
-    }
-  }
-  return headers
-}
 
 export const useAppStore = create<AppState>()(
   persist(
@@ -354,11 +230,9 @@ export const useAppStore = create<AppState>()(
         currentScreen: 'home'
       }),
       logout: () => {
-        // Clear auth token on logout
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem('authToken')
-        }
-        return set({
+        // Clear auth token
+        localStorage.removeItem('authToken')
+        set({
           isAuthenticated: false,
           currentUser: null,
           userRole: 'buyer',
@@ -374,43 +248,29 @@ export const useAppStore = create<AppState>()(
           followedStoreIds: [],
           seller: null,
           isDataLoaded: false,
-          sellerStats: null,
-          adminStats: null,
+          sellerBalance: { availableBalance: 0, pendingBalance: 0, holdBalance: 0, totalBalance: 0, totalWithdrawn: 0 },
+          sellerBankAccounts: [],
+          withdrawRequests: [],
           adminUsers: [],
           adminBanners: [],
           adminComplaints: [],
-          adminOrders: [],
-          adminCategories: [],
-          adminVouchers: [],
-          adminDeposits: [],
-          adminCampaigns: [],
-          adminSettings: {},
-          adminWithdrawals: [],
           divisions: [],
+          chatRooms: [],
+          chatMessages: {},
+          totalUnreadChats: 0,
+          selectedVoucher: null,
+          usedVoucherIds: [],
+          vouchers: [],
+          searchQuery: '',
         })
+        // Clear cart and wishlist stores
+        useCartStore.getState().clearCart()
       },
-      // SECURITY: switchRole should ONLY change the UI view, NOT the actual role in DB
-      // The real role comes from the server. This just switches which dashboard to show.
-      switchRole: (role) => set((state) => {
-        // Only allow switching to roles the user actually has permission for
-        const currentRole = state.currentUser?.role
-        // Admin can view any dashboard
-        if (currentRole === 'admin') {
-          return {
-            userRole: role,
-            currentScreen: role === 'buyer' ? 'home' : role === 'seller' ? 'seller-dashboard' : 'admin-dashboard'
-          }
-        }
-        // Non-admin users can only switch between buyer and their assigned role
-        if (role === currentRole || role === 'buyer') {
-          return {
-            userRole: role,
-            currentScreen: role === 'buyer' ? 'home' : role === 'seller' ? 'seller-dashboard' : 'admin-dashboard'
-          }
-        }
-        // Block unauthorized role switching
-        return state
-      }),
+      switchRole: (role) => set((state) => ({
+        userRole: role,
+        currentUser: state.currentUser ? { ...state.currentUser, role } : null,
+        currentScreen: role === 'buyer' ? 'home' : role === 'seller' ? 'seller-dashboard' : 'admin-dashboard'
+      })),
 
       // Selected items
       selectedProductId: null,
@@ -512,221 +372,140 @@ export const useAppStore = create<AppState>()(
 
       // Orders - START EMPTY
       orders: [],
-      addOrder: (order) => {
-        // Persist order to database via API
-        const state = get()
-        const addressId = state.selectedAddressId || state.addresses.find(a => a.isDefault)?.id || ''
-        fetch('/api/orders', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId: state.currentUser?.id,
-            sellerId: order.sellerId,
-            items: order.items.map(item => ({
-              productId: item.productId,
-              variantId: item.variantId || null,
-              productName: item.productName,
-              variantName: item.variantName || null,
-              price: item.price,
-              quantity: item.quantity,
-              subtotal: item.subtotal,
-              image: item.image || null,
-            })),
-            addressId,
-            subtotal: order.subtotal,
-            shippingCost: order.shippingCost,
-            discountAmount: order.discountAmount,
-            taxAmount: order.taxAmount,
-            platformFee: order.platformFee,
-            totalAmount: order.totalAmount,
-            paymentMethod: order.paymentMethod,
-            shipping: order.shipping ? {
-              provider: order.shipping.provider,
-              service: order.shipping.service,
-              estimatedDays: order.shipping.estimatedDays,
-            } : null,
-          }),
-        }).catch((error) => {
-          console.error('Failed to persist order to database:', error)
-        })
+      addOrder: (order) => set((state) => {
+        const sellerCredit = order.status === 'paid' ? order.subtotal * 0.95 : 0
+        const newSellerBalance = sellerCredit > 0
+          ? {
+              ...state.sellerBalance,
+              pendingBalance: state.sellerBalance.pendingBalance + sellerCredit,
+              totalBalance: state.sellerBalance.availableBalance + state.sellerBalance.pendingBalance + sellerCredit + state.sellerBalance.holdBalance,
+            }
+          : state.sellerBalance
 
-        // Update local state immediately
-        set((state) => {
-          const sellerCredit = order.status === 'paid' ? order.subtotal * 0.95 : 0
-          const newSellerBalance = sellerCredit > 0
-            ? {
-                ...state.sellerBalance,
-                pendingBalance: state.sellerBalance.pendingBalance + sellerCredit,
-                totalBalance: state.sellerBalance.availableBalance + state.sellerBalance.pendingBalance + sellerCredit + state.sellerBalance.holdBalance,
-              }
-            : state.sellerBalance
+        const updatedProducts = state.products.map(p => {
+          // Sum all quantities for this product (may have multiple variants)
+          const totalQty = order.items
+            .filter(item => item.productId === p.id)
+            .reduce((sum, item) => sum + item.quantity, 0)
+          if (totalQty === 0) return p
 
-          const updatedProducts = state.products.map(p => {
-            const orderItem = order.items.find(item => item.productId === p.id)
-            if (!orderItem) return p
+          const newStock = Math.max(0, p.stock - totalQty)
 
-            const newStock = p.stock - orderItem.quantity
-
-            const updatedVariants = p.variants.map(v => {
-              const variantItem = order.items.find(item => item.variantId === v.id)
-              if (!variantItem) return v
-              return { ...v, stock: v.stock - variantItem.quantity }
-            })
-
-            return { ...p, stock: Math.max(0, newStock), variants: updatedVariants }
+          const updatedVariants = p.variants.map(v => {
+            const variantItem = order.items.find(item => item.variantId === v.id)
+            if (!variantItem) return v
+            return { ...v, stock: v.stock - variantItem.quantity }
           })
 
-          return {
-            orders: [order, ...state.orders],
-            sellerBalance: newSellerBalance,
-            products: updatedProducts,
-          }
-        })
-      },
-      updateOrderStatus: (orderId, status) => {
-        set((state) => {
-          const order = state.orders.find(o => o.id === orderId)
-          if (!order) return state
-          const prevStatus = order.status
-          const sellerCredit = order.subtotal * 0.95
-          let newSellerBalance = { ...state.sellerBalance }
-
-          if (status === 'paid' && prevStatus !== 'paid') {
-            newSellerBalance.pendingBalance += sellerCredit
-          } else if (status === 'delivered') {
-            newSellerBalance.pendingBalance -= sellerCredit
-            newSellerBalance.availableBalance += sellerCredit
-          } else if (status === 'cancelled' && (prevStatus === 'paid' || prevStatus === 'processing' || prevStatus === 'shipped')) {
-            newSellerBalance.pendingBalance -= sellerCredit
-          }
-
-          newSellerBalance.totalBalance = newSellerBalance.availableBalance + newSellerBalance.pendingBalance + newSellerBalance.holdBalance
-
-          return {
-            orders: state.orders.map(o => o.id === orderId ? {
-              ...o, status,
-              ...(status === 'paid' ? { paymentStatus: 'paid', paidAt: new Date().toISOString() } : {}),
-              ...(status === 'shipped' ? { shippedAt: new Date().toISOString() } : {}),
-              ...(status === 'delivered' ? { deliveredAt: new Date().toISOString() } : {}),
-            } : o),
-            sellerBalance: newSellerBalance,
-          }
+          return { ...p, stock: Math.max(0, newStock), variants: updatedVariants }
         })
 
-        // Persist to database
-        fetch('/api/orders', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ orderId, status }),
-        }).catch((error) => {
-          console.error('Failed to persist order status update:', error)
-        })
-      },
-      payForOrder: (orderId) => {
-        set((state) => {
-          const order = state.orders.find(o => o.id === orderId)
-          if (!order || order.status !== 'pending') return state
+        return {
+          orders: [order, ...state.orders],
+          sellerBalance: newSellerBalance,
+          products: updatedProducts,
+        }
+      }),
+      updateOrderStatus: (orderId, status) => set((state) => {
+        const order = state.orders.find(o => o.id === orderId)
+        if (!order) return state
+        const prevStatus = order.status
+        const sellerCredit = order.subtotal * 0.95
+        let newSellerBalance = { ...state.sellerBalance }
 
-          const sellerCredit = order.subtotal * 0.95
-          let newWalletBalance = state.walletBalance
-          let newWalletMutations = [...state.walletMutations]
+        if (status === 'paid' && prevStatus !== 'paid') {
+          newSellerBalance.pendingBalance += sellerCredit
+        } else if (status === 'delivered') {
+          newSellerBalance.pendingBalance -= sellerCredit
+          newSellerBalance.availableBalance += sellerCredit
+        } else if (status === 'cancelled' && (prevStatus === 'paid' || prevStatus === 'processing' || prevStatus === 'shipped')) {
+          newSellerBalance.pendingBalance -= sellerCredit
+        }
 
-          if (order.paymentMethod?.toLowerCase() === 'wallet') {
-            if (order.totalAmount > state.walletBalance) return state
-            newWalletBalance = state.walletBalance - order.totalAmount
-            newWalletMutations = [{
-              id: `wm${Date.now()}`, type: 'debit' as const, amount: order.totalAmount, balance: newWalletBalance,
-              description: `Pembayaran Order #${order.orderNumber}`, refType: 'order', createdAt: new Date().toISOString()
-            }, ...state.walletMutations]
-          }
+        newSellerBalance.totalBalance = newSellerBalance.availableBalance + newSellerBalance.pendingBalance + newSellerBalance.holdBalance
 
-          const newSellerBalance = {
-            ...state.sellerBalance,
-            pendingBalance: state.sellerBalance.pendingBalance + sellerCredit,
-            totalBalance: state.sellerBalance.availableBalance + state.sellerBalance.pendingBalance + sellerCredit + state.sellerBalance.holdBalance,
-          }
-
-          return {
-            orders: state.orders.map(o => o.id === orderId ? {
-              ...o, status: 'paid' as OrderStatus, paymentStatus: 'paid', paidAt: new Date().toISOString(),
-            } : o),
-            walletBalance: newWalletBalance,
-            walletMutations: newWalletMutations,
-            sellerBalance: newSellerBalance,
-          }
-        })
-
-        // Persist to database
-        fetch('/api/orders', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ orderId, status: 'paid', paymentStatus: 'paid' }),
-        }).catch((error) => {
-          console.error('Failed to persist order payment:', error)
-        })
-      },
-      cancelOrder: (orderId) => {
-        set((state) => {
-          const order = state.orders.find(o => o.id === orderId)
-          if (!order) return state
-
-          const wasPaid = order.paymentStatus === 'paid' || order.status === 'paid' || order.status === 'processing' || order.status === 'shipped'
-          const sellerCredit = order.subtotal * 0.95
-
-          let newSellerBalance = { ...state.sellerBalance }
-          let newWalletBalance = state.walletBalance
-          let newWalletMutations = [...state.walletMutations]
-
-          if (wasPaid) {
-            newSellerBalance.pendingBalance -= sellerCredit
-          }
-
-          if (order.paymentMethod?.toLowerCase() === 'wallet' && wasPaid) {
-            newWalletBalance = state.walletBalance + order.totalAmount
-            newWalletMutations = [{
-              id: `wm${Date.now()}`, type: 'credit' as const, amount: order.totalAmount, balance: newWalletBalance,
-              description: `Refund Order #${order.orderNumber}`, refType: 'refund', createdAt: new Date().toISOString()
-            }, ...state.walletMutations]
-          }
-
-          newSellerBalance.totalBalance = newSellerBalance.availableBalance + newSellerBalance.pendingBalance + newSellerBalance.holdBalance
-
-          return {
-            orders: state.orders.map(o => o.id === orderId ? {
-              ...o, status: 'cancelled' as OrderStatus, paymentStatus: 'refunded',
-            } : o),
-            sellerBalance: newSellerBalance,
-            walletBalance: newWalletBalance,
-            walletMutations: newWalletMutations,
-          }
-        })
-
-        // Persist to database
-        fetch('/api/orders', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ orderId, status: 'cancelled', paymentStatus: 'refunded' }),
-        }).catch((error) => {
-          console.error('Failed to persist order cancellation:', error)
-        })
-      },
-      updateOrderTracking: (orderId, trackingNumber) => {
-        set((state) => ({
+        return {
           orders: state.orders.map(o => o.id === orderId ? {
-            ...o,
-            shipping: o.shipping ? { ...o.shipping, trackingNumber } : undefined,
+            ...o, status,
+            ...(status === 'paid' ? { paymentStatus: 'paid', paidAt: new Date().toISOString() } : {}),
+            ...(status === 'shipped' ? { shippedAt: new Date().toISOString() } : {}),
+            ...(status === 'delivered' ? { deliveredAt: new Date().toISOString() } : {}),
           } : o),
-        }))
+          sellerBalance: newSellerBalance,
+        }
+      }),
+      payForOrder: (orderId) => set((state) => {
+        const order = state.orders.find(o => o.id === orderId)
+        if (!order || order.status !== 'pending') return state
 
-        // Persist to database
-        fetch('/api/orders', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ orderId, trackingNumber }),
-        }).catch((error) => {
-          console.error('Failed to persist tracking number:', error)
-        })
-      },
+        const sellerCredit = order.subtotal * 0.95
+        let newWalletBalance = state.walletBalance
+        let newWalletMutations = [...state.walletMutations]
+
+        if (order.paymentMethod?.toLowerCase() === 'wallet') {
+          if (order.totalAmount > state.walletBalance) return state
+          newWalletBalance = state.walletBalance - order.totalAmount
+          newWalletMutations = [{
+            id: `wm${Date.now()}`, type: 'debit' as const, amount: order.totalAmount, balance: newWalletBalance,
+            description: `Pembayaran Order #${order.orderNumber}`, refType: 'order', createdAt: new Date().toISOString()
+          }, ...state.walletMutations]
+        }
+
+        const newSellerBalance = {
+          ...state.sellerBalance,
+          pendingBalance: state.sellerBalance.pendingBalance + sellerCredit,
+          totalBalance: state.sellerBalance.availableBalance + state.sellerBalance.pendingBalance + sellerCredit + state.sellerBalance.holdBalance,
+        }
+
+        return {
+          orders: state.orders.map(o => o.id === orderId ? {
+            ...o, status: 'paid' as OrderStatus, paymentStatus: 'paid', paidAt: new Date().toISOString(),
+          } : o),
+          walletBalance: newWalletBalance,
+          walletMutations: newWalletMutations,
+          sellerBalance: newSellerBalance,
+        }
+      }),
+      cancelOrder: (orderId) => set((state) => {
+        const order = state.orders.find(o => o.id === orderId)
+        if (!order) return state
+
+        const wasPaid = order.paymentStatus === 'paid' || order.status === 'paid' || order.status === 'processing' || order.status === 'shipped'
+        const sellerCredit = order.subtotal * 0.95
+
+        let newSellerBalance = { ...state.sellerBalance }
+        let newWalletBalance = state.walletBalance
+        let newWalletMutations = [...state.walletMutations]
+
+        if (wasPaid) {
+          newSellerBalance.pendingBalance -= sellerCredit
+        }
+
+        if (order.paymentMethod?.toLowerCase() === 'wallet' && wasPaid) {
+          newWalletBalance = state.walletBalance + order.totalAmount
+          newWalletMutations = [{
+            id: `wm${Date.now()}`, type: 'credit' as const, amount: order.totalAmount, balance: newWalletBalance,
+            description: `Refund Order #${order.orderNumber}`, refType: 'refund', createdAt: new Date().toISOString()
+          }, ...state.walletMutations]
+        }
+
+        newSellerBalance.totalBalance = newSellerBalance.availableBalance + newSellerBalance.pendingBalance + newSellerBalance.holdBalance
+
+        return {
+          orders: state.orders.map(o => o.id === orderId ? {
+            ...o, status: 'cancelled' as OrderStatus, paymentStatus: 'refunded',
+          } : o),
+          sellerBalance: newSellerBalance,
+          walletBalance: newWalletBalance,
+          walletMutations: newWalletMutations,
+        }
+      }),
+      updateOrderTracking: (orderId, trackingNumber) => set((state) => ({
+        orders: state.orders.map(o => o.id === orderId ? {
+          ...o,
+          shipping: o.shipping ? { ...o.shipping, trackingNumber } : undefined,
+        } : o),
+      })),
 
       // Address - START EMPTY
       addresses: [],
@@ -753,28 +532,16 @@ export const useAppStore = create<AppState>()(
       walletHoldBalance: 0,
       walletCoins: 0,
       walletMutations: [],
-      topUpWallet: (amount) => {
-        set((state) => {
-          const newBalance = state.walletBalance + amount
-          return {
-            walletBalance: newBalance,
-            walletMutations: [{
-              id: `wm${Date.now()}`, type: 'credit', amount, balance: newBalance,
-              description: `Top up MartUp Pay`, refType: 'deposit', createdAt: new Date().toISOString()
-            }, ...state.walletMutations]
-          }
-        })
-
-        // Persist to database
-        const state = get()
-        fetch('/api/wallet', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: state.currentUser?.id, amount }),
-        }).catch((error) => {
-          console.error('Failed to persist wallet top-up:', error)
-        })
-      },
+      topUpWallet: (amount) => set((state) => {
+        const newBalance = state.walletBalance + amount
+        return {
+          walletBalance: newBalance,
+          walletMutations: [{
+            id: `wm${Date.now()}`, type: 'credit', amount, balance: newBalance,
+            description: `Top up MartUp Pay`, refType: 'deposit', createdAt: new Date().toISOString()
+          }, ...state.walletMutations]
+        }
+      }),
       withdrawWallet: (amount, bankAccount) => set((state) => {
         if (amount > state.walletBalance) return state
         const newBalance = state.walletBalance - amount
@@ -890,127 +657,51 @@ export const useAppStore = create<AppState>()(
           }
         }
       }),
-      updateWithdrawStatus: (id, status, rejectionReason) => {
-        set((state) => {
-          const wd = state.withdrawRequests.find(w => w.id === id)
-          if (!wd) return state
-          const now = new Date().toISOString()
-          const updatedRequests = state.withdrawRequests.map(w => {
-            if (w.id !== id) return w
-            return {
-              ...w,
-              status,
-              processedDate: status === 'approved' || status === 'rejected' ? now : w.processedDate,
-              completedDate: status === 'completed' ? now : w.completedDate,
-              rejectionReason: rejectionReason || w.rejectionReason,
-            }
-          })
-          let newBalance = { ...state.sellerBalance }
-          if (status === 'approved') {
-            newBalance.holdBalance = Math.max(0, newBalance.holdBalance - wd.amount)
-          }
-          if (status === 'rejected') {
-            newBalance.availableBalance += wd.amount
-            newBalance.holdBalance = Math.max(0, newBalance.holdBalance - wd.amount)
-          }
-          if (status === 'completed') {
-            newBalance.totalWithdrawn += wd.amount
-            newBalance.lastWithdrawDate = now
-          }
-          newBalance.totalBalance = newBalance.availableBalance + newBalance.pendingBalance + newBalance.holdBalance
+      updateWithdrawStatus: (id, status, rejectionReason) => set((state) => {
+        const wd = state.withdrawRequests.find(w => w.id === id)
+        if (!wd) return state
+        const now = new Date().toISOString()
+        const updatedRequests = state.withdrawRequests.map(w => {
+          if (w.id !== id) return w
           return {
-            withdrawRequests: updatedRequests,
-            sellerBalance: newBalance,
+            ...w,
+            status,
+            processedDate: status === 'approved' || status === 'rejected' ? now : w.processedDate,
+            completedDate: status === 'completed' ? now : w.completedDate,
+            rejectionReason: rejectionReason || w.rejectionReason,
           }
         })
-        // Persist to database via admin API
-        fetch('/api/admin/withdrawals', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ withdrawalId: id, status, adminNote: rejectionReason }),
-        }).catch((error) => {
-          console.error('Failed to persist withdrawal status update:', error)
-        })
-      },
+        let newBalance = { ...state.sellerBalance }
+        if (status === 'approved') {
+          newBalance.holdBalance = Math.max(0, newBalance.holdBalance - wd.amount)
+        }
+        if (status === 'rejected') {
+          newBalance.availableBalance += wd.amount
+          newBalance.holdBalance = Math.max(0, newBalance.holdBalance - wd.amount)
+        }
+        if (status === 'completed') {
+          newBalance.totalWithdrawn += wd.amount
+          newBalance.lastWithdrawDate = now
+        }
+        newBalance.totalBalance = newBalance.availableBalance + newBalance.pendingBalance + newBalance.holdBalance
+        return {
+          withdrawRequests: updatedRequests,
+          sellerBalance: newBalance,
+        }
+      }),
       getSellerAvailableForWithdraw: () => get().sellerBalance.availableBalance,
 
       // Products - START EMPTY (fetched from API)
       products: [],
-      addProduct: (product) => {
-        // Persist product to database via API
-        fetch('/api/seller/products', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            sellerId: product.sellerId,
-            categoryId: product.categoryId,
-            name: product.name,
-            slug: product.slug,
-            description: product.description,
-            price: product.price,
-            discountPrice: product.discountPrice || null,
-            images: product.images,
-            videoUrl: product.videoUrl || null,
-            stock: product.stock,
-            minOrder: product.minOrder,
-            weight: product.weight,
-            condition: product.condition,
-            status: product.status,
-            isFeatured: product.isFeatured,
-            isFlashSale: product.isFlashSale,
-            tags: product.tags || null,
-            variants: product.variants.map(v => ({
-              name: v.name,
-              value: v.value,
-              sku: v.sku || null,
-              price: v.price || null,
-              stock: v.stock,
-              image: v.image || null,
-            })),
-          }),
-        }).then(async (res) => {
-          if (res.ok) {
-            const data = await res.json()
-            if (data.success && data.data) {
-              // Refresh products from API to get the server-generated ID
-              get().fetchProducts()
-            }
-          }
-        }).catch((error) => {
-          console.error('Failed to persist product to database:', error)
-        })
-
-        // Update local state immediately
-        set((state) => ({
-          products: [product, ...state.products]
-        }))
-      },
-      updateProduct: (product) => {
-        set((state) => ({
-          products: state.products.map(p => p.id === product.id ? product : p)
-        }))
-        // Persist product status changes to database
-        fetch('/api/admin/products', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ productId: product.id, status: product.status, isFeatured: product.isFeatured }),
-        }).catch((error) => {
-          console.error('Failed to persist product update:', error)
-        })
-      },
-      removeProduct: (id) => {
-        set((state) => ({
-          products: state.products.filter(p => p.id !== id)
-        }))
-        // Persist to database
-        fetch('/api/admin/products', {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ productId: id }),
-        }).catch((error) => {
-          console.error('Failed to persist product delete:', error)
-        })
-      },
+      addProduct: (product) => set((state) => ({
+        products: [product, ...state.products]
+      })),
+      updateProduct: (product) => set((state) => ({
+        products: state.products.map(p => p.id === product.id ? product : p)
+      })),
+      removeProduct: (id) => set((state) => ({
+        products: state.products.filter(p => p.id !== id)
+      })),
 
       // Reviews - START EMPTY
       reviews: [],
@@ -1075,98 +766,101 @@ export const useAppStore = create<AppState>()(
         }
       }),
 
-      // Admin Orders - START EMPTY (fetched from /api/admin/orders)
-      adminOrders: [],
-
       // Admin Users - START EMPTY
       adminUsers: [],
-      updateAdminUser: (userId, updates) => {
-        set((state) => ({
-          adminUsers: state.adminUsers.map(u => u.id === userId ? { ...u, ...updates } : u)
-        }))
-        // Persist to database
-        const apiUpdates: Record<string, any> = {}
-        if (updates.isVerified !== undefined) apiUpdates.isVerified = updates.isVerified
-        if (updates.isBlocked !== undefined) apiUpdates.isActive = !updates.isBlocked
-        if (updates.role !== undefined) apiUpdates.role = updates.role
-        fetch('/api/admin/users', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId, ...apiUpdates }),
-        }).catch((error) => {
-          console.error('Failed to persist admin user update:', error)
-        })
-      },
-      deleteAdminUser: (userId) => {
-        set((state) => ({
-          adminUsers: state.adminUsers.filter(u => u.id !== userId)
-        }))
-        // Persist to database
-        fetch('/api/admin/users', {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId }),
-        }).catch((error) => {
-          console.error('Failed to persist admin user delete:', error)
-        })
-      },
+      updateAdminUser: (userId, updates) => set((state) => ({
+        adminUsers: state.adminUsers.map(u => u.id === userId ? { ...u, ...updates } : u)
+      })),
+      deleteAdminUser: (userId) => set((state) => ({
+        adminUsers: state.adminUsers.filter(u => u.id !== userId)
+      })),
 
       // Admin Banners - START EMPTY
       adminBanners: [],
-      addAdminBanner: (banner) => {
-        set((state) => ({
-          adminBanners: [...state.adminBanners, banner]
-        }))
-        // Persist to database
-        fetch('/api/admin/banners', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(banner),
-        }).catch((error) => {
-          console.error('Failed to persist admin banner create:', error)
-        })
-      },
-      updateAdminBanner: (bannerId, updates) => {
-        set((state) => ({
-          adminBanners: state.adminBanners.map(b => b.id === bannerId ? { ...b, ...updates } : b)
-        }))
-        // Persist to database
-        fetch('/api/admin/banners', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ bannerId, ...updates }),
-        }).catch((error) => {
-          console.error('Failed to persist admin banner update:', error)
-        })
-      },
-      deleteAdminBanner: (bannerId) => {
-        set((state) => ({
-          adminBanners: state.adminBanners.filter(b => b.id !== bannerId)
-        }))
-        // Persist to database
-        fetch('/api/admin/banners', {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ bannerId }),
-        }).catch((error) => {
-          console.error('Failed to persist admin banner delete:', error)
-        })
-      },
+      addAdminBanner: (banner) => set((state) => ({
+        adminBanners: [...state.adminBanners, banner]
+      })),
+      updateAdminBanner: (bannerId, updates) => set((state) => ({
+        adminBanners: state.adminBanners.map(b => b.id === bannerId ? { ...b, ...updates } : b)
+      })),
+      deleteAdminBanner: (bannerId) => set((state) => ({
+        adminBanners: state.adminBanners.filter(b => b.id !== bannerId)
+      })),
 
       // Admin Complaints - START EMPTY
       adminComplaints: [],
-      updateAdminComplaint: (complaintId, updates) => {
-        set((state) => ({
-          adminComplaints: state.adminComplaints.map(c => c.id === complaintId ? { ...c, ...updates } : c)
-        }))
-        // Persist to database
-        fetch('/api/admin/complaints', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ complaintId, ...updates }),
-        }).catch((error) => {
-          console.error('Failed to persist admin complaint update:', error)
-        })
+      updateAdminComplaint: (complaintId, updates) => set((state) => ({
+        adminComplaints: state.adminComplaints.map(c => c.id === complaintId ? { ...c, ...updates } : c)
+      })),
+
+      // Admin Divisions - START EMPTY
+      divisions: [],
+      fetchDivisions: async () => {
+        try {
+          const res = await fetch('/api/admin/divisions')
+          if (!res.ok) throw new Error('Failed to fetch divisions')
+          const data = await res.json()
+          if (data.success) {
+            set({ divisions: data.divisions })
+          }
+        } catch (error) {
+          console.error('Fetch divisions error:', error)
+        }
+      },
+      fetchAdminUsers: async () => {
+        try {
+          const res = await fetch('/api/admin/users')
+          if (!res.ok) throw new Error('Failed to fetch admin users')
+          const data = await res.json()
+          if (data.success) {
+            set({
+              adminUsers: data.users.map((u: any) => ({
+                id: u.id,
+                name: u.name,
+                email: u.email,
+                phone: u.phone || '',
+                role: u.role,
+                isVerified: u.isVerified,
+                isBlocked: u.isBlocked,
+                joinDate: u.joinDate,
+                totalSpent: u.totalSpent || 0,
+                totalOrders: u.totalOrders || 0,
+                divisionId: u.divisionId || null,
+              })),
+            })
+          }
+        } catch (error) {
+          console.error('Fetch admin users error:', error)
+        }
+      },
+      assignUserToDivision: async (userId, divisionId) => {
+        try {
+          const res = await fetch('/api/admin/users', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId, updates: { divisionId } }),
+          })
+          if (!res.ok) throw new Error('Failed to assign user to division')
+          // Refresh divisions to update member counts
+          get().fetchDivisions()
+          get().fetchAdminUsers()
+        } catch (error) {
+          console.error('Assign user to division error:', error)
+        }
+      },
+      updateDivision: async (divisionId, updates) => {
+        try {
+          const res = await fetch('/api/admin/divisions', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ divisionId, updates }),
+          })
+          if (!res.ok) throw new Error('Failed to update division')
+          // Refresh divisions
+          get().fetchDivisions()
+        } catch (error) {
+          console.error('Update division error:', error)
+        }
       },
 
       // Settings
@@ -1181,39 +875,23 @@ export const useAppStore = create<AppState>()(
       })),
 
       // Account
-      deleteAccount: () => {
-        // Clear auth token on account deletion
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem('authToken')
-        }
-        return set({
-          isAuthenticated: false,
-          currentUser: null,
-          userRole: 'buyer',
-          currentScreen: 'login',
-          orders: [],
-          notifications: [],
-          unreadNotificationCount: 0,
-          addresses: [],
-          walletBalance: 0,
-          walletHoldBalance: 0,
-          walletMutations: [],
-          reviews: [],
-          followedStoreIds: [],
-          seller: null,
-          isDataLoaded: false,
-          sellerStats: null,
-          adminStats: null,
-          adminOrders: [],
-          adminCategories: [],
-          adminVouchers: [],
-          adminDeposits: [],
-          adminCampaigns: [],
-          adminSettings: {},
-          adminWithdrawals: [],
-          divisions: [],
-        })
-      },
+      deleteAccount: () => set({
+        isAuthenticated: false,
+        currentUser: null,
+        userRole: 'buyer',
+        currentScreen: 'login',
+        orders: [],
+        notifications: [],
+        unreadNotificationCount: 0,
+        addresses: [],
+        walletBalance: 0,
+        walletHoldBalance: 0,
+        walletMutations: [],
+        reviews: [],
+        followedStoreIds: [],
+        seller: null,
+        isDataLoaded: false,
+      }),
 
       // Data fetching
       seller: null,
@@ -1224,7 +902,8 @@ export const useAppStore = create<AppState>()(
         try {
           const res = await fetch(`/api/user-data?userId=${userId}`)
           if (!res.ok) throw new Error('Failed to fetch user data')
-          const data = await res.json()
+          const raw = await res.json()
+          const data = raw.data || raw  // Unwrap { success, data } response
 
           const state = get()
 
@@ -1274,12 +953,15 @@ export const useAppStore = create<AppState>()(
 
             // Update seller balance from seller wallet
             if (data.seller.wallet) {
+              const walletBal = data.seller.wallet.balance || 0
+              const walletHold = data.seller.wallet.holdBalance || 0
+              const walletPending = data.seller.wallet.pendingBalance || 0
               set({
                 sellerBalance: {
-                  availableBalance: data.seller.wallet.balance || 0,
-                  pendingBalance: 0,
-                  holdBalance: data.seller.wallet.holdBalance || 0,
-                  totalBalance: (data.seller.wallet.balance || 0) + (data.seller.wallet.holdBalance || 0),
+                  availableBalance: walletBal,
+                  pendingBalance: walletPending,
+                  holdBalance: walletHold,
+                  totalBalance: walletBal + walletHold + walletPending,
                   totalWithdrawn: 0,
                 }
               })
@@ -1362,15 +1044,15 @@ export const useAppStore = create<AppState>()(
                 },
                 seller: o.seller ? {
                   id: o.seller.id,
-                  userId: o.seller.userId,
-                  storeName: o.seller.storeName,
-                  storeSlug: o.seller.storeSlug,
+                  userId: o.seller.userId || '',
+                  storeName: o.seller.storeName || 'Unknown Store',
+                  storeSlug: o.seller.storeSlug || '',
                   storeAvatar: o.seller.storeAvatar || undefined,
-                  isVerified: o.seller.isVerified,
-                  isPremium: o.seller.isPremium,
-                  rating: o.seller.rating,
-                  totalSales: o.seller.totalSales,
-                  totalProducts: o.seller.totalProducts,
+                  isVerified: o.seller.isVerified || false,
+                  isPremium: o.seller.isPremium || false,
+                  rating: o.seller.rating || 0,
+                  totalSales: o.seller.totalSales || 0,
+                  totalProducts: o.seller.totalProducts || 0,
                 } : {
                   id: '',
                   userId: '',
@@ -1441,9 +1123,10 @@ export const useAppStore = create<AppState>()(
           }
 
           // Update wishlist
-          if (data.wishlistProductIds) {
-            // Use product IDs from wishlist as followed store proxy isn't perfect,
-            // but for now just store the product IDs
+          if (data.wishlistProductIds && data.wishlistProductIds.length > 0) {
+            const { wishlistIds } = useWishlistStore.getState()
+            const mergedIds = [...new Set([...wishlistIds, ...data.wishlistProductIds])]
+            useWishlistStore.setState({ wishlistIds: mergedIds })
           }
 
           set({ isDataLoaded: true })
@@ -1458,7 +1141,7 @@ export const useAppStore = create<AppState>()(
           if (!res.ok) throw new Error('Failed to fetch products')
           const data = await res.json()
 
-          const products: Product[] = (data.data || data.products || []).map((p: any) => ({
+          const products: Product[] = (data.products || []).map((p: any) => ({
             id: p.id,
             sellerId: p.sellerId,
             categoryId: p.categoryId,
@@ -1468,7 +1151,6 @@ export const useAppStore = create<AppState>()(
             price: p.price,
             discountPrice: p.discountPrice || undefined,
             images: Array.isArray(p.images) ? p.images : (typeof p.images === 'string' ? JSON.parse(p.images) : []),
-            videoUrl: p.videoUrl || undefined,
             stock: p.stock,
             sold: p.sold,
             minOrder: p.minOrder || 1,
@@ -1544,11 +1226,8 @@ export const useAppStore = create<AppState>()(
           if (!res.ok) throw new Error('Failed to fetch categories')
           const data = await res.json()
 
-          // API returns { success: true, data: [...] }
-          const categoriesData = data.data || data.categories || []
-
           set({
-            categories: categoriesData.map((c: any) => ({
+            categories: (data.categories || []).map((c: any) => ({
               id: c.id,
               name: c.name,
               slug: c.slug,
@@ -1560,346 +1239,10 @@ export const useAppStore = create<AppState>()(
           console.error('Failed to fetch categories:', error)
         }
       },
-
-      // Seller Stats
-      sellerStats: null,
-      fetchSellerStats: async () => {
-        const state = get()
-        const sellerId = state.seller?.id
-        if (!sellerId) return
-        try {
-          const res = await fetch(`/api/seller/stats?sellerId=${sellerId}`)
-          if (!res.ok) return
-          const data = await res.json()
-          if (data.success) {
-            set({ sellerStats: data.data })
-          }
-        } catch (error) {
-          console.error('Failed to fetch seller stats:', error)
-        }
-      },
-
-      // Admin Stats
-      adminStats: null,
-      fetchAdminStats: async () => {
-        try {
-          const res = await fetch('/api/admin/stats', { headers: getAuthHeaders() })
-          if (!res.ok) return
-          const data = await res.json()
-          if (data.success) {
-            set({ adminStats: data.data })
-          }
-        } catch (error) {
-          console.error('Failed to fetch admin stats:', error)
-        }
-      },
-
-      fetchAdminOrders: async () => {
-        try {
-          const res = await fetch('/api/admin/orders?limit=100')
-          if (!res.ok) throw new Error('Failed to fetch admin orders')
-          const data = await res.json()
-          if (data.success) {
-            const orders: Order[] = (data.data || []).map((o: any) => ({
-              id: o.id,
-              orderNumber: o.orderNumber,
-              userId: o.userId,
-              sellerId: o.sellerId,
-              status: o.status as OrderStatus,
-              subtotal: o.subtotal,
-              shippingCost: o.shippingCost,
-              discountAmount: o.discountAmount || 0,
-              taxAmount: o.taxAmount || 0,
-              platformFee: o.platformFee || 0,
-              totalAmount: o.totalAmount,
-              paymentMethod: o.paymentMethod || undefined,
-              paymentStatus: o.paymentStatus,
-              buyerName: o.buyerName || undefined,
-              items: (o.items || []).map((item: any) => ({
-                id: item.id,
-                productId: item.productId,
-                productName: item.productName,
-                variantName: item.variantName || undefined,
-                variantId: item.variantId || undefined,
-                price: item.price,
-                quantity: item.quantity,
-                subtotal: item.subtotal,
-                image: item.image || (item.product?.images?.[0]) || undefined,
-              })),
-              shipping: o.shipping ? {
-                id: o.shipping.id,
-                provider: o.shipping.provider,
-                service: o.shipping.service,
-                trackingNumber: o.shipping.trackingNumber || undefined,
-                estimatedDays: o.shipping.estimatedDays || undefined,
-                status: o.shipping.status,
-              } : undefined,
-              address: o.addressId ? {
-                id: o.addressId,
-                label: '',
-                recipient: '',
-                phone: '',
-                address: '',
-                city: '',
-                province: '',
-                postalCode: '',
-                isDefault: false,
-              } : {
-                id: 'default',
-                label: 'Alamat',
-                recipient: '',
-                phone: '',
-                address: 'Alamat pengiriman',
-                city: '',
-                province: '',
-                postalCode: '',
-                isDefault: true,
-              },
-              seller: o.seller ? {
-                id: o.seller.id,
-                userId: o.seller.id,
-                storeName: o.seller.storeName,
-                storeSlug: o.seller.storeSlug,
-                storeAvatar: o.seller.storeAvatar || undefined,
-                isVerified: o.seller.isVerified,
-                isPremium: o.seller.isPremium || false,
-                rating: o.seller.rating || 0,
-                totalSales: o.seller.totalSales || 0,
-                totalProducts: o.seller.totalProducts || 0,
-              } : {
-                id: '',
-                userId: '',
-                storeName: 'Unknown Seller',
-                storeSlug: '',
-                isVerified: false,
-                isPremium: false,
-                rating: 0,
-                totalSales: 0,
-                totalProducts: 0,
-              },
-              createdAt: o.createdAt,
-              paidAt: o.paidAt || undefined,
-              shippedAt: o.shippedAt || undefined,
-              deliveredAt: o.deliveredAt || undefined,
-            }))
-            set({ adminOrders: orders })
-          }
-        } catch (error) {
-          console.error('Failed to fetch admin orders:', error)
-        }
-      },
-
-      fetchAdminUsers: async () => {
-        try {
-          const res = await fetch('/api/admin/users', { headers: getAuthHeaders() })
-          if (!res.ok) throw new Error('Failed to fetch admin users')
-          const data = await res.json()
-          if (data.success) {
-            set({ adminUsers: data.data })
-          }
-        } catch (error) {
-          console.error('Failed to fetch admin users:', error)
-        }
-      },
-
-      fetchAdminWithdrawals: async () => {
-        try {
-          const res = await fetch('/api/admin/withdrawals', { headers: getAuthHeaders() })
-          if (!res.ok) throw new Error('Failed to fetch admin withdrawals')
-          const data = await res.json()
-          if (data.success) {
-            // Map DB withdrawals to the WithdrawRequest type used by the store
-            const withdrawals = data.data.map((w: any) => ({
-              id: w.id,
-              sellerId: w.sellerId,
-              sellerName: w.sellerName || w.seller?.storeName || 'Unknown',
-              amount: w.amount,
-              adminFee: 0,
-              netAmount: w.amount,
-              bankAccount: {
-                id: w.id,
-                bankName: w.bankName,
-                accountNumber: w.bankAccount,
-                accountHolder: w.bankHolder,
-                isDefault: true,
-              },
-              status: w.status as WithdrawStatus,
-              requestDate: w.createdAt,
-              processedDate: w.processedAt || undefined,
-              completedDate: w.status === 'processed' ? w.processedAt : undefined,
-              rejectionReason: w.adminNote || undefined,
-              estimatedArrival: '1-2 hari kerja',
-            }))
-            set({ withdrawRequests: withdrawals })
-          }
-        } catch (error) {
-          console.error('Failed to fetch admin withdrawals:', error)
-        }
-      },
-
-      fetchAdminBanners: async () => {
-        try {
-          const res = await fetch('/api/admin/banners', { headers: getAuthHeaders() })
-          if (!res.ok) throw new Error('Failed to fetch admin banners')
-          const data = await res.json()
-          if (data.success) {
-            set({ adminBanners: data.data.map((b: any) => ({
-              id: b.id,
-              title: b.title,
-              image: b.image,
-              link: b.link || '',
-              position: b.position,
-              isActive: b.isActive,
-            })) })
-          }
-        } catch (error) {
-          console.error('Failed to fetch admin banners:', error)
-        }
-      },
-
-      fetchAdminComplaints: async () => {
-        try {
-          const res = await fetch('/api/admin/complaints', { headers: getAuthHeaders() })
-          if (!res.ok) throw new Error('Failed to fetch admin complaints')
-          const data = await res.json()
-          if (data.success) {
-            set({ adminComplaints: data.data.map((c: any) => ({
-              id: c.id,
-              userId: c.userId,
-              userName: c.userName || 'Unknown',
-              type: c.type,
-              description: c.description || c.reason,
-              status: c.status,
-              createdAt: c.createdAt,
-              response: c.resolution || undefined,
-              orderId: c.orderId,
-              buyer: c.buyer,
-              seller: c.seller,
-            })) })
-          }
-        } catch (error) {
-          console.error('Failed to fetch admin complaints:', error)
-        }
-      },
-
-      // Admin Categories - START EMPTY
-      adminCategories: [],
-      fetchAdminCategories: async () => {
-        try {
-          const res = await fetch('/api/admin/categories')
-          if (!res.ok) throw new Error('Failed to fetch admin categories')
-          const data = await res.json()
-          if (data.success) {
-            set({ adminCategories: data.data })
-          }
-        } catch (error) {
-          console.error('Failed to fetch admin categories:', error)
-        }
-      },
-
-      // Admin Vouchers - START EMPTY
-      adminVouchers: [],
-      fetchAdminVouchers: async () => {
-        try {
-          const res = await fetch('/api/admin/vouchers')
-          if (!res.ok) throw new Error('Failed to fetch admin vouchers')
-          const data = await res.json()
-          if (data.success) {
-            set({ adminVouchers: data.data })
-          }
-        } catch (error) {
-          console.error('Failed to fetch admin vouchers:', error)
-        }
-      },
-
-      // Admin Deposits - START EMPTY
-      adminDeposits: [],
-      fetchAdminDeposits: async () => {
-        try {
-          const res = await fetch('/api/admin/deposits')
-          if (!res.ok) throw new Error('Failed to fetch admin deposits')
-          const data = await res.json()
-          if (data.success) {
-            set({ adminDeposits: data.data })
-          }
-        } catch (error) {
-          console.error('Failed to fetch admin deposits:', error)
-        }
-      },
-
-      // Admin Campaigns - START EMPTY
-      adminCampaigns: [],
-      fetchAdminCampaigns: async () => {
-        try {
-          const res = await fetch('/api/admin/campaigns')
-          if (!res.ok) throw new Error('Failed to fetch admin campaigns')
-          const data = await res.json()
-          if (data.success) {
-            set({ adminCampaigns: data.data })
-          }
-        } catch (error) {
-          console.error('Failed to fetch admin campaigns:', error)
-        }
-      },
-
-      // Admin Settings - START EMPTY
-      adminSettings: {},
-      fetchAdminSettings: async () => {
-        try {
-          const res = await fetch('/api/admin/settings', { headers: getAuthHeaders() })
-          if (!res.ok) throw new Error('Failed to fetch admin settings')
-          const data = await res.json()
-          if (data.success) {
-            set({ adminSettings: data.data })
-          }
-        } catch (error) {
-          console.error('Failed to fetch admin settings:', error)
-        }
-      },
-
-      // Admin Divisions - START EMPTY
-      divisions: [],
-      fetchDivisions: async () => {
-        try {
-          const res = await fetch('/api/admin/divisions', { headers: getAuthHeaders() })
-          if (!res.ok) throw new Error('Failed to fetch divisions')
-          const data = await res.json()
-          if (data.success) {
-            set({ divisions: data.data || data.divisions || [] })
-          }
-        } catch (error) {
-          console.error('Failed to fetch divisions:', error)
-        }
-      },
-      assignUserToDivision: async (userId, divisionId) => {
-        try {
-          await fetch('/api/admin/users', {
-            method: 'PUT',
-            headers: getAuthHeaders(),
-            body: JSON.stringify({ userId, updates: { divisionId } }),
-          })
-        } catch (error) {
-          console.error('Failed to assign user to division:', error)
-        }
-      },
-      updateDivision: async (divisionId, updates) => {
-        try {
-          await fetch('/api/admin/divisions', {
-            method: 'PATCH',
-            headers: getAuthHeaders(),
-            body: JSON.stringify({ divisionId, ...updates }),
-          })
-        } catch (error) {
-          console.error('Failed to update division:', error)
-        }
-      },
-
-      // Admin Withdrawals - START EMPTY
-      adminWithdrawals: [],
     }),
     {
       name: 'martup-storage',
-      version: 3, // Bumped to clear stale localStorage data - admin now uses real API data
+      version: 2, // Bumped to clear stale localStorage data from mock-data era
       partialize: (state) => ({
         // Only persist essential state, NOT user-specific data that should come from API
         currentScreen: state.currentScreen,
@@ -1916,7 +1259,7 @@ export const useAppStore = create<AppState>()(
 // ==================== CART STORE ====================
 interface CartState {
   items: CartItem[]
-  addItem: (item: CartItem) => void
+  addItem: (product: Product, variant?: ProductVariant, quantity?: number) => void
   removeItem: (id: string) => void
   updateQuantity: (id: string, quantity: number) => void
   toggleCheck: (id: string) => void
@@ -1926,24 +1269,38 @@ interface CartState {
   getCheckedTotalPrice: () => number
   getTotalItemCount: () => number
   getCheckedItemCount: () => number
+  getCheckedItems: () => CartItem[]
+  getCheckedTotal: () => number
+  getCheckedCount: () => number
 }
 
 export const useCartStore = create<CartState>()(
   persist(
     (set, get) => ({
       items: [],
-      addItem: (item) => set((state) => {
+      addItem: (product, variant, quantity = 1) => set((state) => {
+        const variantId = variant?.id
         const existing = state.items.find(
-          (i) => i.productId === item.productId && i.variantId === item.variantId
+          (i) => i.productId === product.id && i.variantId === variantId
         )
         if (existing) {
           return {
             items: state.items.map((i) =>
-              i.id === existing.id ? { ...i, quantity: i.quantity + item.quantity } : i
+              i.id === existing.id ? { ...i, quantity: i.quantity + quantity } : i
             ),
           }
         }
-        return { items: [...state.items, item] }
+        return {
+          items: [...state.items, {
+            id: `cart-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            productId: product.id,
+            variantId: variantId || undefined,
+            quantity,
+            isChecked: true,
+            product,
+            variant: variant || undefined,
+          }]
+        }
       }),
       removeItem: (id) => set((state) => ({
         items: state.items.filter((i) => i.id !== id),
@@ -1963,13 +1320,28 @@ export const useCartStore = create<CartState>()(
       })),
       clearCart: () => set({ items: [] }),
       getTotalPrice: () =>
-        get().items.reduce((sum, item) => sum + (item.variant?.price || item.product.price) * item.quantity, 0),
+        get().items.reduce((sum, item) => {
+          const basePrice = item.variant?.price || item.product.discountPrice || item.product.price
+          return sum + basePrice * item.quantity
+        }, 0),
       getCheckedTotalPrice: () =>
         get()
           .items.filter((i) => i.isChecked)
-          .reduce((sum, item) => sum + (item.variant?.price || item.product.price) * item.quantity, 0),
+          .reduce((sum, item) => {
+            const basePrice = item.variant?.price || item.product.discountPrice || item.product.price
+            return sum + basePrice * item.quantity
+          }, 0),
       getTotalItemCount: () => get().items.reduce((sum, item) => sum + item.quantity, 0),
       getCheckedItemCount: () =>
+        get().items.filter((i) => i.isChecked).reduce((sum, item) => sum + item.quantity, 0),
+      getCheckedItems: () => get().items.filter((i) => i.isChecked),
+      getCheckedTotal: () =>
+        get().items.filter((i) => i.isChecked)
+          .reduce((sum, item) => {
+            const basePrice = item.variant?.price || item.product.discountPrice || item.product.price
+            return sum + basePrice * item.quantity
+          }, 0),
+      getCheckedCount: () =>
         get().items.filter((i) => i.isChecked).reduce((sum, item) => sum + item.quantity, 0),
     }),
     {

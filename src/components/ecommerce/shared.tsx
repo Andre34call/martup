@@ -756,7 +756,7 @@ export function StatusBadge({ status, size = "sm" }: StatusBadgeProps) {
 
 // ==================== ROLE BADGE ====================
 interface RoleBadgeProps {
-  role: "buyer" | "seller" | "admin"
+  role: string
   size?: "sm" | "md"
 }
 

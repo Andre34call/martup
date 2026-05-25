@@ -230,7 +230,7 @@ function ShippingSelector({
 // ==================== MAIN COMPONENT ====================
 export function CheckoutScreen() {
   const { navigate, addresses, selectedAddressId, selectedVoucher, addOrder, showToast, walletBalance, deductWallet, useVoucher: markVoucherUsed } = useAppStore()
-  const { items, getCheckedItems, getCheckedTotal, getCheckedCount, clearCart, removeItems } = useCartStore()
+  const { items, getCheckedItems, getCheckedTotal, getCheckedCount, clearCart, removeItem } = useCartStore()
 
   const [selectedPayment, setSelectedPayment] = useState<string | null>(null)
   const [shippingBySeller, setShippingBySeller] = useState<Record<string, ShippingOption>>({})
@@ -319,9 +319,13 @@ export function CheckoutScreen() {
     }
 
     // Stock validation
-    const outOfStockItem = checkedItems.find(item => item.quantity > item.product.stock)
+    const outOfStockItem = checkedItems.find(item => {
+      const maxStock = item.variant ? item.variant.stock : item.product.stock
+      return item.quantity > maxStock
+    })
     if (outOfStockItem) {
-      showToast(`Stok "${outOfStockItem.product.name}" tidak mencukupi (tersedia: ${outOfStockItem.product.stock})`, "error")
+      const maxStock = outOfStockItem.variant ? outOfStockItem.variant.stock : outOfStockItem.product.stock
+      showToast(`Stok "${outOfStockItem.product.name}" tidak mencukupi (tersedia: ${maxStock})`, "error")
       return
     }
 
@@ -381,11 +385,11 @@ export function CheckoutScreen() {
 
       // Remove checked items from cart
       const checkedItemIds = checkedItems.map(i => i.id)
-      removeItems(checkedItemIds)
+      checkedItemIds.forEach(id => removeItem(id))
 
-      // Deduct wallet balance if paying with MartUp Pay
+      // Deduct wallet balance if paying with MartUp Pay (clamp to 0 minimum)
       if (selectedPayment === 'wallet') {
-        deductWallet(totalAmount, 'Pembayaran Order #' + newOrderNumber)
+        deductWallet(Math.max(0, totalAmount), 'Pembayaran Order #' + newOrderNumber)
       }
 
       // Mark voucher as used

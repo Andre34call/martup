@@ -9,12 +9,12 @@ import { Heart, ShoppingBag } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 export function WishlistScreen() {
-  const { productIds } = useWishlistStore()
+  const { wishlistIds } = useWishlistStore()
   const { navigate, setSelectedProduct, products } = useAppStore()
 
   const wishlistedProducts = useMemo(() => {
-    return products.filter((p) => productIds.includes(p.id))
-  }, [productIds, products])
+    return products.filter((p) => wishlistIds.includes(p.id))
+  }, [wishlistIds, products])
 
   const handleProductClick = useCallback((product: Product) => {
     setSelectedProduct(product.id)

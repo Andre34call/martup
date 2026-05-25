@@ -236,7 +236,7 @@ export function CategoryDetailScreen() {
   if (!category) {
     return (
       <div className="flex flex-col min-h-screen bg-background">
-        <PageHeader title="Kategori" onAction={() => goBack()} />
+        <PageHeader title="Kategori" onBack={() => goBack()} />
         <div className="flex-1 flex items-center justify-center">
           <EmptyState
             icon={<Grid3X3 className="w-10 h-10 text-muted-foreground" />}

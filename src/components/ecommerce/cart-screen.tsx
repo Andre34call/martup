@@ -197,7 +197,7 @@ function RemoveItemModal({
 export function CartScreen() {
   const { navigate, setSelectedProduct, setSelectedSeller, selectedVoucher, showToast } = useAppStore()
   const {
-    items, removeItem, updateQuantity, toggleCheck, toggleAllCheck,
+    items, removeItem, updateQuantity, toggleCheck, checkAll,
     getCheckedTotal, getCheckedCount
   } = useCartStore()
 
@@ -451,7 +451,7 @@ export function CartScreen() {
             <div className="flex items-center gap-2.5">
               <motion.button
                 whileTap={{ scale: 0.9 }}
-                onClick={() => toggleAllCheck(!allChecked)}
+                onClick={() => checkAll(!allChecked)}
               >
                 <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${
                   allChecked
