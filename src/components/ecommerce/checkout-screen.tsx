@@ -229,7 +229,7 @@ function ShippingSelector({
 
 // ==================== MAIN COMPONENT ====================
 export function CheckoutScreen() {
-  const { navigate, addresses, selectedAddressId, selectedVoucher, addOrder, showToast, walletBalance, deductWallet, useVoucher: markVoucherUsed } = useAppStore()
+  const { navigate, addresses, selectedAddressId, selectedVoucher, addOrder, showToast, walletBalance, deductWallet, useVoucher: markVoucherUsed, currentUser } = useAppStore()
   const { items, getCheckedItems, getCheckedTotal, getCheckedCount, clearCart, removeItem } = useCartStore()
 
   const [selectedPayment, setSelectedPayment] = useState<string | null>(null)
@@ -347,7 +347,7 @@ export function CheckoutScreen() {
         const order = {
           id: `o${Date.now()}-${group.seller.id}`,
           orderNumber: newOrderNumber,
-          userId: 'u1',
+          userId: currentUser?.id || '',
           sellerId: group.seller.id,
           status: 'paid' as const,
           subtotal: groupSubtotal,

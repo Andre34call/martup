@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { signOut } from 'next-auth/react'
-import type { ScreenName, UserRole, User, CartItem, Product, ProductVariant, Notification as AppNotification, ChatRoom, ChatMessage, Address, Voucher, Order, OrderStatus, WalletMutation, BankAccount, WithdrawRequest, WithdrawStatus, SellerBalance, Review, Seller, Division, SellerStats } from './types'
+import type { ScreenName, UserRole, User, CartItem, Product, ProductVariant, Notification as AppNotification, ChatRoom, ChatMessage, Address, Voucher, Order, OrderStatus, WalletMutation, BankAccount, WithdrawRequest, WithdrawStatus, SellerBalance, Review, Seller, Division, SellerStats, AdminStats } from './types'
 
 // ==================== APP STORE ====================
 interface AppState {
@@ -193,6 +193,13 @@ interface AppState {
   // Account
   deleteAccount: () => void
 
+  // Admin Data Fetching
+  adminStats: AdminStats | null
+  fetchAdminStats: () => Promise<void>
+  fetchAdminWithdrawals: () => Promise<void>
+  fetchAdminBanners: () => Promise<void>
+  fetchAdminComplaints: () => Promise<void>
+
   // Data fetching
   seller: Seller | null
   sellerStats: SellerStats | null
@@ -265,6 +272,7 @@ export const useAppStore = create<AppState>()(
           adminUsers: [],
           adminBanners: [],
           adminComplaints: [],
+          adminStats: null,
           divisions: [],
           chatRooms: [],
           chatMessages: {},
@@ -1015,6 +1023,105 @@ export const useAppStore = create<AppState>()(
           sellerStats: null,
           isDataLoaded: false,
         })
+      },
+
+      // Admin Data Fetching
+      adminStats: null,
+
+      fetchAdminStats: async () => {
+        try {
+          const res = await fetch('/api/admin/stats')
+          if (!res.ok) throw new Error('Failed to fetch admin stats')
+          const data = await res.json()
+          if (data.success && data.data) {
+            set({ adminStats: data.data as AdminStats })
+          }
+        } catch (error) {
+          console.error('Fetch admin stats error:', error)
+        }
+      },
+
+      fetchAdminWithdrawals: async () => {
+        try {
+          const res = await fetch('/api/admin/withdrawals')
+          if (!res.ok) throw new Error('Failed to fetch admin withdrawals')
+          const data = await res.json()
+          if (data.success && data.data) {
+            // Map withdrawals to store's WithdrawRequest format
+            const withdrawals = data.data.map((w: any) => ({
+              id: w.id,
+              sellerId: w.sellerId,
+              sellerName: w.sellerName || w.storeName || 'Unknown',
+              amount: w.amount,
+              adminFee: 0,
+              netAmount: w.amount,
+              bankAccount: {
+                id: `ba-wd-${w.id}`,
+                bankName: w.bankName || '',
+                accountNumber: w.bankAccount || '',
+                holderName: w.bankHolder || '',
+                isDefault: false,
+              },
+              status: w.status === 'processed' ? 'completed' : (w.status as WithdrawStatus),
+              requestDate: w.createdAt ? new Date(w.createdAt).toISOString() : new Date().toISOString(),
+              estimatedArrival: '1-2 hari kerja',
+              processedDate: w.processedAt ? new Date(w.processedAt).toISOString() : undefined,
+              adminNote: w.adminNote,
+            }))
+            set({ withdrawRequests: withdrawals })
+          }
+        } catch (error) {
+          console.error('Fetch admin withdrawals error:', error)
+        }
+      },
+
+      fetchAdminBanners: async () => {
+        try {
+          const res = await fetch('/api/admin/banners')
+          if (!res.ok) throw new Error('Failed to fetch admin banners')
+          const data = await res.json()
+          if (data.success && data.data) {
+            set({
+              adminBanners: data.data.map((b: any) => ({
+                id: b.id,
+                title: b.title,
+                image: b.image,
+                link: b.link || '',
+                position: b.position || 'home_top',
+                isActive: b.isActive ?? true,
+              }))
+            })
+          }
+        } catch (error) {
+          console.error('Fetch admin banners error:', error)
+        }
+      },
+
+      fetchAdminComplaints: async () => {
+        try {
+          const res = await fetch('/api/admin/complaints')
+          if (!res.ok) throw new Error('Failed to fetch admin complaints')
+          const data = await res.json()
+          if (data.success && data.data) {
+            set({
+              adminComplaints: data.data.map((c: any) => ({
+                id: c.id,
+                userId: c.userId || '',
+                userName: c.userName || c.buyer || '',
+                type: c.type || 'complaint',
+                description: c.description || '',
+                status: c.status || 'open',
+                createdAt: c.createdAt ? new Date(c.createdAt).toISOString() : new Date().toISOString(),
+                response: c.resolution || c.response,
+                orderId: c.orderId || '',
+                buyer: c.buyer || '',
+                seller: c.seller || '',
+              }))
+            })
+          }
+        } catch (error) {
+          console.error('Fetch admin complaints error:', error)
+        }
       },
 
       // Data fetching
