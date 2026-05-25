@@ -67,7 +67,7 @@ export function generateAuthToken(userId: string): string {
  * Verify an HMAC-signed auth token.
  * Returns the userId if valid, null otherwise.
  */
-function verifyAuthToken(token: string): string | null {
+export function verifyAuthToken(token: string): string | null {
   try {
     const decoded = Buffer.from(token, 'base64').toString()
     const [userId, timestamp, signature] = decoded.split(':')
