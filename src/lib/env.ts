@@ -16,9 +16,11 @@ const recommendedVars = [
   'RESEND_API_KEY',
 ] as const
 
-// Validate at module load time
+// Validate at module load time — but NOT during Next.js build phase
+// (Next.js runs route modules during build for static generation, when env vars may not be set)
+const isBuildPhase = process.env.NEXT_PHASE === 'phase-production-build'
 const missing = requiredVars.filter(v => !process.env[v])
-if (missing.length > 0 && process.env.NODE_ENV === 'production') {
+if (missing.length > 0 && process.env.NODE_ENV === 'production' && !isBuildPhase) {
   throw new Error(
     `[FATAL] Missing required environment variables: ${missing.join(', ')}. ` +
     `Application cannot start without them.`

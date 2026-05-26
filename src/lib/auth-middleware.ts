@@ -64,6 +64,10 @@ checkRateLimit.map = undefined as unknown as Map<string, { count: number; lastRe
 const TOKEN_SECRET = (() => {
   const secret = env.TOKEN_SECRET
   if (!secret) {
+    // During build phase, env vars may not be available — return placeholder
+    if (process.env.NEXT_PHASE === 'phase-production-build') {
+      return 'build-placeholder-not-for-production-use'
+    }
     throw new Error('[FATAL] TOKEN_SECRET or NEXTAUTH_SECRET environment variable must be set. Application cannot start without it.')
   }
   return secret

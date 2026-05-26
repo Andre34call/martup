@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3000 2>&1 | tee dev.log",
-    "build": "rm -rf examples skills mini-services && next build && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/",
+    "prebuild": "node -e \"const fs=require('fs');['examples','skills','mini-services'].forEach(d=>{try{fs.rmSync(d,{recursive:true,force:true});console.log('Removed '+d)}catch(e){console.log('Skip '+d+': '+e.message)}})\"",
+    "build": "next build && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/",
+    "postinstall": "node -e \"const fs=require('fs');['examples','skills','mini-services'].forEach(d=>{try{fs.rmSync(d,{recursive:true,force:true})}catch(e){}})\"",
     "start": "NODE_ENV=production bun .next/standalone/server.js 2>&1 | tee server.log",
     "lint": "eslint .",
     "db:push": "prisma db push",
