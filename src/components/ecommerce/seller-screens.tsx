@@ -42,7 +42,7 @@ const stagger = {
 
 // ==================== SELLER DASHBOARD ====================
 export function SellerDashboard() {
-  const { navigate, unreadNotificationCount, switchRole, userRole, orders, sellerBalance, currentUser, products, seller, sellerStats, fetchSellerStats } = useAppStore()
+  const { navigate, unreadNotificationCount, switchRole, userRole, orders, sellerBalance, currentUser, products, seller, sellerStats, fetchSellerStats, commissionRate } = useAppStore()
   const sellerId = seller?.id || ''
 
   // Fetch seller stats from API when seller ID becomes available
@@ -56,7 +56,7 @@ export function SellerDashboard() {
   const sellerOrders = orders.filter(o => o.sellerId === sellerId)
   const totalRevenue = sellerOrders
     .filter(o => o.status === 'paid' || o.status === 'delivered')
-    .reduce((sum, o) => sum + o.subtotal * 0.95, 0)
+    .reduce((sum, o) => sum + o.subtotal * (1 - commissionRate), 0)
   const totalOrders = sellerOrders.length
   const pendingOrders = sellerOrders.filter(o => o.status === 'pending' || o.status === 'paid').length
   const needToShip = sellerOrders.filter(o => o.status === 'paid' || o.status === 'processing').length
@@ -647,7 +647,7 @@ export function SellerOrders() {
 
 // ==================== SELLER ANALYTICS ====================
 export function SellerAnalytics() {
-  const { products, orders, seller, sellerStats, fetchSellerStats } = useAppStore()
+  const { products, orders, seller, sellerStats, fetchSellerStats, commissionRate } = useAppStore()
 
   // Derive sellerId from store seller
   const sellerId = seller?.id || ''
@@ -663,7 +663,7 @@ export function SellerAnalytics() {
   const sellerOrders = orders.filter(o => o.sellerId === sellerId)
   const totalRevenue = sellerOrders
     .filter(o => o.status === 'paid' || o.status === 'delivered')
-    .reduce((sum, o) => sum + o.subtotal * 0.95, 0)
+    .reduce((sum, o) => sum + o.subtotal * (1 - commissionRate), 0)
 
   // Use API stats when available, fallback to local computation
   const stats = sellerStats ? {

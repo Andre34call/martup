@@ -1767,3 +1767,144 @@ Stage Summary:
 - Graceful fallback to DEFAULT_SHIPPING_OPTIONS on API failure
 - Weight-based calculation using product.weight field from cart items
 - All code follows existing patterns (auth-middleware, logger, response format)
+
+---
+Task ID: 3
+Agent: Socket.IO Chat Wiring Agent
+Task: Wire Socket.IO Real-time Chat to Frontend Chat Screen
+
+Work Log:
+- Read worklog.md to understand previous agent work (chat store already has connectSocket, disconnectSocket, emitTyping)
+- Read chat-screen.tsx and chat.ts store to understand current state
+- Modified ChatScreen component: Added connectSocket to useAppStore destructure, added useEffect to call connectSocket() on mount
+- Modified ChatRoomView component:
+  - Added emitTyping, typingUsers, isSocketConnected to useAppStore destructure
+  - Created handleInputChange callback that calls emitTyping(room.id, value.length > 0) on input change
+  - Updated handleSend to call emitTyping(room.id, false) after sending a message
+  - Updated Input onChange to use handleInputChange instead of direct setMessage
+  - Added typing indicator UI before messagesEndRef: shows animated bouncing dots + "Mengetik..." text when other users are typing
+  - Typing indicator filters out current user (only shows when OTHER users type)
+  - Updated header "Online" text to show real socket connection status: green "Online" when connected, amber "Connecting..." when disconnected
+- Lint check passes with 0 errors, 0 warnings
+- Dev server running cleanly
+
+Stage Summary:
+- ChatScreen now calls connectSocket() on mount, establishing WebSocket connection when user enters chat
+- ChatRoomView now emits typing events via WebSocket when user types, and stops typing when message is sent
+- Typing indicator shows animated dots with "Mengetik..." text when other users are typing in the current room
+- Header shows real-time socket connection status (Online/Connecting...)
+- All changes use existing store methods (connectSocket, emitTyping, typingUsers, isSocketConnected) without modification
+
+---
+Task ID: 5
+Agent: Error & Not-Found Pages Agent
+Task: Add error.tsx and not-found.tsx pages
+
+Work Log:
+- Read worklog.md to understand project context and prior work
+- Reviewed existing app structure: layout.tsx, globals.css, button.tsx component, app-container CSS class
+- Confirmed no existing error.tsx or not-found.tsx files were present
+- Created src/app/error.tsx:
+  - "use client" component with error and reset props
+  - AlertTriangle icon from lucide-react in a destructive-tinted circle
+  - Indonesian error message: "Terjadi Kesalahan"
+  - Descriptive text in Indonesian explaining the error
+  - Displays error.digest reference code when available
+  - "Coba Lagi" (Retry) button calling reset() with emerald-600 styling
+  - "Ke Beranda" (Go Home) button as outline variant linking to /
+  - Uses app-container class, centered layout, responsive (flex-col on mobile, flex-row on sm+)
+- Created src/app/not-found.tsx:
+  - Server component (no "use client")
+  - SearchX icon from lucide-react in an emerald-tinted circle
+  - Large "404" heading with "Halaman Tidak Ditemukan" subtitle
+  - Descriptive text in Indonesian
+  - "Kembali ke Beranda" button with emerald-600 styling linking to /
+  - Uses app-container class, centered layout, mobile-friendly
+- Both pages use: bg-background, text-foreground, text-muted-foreground, emerald-500/600 for primary actions
+- Both pages are simple, clean, centered vertically and horizontally
+- Lint check passes with 0 errors, 0 warnings
+- Dev server running cleanly
+
+Stage Summary:
+- error.tsx and not-found.tsx pages created with consistent emerald green theme
+- Indonesian language throughout for MartUp e-commerce app
+- Uses app-container CSS class for layout consistency with the rest of the app
+- Proper Next.js conventions: error.tsx is client component, not-found.tsx is server component
+- Mobile-responsive design with centered content
+
+---
+Task ID: 2
+Agent: Dynamic Commission Rate Agent
+Task: Fix Hardcoded 0.95 Commission → Dynamic Commission Rate
+
+Work Log:
+- Read worklog.md and all relevant files to understand current state
+- Updated src/lib/store/types.ts: Added `commissionRate: number` field to SellerSlice interface
+- Updated src/lib/store/seller.ts: Initialized `commissionRate: 0.05` (5% default), updated `fetchSellerStats` to read commissionRate from API response and set it in state
+- Updated src/app/api/seller/stats/route.ts: Added `commissionRate` to the API response data object (was already computed internally but not returned)
+- Updated src/lib/store/order.ts: Replaced all 4 hardcoded `0.95` values with `(1 - get().commissionRate)`:
+  - Line 81 (addOrder): `order.subtotal * 0.95` → `order.subtotal * (1 - get().commissionRate)`
+  - Line 124 (updateOrderStatus): `order.subtotal * 0.95` → `order.subtotal * (1 - get().commissionRate)`
+  - Line 203 (payForOrder): `currentOrder.subtotal * 0.95` → `currentOrder.subtotal * (1 - get().commissionRate)`
+  - Line 321 (cancelOrder): `order.subtotal * 0.95` → `order.subtotal * (1 - get().commissionRate)`
+- Updated src/components/ecommerce/seller-screens.tsx: Replaced 2 hardcoded `0.95` values with `(1 - commissionRate)`:
+  - SellerDashboard: Added `commissionRate` to useAppStore destructuring, replaced `0.95` in revenue reduce
+  - SellerAnalytics: Added `commissionRate` to useAppStore destructuring, replaced `0.95` in revenue reduce
+- Ran `bun run lint`: 0 errors, 0 warnings
+- Dev server running cleanly
+
+Stage Summary:
+- All 6 hardcoded 0.95 commission values replaced with dynamic `(1 - commissionRate)`
+- commissionRate defaults to 0.05 (5%) and is fetched from /api/seller/stats API on seller dashboard load
+- Server already reads commissionRate from Seller.commissionRate or PlatformSetting.commissionRate with 0.05 fallback
+- Frontend now dynamically uses whatever commission rate the server returns, so admin commission rate changes take effect immediately
+- No breaking changes: default behavior (5% commission) is preserved when API hasn't been called yet
+
+---
+Task ID: 6
+Agent: Shipping Origin City Fix Agent
+Task: Fix originCity Hardcoded "Jakarta" → Use Seller's Store City
+
+Work Log:
+- Added `storeCity String?` field to Seller model in prisma/schema.prisma
+- Pushed schema to database with `bun run db:push` — successful
+- Added `storeCity?: string` to Seller interface in src/lib/types.ts
+- Updated checkout-screen.tsx fetchShippingRates callback to accept optional `originCity` parameter
+- Changed hardcoded `originCity: 'Jakarta'` to `originCity: originCity || 'Jakarta'` (uses seller city, falls back to Jakarta)
+- Updated both auto-fetch effects to pass `group.seller.storeCity` as originCity argument
+- Updated data-fetch.ts seller mapping to include `storeAddress` and `storeCity` fields
+- Updated data-fetch.ts order seller mapping to include `storeCity` field
+- Lint check passes with 0 errors
+- Dev server running cleanly
+
+Stage Summary:
+- Shipping origin city now dynamically uses each seller's storeCity field
+- Jakarta is the fallback when seller has no city set
+- Each seller group in checkout uses its own origin city for shipping rate calculation
+- Seller model extended with storeCity field in database
+
+---
+Task ID: 7
+Agent: Notification Fetch Agent
+Task: Add Notification Fetching from API with Polling
+
+Work Log:
+- Added `fetchNotifications: (userId: string) => Promise<void>` to NotificationSlice interface in types.ts
+- Added fetchNotifications method to notification.ts store that:
+  - Fetches from /api/notifications?userId=... with auth headers
+  - Maps API response to local notification objects (id, title, content, type, isRead, createdAt, actionUrl)
+  - Calculates and sets unreadNotificationCount
+  - Logs errors via logger.warn without crashing
+- Updated notification-screen.tsx:
+  - Added useEffect to fetch notifications on mount when currentUser?.id is available
+  - Added useEffect with setInterval to poll every 60 seconds for new notifications
+  - Added useEffect import and fetchNotifications/currentUser to store destructuring
+- Updated data-fetch.ts fetchUserData to call get().fetchNotifications(userId) after loading user data
+- Lint check passes with 0 errors
+- Dev server running cleanly
+
+Stage Summary:
+- Notifications now fetched from API on mount and every 60 seconds via polling
+- fetchNotifications also called during login (via fetchUserData)
+- Server is source of truth for notifications; local store synced from API
+- Graceful error handling — fetch failures logged but don't crash the UI

@@ -215,6 +215,7 @@ export async function GET(request: NextRequest) {
         monthlyRevenue,
         topProducts,
         recentOrders,
+        commissionRate,
       },
     })
   } catch (error: unknown) {

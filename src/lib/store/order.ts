@@ -78,7 +78,7 @@ export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set
   // ==================== addOrder ====================
   // Local-only — the API call happens in checkout-screen.tsx
   addOrder: (order) => set((state) => {
-    const sellerCredit = order.status === 'paid' ? order.subtotal * 0.95 : 0
+    const sellerCredit = order.status === 'paid' ? order.subtotal * (1 - get().commissionRate) : 0
     const newSellerBalance = sellerCredit > 0
       ? {
           ...state.sellerBalance,
@@ -121,7 +121,7 @@ export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set
       const order = state.orders.find(o => o.id === orderId)
       if (!order) return state
       const prevStatus = order.status
-      const sellerCredit = order.subtotal * 0.95
+      const sellerCredit = order.subtotal * (1 - get().commissionRate)
       let newSellerBalance = { ...state.sellerBalance }
 
       if (status === 'paid' && prevStatus !== 'paid') {
@@ -200,7 +200,7 @@ export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set
       const currentOrder = state.orders.find(o => o.id === orderId)
       if (!currentOrder || currentOrder.status !== 'pending') return state
 
-      const sellerCredit = currentOrder.subtotal * 0.95
+      const sellerCredit = currentOrder.subtotal * (1 - get().commissionRate)
       let newWalletBalance = state.walletBalance
       let newWalletMutations = [...state.walletMutations]
 
@@ -318,7 +318,7 @@ export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set
       if (!order) return state
 
       const wasPaid = order.paymentStatus === 'paid' || order.status === 'paid' || order.status === 'processing' || order.status === 'shipped'
-      const sellerCredit = order.subtotal * 0.95
+      const sellerCredit = order.subtotal * (1 - get().commissionRate)
 
       let newSellerBalance = { ...state.sellerBalance }
       let newWalletBalance = state.walletBalance

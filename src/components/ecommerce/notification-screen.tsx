@@ -5,7 +5,7 @@ import { useAppStore } from "@/lib/store"
 import { formatRelativeTime } from "@/lib/utils"
 import { PageHeader, EmptyState, TabBar, NotificationItem } from "./shared"
 import type { Notification as AppNotification } from "@/lib/types"
-import { useState, useMemo, useCallback } from "react"
+import { useState, useMemo, useCallback, useEffect } from "react"
 import {
   Package, Gift, Bell, MessageCircle, CheckCheck, Trash2
 } from "lucide-react"
@@ -20,8 +20,24 @@ const NOTIFICATION_TABS = [
 
 // ==================== NOTIFICATION SCREEN ====================
 export function NotificationScreen() {
-  const { notifications, markNotificationRead, markAllNotificationsRead, setSelectedOrder, navigate } = useAppStore()
+  const { notifications, markNotificationRead, markAllNotificationsRead, setSelectedOrder, navigate, fetchNotifications, currentUser } = useAppStore()
   const [activeTab, setActiveTab] = useState("all")
+
+  // Fetch notifications from API on mount
+  useEffect(() => {
+    if (currentUser?.id) {
+      fetchNotifications(currentUser.id)
+    }
+  }, [fetchNotifications, currentUser?.id])
+
+  // Poll for new notifications every 60 seconds
+  useEffect(() => {
+    if (!currentUser?.id) return
+    const interval = setInterval(() => {
+      fetchNotifications(currentUser.id)
+    }, 60000)
+    return () => clearInterval(interval)
+  }, [fetchNotifications, currentUser?.id])
 
   const filteredNotifications = useMemo(() => {
     if (activeTab === "all") return notifications

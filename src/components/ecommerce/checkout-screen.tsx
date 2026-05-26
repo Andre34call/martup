@@ -297,14 +297,14 @@ export function CheckoutScreen() {
   }, [groupedBySeller])
 
   // Fetch shipping rates from API when address is selected
-  const fetchShippingRates = useCallback(async (sellerId: string, destinationCity: string, weightGrams: number) => {
+  const fetchShippingRates = useCallback(async (sellerId: string, destinationCity: string, weightGrams: number, originCity?: string) => {
     setIsLoadingRates(prev => ({ ...prev, [sellerId]: true }))
     try {
       const res = await fetch('/api/shipping/calculate', {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify({
-          originCity: 'Jakarta', // Default origin — in production, this would come from seller's store address
+          originCity: originCity || 'Jakarta', // Use seller's store city, fallback to Jakarta
           destinationCity,
           weight: weightGrams,
         }),
@@ -335,7 +335,7 @@ export function CheckoutScreen() {
       // Only fetch if we don't have rates yet for this seller or if address changed
       const currentRates = shippingRatesBySeller[sellerId]
       if (!currentRates || currentRates.length === 0) {
-        fetchShippingRates(sellerId, defaultAddress.city, weight)
+        fetchShippingRates(sellerId, defaultAddress.city, weight, group.seller.storeCity)
       }
     })
   }, [defaultAddress?.id, groupedBySeller.length])
@@ -347,7 +347,7 @@ export function CheckoutScreen() {
     groupedBySeller.forEach(group => {
       const sellerId = group.seller.id
       const weight = weightBySeller[sellerId] || 1000
-      fetchShippingRates(sellerId, defaultAddress.city, weight)
+      fetchShippingRates(sellerId, defaultAddress.city, weight, group.seller.storeCity)
     })
   }, [defaultAddress?.city])
 

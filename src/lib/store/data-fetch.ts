@@ -61,6 +61,8 @@ export const createDataFetchSlice: StateCreator<AppStore, [], [], DataFetchSlice
           totalSales: data.seller.totalSales,
           totalProducts: data.seller.totalProducts,
           responseTime: data.seller.responseTime || undefined,
+          storeAddress: data.seller.storeAddress || undefined,
+          storeCity: data.seller.storeCity || undefined,
           bankName: data.seller.bankName || undefined,
           bankAccount: data.seller.bankAccount || undefined,
           bankHolder: data.seller.bankHolder || undefined,
@@ -170,6 +172,7 @@ export const createDataFetchSlice: StateCreator<AppStore, [], [], DataFetchSlice
               rating: o.seller.rating || 0,
               totalSales: o.seller.totalSales || 0,
               totalProducts: o.seller.totalProducts || 0,
+              storeCity: o.seller.storeCity || undefined,
             } : {
               id: '',
               userId: '',
@@ -252,6 +255,9 @@ export const createDataFetchSlice: StateCreator<AppStore, [], [], DataFetchSlice
       if (data.user?.role === 'admin') {
         get().fetchPlatformSettings()
       }
+
+      // Fetch latest notifications from API
+      get().fetchNotifications(userId)
 
       set({ isDataLoaded: true })
     } catch (error) {

@@ -59,6 +59,7 @@ model Seller {
   storeAvatar     String?
   storeBanner     String?
   storeAddress    String?
+  storeCity       String?
   isVerified      Boolean  @default(false)
   isPremium       Boolean  @default(false)
   rating          Float    @default(0)

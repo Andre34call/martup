@@ -47,6 +47,7 @@ export interface NotificationSlice {
   unreadNotificationCount: number
   markNotificationRead: (id: string) => void
   markAllNotificationsRead: () => void
+  fetchNotifications: (userId: string) => Promise<void>
 }
 
 export interface ChatSlice {
@@ -135,6 +136,7 @@ export interface SellerSlice {
   sellerBalance: SellerBalance
   sellerBankAccounts: BankAccount[]
   withdrawRequests: WithdrawRequest[]
+  commissionRate: number
   addBankAccount: (account: BankAccount) => void
   removeBankAccount: (id: string) => void
   setDefaultBankAccount: (id: string) => void

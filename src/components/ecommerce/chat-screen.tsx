@@ -114,7 +114,7 @@ export function ChatRoomScreen() {
 
 // ==================== CHAT ROOM VIEW ====================
 function ChatRoomView({ room, onBack }: { room: ChatRoom; onBack: () => void }) {
-  const { showToast, chatMessages, currentUser, markChatRead, fetchChatMessages, sendChatMessage } = useAppStore()
+  const { showToast, chatMessages, currentUser, markChatRead, fetchChatMessages, sendChatMessage, emitTyping, typingUsers, isSocketConnected } = useAppStore()
   const [message, setMessage] = useState("")
   const messages = chatMessages[room.id] || []
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -135,12 +135,18 @@ function ChatRoomView({ room, onBack }: { room: ChatRoom; onBack: () => void }) 
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
 
+  const handleInputChange = useCallback((value: string) => {
+    setMessage(value)
+    emitTyping(room.id, value.length > 0)
+  }, [room.id, emitTyping])
+
   const handleSend = useCallback(() => {
     if (!message.trim()) return
     sendChatMessage(room.id, message.trim())
     setMessage("")
+    emitTyping(room.id, false)
     inputRef.current?.focus()
-  }, [message, room.id, sendChatMessage])
+  }, [message, room.id, sendChatMessage, emitTyping])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -170,7 +176,9 @@ function ChatRoomView({ room, onBack }: { room: ChatRoom; onBack: () => void }) 
               </div>
               <div>
                 <p className="text-sm font-semibold text-foreground">{room.seller.storeName}</p>
-                <p className="text-[10px] text-emerald-500">Online</p>
+                <p className={`text-[10px] ${isSocketConnected ? 'text-emerald-500' : 'text-amber-500'}`}>
+                  {isSocketConnected ? 'Online' : 'Connecting...'}
+                </p>
               </div>
             </div>
           </div>
@@ -248,6 +256,21 @@ function ChatRoomView({ room, onBack }: { room: ChatRoom; onBack: () => void }) 
             </motion.div>
           )
         })}
+        {/* Typing indicator */}
+        {(() => {
+          const roomTypingUsers = typingUsers[room.id] || []
+          const otherTyping = roomTypingUsers.filter(id => id !== currentUser?.id)
+          return otherTyping.length > 0
+        })() && (
+          <div className="flex items-center gap-2 px-2">
+            <div className="flex gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '0ms' }} />
+              <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '150ms' }} />
+              <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '300ms' }} />
+            </div>
+            <span className="text-xs text-muted-foreground">Mengetik...</span>
+          </div>
+        )}
         <div ref={messagesEndRef} />
       </div>
 
@@ -279,7 +302,7 @@ function ChatRoomView({ room, onBack }: { room: ChatRoom; onBack: () => void }) 
             <Input
               ref={inputRef}
               value={message}
-              onChange={(e) => setMessage(e.target.value)}
+              onChange={(e) => handleInputChange(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Ketik pesan..."
               className="h-10 rounded-full bg-muted/50 border-border/50 pr-10 focus:border-emerald-500 focus:ring-emerald-500/20"
@@ -311,13 +334,18 @@ function ChatRoomView({ room, onBack }: { room: ChatRoom; onBack: () => void }) 
 
 // ==================== CHAT SCREEN ====================
 export function ChatScreen() {
-  const { chatRooms, navigate, setSelectedChatRoom, fetchChatRooms } = useAppStore()
+  const { chatRooms, navigate, setSelectedChatRoom, fetchChatRooms, connectSocket } = useAppStore()
   const [searchQuery, setSearchQuery] = useState("")
 
   // Fetch chat rooms from API on mount
   useEffect(() => {
     fetchChatRooms()
   }, [fetchChatRooms])
+
+  // Connect WebSocket for real-time chat
+  useEffect(() => {
+    connectSocket()
+  }, [connectSocket])
 
   const filteredRooms = useMemo(() => {
     if (!searchQuery.trim()) return chatRooms

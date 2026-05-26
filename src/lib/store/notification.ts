@@ -1,6 +1,7 @@
 import type { StateCreator } from 'zustand'
 import type { NotificationSlice, AppStore } from './types'
 import { getAuthHeaders } from './getAuthHeaders'
+import { logger } from '@/lib/logger'
 
 export const createNotificationSlice: StateCreator<AppStore, [], [], NotificationSlice> = (set, get) => ({
   notifications: [],
@@ -33,4 +34,28 @@ export const createNotificationSlice: StateCreator<AppStore, [], [], Notificatio
       unreadNotificationCount: 0
     }
   }),
+  fetchNotifications: async (userId: string) => {
+    try {
+      const res = await fetch(`/api/notifications?userId=${encodeURIComponent(userId)}`, {
+        headers: getAuthHeaders(),
+      })
+      if (!res.ok) throw new Error('Failed to fetch notifications')
+      const data = await res.json()
+      if (data.success && data.data) {
+        const notifications = data.data.map((n: any) => ({
+          id: n.id,
+          title: n.title,
+          content: n.content,
+          type: n.type || 'system',
+          isRead: n.isRead,
+          createdAt: n.createdAt,
+          actionUrl: n.actionUrl || undefined,
+        }))
+        const unreadCount = notifications.filter((n: any) => !n.isRead).length
+        set({ notifications, unreadNotificationCount: unreadCount })
+      }
+    } catch (error) {
+      logger.warn({ component: 'notification', err: error }, 'Fetch notifications error')
+    }
+  },
 })

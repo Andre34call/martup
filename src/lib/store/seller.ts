@@ -14,6 +14,7 @@ export const createSellerSlice: StateCreator<AppStore, [], [], SellerSlice> = (s
   },
   sellerBankAccounts: [],
   withdrawRequests: [],
+  commissionRate: 0.05,
   addBankAccount: (account) => set((state) => {
     const accounts = account.isDefault
       ? state.sellerBankAccounts.map(a => ({ ...a, isDefault: false })).concat(account)
@@ -108,7 +109,11 @@ export const createSellerSlice: StateCreator<AppStore, [], [], SellerSlice> = (s
       if (!res.ok) throw new Error('Failed to fetch seller stats')
       const data = await res.json()
       if (data.success && data.data) {
-        set({ sellerStats: data.data as SellerStats })
+        const update: Partial<SellerSlice> = { sellerStats: data.data as SellerStats }
+        if (typeof data.data.commissionRate === 'number') {
+          update.commissionRate = data.data.commissionRate
+        }
+        set(update)
       }
     } catch (error) {
       logger.warn({ component: 'seller', err: error }, 'Failed to fetch seller stats')

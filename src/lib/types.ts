@@ -47,6 +47,7 @@ export interface Seller {
   totalProducts: number
   responseTime?: number
   storeAddress?: string
+  storeCity?: string
   bankName?: string
   bankAccount?: string
   bankHolder?: string
