@@ -1458,7 +1458,7 @@ export function AdminCampaigns() {
 
 // ==================== ADMIN SETTINGS ====================
 export function AdminSettings() {
-  const { showToast } = useAppStore()
+  const { showToast, fetchPlatformSettings } = useAppStore()
   const [settings, setSettings] = useState<PlatformSettings | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -1470,13 +1470,15 @@ export function AdminSettings() {
       const data = await res.json()
       if (data.success) {
         setSettings(data.data)
+        // Sync to global store so other components (checkout, etc.) can use settings
+        fetchPlatformSettings()
       }
     } catch {
       showToast("Gagal memuat pengaturan", "error")
     } finally {
       setLoading(false)
     }
-  }, [showToast])
+  }, [showToast, fetchPlatformSettings])
 
   useEffect(() => {
     fetchSettings()
@@ -1495,6 +1497,8 @@ export function AdminSettings() {
       if (data.success) {
         showToast("Pengaturan berhasil disimpan", "success")
         setSettings(data.data)
+        // Sync updated settings to global store
+        fetchPlatformSettings()
       } else {
         showToast(data.error || "Gagal menyimpan pengaturan", "error")
       }

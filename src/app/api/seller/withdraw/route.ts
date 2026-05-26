@@ -5,8 +5,28 @@ import { serializeDecimal } from '@/lib/decimal-utils'
 import { Prisma } from '@prisma/client'
 
 import { logger } from '@/lib/logger'
-// Minimum withdrawal amount in IDR
-const MIN_WITHDRAWAL_AMOUNT = 10000
+
+// Minimum withdrawal amount in IDR (fallback, overridden by platform settings)
+const DEFAULT_MIN_WITHDRAWAL = 10000
+
+/**
+ * Read minWithdrawal from PlatformSetting table.
+ * Returns the default if settings are not configured or DB read fails.
+ */
+async function getMinWithdrawal(): Promise<number> {
+  try {
+    const row = await db.platformSetting.findUnique({ where: { key: 'platform_settings' } })
+    if (row) {
+      const settings = JSON.parse(row.value) as Record<string, number | boolean | string>
+      if (typeof settings.minWithdrawal === 'number' && settings.minWithdrawal >= 10000) {
+        return settings.minWithdrawal
+      }
+    }
+  } catch {
+    // Fallback to default
+  }
+  return DEFAULT_MIN_WITHDRAWAL
+}
 
 // ==================== POST /api/seller/withdraw ====================
 // Create a new withdrawal request for the authenticated seller
@@ -73,9 +93,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (amount < MIN_WITHDRAWAL_AMOUNT) {
+    const minWithdrawal = await getMinWithdrawal()
+    if (amount < minWithdrawal) {
       return NextResponse.json(
-        { success: false, error: `Minimum withdrawal amount is Rp ${MIN_WITHDRAWAL_AMOUNT.toLocaleString('id-ID')}` },
+        { success: false, error: `Minimum withdrawal amount is Rp ${minWithdrawal.toLocaleString('id-ID')}` },
         { status: 400 }
       )
     }

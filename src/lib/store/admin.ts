@@ -208,4 +208,18 @@ export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set
       logger.warn({ component: 'admin', err: error }, 'Fetch admin complaints error')
     }
   },
+
+  platformSettings: null,
+  fetchPlatformSettings: async () => {
+    try {
+      const res = await fetch('/api/admin/settings', { headers: getAuthHeaders() })
+      if (!res.ok) throw new Error('Failed to fetch platform settings')
+      const data = await res.json()
+      if (data.success && data.data) {
+        set({ platformSettings: data.data as Record<string, number | boolean | string> })
+      }
+    } catch (error) {
+      logger.warn({ component: 'admin', err: error }, 'Fetch platform settings error')
+    }
+  },
 })

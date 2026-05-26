@@ -234,6 +234,8 @@ export interface AdminSlice {
   fetchAdminWithdrawals: () => Promise<void>
   fetchAdminBanners: () => Promise<void>
   fetchAdminComplaints: () => Promise<void>
+  platformSettings: Record<string, number | boolean | string> | null
+  fetchPlatformSettings: () => Promise<void>
 }
 
 export interface SettingsSlice {
@@ -243,7 +245,9 @@ export interface SettingsSlice {
     emailNotif: boolean
     dataSharing: boolean
   }
+  isSettingsLoaded: boolean
   updateSettings: (settings: Partial<SettingsSlice['settings']>) => void
+  fetchSettings: () => Promise<void>
 }
 
 export interface DataFetchSlice {

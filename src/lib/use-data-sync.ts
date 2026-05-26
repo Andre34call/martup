@@ -6,47 +6,87 @@ import { useAppStore, useCartStore, useWishlistStore } from '@/lib/store'
 import { logger } from '@/lib/logger'
 
 /**
- * useDataSync - Watches auth state and syncs data from API when user logs in.
+ * useDataSync - Watches auth state from BOTH auth stores and syncs data from API
+ * when a user is authenticated.
  *
- * On login: fetches user data, merges local cart to server, syncs wishlist from server.
+ * Works with two auth mechanisms:
+ * - useAuthStore (email/password users) — persists to localStorage via martup_* keys
+ * - useAppStore   (Google OAuth / NextAuth users) — isAuthenticated set by DataFetcher
+ *
+ * On authentication: fetches user data, merges local cart to server, syncs wishlist.
  * Note: mergeLocalToServer internally calls syncFromServer, so we don't need a separate call.
  * On logout: resets the isDataLoaded flag so data will be re-fetched on next login.
  */
 export function useDataSync() {
-  const userId = useAuthStore((s) => s.userId)
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
+  // ── Auth state from both stores ──────────────────────────────────────
+  const authStoreUserId = useAuthStore((s) => s.userId)
+  const authStoreIsAuthenticated = useAuthStore((s) => s.isAuthenticated)
+
+  const appStoreIsAuthenticated = useAppStore((s) => s.isAuthenticated)
+  const appStoreUserId = useAppStore((s) => s.currentUser?.id ?? null)
   const isDataLoaded = useAppStore((s) => s.isDataLoaded)
 
+  // ── Sync actions ─────────────────────────────────────────────────────
   const fetchUserData = useAppStore((s) => s.fetchUserData)
+  const fetchSettings = useAppStore((s) => s.fetchSettings)
   const cartMergeLocalToServer = useCartStore((s) => s.mergeLocalToServer)
   const wishlistSyncFromServer = useWishlistStore((s) => s.syncWishlistFromServer)
 
-  const prevAuthRef = useRef(false)
+  // ── Guards ───────────────────────────────────────────────────────────
   const syncingRef = useRef(false)
+  // Track the last userId we synced for, so we don't re-sync the same user
+  const lastSyncedUserIdRef = useRef<string | null>(null)
 
   useEffect(() => {
-    const wasAuthenticated = prevAuthRef.current
-    prevAuthRef.current = !!isAuthenticated
+    // Determine effective auth from whichever store is authenticated
+    const effectiveUserId = appStoreUserId || authStoreUserId
+    const effectiveIsAuthenticated = appStoreIsAuthenticated || authStoreIsAuthenticated
 
-    // User just logged in or is already authenticated but data not yet loaded
-    if (isAuthenticated && userId) {
-      if ((!wasAuthenticated || !isDataLoaded) && !syncingRef.current) {
+    // ── Sync on authentication ────────────────────────────────────────
+    if (effectiveIsAuthenticated && effectiveUserId) {
+      // Only sync if data hasn't been loaded yet AND we're not already syncing
+      // AND we haven't already synced for this particular user
+      if (
+        !isDataLoaded &&
+        !syncingRef.current &&
+        lastSyncedUserIdRef.current !== effectiveUserId
+      ) {
         syncingRef.current = true
+        lastSyncedUserIdRef.current = effectiveUserId
+
         Promise.all([
-          fetchUserData(userId),
-          cartMergeLocalToServer(userId), // mergeLocalToServer internally calls syncFromServer
-          wishlistSyncFromServer(userId),  // Sync wishlist from server
-        ]).catch((err) => {
-          logger.warn({ component: 'data-sync', err }, 'Failed to sync data from API')
-        }).finally(() => {
-          syncingRef.current = false
-        })
+          fetchUserData(effectiveUserId),
+          fetchSettings(),
+          cartMergeLocalToServer(effectiveUserId), // mergeLocalToServer internally calls syncFromServer
+          wishlistSyncFromServer(effectiveUserId),
+        ])
+          .catch((err) => {
+            logger.warn({ component: 'data-sync', err }, 'Failed to sync data from API')
+            // On failure, allow retry by clearing the last-synced ref
+            lastSyncedUserIdRef.current = null
+          })
+          .finally(() => {
+            syncingRef.current = false
+          })
       }
     }
 
-    // User logged out - reset data loaded flag so next login re-fetches
-    if (wasAuthenticated && !isAuthenticated) {
-      useAppStore.setState({ isDataLoaded: false })
+    // ── Reset on full logout (both stores unauthenticated) ────────────
+    if (!appStoreIsAuthenticated && !authStoreIsAuthenticated) {
+      if (isDataLoaded || lastSyncedUserIdRef.current) {
+        useAppStore.setState({ isDataLoaded: false })
+        lastSyncedUserIdRef.current = null
+      }
     }
-  }, [isAuthenticated, userId, isDataLoaded, fetchUserData, cartMergeLocalToServer, wishlistSyncFromServer])
+  }, [
+    appStoreIsAuthenticated,
+    authStoreIsAuthenticated,
+    appStoreUserId,
+    authStoreUserId,
+    isDataLoaded,
+    fetchUserData,
+    fetchSettings,
+    cartMergeLocalToServer,
+    wishlistSyncFromServer,
+  ])
 }

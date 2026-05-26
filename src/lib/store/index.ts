@@ -63,10 +63,11 @@ export const useAppStore = create<AppStore>()(
       partialize: (state) => ({
         // Only persist non-sensitive UI preferences
         // Do NOT persist currentScreen — it can reference protected screens
+        // Note: settings are persisted locally for fast UI, but also synced from server on login
         previousScreens: [],
         settings: state.settings,
         searchHistory: state.searchHistory,
-        // Do NOT persist: currentScreen, orders, notifications, products, wallet, vouchers, etc.
+        // Do NOT persist: currentScreen, orders, notifications, products, wallet, vouchers, isSettingsLoaded, etc.
       }),
     }
   )

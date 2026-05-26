@@ -230,7 +230,7 @@ function ShippingSelector({
 
 // ==================== MAIN COMPONENT ====================
 export function CheckoutScreen() {
-  const { navigate, addresses, selectedAddressId, selectedVoucher, addOrder, showToast, walletBalance, deductWallet, useVoucher: markVoucherUsed, currentUser, selectVoucher } = useAppStore()
+  const { navigate, addresses, selectedAddressId, selectedVoucher, addOrder, showToast, walletBalance, deductWallet, useVoucher: markVoucherUsed, currentUser, selectVoucher, platformSettings } = useAppStore()
   const { items, getCheckedItems, getCheckedTotal, getCheckedCount, clearCart, removeItem } = useCartStore()
 
   const [selectedPayment, setSelectedPayment] = useState<string | null>(null)
@@ -262,10 +262,10 @@ export function CheckoutScreen() {
     return Object.values(groups)
   }, [checkedItems])
 
-  // Calculate totals
+  // Calculate totals — use platform settings with fallback defaults
   const subtotal = checkedTotal
   const shippingCost = Object.values(shippingBySeller).reduce((sum, opt) => sum + opt.price, 0)
-  const platformFee = 1000
+  const platformFee = (platformSettings?.platformFee as number) ?? 1000
   const taxAmount = 0
 
   const voucherDiscount = useMemo(() => {

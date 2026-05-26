@@ -2,9 +2,8 @@
 
 import { create } from 'zustand'
 import { apiClient } from '@/lib/api-client'
-import { useAppStore, useCartStore, useWishlistStore } from '@/lib/store'
+import { useAppStore } from '@/lib/store'
 import type { User, Seller, UserRole } from '@/lib/types'
-import { logger } from '@/lib/logger'
 
 // ==================== AUTH STORE ====================
 
@@ -93,18 +92,6 @@ function clearStorage() {
   Object.values(STORAGE_KEYS).forEach((key) => localStorage.removeItem(key))
 }
 
-/**
- * Sync all stores with API data for the given userId.
- * Called after successful login/register to ensure stores are populated.
- */
-function syncAllStores(userId: string) {
-  Promise.all([
-    useAppStore.getState().fetchUserData(userId),
-    useCartStore.getState().mergeLocalToServer(userId),
-  ]).catch((err) => {
-    logger.warn({ component: 'auth-store', err: err }, 'Failed to sync stores after auth')
-  })
-}
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   userId: null,
@@ -134,8 +121,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       isAuthenticated: true,
     })
 
-    // Trigger data sync after login
-    syncAllStores(data.user.id)
+    // Data sync is handled by useDataSync hook — no manual sync needed here
   },
 
   register: async (registerData) => {
@@ -165,8 +151,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       isAuthenticated: true,
     })
 
-    // Trigger data sync after register + auto-login
-    syncAllStores(loginData.user.id)
+    // Data sync is handled by useDataSync hook — no manual sync needed here
   },
 
   logout: () => {

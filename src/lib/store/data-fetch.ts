@@ -248,6 +248,11 @@ export const createDataFetchSlice: StateCreator<AppStore, [], [], DataFetchSlice
         }
       }
 
+      // Fetch platform settings for admin users
+      if (data.user?.role === 'admin') {
+        get().fetchPlatformSettings()
+      }
+
       set({ isDataLoaded: true })
     } catch (error) {
       logger.warn({ component: 'data-fetch', err: error }, 'Failed to fetch user data')

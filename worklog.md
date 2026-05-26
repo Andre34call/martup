@@ -1021,3 +1021,30 @@ Stage Summary:
 - Cart sync no longer has redundant double-fetch
 - All console.error replaced with structured Pino logging
 - Only console.warn remaining is in middleware.ts (Edge Runtime, intentional)
+
+---
+Task ID: 2
+Agent: Cart & Wishlist Sync Fix Agent
+Task: Fix useDataSync hook never being imported — cart/wishlist don't sync on page refresh
+
+Work Log:
+- Identified root cause: useDataSync was defined but never imported, causing no data sync on page refresh for email/password users
+- Analyzed dual auth store architecture: useAuthStore (email/password, persisted) vs useAppStore (Google OAuth, not persisted)
+- Rewrote src/lib/use-data-sync.ts to watch BOTH auth stores and determine effective auth state
+- Added syncingRef + lastSyncedUserIdRef guards to prevent double-sync
+- On sync failure, clears lastSyncedUserIdRef to allow retry
+- Created DataSyncWrapper component in providers.tsx that calls useDataSync()
+- Placed DataSyncWrapper inside provider tree (SessionProvider > ZustandHydration > DataFetcher > DataSyncWrapper)
+- Removed manual fetchUserData/mergeLocalToServer/syncWishlistFromServer from DataFetcher (useDataSync handles it)
+- Removed syncAllStores() from auth-store.ts login/register to prevent double-sync
+- fetchUserData also bridges auth to useAppStore (sets isAuthenticated + currentUser)
+- Verified cart merge flow: mergeLocalToServer → syncFromServer (correct order, server is source of truth)
+- Verified wishlist sync flow: syncWishlistFromServer replaces local with server data (correct)
+- bun run lint passes with 0 errors
+
+Stage Summary:
+- useDataSync now watches both auth stores and triggers data sync on any authenticated state
+- Email/password users now get cart/wishlist synced from server on page refresh
+- Google OAuth users still work through DataFetcher bridge + useDataSync
+- Single point of data sync (useDataSync) eliminates race conditions from multiple sync paths
+- No double-sync due to isDataLoaded flag + syncingRef + lastSyncedUserIdRef guards

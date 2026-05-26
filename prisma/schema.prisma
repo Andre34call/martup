@@ -47,6 +47,7 @@ model User {
   referrals     Referral[] @relation("UserReferrals")
   division      Division? @relation(fields: [divisionId], references: [id])
   ledDivision   Division? @relation("DivisionHead")
+  userSettings  UserSetting[]
 }
 
 model Seller {
@@ -550,4 +551,18 @@ model Division {
 model PlatformSetting {
   key   String @id
   value String // JSON string
+}
+
+// ==================== USER SETTINGS ====================
+
+model UserSetting {
+  id     String @id @default(cuid())
+  userId String
+  key    String
+  value  String // JSON string
+
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@unique([userId, key])
+  @@index([userId])
 }
