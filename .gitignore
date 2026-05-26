@@ -50,7 +50,9 @@ test
 prompt
 
 server.log
-# Skills directory
+# Skills directory (dev only, not for production)
 /skills/
+# Mini services (run separately, not part of Next.js build)
+/mini-services/
 # Examples (not needed in production)
 /examples/
