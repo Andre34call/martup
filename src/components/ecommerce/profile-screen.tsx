@@ -17,15 +17,11 @@ import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 
-const MOCK_USER = {
+// Default values for unauthenticated users — NOT a mock, just sensible defaults
+const DEFAULT_USER_VALUES = {
   name: "New Member",
   email: "",
-  phone: "",
   memberSince: new Date().toLocaleDateString('id-ID', { month: 'short', year: 'numeric' }),
-  loyaltyPoints: 0,
-  coins: 0,
-  coupons: 0,
-  balance: 0,
 }
 
 // ==================== MENU ITEM ====================
@@ -87,12 +83,11 @@ export function ProfileScreen() {
   const { theme, setTheme } = useTheme()
   const isDarkMode = theme === 'dark'
 
-  const user = currentUser || MOCK_USER
-  const userName = user.name || 'Pengguna'
-  const userEmail = user.email || ''
+  const userName = currentUser?.name || DEFAULT_USER_VALUES.name
+  const userEmail = currentUser?.email || DEFAULT_USER_VALUES.email
   const memberSince = currentUser?.id
     ? new Date().toLocaleDateString('id-ID', { month: 'short', year: 'numeric' })
-    : MOCK_USER.memberSince
+    : DEFAULT_USER_VALUES.memberSince
 
   // Count orders by status
   const orderCounts = useMemo(() => ({
@@ -422,35 +417,37 @@ export function ProfileScreen() {
           </div>
         )}
 
-        {/* Role Switcher */}
-        <div className="px-4 pb-4">
-          <div className="bg-card rounded-xl border border-border/50 p-4">
-            <h3 className="text-sm font-bold text-foreground mb-3">Switch Role (Demo)</h3>
-            <div className="flex gap-2">
-              {(["buyer", "seller", ...(currentUser?.role === 'admin' ? ["admin" as const] : [])] as const).map((role) => {
-                const roleIcons = { buyer: User, seller: Store, admin: LayoutDashboard }
-                const RoleIcon = roleIcons[role]
-                const roleColors = {
-                  buyer: userRole === "buyer" ? "bg-emerald-500 text-white border-emerald-500" : "bg-muted text-muted-foreground border-border",
-                  seller: userRole === "seller" ? "bg-orange-500 text-white border-orange-500" : "bg-muted text-muted-foreground border-border",
-                  admin: userRole === "admin" ? "bg-purple-500 text-white border-purple-500" : "bg-muted text-muted-foreground border-border",
-                }
-                return (
-                  <motion.button
-                    key={role}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => handleRoleSwitch(role)}
-                    className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-medium border transition-all ${roleColors[role]}`}
-                  >
-                    <RoleIcon className="w-4 h-4" />
-                    {role.charAt(0).toUpperCase() + role.slice(1)}
-                    {userRole === role && <Check className="w-3.5 h-3.5" />}
-                  </motion.button>
-                )
-              })}
+        {/* Role Switcher — Hidden in production; only visible in development */}
+        {process.env.NODE_ENV === 'development' && (
+          <div className="px-4 pb-4">
+            <div className="bg-card rounded-xl border border-border/50 p-4">
+              <h3 className="text-sm font-bold text-foreground mb-3">Switch Role (Dev Only)</h3>
+              <div className="flex gap-2">
+                {(["buyer", "seller", ...(currentUser?.role === 'admin' ? ["admin" as const] : [])] as const).map((role) => {
+                  const roleIcons = { buyer: User, seller: Store, admin: LayoutDashboard }
+                  const RoleIcon = roleIcons[role]
+                  const roleColors = {
+                    buyer: userRole === "buyer" ? "bg-emerald-500 text-white border-emerald-500" : "bg-muted text-muted-foreground border-border",
+                    seller: userRole === "seller" ? "bg-orange-500 text-white border-orange-500" : "bg-muted text-muted-foreground border-border",
+                    admin: userRole === "admin" ? "bg-purple-500 text-white border-purple-500" : "bg-muted text-muted-foreground border-border",
+                  }
+                  return (
+                    <motion.button
+                      key={role}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => handleRoleSwitch(role)}
+                      className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-medium border transition-all ${roleColors[role]}`}
+                    >
+                      <RoleIcon className="w-4 h-4" />
+                      {role.charAt(0).toUpperCase() + role.slice(1)}
+                      {userRole === role && <Check className="w-3.5 h-3.5" />}
+                    </motion.button>
+                  )
+                })}
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Logout Button */}
         <div className="px-4 pb-8">

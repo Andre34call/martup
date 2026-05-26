@@ -164,7 +164,7 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      const mergedItems = []
+      const mergedItems: Array<Record<string, unknown>> = []
 
       for (const item of items) {
         if (!item.productId || !item.quantity || item.quantity < 1) continue

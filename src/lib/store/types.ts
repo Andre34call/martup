@@ -229,6 +229,8 @@ export interface AdminSlice {
   updateDivision: (divisionId: string, updates: Record<string, any>) => Promise<void>
   adminStats: AdminStats | null
   fetchAdminStats: () => Promise<void>
+  adminOrders: Order[]
+  fetchAdminOrders: () => Promise<void>
   fetchAdminWithdrawals: () => Promise<void>
   fetchAdminBanners: () => Promise<void>
   fetchAdminComplaints: () => Promise<void>

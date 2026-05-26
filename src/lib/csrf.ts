@@ -4,9 +4,11 @@ import { NextRequest, NextResponse } from 'next/server'
 // Double-submit cookie pattern for CSRF protection
 // Uses Web Crypto API (Edge Runtime compatible)
 // Works by:
-// 1. Setting a CSRF token as a cookie (HttpOnly, SameSite=Strict)
+// 1. Setting a CSRF token as a cookie (SameSite=Strict, NOT httpOnly — JS must read it)
 // 2. Requiring the same token in a custom header (X-CSRF-Token) for mutating requests
 // 3. Since browsers don't send custom headers in cross-origin requests, this prevents CSRF
+// 4. The cookie is NOT httpOnly because the double-submit pattern requires JS to read it
+//    and copy the value to a custom header. Protection comes from SameSite + CORS.
 
 const CSRF_COOKIE_NAME = '__Host-csrf-token'
 const CSRF_HEADER_NAME = 'x-csrf-token'
@@ -137,7 +139,12 @@ export function setCsrfCookie(response: NextResponse, token: string): NextRespon
   response.cookies.set({
     name: CSRF_COOKIE_NAME,
     value: token,
-    httpOnly: true,
+    // IMPORTANT: httpOnly must be false for the double-submit cookie pattern.
+    // The client-side JavaScript needs to read this cookie to send it as a header.
+    // CSRF protection comes from: (1) SameSite=strict prevents cross-origin cookie sending,
+    // (2) attackers cannot read cross-origin cookies, (3) attackers cannot set custom headers.
+    // This cookie is NOT a session identifier — it's a single-use CSRF nonce.
+    httpOnly: false,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'strict',
     path: '/',

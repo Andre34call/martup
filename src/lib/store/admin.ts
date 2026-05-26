@@ -1,6 +1,6 @@
 import type { StateCreator } from 'zustand'
 import type { AdminSlice, AppStore } from './types'
-import type { AdminStats, WithdrawStatus } from '../types'
+import type { AdminStats, WithdrawStatus, Order } from '../types'
 import { getAuthHeaders } from './getAuthHeaders'
 
 export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set, get) => ({
@@ -99,6 +99,19 @@ export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set
   },
 
   adminStats: null,
+  adminOrders: [],
+  fetchAdminOrders: async () => {
+    try {
+      const res = await fetch('/api/admin/orders', { headers: getAuthHeaders() })
+      if (!res.ok) throw new Error('Failed to fetch admin orders')
+      const data = await res.json()
+      if (data.success && data.data) {
+        set({ adminOrders: data.data as Order[] })
+      }
+    } catch (error) {
+      console.error('Fetch admin orders error:', error)
+    }
+  },
   fetchAdminStats: async () => {
     try {
       const res = await fetch('/api/admin/stats', { headers: getAuthHeaders() })

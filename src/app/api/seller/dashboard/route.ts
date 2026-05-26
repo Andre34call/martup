@@ -71,7 +71,7 @@ export async function GET(request: Request) {
       const monthKey = `${monthNames[order.createdAt.getMonth()]}`
       monthlyRevenueMap.set(
         monthKey,
-        (monthlyRevenueMap.get(monthKey) || 0) + order.totalAmount
+        (monthlyRevenueMap.get(monthKey) || 0) + Number(order.totalAmount)
       )
     }
 
@@ -94,7 +94,7 @@ export async function GET(request: Request) {
     const topProductStats = topProducts.map((p) => ({
       name: p.name,
       sold: p.sold,
-      revenue: p.sold * p.price,
+      revenue: p.sold * Number(p.price),
     }))
 
     // Get recent orders

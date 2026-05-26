@@ -3,18 +3,29 @@
 // ==================== CSRF CLIENT UTILITY ====================
 // Reads the CSRF token from cookie and attaches it to outgoing requests.
 // Works with the server-side CSRF middleware in src/lib/csrf.ts
+//
+// IMPORTANT: The __Host-csrf-token cookie is set with httpOnly=false
+// specifically so that JavaScript can read it for the double-submit pattern.
 
 const CSRF_COOKIE_NAME = '__Host-csrf-token'
 const CSRF_HEADER_NAME = 'x-csrf-token'
 
 /**
  * Get the CSRF token from the cookie.
+ * The cookie is NOT httpOnly — it must be readable by JS for the double-submit pattern.
  */
 export function getCsrfToken(): string | null {
   if (typeof document === 'undefined') return null
 
-  const match = document.cookie.match(new RegExp('(^| )' + CSRF_COOKIE_NAME + '=([^;]+)'))
-  return match ? decodeURIComponent(match[2]) : null
+  // Parse cookies properly — the token is base64-encoded and may contain =/+ chars
+  const cookies = document.cookie.split(';')
+  for (const cookie of cookies) {
+    const [name, ...rest] = cookie.trim().split('=')
+    if (name === CSRF_COOKIE_NAME) {
+      return rest.join('=').trim() // Rejoin in case value contains '='
+    }
+  }
+  return null
 }
 
 /**

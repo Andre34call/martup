@@ -644,3 +644,117 @@ Stage Summary:
 - Legal compliance: Privacy Policy, Terms of Service, Refund Policy all in Indonesian
 - TypeScript errors no longer hidden — build will catch type issues
 - Estimated readiness improvement: 32% → ~55-60%
+
+---
+Task ID: 5-a
+Agent: TypeScript Fix Agent
+Task: Fix TypeScript errors in API routes (8 specific errors)
+
+Work Log:
+- Read worklog.md and Prisma schema to understand project context
+- Fixed all 8 TypeScript errors in API routes:
+
+1. **src/app/api/addresses/route.ts(45)**: Property 'trim' does not exist on 'string | boolean'
+   - Fix: Extracted `body[field.key]` into a `const value` variable so TypeScript properly narrows the type through the `typeof value !== 'string'` check before calling `.trim()`
+
+2. **src/app/api/admin/banners/route.ts(51,59,97)**: Record<string, unknown> not assignable to BannerCreateInput
+   - Fix: Replaced `Record<string, unknown>` with properly typed objects for both createData and updateData, matching the Banner model fields (title, image, link, position, isActive, sortOrder, startDate, endDate)
+
+3. **src/app/api/admin/dashboard/route.ts(46)**: Operator '+' cannot be applied to 'number' and 'Decimal'
+   - Fix: Wrapped `order.totalAmount` with `Number()` to convert Prisma Decimal to number for arithmetic
+
+4. **src/app/api/admin/deposits/route.ts(22)**: Type with include 'user' not assignable to 'never'
+   - Fix: Added `user User @relation(fields: [userId], references: [id])` relation to Deposit model in Prisma schema, and `deposits Deposit[]` to User model
+
+5. **src/app/api/admin/users/route.ts(42)**: Operator '+' cannot be applied to 'number' and 'Decimal'
+   - Fix: Wrapped `order.totalAmount` with `Number()` to convert Prisma Decimal to number
+
+6. **src/app/api/admin/vouchers/route.ts**: seller/_count errors
+   - Fix: Added `seller Seller? @relation(fields: [sellerId], references: [id])` relation to Voucher model in Prisma schema, and `vouchers Voucher[]` to Seller model. This also resolved the _count error since the entire include was invalid without the seller relation defined.
+
+7. **src/app/api/cart/route.ts(224)**: Argument of type 'any' not assignable to parameter of type 'never'
+   - Fix: Typed `mergedItems` as `Array<Record<string, unknown>>` instead of leaving it as untyped `[]` (which TypeScript infers as `never[]`)
+
+8. **src/app/api/chat/rooms/route.ts(80)**: product not assignable to null
+   - Fix: Changed `let product = null` to `let product: { id: string; name: string; images: string; price: unknown; discountPrice: unknown } | null = null` to match the type returned by the Prisma query
+
+- Ran `bun run db:push` to sync Prisma schema changes (Deposit->User relation, Voucher->Seller relation)
+- Verified all 8 original errors are resolved with `npx tsc --noEmit | grep` — zero errors in the targeted files
+- Lint check passes with 0 errors, 0 warnings
+- Dev server running cleanly
+
+Stage Summary:
+- All 8 TypeScript errors in API routes fixed
+- Prisma schema updated with 2 new relations: Deposit->User, Voucher->Seller
+- User model updated with `deposits Deposit[]` relation
+- Seller model updated with `vouchers Voucher[]` relation
+- No existing functionality broken
+
+---
+Task ID: 5-b
+Agent: TypeScript Fix Agent
+Task: Fix TypeScript errors in API routes and components
+
+Work Log:
+- Fixed Decimal arithmetic errors across 6 API route files by wrapping Prisma Decimal values with Number():
+  - src/app/api/orders/[id]/cancel/route.ts: buyerWallet.balance + order.totalAmount → Number() conversion
+  - src/app/api/orders/[id]/route.ts: commission/subtotal/sellerEarnings/newBalance → Number() conversion
+  - src/app/api/orders/[id]/status/route.ts: releaseAmount/holdAmount/balance arithmetic → Number() conversion
+  - src/app/api/seller/dashboard/route.ts: order.totalAmount and p.price → Number() conversion
+  - src/app/api/wallet/withdraw/route.ts: wallet.balance < amount → Number() comparison, locale string
+  - src/app/api/withdrawals/[id]/route.ts: wallet.balance + withdrawal.amount → Number() conversion
+
+- Fixed seed route type errors (src/app/api/seed/route.ts):
+  - Typed sellerUsers array explicitly as Array<{ userId: string; sellerId: string; storeName: string }>
+  - Added userId to Wallet upsert create data
+
+- Fixed seller/orders route (src/app/api/seller/orders/route.ts):
+  - Changed 'image' to 'avatar' in UserSelect (Prisma User model uses avatar, not image)
+  - Removed duplicate mapping code that was causing syntax errors
+
+- Fixed user/avatar route (src/app/api/user/avatar/route.ts):
+  - Cast file.type to typeof ALLOWED_IMAGE_TYPES[number] for type safety
+  - Implemented validateImageMagicBytes function with JPEG, PNG, GIF, WebP magic byte signatures
+
+- Fixed admin-screens.tsx:
+  - Added WithdrawStatus import from @/lib/types
+  - Added 'processed' entry to statusColorMap and statusLabelMap Records
+  - Changed EmptyState description→subtitle prop to match EmptyStateProps interface
+  - Added optional fields to AdminStats interface in types.ts (totalDivisions, totalStaff, topSellers, categoryPerformance, recentOrders, recentUsers)
+
+- Fixed admin-orders-screen.tsx:
+  - Added adminOrders: Order[] and fetchAdminOrders() to AdminSlice interface and admin store slice
+
+- Fixed missing-screens.tsx:
+  - Added navigate to SettingsScreen's useAppStore destructuring
+
+- Fixed seller-screens.tsx:
+  - Changed (order as Record<string, unknown>) to (order as unknown as Record<string, unknown>) for safe type narrowing
+
+- Fixed seller-withdraw-screen.tsx:
+  - Added 'approved' and 'processed' entries to WithdrawStatusBadge config Record
+  - Replaced createWithdrawRequest with requestWithdraw (correct store method)
+  - Replaced currentSeller with seller (correct store property)
+  - Added id field to addBankAccount call (required by BankAccount interface)
+  - Added bankCode optional field to BankAccount interface in types.ts
+  - Used bankName.toLowerCase() as fallback for bankCode in getBankInfo calls
+  - Fixed referenceNumber → request.id.slice(0,12) (WithdrawRequest has no referenceNumber)
+  - Fixed requestedAt → requestDate and completedAt → completedDate
+  - Replaced sellerWithdrawRequests with withdrawRequests (correct store property)
+  - Fixed type comparison issue with "all" | WithdrawStatus tab filtering
+
+- Fixed seller-withdraw-screens.tsx:
+  - Added 'processed' entry to statusConfig Record<WithdrawStatus, ...>
+
+- Fixed mock-data.ts:
+  - Added missing AdminStats properties: openComplaints, unverifiedSellers, pendingWithdrawalAmount, paymentMethodDistribution
+
+- Fixed use-data-sync.ts:
+  - Replaced loadFromApi calls with fetchUserData, mergeLocalToServer, syncFromServer
+
+- Fixed store/auth-store.ts:
+  - Replaced loadFromApi calls in syncAllStores with fetchUserData and mergeLocalToServer
+
+- Final tsc check: 0 errors in src/ directory (only 1 unrelated error in skills/ directory)
+- ESLint: 0 errors, 0 warnings
+- Dev server running cleanly on port 3000

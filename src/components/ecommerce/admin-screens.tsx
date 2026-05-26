@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { useAppStore } from "@/lib/store"
+import type { WithdrawStatus } from "@/lib/types"
 import { formatPrice, formatRelativeTime } from "@/lib/utils"
 import { PageHeader, SectionHeader, SearchBar, EmptyState } from "./shared"
 import { useState, useRef, useEffect, useCallback } from "react"
@@ -881,6 +882,7 @@ export function AdminWithdraw() {
     pending: "border-amber-300 text-amber-600",
     approved: "border-blue-300 text-blue-600",
     processing: "border-purple-300 text-purple-600",
+    processed: "border-purple-300 text-purple-600",
     completed: "border-emerald-300 text-emerald-600",
     rejected: "border-red-300 text-red-600",
   }
@@ -889,6 +891,7 @@ export function AdminWithdraw() {
     pending: "Pending",
     approved: "Disetujui",
     processing: "Diproses",
+    processed: "Diproses",
     completed: "Selesai",
     rejected: "Ditolak",
   }
@@ -1256,7 +1259,7 @@ export function AdminBanner() {
           <SectionHeader title="Banner Aktif" icon={<ImageIcon className="w-4 h-4" />} />
           <div className="space-y-2 mt-3">
             {adminBanners.length === 0 ? (
-              <EmptyState icon={<ImageIcon className="w-12 h-12" />} title="Belum ada banner" description="Tambahkan banner baru untuk ditampilkan di aplikasi" />
+              <EmptyState icon={<ImageIcon className="w-12 h-12" />} title="Belum ada banner" subtitle="Tambahkan banner baru untuk ditampilkan di aplikasi" />
             ) : (
               adminBanners.map((banner, i) => (
                 <motion.div key={banner.id} custom={i} variants={stagger} initial="initial" animate="animate">

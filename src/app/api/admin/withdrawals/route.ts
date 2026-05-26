@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
+import { logBusinessEvent } from '@/lib/logger'
 
 // GET /api/admin/withdrawals - Fetch all withdrawal requests with seller info
 export async function GET(request: NextRequest) {
@@ -73,6 +74,8 @@ export async function GET(request: NextRequest) {
 }
 
 // PUT /api/admin/withdrawals - Update withdrawal status (approve, reject, complete)
+// SECURITY: Uses $transaction for all status changes to ensure atomic financial operations
+// CRITICAL: On rejection, holdBalance MUST be refunded back to balance
 export async function PUT(request: NextRequest) {
   const authResult = await verifyAdmin(request)
   if (!authResult.success) return authErrorResponse(authResult)
@@ -135,9 +138,95 @@ export async function PUT(request: NextRequest) {
       updateData.processedAt = new Date()
     }
 
-    const withdrawal = await db.withdrawal.update({
-      where: { id: withdrawalId },
-      data: updateData,
+    // SECURITY: Use $transaction for all status changes involving financial operations
+    const withdrawal = await db.$transaction(async (tx) => {
+      const updatedWithdrawal = await tx.withdrawal.update({
+        where: { id: withdrawalId },
+        data: updateData,
+      })
+
+      // CRITICAL: On rejection, refund holdBalance back to seller's balance
+      // Without this, the seller's escrowed funds would be lost permanently
+      if (status === 'rejected') {
+        const wallet = await tx.wallet.findUnique({
+          where: { sellerId: current.sellerId },
+        })
+
+        if (wallet) {
+          // Move funds back from holdBalance to balance
+          const updatedWallet = await tx.wallet.update({
+            where: { id: wallet.id },
+            data: {
+              balance: { increment: current.amount },
+              holdBalance: { decrement: current.amount },
+            },
+          })
+
+          // Record the refund mutation
+          await tx.walletMutation.create({
+            data: {
+              walletId: wallet.id,
+              type: 'credit',
+              amount: current.amount,
+              balance: updatedWallet.balance,
+              description: `Pengembalian dana penarikan yang ditolak${adminNote ? `: ${adminNote}` : ''}`,
+              refType: 'withdraw',
+              refId: current.id,
+            },
+          })
+        }
+      }
+
+      // When processing (completing) a withdrawal, reduce holdBalance
+      // (funds are now actually sent to the seller's bank account)
+      if (status === 'processed') {
+        const wallet = await tx.wallet.findUnique({
+          where: { sellerId: current.sellerId },
+        })
+
+        if (wallet) {
+          const updatedWallet = await tx.wallet.update({
+            where: { id: wallet.id },
+            data: {
+              holdBalance: { decrement: current.amount },
+            },
+          })
+
+          // Record the final deduction from hold
+          await tx.walletMutation.create({
+            data: {
+              walletId: wallet.id,
+              type: 'debit',
+              amount: current.amount,
+              balance: updatedWallet.balance,
+              description: `Penarikan dana selesai ke ${current.bankName} - ${current.bankAccount}`,
+              refType: 'withdraw',
+              refId: current.id,
+            },
+          })
+        }
+      }
+
+      // Update the corresponding transaction record status
+      if (status === 'rejected') {
+        await tx.transaction.updateMany({
+          where: { refId: current.id, type: 'withdraw', status: 'pending' },
+          data: { status: 'failed' },
+        })
+      } else if (status === 'processed') {
+        await tx.transaction.updateMany({
+          where: { refId: current.id, type: 'withdraw', status: 'pending' },
+          data: { status: 'success' },
+        })
+      }
+
+      return updatedWithdrawal
+    })
+
+    logBusinessEvent({
+      event: 'WITHDRAWAL_STATUS_CHANGED',
+      userId: authResult.user.id,
+      details: { withdrawalId, newStatus: status, adminNote },
     })
 
     return NextResponse.json(serializeDecimal({ success: true, data: withdrawal }))

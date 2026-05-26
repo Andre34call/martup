@@ -303,7 +303,7 @@ export function SellerDashboard() {
                         <p className="text-xs font-mono text-muted-foreground">{order.orderNumber}</p>
                         <StatusBadge status={order.status} size="sm" />
                       </div>
-                      <p className="text-sm font-medium text-foreground mt-1 truncate">{order.address?.recipient || (order as Record<string, unknown>).buyerName as string || ''}</p>
+                      <p className="text-sm font-medium text-foreground mt-1 truncate">{order.address?.recipient || (order as unknown as Record<string, unknown>).buyerName as string || ''}</p>
                       <p className="text-xs text-muted-foreground truncate">{order.items?.map(it => it.productName).join(', ') || ''}</p>
                     </div>
                     <p className="text-sm font-bold text-emerald-600 flex-shrink-0">{formatPrice(order.totalAmount)}</p>

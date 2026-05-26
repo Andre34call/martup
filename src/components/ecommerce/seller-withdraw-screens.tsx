@@ -22,6 +22,7 @@ const statusConfig: Record<WithdrawStatus, { label: string; color: string; bgCol
   pending: { label: "Menunggu Review", color: "text-amber-600", bgColor: "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800", icon: Clock },
   approved: { label: "Disetujui", color: "text-blue-600", bgColor: "bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800", icon: CheckCircle2 },
   processing: { label: "Diproses", color: "text-purple-600", bgColor: "bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800", icon: Loader2 },
+  processed: { label: "Diproses", color: "text-purple-600", bgColor: "bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800", icon: Loader2 },
   completed: { label: "Selesai", color: "text-emerald-600", bgColor: "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800", icon: CheckCircle2 },
   rejected: { label: "Ditolak", color: "text-red-600", bgColor: "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800", icon: XCircle },
 }

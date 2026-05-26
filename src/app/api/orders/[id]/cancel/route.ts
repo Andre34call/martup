@@ -90,7 +90,7 @@ export async function POST(
         })
 
         if (buyerWallet) {
-          const newBalance = buyerWallet.balance + order.totalAmount
+          const newBalance = Number(buyerWallet.balance) + Number(order.totalAmount)
           await tx.wallet.update({
             where: { id: buyerWallet.id },
             data: { balance: newBalance },

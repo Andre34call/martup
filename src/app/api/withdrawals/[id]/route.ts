@@ -73,7 +73,7 @@ export async function PUT(
           where: { sellerId: withdrawal.sellerId },
         })
         if (wallet) {
-          const newBalance = wallet.balance + withdrawal.amount
+          const newBalance = Number(wallet.balance) + Number(withdrawal.amount)
           await tx.wallet.update({
             where: { id: wallet.id },
             data: { balance: { increment: withdrawal.amount } },

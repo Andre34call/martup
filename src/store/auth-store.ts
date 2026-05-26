@@ -98,9 +98,8 @@ function clearStorage() {
  */
 function syncAllStores(userId: string) {
   Promise.all([
-    useAppStore.getState().loadFromApi(userId),
-    useCartStore.getState().loadFromApi(userId),
-    useWishlistStore.getState().loadFromApi(userId),
+    useAppStore.getState().fetchUserData(userId),
+    useCartStore.getState().mergeLocalToServer(userId),
   ]).catch((err) => {
     console.error('Failed to sync stores after auth:', err)
   })

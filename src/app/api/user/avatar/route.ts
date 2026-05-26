@@ -14,7 +14,33 @@ const MAX_AVATAR_SIZE = UPLOAD_LIMITS.mbToBytes(UPLOAD_LIMITS.MAX_AVATAR_SIZE_MB
 const ALLOWED_IMAGE_TYPES = [...UPLOAD_LIMITS.ALLOWED_IMAGE_TYPES]
 const ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif']
 
-// ==================== MAGIC BYTE VALIDATION =============// ==================== HELPERS ====================
+// ==================== MAGIC BYTE VALIDATION ====================
+
+/**
+ * Validate that an ArrayBuffer contains a real image by checking magic bytes (file signatures).
+ * Prevents malicious files with spoofed extensions from being uploaded.
+ */
+function validateImageMagicBytes(buffer: ArrayBuffer): boolean {
+  const bytes = new Uint8Array(buffer)
+  if (bytes.length < 4) return false
+
+  // JPEG: starts with FF D8 FF
+  if (bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF) return true
+
+  // PNG: starts with 89 50 4E 47
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47) return true
+
+  // GIF: starts with 47 49 46 38 (GIF8)
+  if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38) return true
+
+  // WebP: starts with 52 49 46 46 ... 57 45 42 50 (RIFF....WEBP)
+  if (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
+      bytes.length >= 12 && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) return true
+
+  return false
+}
+
+// ==================== HELPERS ====================
 
 /**
  * Extract the file path from a Supabase public URL.
@@ -84,7 +110,7 @@ export async function POST(request: NextRequest) {
     }
 
     // SECURITY: Validate file type - images ONLY
-    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type as typeof ALLOWED_IMAGE_TYPES[number])) {
       return NextResponse.json(
         { success: false, error: `Invalid file type. Only JPG, PNG, WebP, and GIF images are allowed for avatars. Got: ${file.type}` },
         { status: 400 }

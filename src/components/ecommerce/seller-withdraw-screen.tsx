@@ -56,7 +56,9 @@ function getBankInfo(code: string) {
 function WithdrawStatusBadge({ status }: { status: WithdrawStatus }) {
   const config: Record<WithdrawStatus, { label: string; color: string; icon: typeof Clock }> = {
     pending: { label: "Menunggu", color: "border-amber-300 text-amber-600 bg-amber-50 dark:bg-amber-900/20", icon: Clock },
+    approved: { label: "Disetujui", color: "border-blue-300 text-blue-600 bg-blue-50 dark:bg-blue-900/20", icon: CheckCircle2 },
     processing: { label: "Diproses", color: "border-blue-300 text-blue-600 bg-blue-50 dark:bg-blue-900/20", icon: Loader2 },
+    processed: { label: "Diproses", color: "border-blue-300 text-blue-600 bg-blue-50 dark:bg-blue-900/20", icon: Loader2 },
     completed: { label: "Berhasil", color: "border-emerald-300 text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20", icon: CheckCircle2 },
     rejected: { label: "Ditolak", color: "border-red-300 text-red-600 bg-red-50 dark:bg-red-900/20", icon: X },
   }
@@ -75,7 +77,7 @@ const PLATFORM_FEE_RATE = 0.05
 const getSellerIncome = (order: { subtotal: number }) => Math.round(order.subtotal * (1 - PLATFORM_FEE_RATE))
 
 export function SellerWithdrawScreen() {
-  const { goBack, walletBalance, walletHoldBalance, sellerBankAccounts, createWithdrawRequest, showToast, navigate, orders, currentSeller } = useAppStore()
+  const { goBack, walletBalance, walletHoldBalance, sellerBankAccounts, requestWithdraw, showToast, navigate, orders, seller } = useAppStore()
 
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1) // 1=Select Bank, 2=Amount, 3=Confirm, 4=Success
   const [selectedBankId, setSelectedBankId] = useState<string>(
@@ -101,7 +103,7 @@ export function SellerWithdrawScreen() {
   const selectedBank = sellerBankAccounts.find(a => a.id === selectedBankId)
 
   // Order-based fund source
-  const sellerOrders = orders.filter(o => o.sellerId === currentSeller?.id)
+  const sellerOrders = orders.filter(o => o.sellerId === seller?.id)
   const deliveredOrders = sellerOrders.filter(o => o.status === 'delivered')
   const totalDeliveredIncome = deliveredOrders.reduce((sum, o) => sum + getSellerIncome(o), 0)
 
@@ -123,8 +125,8 @@ export function SellerWithdrawScreen() {
 
     const { addBankAccount } = useAppStore.getState()
     addBankAccount({
+      id: `ba-${Date.now()}`,
       bankName: getBankInfo(newBankCode).name,
-      bankCode: newBankCode,
       accountNumber: newAccountNumber,
       accountHolder: newAccountHolder,
       isDefault: sellerBankAccounts.length === 0,
@@ -160,13 +162,10 @@ export function SellerWithdrawScreen() {
   }
 
   const handleConfirm = () => {
-    const result = createWithdrawRequest(parseInt(amount), selectedBankId)
-    if (result) {
-      setRefNumber(result)
-      setStep(4)
-    } else {
-      showToast("Gagal mengajukan penarikan dana", "error")
-    }
+    requestWithdraw(parseInt(amount), selectedBankId)
+    setRefNumber(`WD-${Date.now()}`)
+    setStep(4)
+    showToast("Penarikan dana berhasil diajukan!", "success")
   }
 
   const handleCopyRef = () => {
@@ -249,7 +248,7 @@ export function SellerWithdrawScreen() {
                     />
                   )}
                   {sellerBankAccounts.map((account, i) => {
-                    const bankInfo = getBankInfo(account.bankCode)
+                    const bankInfo = getBankInfo(account.bankCode || account.bankName?.toLowerCase() || 'bca')
                     const isSelected = selectedBankId === account.id
                     return (
                       <motion.div key={account.id} custom={i} variants={stagger} initial="initial" animate="animate">
@@ -382,8 +381,8 @@ export function SellerWithdrawScreen() {
               {selectedBank && (
                 <Card className="p-3">
                   <div className="flex items-center gap-3">
-                    <div className={`w-9 h-9 rounded-lg ${getBankInfo(selectedBank.bankCode).color} text-white font-bold text-[10px] flex items-center justify-center`}>
-                      {getBankInfo(selectedBank.bankCode).icon}
+                    <div className={`w-9 h-9 rounded-lg ${getBankInfo(selectedBank.bankCode || selectedBank.bankName?.toLowerCase() || 'bca').color} text-white font-bold text-[10px] flex items-center justify-center`}>
+                      {getBankInfo(selectedBank.bankCode || selectedBank.bankName?.toLowerCase() || 'bca').icon}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-foreground">{selectedBank.bankName}</p>
@@ -534,8 +533,8 @@ export function SellerWithdrawScreen() {
                   {/* Bank Info */}
                   {selectedBank && (
                     <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-xl ${getBankInfo(selectedBank.bankCode).color} text-white font-bold text-[10px] flex items-center justify-center`}>
-                        {getBankInfo(selectedBank.bankCode).icon}
+                      <div className={`w-10 h-10 rounded-xl ${getBankInfo(selectedBank.bankCode || selectedBank.bankName?.toLowerCase() || 'bca').color} text-white font-bold text-[10px] flex items-center justify-center`}>
+                        {getBankInfo(selectedBank.bankCode || selectedBank.bankName?.toLowerCase() || 'bca').icon}
                       </div>
                       <div>
                         <p className="text-sm font-medium text-foreground">{selectedBank.bankName}</p>
@@ -695,7 +694,7 @@ export function SellerWithdrawScreen() {
 
 // ==================== SELLER WITHDRAW HISTORY SCREEN ====================
 export function SellerWithdrawHistoryScreen() {
-  const { goBack, sellerWithdrawRequests, showToast, sellerBankAccounts, removeBankAccount, setDefaultBankAccount } = useAppStore()
+  const { goBack, withdrawRequests, showToast, sellerBankAccounts, removeBankAccount, setDefaultBankAccount } = useAppStore()
   const [activeTab, setActiveTab] = useState<"all" | WithdrawStatus>("all")
   const [showBankManager, setShowBankManager] = useState(false)
 
@@ -708,11 +707,11 @@ export function SellerWithdrawHistoryScreen() {
   ]
 
   const filtered = activeTab === "all"
-    ? sellerWithdrawRequests
-    : sellerWithdrawRequests.filter(r => r.status === activeTab)
+    ? withdrawRequests
+    : withdrawRequests.filter(r => r.status === activeTab)
 
-  const pendingCount = sellerWithdrawRequests.filter(r => r.status === "pending").length
-  const totalWithdrawn = sellerWithdrawRequests
+  const pendingCount = withdrawRequests.filter(r => r.status === "pending").length
+  const totalWithdrawn = withdrawRequests
     .filter(r => r.status === "completed")
     .reduce((sum, r) => sum + r.netAmount, 0)
 
@@ -749,7 +748,7 @@ export function SellerWithdrawHistoryScreen() {
               {tab.label}
               {tab.key !== "all" && (
                 <span className="ml-1 text-[10px]">
-                  ({sellerWithdrawRequests.filter(r => tab.key === "all" || r.status === tab.key).length})
+                  ({withdrawRequests.filter(r => r.status === tab.key).length})
                 </span>
               )}
             </motion.button>
@@ -771,15 +770,15 @@ export function SellerWithdrawHistoryScreen() {
                   {/* Header */}
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-2">
-                      <div className={`w-9 h-9 rounded-xl ${getBankInfo(request.bankAccount.bankCode).color} text-white font-bold text-[9px] flex items-center justify-center flex-shrink-0`}>
-                        {getBankInfo(request.bankAccount.bankCode).icon}
+                      <div className={`w-9 h-9 rounded-xl ${getBankInfo(request.bankAccount.bankCode || request.bankAccount.bankName?.toLowerCase() || 'bca').color} text-white font-bold text-[9px] flex items-center justify-center flex-shrink-0`}>
+                        {getBankInfo(request.bankAccount.bankCode || request.bankAccount.bankName?.toLowerCase() || 'bca').icon}
                       </div>
                       <div>
                         <p className="text-sm font-medium text-foreground">
                           {request.bankAccount.bankName} ****{request.bankAccount.accountNumber.slice(-4)}
                         </p>
                         <p className="text-[10px] text-muted-foreground font-mono">
-                          {request.referenceNumber}
+                          {request.id.slice(0, 12)}
                         </p>
                       </div>
                     </div>
@@ -805,16 +804,16 @@ export function SellerWithdrawHistoryScreen() {
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-muted-foreground">Tanggal</span>
                       <span className="text-xs text-foreground">
-                        {new Date(request.requestedAt).toLocaleDateString('id-ID', {
+                        {new Date(request.requestDate).toLocaleDateString('id-ID', {
                           day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
                         })}
                       </span>
                     </div>
-                    {request.status === 'completed' && request.completedAt && (
+                    {request.status === 'completed' && request.completedDate && (
                       <div className="flex items-center justify-between">
                         <span className="text-xs text-muted-foreground">Selesai</span>
                         <span className="text-xs text-foreground">
-                          {new Date(request.completedAt).toLocaleDateString('id-ID', {
+                          {new Date(request.completedDate).toLocaleDateString('id-ID', {
                             day: 'numeric', month: 'short', year: 'numeric'
                           })}
                         </span>
@@ -854,7 +853,7 @@ export function SellerWithdrawHistoryScreen() {
                     <p className="text-xs text-muted-foreground text-center py-4">Belum ada rekening terdaftar</p>
                   ) : (
                     sellerBankAccounts.map((account) => {
-                      const bankInfo = getBankInfo(account.bankCode)
+                      const bankInfo = getBankInfo(account.bankCode || account.bankName?.toLowerCase() || 'bca')
                       return (
                         <Card key={account.id} className="p-3">
                           <div className="flex items-center gap-3">

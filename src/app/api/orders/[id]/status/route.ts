@@ -42,7 +42,7 @@ export async function PUT(
         where: { sellerId: order.sellerId },
       })
       if (sellerWallet) {
-        const releaseAmount = order.totalAmount * (1 - 0.05) // minus commission
+        const releaseAmount = Number(order.totalAmount) * (1 - 0.05) // minus commission
         await db.wallet.update({
           where: { sellerId: order.sellerId },
           data: {
@@ -56,7 +56,7 @@ export async function PUT(
             walletId: sellerWallet.id,
             type: 'credit',
             amount: releaseAmount,
-            balance: sellerWallet.balance + releaseAmount,
+            balance: Number(sellerWallet.balance) + releaseAmount,
             description: `Pencairan dana pesanan ${order.orderNumber}`,
             refType: 'order',
             refId: order.id,
@@ -107,7 +107,7 @@ export async function PUT(
               walletId: buyerWallet.id,
               type: 'credit',
               amount: order.totalAmount,
-              balance: buyerWallet.balance + order.totalAmount,
+              balance: Number(buyerWallet.balance) + Number(order.totalAmount),
               description: `Refund pesanan ${order.orderNumber}`,
               refType: 'refund',
               refId: order.id,
@@ -120,7 +120,7 @@ export async function PUT(
           where: { sellerId: order.sellerId },
         })
         if (sellerWallet) {
-          const holdAmount = order.totalAmount * (1 - 0.05)
+          const holdAmount = Number(order.totalAmount) * (1 - 0.05)
           await db.wallet.update({
             where: { sellerId: order.sellerId },
             data: { holdBalance: { decrement: holdAmount } },

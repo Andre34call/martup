@@ -42,6 +42,7 @@ model User {
   wishlists     Wishlist[]
   cartItems     CartItem[]
   transactions  Transaction[]
+  deposits      Deposit[]
   referrals     Referral[] @relation("UserReferrals")
   division      Division? @relation(fields: [divisionId], references: [id])
   ledDivision   Division? @relation("DivisionHead")
@@ -75,6 +76,7 @@ model Seller {
   orders          Order[]
   wallet          Wallet?
   campaigns       Campaign[]
+  vouchers        Voucher[]
 }
 
 model Address {
@@ -137,6 +139,8 @@ model Deposit {
   adminNote   String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  user        User     @relation(fields: [userId], references: [id])
 }
 
 model Withdrawal {
@@ -443,6 +447,7 @@ model Voucher {
   isActive      Boolean   @default(true)
   createdAt     DateTime  @default(now())
 
+  seller        Seller?   @relation(fields: [sellerId], references: [id])
   usages        VoucherUsage[]
 }
 

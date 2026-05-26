@@ -9,6 +9,7 @@ export type ScreenName =
   | 'notification' | 'profile' | 'settings' | 'voucher' | 'review'
   | 'refund' | 'help' | 'address' | 'followed-stores'
   | 'seller-shop' | 'category-detail'
+  | 'privacy-policy' | 'terms-of-service' | 'refund-policy'
   | 'seller-dashboard' | 'seller-products' | 'seller-add-product'
   | 'seller-orders' | 'seller-analytics' | 'seller-chat' | 'seller-settings'
   | 'seller-campaign' | 'seller-wallet' | 'seller-withdraw' | 'seller-withdraw-history'
@@ -287,14 +288,21 @@ export interface AdminStats {
   revenueChart: { date: string; revenue: number }[]
   userGrowth: { date: string; users: number }[]
   paymentMethodDistribution: { method: string; count: number; percentage: number }[]
+  totalDivisions?: number
+  totalStaff?: number
+  topSellers?: Array<{ name: string; revenue: number; orders: number; rating: number }>
+  categoryPerformance?: Array<{ name: string; revenue: number; percentage: number }>
+  recentOrders?: Order[]
+  recentUsers?: Array<{ id: string; name: string; email: string; joinedAt: string }>
 }
 
 // ==================== SELLER FINANCIAL TYPES ====================
-export type WithdrawStatus = 'pending' | 'approved' | 'rejected' | 'processing' | 'completed'
+export type WithdrawStatus = 'pending' | 'approved' | 'rejected' | 'processing' | 'processed' | 'completed'
 
 export interface BankAccount {
   id: string
   bankName: string
+  bankCode?: string
   accountNumber: string
   accountHolder: string
   isDefault: boolean

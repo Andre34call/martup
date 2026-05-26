@@ -9,7 +9,7 @@ import { useAppStore, useCartStore, useWishlistStore } from '@/lib/store'
  * Call this hook once in a top-level client component (e.g. the app layout or provider).
  *
  * When the user becomes authenticated (isAuthenticated + userId), it calls
- * loadFromApi on all three Zustand stores (app, cart, wishlist).
+ * fetchUserData on the app store and mergeLocalToServer/syncFromServer on cart/wishlist.
  * When the user logs out, it resets the isDataLoaded flag so data will be
  * re-fetched on next login.
  */
@@ -19,9 +19,9 @@ export function useDataSync() {
   const isDataLoaded = useAppStore((s) => s.isDataLoaded)
 
   // Use refs to hold stable references to store actions
-  const appLoadFromApi = useAppStore((s) => s.loadFromApi)
-  const cartLoadFromApi = useCartStore((s) => s.loadFromApi)
-  const wishlistLoadFromApi = useWishlistStore((s) => s.loadFromApi)
+  const fetchUserData = useAppStore((s) => s.fetchUserData)
+  const cartMergeLocalToServer = useCartStore((s) => s.mergeLocalToServer)
+  const cartSyncFromServer = useCartStore((s) => s.syncFromServer)
 
   const prevAuthRef = useRef(false)
   const syncingRef = useRef(false)
@@ -35,9 +35,9 @@ export function useDataSync() {
       if ((!wasAuthenticated || !isDataLoaded) && !syncingRef.current) {
         syncingRef.current = true
         Promise.all([
-          appLoadFromApi(userId),
-          cartLoadFromApi(userId),
-          wishlistLoadFromApi(userId),
+          fetchUserData(userId),
+          cartMergeLocalToServer(userId),
+          cartSyncFromServer(userId),
         ]).catch((err) => {
           console.error('Failed to sync data from API:', err)
         }).finally(() => {
@@ -50,5 +50,5 @@ export function useDataSync() {
     if (wasAuthenticated && !isAuthenticated) {
       useAppStore.setState({ isDataLoaded: false })
     }
-  }, [isAuthenticated, userId, isDataLoaded, appLoadFromApi, cartLoadFromApi, wishlistLoadFromApi])
+  }, [isAuthenticated, userId, isDataLoaded, fetchUserData, cartMergeLocalToServer, cartSyncFromServer])
 }

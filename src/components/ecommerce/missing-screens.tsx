@@ -30,7 +30,7 @@ const stagger = {
 
 // ==================== SETTINGS SCREEN ====================
 export function SettingsScreen() {
-  const { currentUser, showToast, logout, avatarUrl, updateAvatar, updateProfile, settings, updateSettings, deleteAccount } = useAppStore()
+  const { currentUser, showToast, logout, avatarUrl, updateAvatar, updateProfile, settings, updateSettings, deleteAccount, navigate } = useAppStore()
   const [editField, setEditField] = useState<string | null>(null)
   const [editValue, setEditValue] = useState("")
   const [showPasswordDialog, setShowPasswordDialog] = useState(false)

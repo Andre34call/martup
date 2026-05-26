@@ -234,9 +234,9 @@ export async function PUT(
         })
 
         // Credit seller wallet (subtotal - commission)
-        const commissionRate = order.seller.commissionRate
-        const commission = order.subtotal * commissionRate
-        const sellerEarnings = order.subtotal - commission
+        const commissionRate = Number(order.seller.commissionRate)
+        const commission = Number(order.subtotal) * commissionRate
+        const sellerEarnings = Number(order.subtotal) - commission
 
         // Ensure seller has a wallet
         let sellerWallet = await tx.wallet.findUnique({
@@ -254,7 +254,7 @@ export async function PUT(
           })
         }
 
-        const newBalance = sellerWallet.balance + sellerEarnings
+        const newBalance = Number(sellerWallet.balance) + sellerEarnings
 
         await tx.wallet.update({
           where: { id: sellerWallet.id },

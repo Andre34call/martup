@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const createData: Record<string, unknown> = { title, image }
+    const createData: { title: string; image: string; link?: string; position?: string; isActive?: boolean; sortOrder?: number; startDate?: Date; endDate?: Date } = { title, image }
     if (link !== undefined) createData.link = link
     if (position !== undefined) createData.position = position
     if (isActive !== undefined) createData.isActive = isActive
@@ -94,7 +94,7 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    const updateData: Record<string, unknown> = {}
+    const updateData: { title?: string; image?: string; link?: string; position?: string; isActive?: boolean; sortOrder?: number } = {}
     if (title !== undefined) updateData.title = title
     if (image !== undefined) updateData.image = image
     if (link !== undefined) updateData.link = link

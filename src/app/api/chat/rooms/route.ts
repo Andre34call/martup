@@ -75,7 +75,7 @@ export async function GET(request: NextRequest) {
         const lastMessage = room.messages.length > 0 ? room.messages[0] : null
 
         // Get product info if productId exists
-        let product = null
+        let product: { id: string; name: string; images: string; price: unknown; discountPrice: unknown } | null = null
         if (room.productId) {
           product = await db.product.findUnique({
             where: { id: room.productId },

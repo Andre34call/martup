@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
+import { logBusinessEvent } from '@/lib/logger'
 
 // GET /api/admin/deposits - List all deposits with user info, support ?status=pending filter
 export async function GET(request: NextRequest) {
@@ -61,7 +62,8 @@ export async function GET(request: NextRequest) {
 }
 
 // PUT /api/admin/deposits - Update deposit status (approve/reject)
-// When approving (status='success'), also credit the user's wallet balance
+// When approving (status='success'), credits the user's wallet balance ATOMICALLY
+// SECURITY: Entire operation is wrapped in a $transaction to prevent race conditions
 export async function PUT(request: NextRequest) {
   try {
     const authResult = await verifyAdmin(request)
@@ -103,63 +105,84 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    // If approving, credit the user's wallet (use atomic increment to avoid race condition)
-    if (status === 'success') {
-      const wallet = await db.wallet.findUnique({
-        where: { userId: deposit.userId },
-      })
-
-      if (wallet) {
-        // Use atomic increment for balance (safe under concurrency)
-        await db.wallet.update({
-          where: { id: wallet.id },
-          data: { balance: { increment: deposit.amount } },
+    // SECURITY: Use $transaction for atomic deposit approval + wallet credit
+    // This prevents race conditions where balance could be read incorrectly between operations
+    const updatedDeposit = await db.$transaction(async (tx) => {
+      // If approving, credit the user's wallet atomically
+      if (status === 'success') {
+        const wallet = await tx.wallet.findUnique({
+          where: { userId: deposit.userId },
         })
 
-        // Fetch fresh balance after increment for mutation record
-        const freshWallet = await db.wallet.findUnique({ where: { id: wallet.id } })
+        if (wallet) {
+          // Atomic increment + read fresh balance within the same transaction
+          const updatedWallet = await tx.wallet.update({
+            where: { id: wallet.id },
+            data: { balance: { increment: deposit.amount } },
+          })
 
-        await db.walletMutation.create({
-          data: {
-            walletId: wallet.id,
-            type: 'credit',
-            amount: deposit.amount,
-            balance: freshWallet!.balance,
-            description: `Deposit approved - ${deposit.method}`,
-            refType: 'deposit',
-            refId: deposit.id,
-          },
-        })
-      } else {
-        // Create wallet if it doesn't exist, then credit
-        const newWallet = await db.wallet.create({
-          data: {
-            userId: deposit.userId,
-            balance: deposit.amount,
-          },
-        })
+          await tx.walletMutation.create({
+            data: {
+              walletId: wallet.id,
+              type: 'credit',
+              amount: deposit.amount,
+              balance: updatedWallet.balance,
+              description: `Deposit approved - ${deposit.method}`,
+              refType: 'deposit',
+              refId: deposit.id,
+            },
+          })
+        } else {
+          // Create wallet if it doesn't exist, then credit
+          const newWallet = await tx.wallet.create({
+            data: {
+              userId: deposit.userId,
+              balance: deposit.amount,
+            },
+          })
 
-        await db.walletMutation.create({
-          data: {
-            walletId: newWallet.id,
-            type: 'credit',
-            amount: deposit.amount,
-            balance: newWallet.balance,
-            description: `Deposit approved - ${deposit.method}`,
-            refType: 'deposit',
-            refId: deposit.id,
-          },
+          await tx.walletMutation.create({
+            data: {
+              walletId: newWallet.id,
+              type: 'credit',
+              amount: deposit.amount,
+              balance: newWallet.balance,
+              description: `Deposit approved - ${deposit.method}`,
+              refType: 'deposit',
+              refId: deposit.id,
+            },
+          })
+        }
+
+        // Update corresponding transaction record to 'success'
+        await tx.transaction.updateMany({
+          where: { refId: deposit.id, type: 'deposit', status: 'pending' },
+          data: { status: 'success' },
         })
       }
-    }
 
-    // Update deposit status
-    const updateData: Record<string, unknown> = { status }
-    if (adminNote !== undefined) updateData.adminNote = adminNote
+      // If rejecting, update transaction to 'failed'
+      if (status === 'failed') {
+        await tx.transaction.updateMany({
+          where: { refId: deposit.id, type: 'deposit', status: 'pending' },
+          data: { status: 'failed' },
+        })
+      }
 
-    const updatedDeposit = await db.deposit.update({
-      where: { id: depositId },
-      data: updateData,
+      // Update deposit status
+      const updateData: Record<string, unknown> = { status }
+      if (adminNote !== undefined) updateData.adminNote = adminNote
+
+      return tx.deposit.update({
+        where: { id: depositId },
+        data: updateData,
+      })
+    })
+
+    logBusinessEvent({
+      event: 'DEPOSIT_STATUS_CHANGED',
+      userId: authResult.user.id,
+      details: { depositId, newStatus: status, adminNote },
     })
 
     return NextResponse.json(serializeDecimal({ success: true, data: updatedDeposit }))

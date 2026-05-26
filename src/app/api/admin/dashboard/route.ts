@@ -43,7 +43,7 @@ export async function GET() {
     const revenueMap = new Map<string, number>()
     for (const order of monthlyOrders) {
       const key = monthNames[order.createdAt.getMonth()]
-      revenueMap.set(key, (revenueMap.get(key) || 0) + order.totalAmount)
+      revenueMap.set(key, (revenueMap.get(key) || 0) + Number(order.totalAmount))
     }
     const revenueChart = Array.from(revenueMap.entries()).map(([date, revenue]) => ({ date, revenue }))
 

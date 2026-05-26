@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
 
     const mapped = users.map((user) => {
       const totalSpent = user.orders.reduce(
-        (sum, order) => sum + order.totalAmount,
+        (sum, order) => sum + Number(order.totalAmount),
         0
       )
       const totalOrders = user.orders.length

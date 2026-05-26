@@ -93,9 +93,9 @@ export async function POST(request: NextRequest) {
     }
 
     // SECURITY: Check sufficient balance (only available balance, not hold/pending)
-    if (wallet.balance < amount) {
+    if (Number(wallet.balance) < amount) {
       return NextResponse.json(
-        { success: false, error: `Saldo tidak mencukupi. Saldo tersedia: Rp ${wallet.balance.toLocaleString('id-ID')}` },
+        { success: false, error: `Saldo tidak mencukupi. Saldo tersedia: Rp ${Number(wallet.balance).toLocaleString('id-ID')}` },
         { status: 400 }
       )
     }
@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
         where: { id: wallet.id },
       })
 
-      if (!currentWallet || currentWallet.balance < amount) {
+      if (!currentWallet || Number(currentWallet.balance) < amount) {
         throw new Error('Saldo tidak mencukupi')
       }
 

@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
     // Legacy secret check removed - admin auth is now required
 
     // 1. Create demo seller users
-    const sellerUsers = []
+    const sellerUsers: Array<{ userId: string; sellerId: string; storeName: string }> = []
     const sellerData = [
       { email: 'gadgetpro@martup.demo', name: 'Gadget Pro Store', storeName: 'Gadget Pro Store', storeSlug: 'gadget-pro', storeDesc: 'Toko gadget terpercaya sejak 2020. Jual HP, laptop, dan aksesoris terbaru.', isVerified: true, isPremium: true, rating: 4.9, totalSales: 15000, totalProducts: 6 },
       { email: 'fashionhub@martup.demo', name: 'Fashion Hub', storeName: 'Fashion Hub', storeSlug: 'fashion-hub', storeDesc: 'Fashion terkini untuk pria dan wanita. Kualitas premium, harga terjangkau.', isVerified: true, isPremium: false, rating: 4.7, totalSales: 8000, totalProducts: 2 },
@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
         await db.wallet.upsert({
           where: { sellerId: seller.id },
           update: {},
-          create: { sellerId: seller.id, balance: sd.totalSales * 5000, holdBalance: 1500000 },
+          create: { userId: existingUser.id, sellerId: seller.id, balance: sd.totalSales * 5000, holdBalance: 1500000 },
         })
         // Update user role
         await db.user.update({ where: { id: existingUser.id }, data: { role: 'seller', isVerified: sd.isVerified } })

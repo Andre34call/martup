@@ -252,6 +252,9 @@ export const MOCK_ADMIN_STATS: AdminStats = {
   totalRevenue: 12500000000,
   pendingWithdrawals: 23,
   activeProducts: 850000,
+  openComplaints: 12,
+  unverifiedSellers: 5,
+  pendingWithdrawalAmount: 150000000,
   revenueChart: [
     { date: 'Jul', revenue: 8500000000 },
     { date: 'Aug', revenue: 9200000000 },
@@ -267,6 +270,11 @@ export const MOCK_ADMIN_STATS: AdminStats = {
     { date: 'Oct', users: 108000 },
     { date: 'Nov', users: 116000 },
     { date: 'Dec', users: 125000 },
+  ],
+  paymentMethodDistribution: [
+    { method: 'Midtrans', count: 250000, percentage: 55 },
+    { method: 'Wallet', count: 120000, percentage: 27 },
+    { method: 'COD', count: 80000, percentage: 18 },
   ],
 }
 

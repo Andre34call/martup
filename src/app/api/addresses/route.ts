@@ -42,7 +42,8 @@ function validateCreateFields(body: AddressBody): string | null {
   ]
 
   for (const field of requiredFields) {
-    if (!body[field.key] || typeof body[field.key] !== 'string' || !body[field.key]!.trim()) {
+    const value = body[field.key]
+    if (!value || typeof value !== 'string' || !value.trim()) {
       return `${field.label} is required`
     }
   }
