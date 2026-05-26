@@ -1548,3 +1548,31 @@ Stage Summary:
 - Seller order status updates now have proper API-first error handling (no more silent failures)
 - Centralized env.ts provides startup validation and typed env accessor for all env vars
 - 6 files modified/created: search-screen.tsx, seller-screens.tsx, env.ts, auth-middleware.ts, csrf.ts, auth.ts
+
+---
+Task ID: Phase3-Complete
+Agent: Main Agent
+Task: Phase 3 — Critical Frontend-Backend Sync + Production Readiness
+
+Work Log:
+- P0: Rewrote order.ts store — all 5 methods now call server API (updateOrderStatus, payForOrder, cancelOrder, updateOrderTracking) with optimistic + rollback
+- P0: Rewrote wallet.ts store — topUpWallet, withdrawWallet now call server API; added fetchWalletBalance, fetchWalletMutations
+- P0: Created /api/cron/cancel-expired — auto-cancels unpaid orders >24h, restores stock, notifies buyer; vercel.json cron every hour
+- P0: Fixed /api/payment/create — now restores stock on reactive auto-cancel
+- P1: Rewrote search-screen.tsx — uses /api/search with facets, pagination, debounced input, AbortController
+- P1: Fixed seller-screens.tsx — settings save calls PUT /api/seller/profile; order status updates now API-first with error handling
+- P1: Created src/lib/env.ts — centralized env validation, fails fast in production, typed accessor
+- P1: Updated auth-middleware.ts, csrf.ts, auth.ts to use env module
+- P2: Added 12 missing Prisma indexes (Address, Deposit, ProductVariant, OrderItem, Order, Review, Category, Campaign, Banner, Referral)
+- P2: Pushed schema changes to Supabase DB
+- Fixed TS errors: Seller type missing storeAddress, search-screen any typing
+- All lint checks pass (0 errors, 0 warnings)
+- All TypeScript checks pass (0 errors in src/)
+- Pushed to GitHub, auto-deploying to Vercel
+
+Stage Summary:
+- 4 P0 critical fixes: order sync, wallet sync, auto-cancel cron, payment stock restore
+- 3 P1 important fixes: search API integration, seller settings save, env validation
+- 1 P2 improvement: 12 missing DB indexes
+- 19 files changed, 1841 insertions, 240 deletions
+- Estimated readiness: 70% → 80%+
