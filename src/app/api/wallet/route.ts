@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { verifyAuth, checkRateLimit, authErrorResponse } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
 
+import { logger } from '@/lib/logger'
 // ==================== WALLET ====================
 // GET: Fetch wallet for a user (authenticated, ownership verified)
 // POST: DEPRECATED — use /api/wallet/deposit for top-ups (requires payment verification)
@@ -56,7 +57,7 @@ export async function GET(request: NextRequest) {
     }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Wallet GET error:', error)
+    logger.error({ err: error }, 'Wallet GET error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

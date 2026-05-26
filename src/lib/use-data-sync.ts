@@ -39,7 +39,7 @@ export function useDataSync() {
           cartMergeLocalToServer(userId),
           cartSyncFromServer(userId),
         ]).catch((err) => {
-          console.error('Failed to sync data from API:', err)
+          if (process.env.NODE_ENV === 'development') console.error('Failed to sync data from API:', err)
         }).finally(() => {
           syncingRef.current = false
         })

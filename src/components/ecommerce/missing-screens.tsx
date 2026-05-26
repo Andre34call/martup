@@ -5,7 +5,7 @@ import { useAppStore, getAuthHeaders } from "@/lib/store"
 import { formatPrice } from "@/lib/utils"
 import { PageHeader, SectionHeader, EmptyState, SearchBar, WalletBalanceCard } from "./shared"
 import { useState, useRef, useCallback, useEffect, useMemo } from "react"
-import { Settings as SettingsIcon, Shield, Bell, Globe, Lock, Trash2, CreditCard, Ticket, Copy, Check, MapPin, Plus, Star, Camera, Send, RotateCcw, HelpCircle, ChevronDown, ChevronUp, MessageSquare, Phone, Heart, Store, Wallet, ArrowUpRight, Clock, Banknote, Edit, ChevronRight, Package, ImagePlus, Video, Play, X, Eye, EyeOff, KeyRound, ThumbsUp, ThumbsDown, Meh, CheckCircle2, FileText } from "lucide-react"
+import { Settings as SettingsIcon, Shield, Bell, Globe, Lock, Trash2, CreditCard, Ticket, Copy, Check, MapPin, Plus, Star, Camera, Send, RotateCcw, HelpCircle, ChevronDown, ChevronUp, MessageSquare, Phone, Heart, Store, Wallet, ArrowUpRight, Clock, Banknote, Edit, ChevronRight, Package, ImagePlus, Video, Play, X, Eye, EyeOff, KeyRound, ThumbsUp, ThumbsDown, Meh, CheckCircle2, FileText, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
@@ -39,7 +39,146 @@ export function SettingsScreen() {
   const [confirmPassword, setConfirmPassword] = useState("")
   const [showCurrentPassword, setShowCurrentPassword] = useState(false)
   const [showNewPassword, setShowNewPassword] = useState(false)
+  const [isChangingPassword, setIsChangingPassword] = useState(false)
   const avatarInputRef = useRef<HTMLInputElement>(null)
+
+  // 2FA state
+  const [twoFAEnabled, setTwoFAEnabled] = useState(false)
+  const [twoFALoading, setTwoFALoading] = useState(true)
+  const [show2FADialog, setShow2FADialog] = useState(false)
+  const [show2FADisableDialog, setShow2FADisableDialog] = useState(false)
+  const [twoFAStep, setTwoFAStep] = useState<'otp' | 'verify'>('otp')
+  const [twoFAOtp, setTwoFAOtp] = useState("")
+  const [twoFADevOtp, setTwoFADevOtp] = useState<string | null>(null)
+  const [twoFASending, setTwoFASending] = useState(false)
+  const [twoFAVerifying, setTwoFAVerifying] = useState(false)
+  const [twoFADisablePassword, setTwoFADisablePassword] = useState("")
+  const [twoFADisableLoading, setTwoFADisableLoading] = useState(false)
+  const [twoFACountdown, setTwoFACountdown] = useState(0)
+
+  // Load 2FA status from API on mount
+  useEffect(() => {
+    const fetch2FAStatus = async () => {
+      try {
+        const res = await fetch('/api/user/2fa', { headers: getAuthHeaders() })
+        if (res.ok) {
+          const data = await res.json()
+          if (data.success && data.data) {
+            setTwoFAEnabled(data.data.twoFactorEnabled)
+            updateSettings({ twoFactor: data.data.twoFactorEnabled })
+          }
+        }
+      } catch {
+        // Silently fail, will default to false
+      }
+      setTwoFALoading(false)
+    }
+    fetch2FAStatus()
+  }, [updateSettings])
+
+  // Countdown timer for OTP resend
+  useEffect(() => {
+    if (twoFACountdown <= 0) return
+    const timer = setInterval(() => setTwoFACountdown((prev) => prev - 1), 1000)
+    return () => clearInterval(timer)
+  }, [twoFACountdown])
+
+  // Handle 2FA toggle
+  const handle2FAToggle = (checked: boolean) => {
+    if (checked) {
+      if (!currentUser?.phone) {
+        showToast('Nomor HP harus diatur terlebih dahulu untuk mengaktifkan 2FA', 'error')
+        return
+      }
+      setTwoFAStep('otp')
+      setTwoFAOtp("")
+      setTwoFADevOtp(null)
+      setShow2FADialog(true)
+    } else {
+      setTwoFADisablePassword("")
+      setShow2FADisableDialog(true)
+    }
+  }
+
+  // Send OTP for 2FA enable
+  const handle2FASendOtp = async () => {
+    setTwoFASending(true)
+    try {
+      const res = await fetch('/api/user/2fa', {
+        method: 'POST',
+        headers: getAuthHeaders(true),
+        body: JSON.stringify({ action: 'send-otp' }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setTwoFAStep('verify')
+        setTwoFACountdown(60)
+        if (data.devOtp) {
+          setTwoFADevOtp(data.devOtp)
+          setTwoFAOtp(data.devOtp)
+        }
+        showToast(data.message || 'Kode OTP telah dikirim', 'success')
+      } else {
+        showToast(data.error || 'Gagal mengirim OTP', 'error')
+      }
+    } catch {
+      showToast('Terjadi kesalahan koneksi', 'error')
+    }
+    setTwoFASending(false)
+  }
+
+  // Verify OTP and enable 2FA
+  const handle2FAVerify = async () => {
+    if (twoFAOtp.length !== 6) return
+    setTwoFAVerifying(true)
+    try {
+      const res = await fetch('/api/user/2fa', {
+        method: 'POST',
+        headers: getAuthHeaders(true),
+        body: JSON.stringify({ action: 'enable', otpCode: twoFAOtp }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setTwoFAEnabled(true)
+        updateSettings({ twoFactor: true })
+        setShow2FADialog(false)
+        showToast('Two-Factor Authentication berhasil diaktifkan!', 'success')
+      } else {
+        showToast(data.error || 'Verifikasi gagal', 'error')
+      }
+    } catch {
+      showToast('Terjadi kesalahan koneksi', 'error')
+    }
+    setTwoFAVerifying(false)
+  }
+
+  // Disable 2FA
+  const handle2FADisable = async () => {
+    if (!twoFADisablePassword) {
+      showToast('Password wajib diisi', 'error')
+      return
+    }
+    setTwoFADisableLoading(true)
+    try {
+      const res = await fetch('/api/user/2fa', {
+        method: 'DELETE',
+        headers: getAuthHeaders(true),
+        body: JSON.stringify({ password: twoFADisablePassword }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setTwoFAEnabled(false)
+        updateSettings({ twoFactor: false })
+        setShow2FADisableDialog(false)
+        showToast('Two-Factor Authentication berhasil dinonaktifkan', 'success')
+      } else {
+        showToast(data.error || 'Gagal menonaktifkan 2FA', 'error')
+      }
+    } catch {
+      showToast('Terjadi kesalahan koneksi', 'error')
+    }
+    setTwoFADisableLoading(false)
+  }
 
   const handleEditField = (field: string, value: string) => {
     setEditField(field)
@@ -74,7 +213,7 @@ export function SettingsScreen() {
     e.target.value = ""
   }
 
-  const handleChangePassword = () => {
+  const handleChangePassword = async () => {
     if (!currentPassword || !newPassword || !confirmPassword) {
       showToast("Semua field harus diisi", "error")
       return
@@ -87,11 +226,36 @@ export function SettingsScreen() {
       showToast("Konfirmasi password tidak cocok", "error")
       return
     }
-    showToast("Password berhasil diubah!", "success")
-    setShowPasswordDialog(false)
-    setCurrentPassword("")
-    setNewPassword("")
-    setConfirmPassword("")
+    if (newPassword === currentPassword) {
+      showToast("Password baru harus berbeda dari password saat ini", "error")
+      return
+    }
+
+    setIsChangingPassword(true)
+    try {
+      const res = await fetch('/api/user/password', {
+        method: 'POST',
+        headers: getAuthHeaders(true),
+        body: JSON.stringify({ currentPassword, newPassword, confirmPassword }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok || !data.success) {
+        showToast(data.error || 'Gagal mengubah password', 'error')
+        return
+      }
+
+      showToast('Password berhasil diubah!', 'success')
+      setShowPasswordDialog(false)
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+    } catch {
+      showToast('Terjadi kesalahan jaringan. Coba lagi.', 'error')
+    } finally {
+      setIsChangingPassword(false)
+    }
   }
 
   const handleDeleteAccount = () => {
@@ -255,7 +419,14 @@ export function SettingsScreen() {
                   <p className="text-xs text-muted-foreground">Keamanan ekstra untuk akun</p>
                 </div>
               </div>
-              <Switch checked={settings.twoFactor} onCheckedChange={() => updateSettings({ twoFactor: !settings.twoFactor })} />
+              {twoFALoading ? (
+                <Loader2 className="w-4 h-4 text-muted-foreground animate-spin" />
+              ) : (
+                <Switch
+                  checked={twoFAEnabled}
+                  onCheckedChange={handle2FAToggle}
+                />
+              )}
             </div>
           </Card>
         </motion.div>
@@ -453,8 +624,156 @@ export function SettingsScreen() {
             <Button variant="outline" onClick={() => setShowPasswordDialog(false)} className="rounded-xl h-10 flex-1">
               Batal
             </Button>
-            <Button onClick={handleChangePassword} className="bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-10 flex-1">
-              Ubah Password
+            <Button onClick={handleChangePassword} disabled={isChangingPassword} className="bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-10 flex-1">
+              {isChangingPassword ? 'Menyimpan...' : 'Ubah Password'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 2FA Enable Dialog */}
+      <Dialog open={show2FADialog} onOpenChange={(open) => { setShow2FADialog(open); if (!open) { setTwoFAStep('otp'); setTwoFAOtp(''); setTwoFADevOtp(null); } }}>
+        <DialogContent className="max-w-[340px] rounded-2xl p-5">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold flex items-center gap-2">
+              <Shield className="w-5 h-5 text-emerald-500" />
+              Aktifkan Two-Factor Auth
+            </DialogTitle>
+          </DialogHeader>
+          {twoFAStep === 'otp' ? (
+            <div className="space-y-4 mt-2">
+              <p className="text-sm text-muted-foreground">
+                Kami akan mengirimkan kode OTP ke nomor HP Anda untuk memverifikasi identitas.
+              </p>
+              {currentUser?.phone && (
+                <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-xl">
+                  <Phone className="w-4 h-4 text-emerald-600" />
+                  <span className="text-sm font-medium text-foreground">{currentUser.phone.replace(/(\d{3})\d+(\d{3})/, '$1****$2')}</span>
+                </div>
+              )}
+              <Button
+                onClick={handle2FASendOtp}
+                disabled={twoFASending}
+                className="w-full bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-10"
+              >
+                {twoFASending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  'Kirim Kode OTP'
+                )}
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-4 mt-2">
+              <p className="text-sm text-muted-foreground">
+                Masukkan 6 digit kode OTP yang dikirim ke HP Anda.
+              </p>
+              <div className="flex justify-center gap-2">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <input
+                    key={i}
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={1}
+                    value={twoFAOtp[i] || ''}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '')
+                      const newOtp = twoFAOtp.split('')
+                      newOtp[i] = val
+                      const combined = newOtp.join('').slice(0, 6)
+                      setTwoFAOtp(combined)
+                      // Auto-focus next input
+                      if (val && i < 5) {
+                        const nextInput = e.target.nextElementSibling as HTMLInputElement
+                        nextInput?.focus()
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Backspace' && !twoFAOtp[i] && i > 0) {
+                        const prevInput = (e.target as HTMLElement).previousElementSibling as HTMLInputElement
+                        prevInput?.focus()
+                      }
+                    }}
+                    className="w-10 h-12 text-center text-lg font-bold rounded-xl border-2 border-border focus:border-emerald-500 focus:ring-emerald-500/20 outline-none"
+                  />
+                ))}
+              </div>
+              {twoFADevOtp && (
+                <p className="text-xs text-center text-amber-600 dark:text-amber-400">
+                  🔧 Dev mode — OTP: <span className="font-mono font-bold">{twoFADevOtp}</span>
+                </p>
+              )}
+              <div className="text-center">
+                {twoFACountdown > 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    Kirim ulang dalam <span className="font-semibold text-emerald-600">{twoFACountdown}s</span>
+                  </p>
+                ) : (
+                  <button
+                    onClick={handle2FASendOtp}
+                    disabled={twoFASending}
+                    className="text-xs text-emerald-600 hover:text-emerald-700 font-semibold"
+                  >
+                    Kirim Ulang Kode
+                  </button>
+                )}
+              </div>
+              <Button
+                onClick={handle2FAVerify}
+                disabled={twoFAVerifying || twoFAOtp.length !== 6}
+                className="w-full bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-10"
+              >
+                {twoFAVerifying ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  'Verifikasi & Aktifkan'
+                )}
+              </Button>
+            </div>
+          )}
+          <DialogFooter className="mt-2">
+            <Button variant="outline" onClick={() => { setShow2FADialog(false); setTwoFAStep('otp'); setTwoFAOtp(''); setTwoFADevOtp(null); }} className="rounded-xl h-9 w-full">
+              Batal
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 2FA Disable Dialog */}
+      <Dialog open={show2FADisableDialog} onOpenChange={setShow2FADisableDialog}>
+        <DialogContent className="max-w-[340px] rounded-2xl p-5">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold flex items-center gap-2">
+              <Lock className="w-5 h-5 text-amber-500" />
+              Nonaktifkan Two-Factor Auth
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-2">
+            <p className="text-sm text-muted-foreground">
+              Masukkan password Anda untuk memverifikasi identitas dan menonaktifkan 2FA.
+            </p>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-foreground">Password Saat Ini <span className="text-red-500">*</span></label>
+              <Input
+                type="password"
+                value={twoFADisablePassword}
+                onChange={(e) => setTwoFADisablePassword(e.target.value)}
+                placeholder="Masukkan password"
+                className="rounded-xl h-10"
+              />
+            </div>
+          </div>
+          <DialogFooter className="mt-4 gap-2">
+            <Button variant="outline" onClick={() => setShow2FADisableDialog(false)} className="rounded-xl h-10 flex-1">
+              Batal
+            </Button>
+            <Button
+              onClick={handle2FADisable}
+              disabled={twoFADisableLoading || !twoFADisablePassword}
+              variant="destructive"
+              className="rounded-xl h-10 flex-1"
+            >
+              {twoFADisableLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Nonaktifkan'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -498,7 +817,7 @@ export function VoucherScreen() {
           }
         }
       } catch (error) {
-        console.error('Failed to fetch vouchers:', error)
+        if (process.env.NODE_ENV === 'development') console.error('Failed to fetch vouchers:', error)
       }
       setIsLoadingVouchers(false)
     }

@@ -4,6 +4,7 @@ import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middle
 import { sanitizeInput } from '@/lib/sanitize'
 import { serializeDecimal } from '@/lib/decimal-utils'
 
+import { logger } from '@/lib/logger'
 // Helper to safely parse JSON fields
 function parseJsonField(value: string | null | undefined): unknown[] {
   if (!value) return []
@@ -56,7 +57,7 @@ export async function GET(request: NextRequest) {
     }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Seller Products GET error:', error)
+    logger.error({ err: error }, 'Seller Products GET error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -236,7 +237,7 @@ export async function POST(request: NextRequest) {
     }), { status: 201 })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Seller Products POST error:', error)
+    logger.error({ err: error }, 'Seller Products POST error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -522,7 +523,7 @@ export async function PUT(request: NextRequest) {
     }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Seller Products PUT error:', error)
+    logger.error({ err: error }, 'Seller Products PUT error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -615,7 +616,7 @@ export async function DELETE(request: NextRequest) {
     })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Seller Products DELETE error:', error)
+    logger.error({ err: error }, 'Seller Products DELETE error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

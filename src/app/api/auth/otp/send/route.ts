@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { checkRateLimit } from '@/lib/auth-middleware'
 import crypto from 'crypto'
 
+import { logger } from '@/lib/logger'
 // OTP configuration
 const OTP_LENGTH = 6
 const OTP_EXPIRY_MINUTES = 5
@@ -98,7 +99,7 @@ export async function POST(request: NextRequest) {
 
     // In production: Send OTP via SMS gateway (Twilio, Vonage, etc.)
     // For now: Log it and return it in dev mode
-    console.log(`[OTP] Code ${otpCode} sent to ${normalizedPhone} (expires in ${OTP_EXPIRY_MINUTES} min)`)
+    logger.info(`[OTP] Code ${otpCode} sent to ${normalizedPhone} (expires in ${OTP_EXPIRY_MINUTES} min)`)
 
     const isDev = process.env.NODE_ENV === 'development'
 
@@ -111,7 +112,7 @@ export async function POST(request: NextRequest) {
     })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('OTP send error:', error)
+    logger.error({ err: error }, 'OTP send error')
     return NextResponse.json(
       { success: false, error: 'Terjadi kesalahan server. Coba lagi nanti.' },
       { status: 500 }

@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
 
+import { logger } from '@/lib/logger'
 // ==================== Midtrans Configuration ====================
 
 const MIDTRANS_SERVER_KEY = process.env.MIDTRANS_SERVER_KEY || ''
@@ -196,7 +197,7 @@ export async function POST(request: NextRequest) {
     const snapData = await snapResponse.json()
 
     if (!snapResponse.ok) {
-      console.error('Midtrans Snap API error:', snapData)
+      logger.error({ err: snapData }, 'Midtrans Snap API error')
       return NextResponse.json(
         {
           success: false,
@@ -249,7 +250,7 @@ export async function POST(request: NextRequest) {
     )
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Payment Create POST error:', error)
+    logger.error({ err: error }, 'Payment Create POST error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

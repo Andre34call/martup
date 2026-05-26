@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAuth, checkRateLimit } from '@/lib/auth-middleware'
 
+import { logger } from '@/lib/logger'
 // GET /api/chat/rooms - List chat rooms for authenticated user
 export async function GET(request: NextRequest) {
   try {
@@ -128,7 +129,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Chat rooms GET error:', error)
+    logger.error({ err: error }, 'Chat rooms GET error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -299,7 +300,7 @@ export async function POST(request: NextRequest) {
     )
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Chat rooms POST error:', error)
+    logger.error({ err: error }, 'Chat rooms POST error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

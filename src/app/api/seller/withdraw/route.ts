@@ -4,6 +4,7 @@ import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middle
 import { serializeDecimal } from '@/lib/decimal-utils'
 import { Prisma } from '@prisma/client'
 
+import { logger } from '@/lib/logger'
 // Minimum withdrawal amount in IDR
 const MIN_WITHDRAWAL_AMOUNT = 10000
 
@@ -169,7 +170,7 @@ export async function POST(request: NextRequest) {
       }
     }
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Seller Withdraw POST error:', error)
+    logger.error({ err: error }, 'Seller Withdraw POST error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -281,7 +282,7 @@ export async function GET(request: NextRequest) {
     )
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Seller Withdraw GET error:', error)
+    logger.error({ err: error }, 'Seller Withdraw GET error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
+import { logger } from '@/lib/logger'
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
@@ -141,7 +142,7 @@ export async function GET(request: Request) {
       },
     })
   } catch (error) {
-    console.error('Get seller dashboard error:', error)
+    logger.error({ err: error }, 'Get seller dashboard error')
     return NextResponse.json(
       { error: 'Terjadi kesalahan server' },
       { status: 500 }

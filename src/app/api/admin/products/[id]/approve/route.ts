@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
+import { logger } from '@/lib/logger'
 export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -51,7 +52,7 @@ export async function PUT(
       },
     })
   } catch (error) {
-    console.error('Approve/block product error:', error)
+    logger.error({ err: error }, 'Approve/block product error')
     return NextResponse.json(
       { error: 'Terjadi kesalahan server' },
       { status: 500 }

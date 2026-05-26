@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middleware'
 import { sanitizeInput } from '@/lib/sanitize'
 
+import { logger } from '@/lib/logger'
 // PUT /api/addresses/[id] - Update an address (SECURED with verifyAuth)
 export async function PUT(
   request: NextRequest,
@@ -113,7 +114,7 @@ export async function PUT(
       data: updated,
     })
   } catch (error: unknown) {
-    console.error('PUT /api/addresses/[id] error:', error)
+    logger.error({ err: error }, 'PUT /api/addresses/[id] error')
     return NextResponse.json(
       { success: false, error: 'Gagal mengubah alamat' },
       { status: 500 }
@@ -171,7 +172,7 @@ export async function DELETE(
       message: 'Alamat berhasil dihapus',
     })
   } catch (error: unknown) {
-    console.error('DELETE /api/addresses/[id] error:', error)
+    logger.error({ err: error }, 'DELETE /api/addresses/[id] error')
     return NextResponse.json(
       { success: false, error: 'Gagal menghapus alamat' },
       { status: 500 }

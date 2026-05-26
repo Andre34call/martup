@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { serializeDecimal } from '@/lib/decimal-utils'
 
+import { logger } from '@/lib/logger'
 // Helper to safely parse JSON fields
 function parseJsonField(value: string | null | undefined): unknown[] {
   if (!value) return []
@@ -105,7 +106,7 @@ export async function GET(request: NextRequest) {
     }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Products GET error:', error)
+    logger.error({ err: error }, 'Products GET error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

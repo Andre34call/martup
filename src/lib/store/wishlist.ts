@@ -30,7 +30,7 @@ export const useWishlistStore = create<WishlistState>()(
             headers: getAuthHeaders(true),
             body: JSON.stringify({ productId }),
           }).catch((error) => {
-            console.error('Remove from wishlist API error:', error)
+            if (process.env.NODE_ENV === 'development') console.error('Remove from wishlist API error:', error)
             // Revert on error
             set((state) => ({ wishlistIds: [...state.wishlistIds, productId] }))
           })
@@ -40,7 +40,7 @@ export const useWishlistStore = create<WishlistState>()(
             headers: getAuthHeaders(true),
             body: JSON.stringify({ productId }),
           }).catch((error) => {
-            console.error('Add to wishlist API error:', error)
+            if (process.env.NODE_ENV === 'development') console.error('Add to wishlist API error:', error)
             // Revert on error
             set((state) => ({ wishlistIds: state.wishlistIds.filter((id) => id !== productId) }))
           })
@@ -60,7 +60,7 @@ export const useWishlistStore = create<WishlistState>()(
             set({ wishlistIds: ids })
           }
         } catch (error) {
-          console.error('Sync wishlist from server error:', error)
+          if (process.env.NODE_ENV === 'development') console.error('Sync wishlist from server error:', error)
         }
       },
     }),

@@ -19,10 +19,11 @@ model User {
   role          String    @default("buyer") // buyer, seller, admin, finance, pr, tech, cs, marketing, operations
   divisionId    String?   // FK to Division
   password      String?
-  otpCode       String?
-  otpExpiry     DateTime?
-  isVerified    Boolean   @default(false)
-  isActive      Boolean   @default(true)
+  otpCode            String?
+  otpExpiry          DateTime?
+  twoFactorEnabled   Boolean   @default(false)
+  isVerified         Boolean   @default(false)
+  isActive           Boolean   @default(true)
   referralCode  String?   @unique
   referredBy    String?
   loyaltyPoints Int       @default(0)

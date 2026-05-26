@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
+import { logger } from '@/lib/logger'
 export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -153,7 +154,7 @@ export async function PUT(
 
     return NextResponse.json({ order: updatedOrder })
   } catch (error) {
-    console.error('Update order status error:', error)
+    logger.error({ err: error }, 'Update order status error')
     return NextResponse.json(
       { error: 'Terjadi kesalahan server' },
       { status: 500 }

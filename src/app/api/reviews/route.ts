@@ -4,6 +4,7 @@ import { verifyAuth, checkRateLimit } from '@/lib/auth-middleware'
 import { sanitizeInput } from '@/lib/sanitize'
 import { serializeDecimal } from '@/lib/decimal-utils'
 
+import { logger } from '@/lib/logger'
 // ==================== HELPERS ====================
 
 // Safely parse a JSON field (images stored as JSON string)
@@ -73,7 +74,7 @@ export async function GET(request: NextRequest) {
     }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Reviews GET error:', error)
+    logger.error({ err: error }, 'Reviews GET error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -243,7 +244,7 @@ export async function POST(request: NextRequest) {
     }), { status: 201 })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Reviews POST error:', error)
+    logger.error({ err: error }, 'Reviews POST error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -368,7 +369,7 @@ export async function PUT(request: NextRequest) {
     }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Reviews PUT error:', error)
+    logger.error({ err: error }, 'Reviews PUT error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -448,7 +449,7 @@ export async function DELETE(request: NextRequest) {
     })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Reviews DELETE error:', error)
+    logger.error({ err: error }, 'Reviews DELETE error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

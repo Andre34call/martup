@@ -160,11 +160,11 @@ export const createAuthSlice: StateCreator<AppStore, [], [], AuthSlice> = (set, 
               }
             }
           } catch (fetchErr) {
-            console.error('Failed to fetch existing seller data:', fetchErr)
+            if (process.env.NODE_ENV === 'development') console.error('Failed to fetch existing seller data:', fetchErr)
           }
         }
       } catch (err) {
-        console.error('Auto seller register failed:', err)
+        if (process.env.NODE_ENV === 'development') console.error('Auto seller register failed:', err)
       }
     }
 

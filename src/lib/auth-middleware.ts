@@ -3,21 +3,47 @@ import { db } from '@/lib/db'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import crypto from 'crypto'
+import { createRateLimiter, type RateLimitResult, rateLimitHeaders } from '@/lib/rate-limit'
 
 // ==================== AUTH MIDDLEWARE ====================
 // SECURITY OVERHAUL: Removed insecure x-auth-user-id method
 // Only NextAuth session and HMAC-signed bearer tokens are accepted
 
-// Simple in-memory rate limiter
-const rateLimitMap = new Map<string, { count: number; lastReset: number }>()
-const RATE_LIMIT_WINDOW = 60 * 1000 // 1 minute
-const RATE_LIMIT_MAX = 10 // max 10 requests per minute
+// ==================== RATE LIMITING ====================
+// Uses the advanced rate limiter from rate-limit.ts which supports
+// both in-memory (dev) and Redis/Vercel KV (production) backends.
 
-export function checkRateLimit(identifier: string, maxRequests: number = RATE_LIMIT_MAX): boolean {
+const apiLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 60, keyPrefix: 'rl:api:' })
+const authLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 10, keyPrefix: 'rl:auth:' })
+const sensitiveLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 5, keyPrefix: 'rl:sensitive:' })
+
+/**
+ * Check rate limit using the advanced rate limiter.
+ * Returns the rate limit result so callers can include headers in responses.
+ */
+export async function checkRateLimitAdvanced(
+  identifier: string,
+  maxRequests: number = 60
+): Promise<RateLimitResult> {
+  const limiter = createRateLimiter({ windowMs: 60_000, maxRequests, keyPrefix: 'rl:custom:' })
+  return limiter.check(identifier)
+}
+
+/**
+ * Legacy synchronous rate limit check — kept for backward compatibility.
+ * DEPRECATED: Use checkRateLimitAdvanced() for new code.
+ */
+export function checkRateLimit(identifier: string, maxRequests: number = 60): boolean {
+  // Synchronous approximation — uses in-memory fallback for immediate response
+  // For production, use checkRateLimitAdvanced() which supports distributed backends
   const now = Date.now()
+  if (!checkRateLimit.map) {
+    checkRateLimit.map = new Map<string, { count: number; lastReset: number }>()
+  }
+  const rateLimitMap = checkRateLimit.map
   const entry = rateLimitMap.get(identifier)
 
-  if (!entry || now - entry.lastReset > RATE_LIMIT_WINDOW) {
+  if (!entry || now - entry.lastReset > 60_000) {
     rateLimitMap.set(identifier, { count: 1, lastReset: now })
     return true
   }
@@ -29,16 +55,8 @@ export function checkRateLimit(identifier: string, maxRequests: number = RATE_LI
   entry.count++
   return true
 }
-
-// Clean up old entries every 5 minutes
-setInterval(() => {
-  const now = Date.now()
-  for (const [key, entry] of rateLimitMap.entries()) {
-    if (now - entry.lastReset > RATE_LIMIT_WINDOW * 2) {
-      rateLimitMap.delete(key)
-    }
-  }
-}, 5 * 60 * 1000)
+// Static property for the in-memory map
+checkRateLimit.map = undefined as unknown as Map<string, { count: number; lastReset: number }>
 
 // ==================== TOKEN SIGNING ====================
 

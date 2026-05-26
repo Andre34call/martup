@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyAuth } from '@/lib/auth-middleware'
 
+import { logger } from '@/lib/logger'
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
@@ -89,7 +90,7 @@ export async function POST(request: NextRequest) {
       } catch {
         errorData = { message: `HTTP ${uploadResponse.status}` }
       }
-      console.error('Supabase storage upload error:', errorData)
+      logger.error({ err: errorData }, 'Supabase storage upload error')
 
       // Provide user-friendly error messages
       const errorMsg = errorData.message || errorData.error || 'Unknown error'
@@ -106,7 +107,7 @@ export async function POST(request: NextRequest) {
               'apikey': SUPABASE_ANON_KEY,
             },
           })
-          console.log('[Upload] Auto-setup storage result:', setupRes.status)
+          logger.info({ status: setupRes.status }, '[Upload] Auto-setup storage result')
         } catch {
           // Ignore setup errors
         }
@@ -133,7 +134,7 @@ export async function POST(request: NextRequest) {
     })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Upload error:', error)
+    logger.error({ err: error }, 'Upload error')
     return NextResponse.json({ success: false, error: message }, { status: 500 })
   }
 }

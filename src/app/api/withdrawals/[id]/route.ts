@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
-import { logSecurityEvent, logBusinessEvent } from '@/lib/logger'
+import { logger, logSecurityEvent, logBusinessEvent } from '@/lib/logger'
 
 // ==================== WITHDRAWAL APPROVAL/REJECTION ====================
 // SECURITY: Only admins can approve/reject withdrawals
@@ -108,7 +108,7 @@ export async function PUT(
     }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Update withdrawal error:', error)
+    logger.error({ err: error }, 'Update withdrawal error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

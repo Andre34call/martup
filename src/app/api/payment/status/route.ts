@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
 
+import { logger } from '@/lib/logger'
 // ==================== GET /api/payment/status ====================
 // Check payment status for an order
 
@@ -93,7 +94,7 @@ export async function GET(request: NextRequest) {
     )
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Payment Status GET error:', error)
+    logger.error({ err: error }, 'Payment Status GET error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

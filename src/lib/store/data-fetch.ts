@@ -35,6 +35,7 @@ export const createDataFetchSlice: StateCreator<AppStore, [], [], DataFetchSlice
           loyaltyPoints: data.user.loyaltyPoints || 0,
           coins: data.user.coins || 0,
           referralCode: data.user.referralCode || undefined,
+          twoFactorEnabled: data.user.twoFactorEnabled || false,
         }
         set({
           currentUser: user,
@@ -248,7 +249,7 @@ export const createDataFetchSlice: StateCreator<AppStore, [], [], DataFetchSlice
 
       set({ isDataLoaded: true })
     } catch (error) {
-      console.error('Failed to fetch user data:', error)
+      if (process.env.NODE_ENV === 'development') console.error('Failed to fetch user data:', error)
     }
   },
 
@@ -269,7 +270,7 @@ export const createDataFetchSlice: StateCreator<AppStore, [], [], DataFetchSlice
         })
       }
     } catch (error) {
-      console.error('Failed to fetch home banners:', error)
+      if (process.env.NODE_ENV === 'development') console.error('Failed to fetch home banners:', error)
     }
   },
 })

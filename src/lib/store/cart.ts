@@ -114,13 +114,13 @@ export const useCartStore = create<CartState>()(
               } else {
                 // API returned error — revert
                 set({ items: previousItems })
-                console.error('Cart add failed:', data.error)
+                if (process.env.NODE_ENV === 'development') console.error('Cart add failed:', data.error)
               }
             })
             .catch(() => {
               // Network error — revert
               set({ items: previousItems })
-              console.error('Cart add: network error, reverted optimistic update')
+              if (process.env.NODE_ENV === 'development') console.error('Cart add: network error, reverted optimistic update')
             })
         }
       },
@@ -145,13 +145,13 @@ export const useCartStore = create<CartState>()(
               if (!data.success) {
                 // Revert on failure
                 set({ items: previousItems })
-                console.error('Cart remove failed:', data.error)
+                if (process.env.NODE_ENV === 'development') console.error('Cart remove failed:', data.error)
               }
             })
             .catch(() => {
               // Revert on network error
               set({ items: previousItems })
-              console.error('Cart remove: network error, reverted optimistic update')
+              if (process.env.NODE_ENV === 'development') console.error('Cart remove: network error, reverted optimistic update')
             })
         }
       },
@@ -188,13 +188,13 @@ export const useCartStore = create<CartState>()(
               } else {
                 // Revert on failure
                 set({ items: previousItems })
-                console.error('Cart quantity update failed:', data.error)
+                if (process.env.NODE_ENV === 'development') console.error('Cart quantity update failed:', data.error)
               }
             })
             .catch(() => {
               // Revert on network error
               set({ items: previousItems })
-              console.error('Cart quantity update: network error, reverted optimistic update')
+              if (process.env.NODE_ENV === 'development') console.error('Cart quantity update: network error, reverted optimistic update')
             })
         }
       },
@@ -224,13 +224,13 @@ export const useCartStore = create<CartState>()(
               if (!data.success) {
                 // Revert on failure
                 set({ items: previousItems })
-                console.error('Cart toggle check failed:', data.error)
+                if (process.env.NODE_ENV === 'development') console.error('Cart toggle check failed:', data.error)
               }
             })
             .catch(() => {
               // Revert on network error
               set({ items: previousItems })
-              console.error('Cart toggle check: network error, reverted optimistic update')
+              if (process.env.NODE_ENV === 'development') console.error('Cart toggle check: network error, reverted optimistic update')
             })
         }
       },
@@ -261,7 +261,7 @@ export const useCartStore = create<CartState>()(
             const failures = results.filter((r) => !r.success)
             if (failures.length > 0) {
               // Re-sync from server on partial failure to ensure consistency
-              console.error('Cart checkAll: some updates failed, re-syncing from server')
+              if (process.env.NODE_ENV === 'development') console.error('Cart checkAll: some updates failed, re-syncing from server')
               const token = localStorage.getItem('authToken')
               if (token) {
                 // Extract userId from token payload (HMAC token contains userId)
@@ -292,13 +292,13 @@ export const useCartStore = create<CartState>()(
               if (!data.success) {
                 // Revert on failure
                 set({ items: previousItems })
-                console.error('Cart clear failed:', data.error)
+                if (process.env.NODE_ENV === 'development') console.error('Cart clear failed:', data.error)
               }
             })
             .catch(() => {
               // Revert on network error
               set({ items: previousItems })
-              console.error('Cart clear: network error, reverted optimistic update')
+              if (process.env.NODE_ENV === 'development') console.error('Cart clear: network error, reverted optimistic update')
             })
         }
       },
@@ -341,11 +341,11 @@ export const useCartStore = create<CartState>()(
             const serverItems = data.data.map((raw: Record<string, unknown>) => mapServerCartItem(raw))
             set({ items: serverItems, isSyncing: false })
           } else {
-            console.error('Cart sync failed:', data.error)
+            if (process.env.NODE_ENV === 'development') console.error('Cart sync failed:', data.error)
             set({ isSyncing: false })
           }
         } catch (error) {
-          console.error('Cart sync: network error', error)
+          if (process.env.NODE_ENV === 'development') console.error('Cart sync: network error', error)
           set({ isSyncing: false })
         }
       },
@@ -380,11 +380,11 @@ export const useCartStore = create<CartState>()(
             // Merge succeeded — re-fetch from server to get the authoritative state
             await get().syncFromServer(userId)
           } else {
-            console.error('Cart merge failed:', data.error)
+            if (process.env.NODE_ENV === 'development') console.error('Cart merge failed:', data.error)
             set({ isSyncing: false })
           }
         } catch (error) {
-          console.error('Cart merge: network error', error)
+          if (process.env.NODE_ENV === 'development') console.error('Cart merge: network error', error)
           set({ isSyncing: false })
         }
       },

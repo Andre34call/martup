@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
 
+import { logger } from '@/lib/logger'
 // Helper to safely parse JSON fields
 function parseJsonField(value: string | null | undefined): unknown[] {
   if (!value) return []
@@ -114,7 +115,7 @@ export async function GET(request: NextRequest) {
     }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Orders GET error:', error)
+    logger.error({ err: error }, 'Orders GET error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -305,7 +306,7 @@ export async function PUT(request: NextRequest) {
     }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Orders PUT error:', error)
+    logger.error({ err: error }, 'Orders PUT error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -542,7 +543,7 @@ export async function POST(request: NextRequest) {
     }), { status: 201 })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Orders POST error:', error)
+    logger.error({ err: error }, 'Orders POST error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { checkRateLimit, generateAuthToken } from '@/lib/auth-middleware'
 import bcrypt from 'bcryptjs'
 
+import { logger } from '@/lib/logger'
 // POST /api/auth/register - Register a new user with email and password
 export async function POST(request: NextRequest) {
   try {
@@ -102,7 +103,7 @@ export async function POST(request: NextRequest) {
       message: 'Registrasi berhasil! Selamat datang di MartUp.',
     })
   } catch (error: any) {
-    console.error('Register error:', error)
+    logger.error({ err: error }, 'Register error')
     return NextResponse.json(
       { success: false, error: 'Terjadi kesalahan server. Coba lagi nanti.' },
       { status: 500 }

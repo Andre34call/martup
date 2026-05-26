@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middleware'
 import { sanitizeInput, sanitizeRichContent } from '@/lib/sanitize'
 
+import { logger } from '@/lib/logger'
 // Helper: safely parse JSON field
 function safeJsonParse(value: string | null | undefined): unknown[] {
   if (!value) return []
@@ -87,7 +88,7 @@ export async function GET(
       data: responseProduct,
     })
   } catch (error) {
-    console.error('GET /api/products/[id] error:', error)
+    logger.error({ err: error }, 'GET /api/products/[id] error')
     return NextResponse.json(
       { success: false, error: 'Failed to fetch product' },
       { status: 500 }
@@ -278,7 +279,7 @@ export async function PUT(
       data: responseProduct,
     })
   } catch (error: unknown) {
-    console.error('PUT /api/products/[id] error:', error)
+    logger.error({ err: error }, 'PUT /api/products/[id] error')
     return NextResponse.json(
       { success: false, error: 'Failed to update product' },
       { status: 500 }
@@ -342,7 +343,7 @@ export async function DELETE(
       message: 'Product deleted successfully',
     })
   } catch (error: unknown) {
-    console.error('DELETE /api/products/[id] error:', error)
+    logger.error({ err: error }, 'DELETE /api/products/[id] error')
     return NextResponse.json(
       { success: false, error: 'Failed to delete product' },
       { status: 500 }

@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
 
+import { logger } from '@/lib/logger'
 export async function GET(request: NextRequest) {
   const authResult = await verifyAdmin(request)
   if (!authResult.success) return authErrorResponse(authResult)
@@ -224,7 +225,7 @@ export async function GET(request: NextRequest) {
     }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Admin stats GET error:', error)
+    logger.error({ err: error }, 'Admin stats GET error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

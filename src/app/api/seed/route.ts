@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 
+import { logger } from '@/lib/logger'
 // Seed endpoint - creates demo sellers with products and categories
 // SECURITY: Requires admin authentication
 export async function POST(request: NextRequest) {
@@ -351,7 +352,7 @@ export async function POST(request: NextRequest) {
       },
     })
   } catch (error: any) {
-    console.error('Seed error:', error)
+    logger.error({ err: error }, 'Seed error')
     return NextResponse.json(
       { success: false, error: error.message || 'Internal server error' },
       { status: 500 }

@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
 
+import { logger } from '@/lib/logger'
 const MAX_QUANTITY = 99
 
 // Helper: safely parse JSON field
@@ -130,7 +131,7 @@ export async function PUT(
       data: responseItem,
     }))
   } catch (error) {
-    console.error('Update cart item error:', error)
+    logger.error({ err: error }, 'Update cart item error')
     return NextResponse.json(
       { success: false, error: 'Terjadi kesalahan server' },
       { status: 500 }
@@ -175,7 +176,7 @@ export async function DELETE(
       message: 'Item berhasil dihapus dari keranjang',
     })
   } catch (error) {
-    console.error('Delete cart item error:', error)
+    logger.error({ err: error }, 'Delete cart item error')
     return NextResponse.json(
       { success: false, error: 'Terjadi kesalahan server' },
       { status: 500 }

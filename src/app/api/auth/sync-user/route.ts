@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { checkRateLimit, generateAuthToken } from '@/lib/auth-middleware'
 
+import { logger } from '@/lib/logger'
 // POST /api/auth/sync-user - Sync user from Google OAuth
 // For Google: called by NextAuth signIn callback (requires x-internal-secret)
 // For Phone: DEPRECATED - use /api/auth/otp/send and /api/auth/otp/verify instead
@@ -43,7 +44,7 @@ export async function POST(request: NextRequest) {
     const internalSecret = request.headers.get('x-internal-secret')
     const expectedSecret = process.env.NEXTAUTH_SECRET
     if (!expectedSecret || internalSecret !== expectedSecret) {
-      console.warn(`[SECURITY] sync-user called without valid internal secret from IP: ${clientIp}`)
+      logger.warn(`[SECURITY] sync-user called without valid internal secret from IP: ${clientIp}`)
       return NextResponse.json(
         { success: false, error: 'Unauthorized - Invalid internal authentication' },
         { status: 401 }
@@ -145,7 +146,7 @@ export async function POST(request: NextRequest) {
       isNewUser: !user.wallet || user.createdAt === user.updatedAt,
     })
   } catch (error: any) {
-    console.error('Sync user error:', error)
+    logger.error({ err: error }, 'Sync user error')
     return NextResponse.json(
       { success: false, error: error.message || 'Internal server error' },
       { status: 500 }

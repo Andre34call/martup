@@ -101,7 +101,7 @@ function syncAllStores(userId: string) {
     useAppStore.getState().fetchUserData(userId),
     useCartStore.getState().mergeLocalToServer(userId),
   ]).catch((err) => {
-    console.error('Failed to sync stores after auth:', err)
+    if (process.env.NODE_ENV === 'development') console.error('Failed to sync stores after auth:', err)
   })
 }
 

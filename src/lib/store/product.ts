@@ -95,7 +95,7 @@ export const createProductSlice: StateCreator<AppStore, [], [], ProductSlice> = 
 
       set({ products })
     } catch (error) {
-      console.error('Failed to fetch products:', error)
+      if (process.env.NODE_ENV === 'development') console.error('Failed to fetch products:', error)
     }
   },
   fetchCategories: async () => {
@@ -117,7 +117,7 @@ export const createProductSlice: StateCreator<AppStore, [], [], ProductSlice> = 
 
       set({ categories: (data.data || data.categories || []).map(mapCategory) })
     } catch (error) {
-      console.error('Failed to fetch categories:', error)
+      if (process.env.NODE_ENV === 'development') console.error('Failed to fetch categories:', error)
     }
   },
 })

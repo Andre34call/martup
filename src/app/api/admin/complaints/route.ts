@@ -4,6 +4,7 @@ import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 import { sanitizeInput } from '@/lib/sanitize'
 import { serializeDecimal } from '@/lib/decimal-utils'
 
+import { logger } from '@/lib/logger'
 // GET /api/admin/complaints - Fetch all complaints with order and user info
 export async function GET(request: NextRequest) {
   const authResult = await verifyAdmin(request)
@@ -52,7 +53,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(serializeDecimal({ success: true, data: mapped }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Admin complaints GET error:', error)
+    logger.error({ err: error }, 'Admin complaints GET error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -91,7 +92,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json(serializeDecimal({ success: true, data: complaint }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Admin complaints PUT error:', error)
+    logger.error({ err: error }, 'Admin complaints PUT error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

@@ -37,7 +37,7 @@ export const createProfileSlice: StateCreator<AppStore, [], [], ProfileSlice> = 
           : null,
       }))
     } catch (error) {
-      console.error('uploadAvatar error:', error)
+      if (process.env.NODE_ENV === 'development') console.error('uploadAvatar error:', error)
       throw error
     }
   },
@@ -58,7 +58,7 @@ export const createProfileSlice: StateCreator<AppStore, [], [], ProfileSlice> = 
           : null,
       }))
     } catch (error) {
-      console.error('removeAvatar error:', error)
+      if (process.env.NODE_ENV === 'development') console.error('removeAvatar error:', error)
       throw error
     }
   },

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuth } from '@/lib/auth-helpers'
 
+import { logger } from '@/lib/logger'
 // GET /api/wallet/mutations — Get wallet mutation history
 export async function GET(request: NextRequest) {
   try {
@@ -59,7 +60,7 @@ export async function GET(request: NextRequest) {
     if (message === 'Unauthorized') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    console.error('GET /api/wallet/mutations error:', error)
+    logger.error({ err: error }, 'GET /api/wallet/mutations error')
     return NextResponse.json(
       { error: 'Failed to fetch wallet mutations' },
       { status: 500 }

@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
 
+import { logger } from '@/lib/logger'
 // Helper to safely parse JSON fields
 function parseJsonField(value: string | null | undefined): unknown[] {
   if (!value) return []
@@ -106,7 +107,7 @@ export async function GET(request: NextRequest) {
     }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Cart GET error:', error)
+    logger.error({ err: error }, 'Cart GET error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -380,7 +381,7 @@ export async function POST(request: NextRequest) {
     )
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Cart POST error:', error)
+    logger.error({ err: error }, 'Cart POST error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -503,7 +504,7 @@ export async function PUT(request: NextRequest) {
     }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Cart PUT error:', error)
+    logger.error({ err: error }, 'Cart PUT error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -588,7 +589,7 @@ export async function DELETE(request: NextRequest) {
     })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Cart DELETE error:', error)
+    logger.error({ err: error }, 'Cart DELETE error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

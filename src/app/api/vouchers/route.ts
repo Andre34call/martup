@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { serializeDecimal } from '@/lib/decimal-utils'
 
+import { logger } from '@/lib/logger'
 // GET /api/vouchers - Public endpoint: list active vouchers for display
 // Query params:
 //   userId: optional - to check if user has already used each voucher
@@ -67,7 +68,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(serializeDecimal({ success: true, data }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Vouchers GET error:', error)
+    logger.error({ err: error }, 'Vouchers GET error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

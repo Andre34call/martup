@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 
+import { logger } from '@/lib/logger'
 // GET /api/admin/banners - Fetch all banners
 export async function GET(request: NextRequest) {
   const authResult = await verifyAdmin(request)
@@ -15,7 +16,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: true, data: banners })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Admin banners GET error:', error)
+    logger.error({ err: error }, 'Admin banners GET error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -61,7 +62,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, data: banner })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Admin banners POST error:', error)
+    logger.error({ err: error }, 'Admin banners POST error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -110,7 +111,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ success: true, data: banner })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Admin banners PUT error:', error)
+    logger.error({ err: error }, 'Admin banners PUT error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -141,7 +142,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ success: true, data: banner })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Admin banners DELETE error:', error)
+    logger.error({ err: error }, 'Admin banners DELETE error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

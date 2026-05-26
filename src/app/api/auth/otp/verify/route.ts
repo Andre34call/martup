@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { checkRateLimit, generateAuthToken } from '@/lib/auth-middleware'
 import crypto from 'crypto'
 
+import { logger } from '@/lib/logger'
 // POST /api/auth/otp/verify - Verify OTP code and log in the user
 export async function POST(request: NextRequest) {
   try {
@@ -157,7 +158,7 @@ export async function POST(request: NextRequest) {
     })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('OTP verify error:', error)
+    logger.error({ err: error }, 'OTP verify error')
     return NextResponse.json(
       { success: false, error: 'Terjadi kesalahan server. Coba lagi nanti.' },
       { status: 500 }

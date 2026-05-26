@@ -38,7 +38,7 @@ export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set
         set({ divisions: data.divisions })
       }
     } catch (error) {
-      console.error('Fetch divisions error:', error)
+      if (process.env.NODE_ENV === 'development') console.error('Fetch divisions error:', error)
     }
   },
   fetchAdminUsers: async () => {
@@ -65,7 +65,7 @@ export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set
         })
       }
     } catch (error) {
-      console.error('Fetch admin users error:', error)
+      if (process.env.NODE_ENV === 'development') console.error('Fetch admin users error:', error)
     }
   },
   assignUserToDivision: async (userId, divisionId) => {
@@ -80,7 +80,7 @@ export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set
       get().fetchDivisions()
       get().fetchAdminUsers()
     } catch (error) {
-      console.error('Assign user to division error:', error)
+      if (process.env.NODE_ENV === 'development') console.error('Assign user to division error:', error)
     }
   },
   updateDivision: async (divisionId, updates) => {
@@ -94,7 +94,7 @@ export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set
       // Refresh divisions
       get().fetchDivisions()
     } catch (error) {
-      console.error('Update division error:', error)
+      if (process.env.NODE_ENV === 'development') console.error('Update division error:', error)
     }
   },
 
@@ -109,7 +109,7 @@ export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set
         set({ adminOrders: data.data as Order[] })
       }
     } catch (error) {
-      console.error('Fetch admin orders error:', error)
+      if (process.env.NODE_ENV === 'development') console.error('Fetch admin orders error:', error)
     }
   },
   fetchAdminStats: async () => {
@@ -121,7 +121,7 @@ export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set
         set({ adminStats: data.data as AdminStats })
       }
     } catch (error) {
-      console.error('Fetch admin stats error:', error)
+      if (process.env.NODE_ENV === 'development') console.error('Fetch admin stats error:', error)
     }
   },
   fetchAdminWithdrawals: async () => {
@@ -154,7 +154,7 @@ export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set
         set({ withdrawRequests: withdrawals })
       }
     } catch (error) {
-      console.error('Fetch admin withdrawals error:', error)
+      if (process.env.NODE_ENV === 'development') console.error('Fetch admin withdrawals error:', error)
     }
   },
   fetchAdminBanners: async () => {
@@ -178,7 +178,7 @@ export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set
         })
       }
     } catch (error) {
-      console.error('Fetch admin banners error:', error)
+      if (process.env.NODE_ENV === 'development') console.error('Fetch admin banners error:', error)
     }
   },
   fetchAdminComplaints: async () => {
@@ -204,7 +204,7 @@ export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set
         })
       }
     } catch (error) {
-      console.error('Fetch admin complaints error:', error)
+      if (process.env.NODE_ENV === 'development') console.error('Fetch admin complaints error:', error)
     }
   },
 })

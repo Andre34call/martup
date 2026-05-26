@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
+import { logger } from '@/lib/logger'
 export async function GET() {
   try {
     const [
@@ -73,7 +74,7 @@ export async function GET() {
       },
     })
   } catch (error) {
-    console.error('Get admin dashboard error:', error)
+    logger.error({ err: error }, 'Get admin dashboard error')
     return NextResponse.json(
       { error: 'Terjadi kesalahan server' },
       { status: 500 }

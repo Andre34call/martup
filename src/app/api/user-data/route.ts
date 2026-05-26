@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { verifyAuth } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
 
+import { logger } from '@/lib/logger'
 // Helper to safely parse JSON fields
 function parseJsonField(value: string | null | undefined): unknown[] {
   if (!value) return []
@@ -76,6 +77,7 @@ export async function GET(request: NextRequest) {
           role: true,
           isVerified: true,
           isActive: true,
+          twoFactorEnabled: true,
           loyaltyPoints: true,
           coins: true,
           referralCode: true,
@@ -225,7 +227,7 @@ export async function GET(request: NextRequest) {
     }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('User Data GET error:', error)
+    logger.error({ err: error }, 'User Data GET error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

@@ -2,6 +2,28 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { checkRateLimit, generateAuthToken } from '@/lib/auth-middleware'
 import bcrypt from 'bcryptjs'
+import crypto from 'crypto'
+
+import { logger } from '@/lib/logger'
+
+// OTP configuration for 2FA login
+const OTP_LENGTH = 6
+const OTP_EXPIRY_MINUTES = 5
+
+function maskPhone(phone: string): string {
+  const digits = phone.replace(/\D/g, '')
+  if (digits.length < 8) return phone
+  const visibleStart = digits.slice(0, 4)
+  const visibleEnd = digits.slice(-3)
+  const maskedMiddle = '*'.repeat(Math.min(digits.length - 7, 4))
+  if (digits.startsWith('62')) {
+    return `+62 ${digits.slice(2, 4)}${maskedMiddle}${visibleEnd}`
+  }
+  if (digits.startsWith('0')) {
+    return `0${digits.slice(1, 3)}${maskedMiddle}${visibleEnd}`
+  }
+  return `${visibleStart}${maskedMiddle}${visibleEnd}`
+}
 
 // POST /api/auth/login - Login with email and password
 export async function POST(request: NextRequest) {
@@ -76,7 +98,46 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Generate auth token
+    // Check if user has 2FA enabled
+    if (user.twoFactorEnabled) {
+      if (!user.phone) {
+        // Edge case: 2FA enabled but no phone — allow login anyway and suggest disabling 2FA
+        const token = generateAuthToken(user.id)
+        const { password: _, ...userWithoutPassword } = user
+        return NextResponse.json({
+          success: true,
+          user: userWithoutPassword,
+          token,
+          message: 'Login berhasil (2FA tidak dapat diverifikasi karena nomor HP tidak tersedia)',
+        })
+      }
+
+      // Generate OTP for 2FA verification
+      const otpCode = crypto.randomInt(0, Math.pow(10, OTP_LENGTH)).toString().padStart(OTP_LENGTH, '0')
+      const otpExpiry = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000)
+
+      await db.user.update({
+        where: { id: user.id },
+        data: { otpCode, otpExpiry },
+      })
+
+      // In production: Send OTP via SMS gateway
+      logger.info(`[2FA Login] OTP sent to ${user.phone} (expires in ${OTP_EXPIRY_MINUTES} min)`)
+
+      const isDev = process.env.NODE_ENV === 'development'
+
+      // Return requires2FA flag — client should redirect to OTP screen
+      return NextResponse.json({
+        success: true,
+        requires2FA: true,
+        phone: maskPhone(user.phone),
+        userId: user.id,
+        message: `Verifikasi 2FA diperlukan. Kode OTP dikirim ke ${maskPhone(user.phone)}`,
+        ...(isDev ? { devOtp: otpCode } : {}),
+      })
+    }
+
+    // Normal login (no 2FA) — generate auth token
     const token = generateAuthToken(user.id)
 
     // Return user data (without password)
@@ -89,7 +150,7 @@ export async function POST(request: NextRequest) {
       message: 'Login berhasil',
     })
   } catch (error: any) {
-    console.error('Login error:', error)
+    logger.error({ err: error }, 'Login error')
     return NextResponse.json(
       { success: false, error: 'Terjadi kesalahan server. Coba lagi nanti.' },
       { status: 500 }

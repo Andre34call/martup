@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAuth, verifyAdmin, checkRateLimit, authErrorResponse } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
-import { logSecurityEvent } from '@/lib/logger'
+import { logger, logSecurityEvent } from '@/lib/logger'
 
 // ==================== WITHDRAWALS LIST ====================
 // SECURITY: Sellers can only see their own withdrawals
@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
     }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Get withdrawals error:', error)
+    logger.error({ err: error }, 'Get withdrawals error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

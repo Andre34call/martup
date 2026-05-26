@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 
+import { logger } from '@/lib/logger'
 // GET /api/admin/divisions - Fetch all divisions with member counts
 export async function GET(request: NextRequest) {
   // Verify admin access
@@ -49,7 +50,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Divisions GET error:', error)
+    logger.error({ err: error }, 'Divisions GET error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -119,7 +120,7 @@ export async function POST(request: NextRequest) {
     })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Divisions POST error:', error)
+    logger.error({ err: error }, 'Divisions POST error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -182,7 +183,7 @@ export async function PATCH(request: NextRequest) {
     })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Divisions PATCH error:', error)
+    logger.error({ err: error }, 'Divisions PATCH error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -222,7 +223,7 @@ export async function DELETE(request: NextRequest) {
     })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Divisions DELETE error:', error)
+    logger.error({ err: error }, 'Divisions DELETE error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

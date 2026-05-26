@@ -462,7 +462,7 @@ export function CheckoutScreen() {
             addOrder(localOrder)
           }
         } catch (error) {
-          console.error('Order creation failed:', error)
+          if (process.env.NODE_ENV === 'development') console.error('Order creation failed:', error)
           // Fallback: add locally even if API fails — use correct status
           const order = {
             id: `o${Date.now()}-${group.seller.id}`,

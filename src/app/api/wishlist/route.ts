@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
 
+import { logger } from '@/lib/logger'
 // Helper to safely parse JSON fields
 function parseJsonField(value: string | null | undefined): unknown[] {
   if (!value) return []
@@ -95,7 +96,7 @@ export async function GET(request: NextRequest) {
     }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Wishlist GET error:', error)
+    logger.error({ err: error }, 'Wishlist GET error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -209,7 +210,7 @@ export async function POST(request: NextRequest) {
     )
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Wishlist POST error:', error)
+    logger.error({ err: error }, 'Wishlist POST error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -305,7 +306,7 @@ export async function DELETE(request: NextRequest) {
     })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Wishlist DELETE error:', error)
+    logger.error({ err: error }, 'Wishlist DELETE error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

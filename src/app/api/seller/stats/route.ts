@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
 
+import { logger } from '@/lib/logger'
 // GET /api/seller/stats?sellerId=xxx - Fetch seller dashboard statistics
 export async function GET(request: NextRequest) {
   try {
@@ -218,7 +219,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Seller stats GET error:', error)
+    logger.error({ err: error }, 'Seller stats GET error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

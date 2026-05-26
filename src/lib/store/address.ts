@@ -38,7 +38,7 @@ export const createAddressSlice: StateCreator<AppStore, [], [], AddressSlice> = 
         }
       })
     } catch (error) {
-      console.error('addAddress error:', error)
+      if (process.env.NODE_ENV === 'development') console.error('addAddress error:', error)
       throw error
     }
   },
@@ -77,7 +77,7 @@ export const createAddressSlice: StateCreator<AppStore, [], [], AddressSlice> = 
         }
       })
     } catch (error) {
-      console.error('updateAddress error:', error)
+      if (process.env.NODE_ENV === 'development') console.error('updateAddress error:', error)
       throw error
     }
   },
@@ -108,7 +108,7 @@ export const createAddressSlice: StateCreator<AppStore, [], [], AddressSlice> = 
         }
       })
     } catch (error) {
-      console.error('deleteAddress error:', error)
+      if (process.env.NODE_ENV === 'development') console.error('deleteAddress error:', error)
       throw error
     }
   },
@@ -128,7 +128,7 @@ export const createAddressSlice: StateCreator<AppStore, [], [], AddressSlice> = 
         selectedAddressId: id,
       }))
     } catch (error) {
-      console.error('setDefaultAddress error:', error)
+      if (process.env.NODE_ENV === 'development') console.error('setDefaultAddress error:', error)
       throw error
     }
   },
@@ -150,7 +150,7 @@ export const createAddressSlice: StateCreator<AppStore, [], [], AddressSlice> = 
         selectedAddressId: defaultAddr?.id ?? get().selectedAddressId,
       })
     } catch (error) {
-      console.error('fetchAddresses error:', error)
+      if (process.env.NODE_ENV === 'development') console.error('fetchAddresses error:', error)
       throw error
     }
   },

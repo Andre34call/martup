@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAuth, checkRateLimit, authErrorResponse } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
-import { logBusinessEvent } from '@/lib/logger'
+import { logger, logBusinessEvent } from '@/lib/logger'
 
 // ==================== WALLET WITHDRAW ====================
 // SECURITY: Requires authentication + seller verification
@@ -176,7 +176,7 @@ export async function POST(request: NextRequest) {
     }), { status: 201 })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('POST /api/wallet/withdraw error:', error)
+    logger.error({ err: error }, 'POST /api/wallet/withdraw error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

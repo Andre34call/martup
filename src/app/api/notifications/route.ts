@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
 
+import { logger } from '@/lib/logger'
 // GET /api/notifications - Fetch notifications for a user
 export async function GET(request: NextRequest) {
   try {
@@ -41,7 +42,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Notifications GET error:', error)
+    logger.error({ err: error }, 'Notifications GET error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -118,7 +119,7 @@ export async function PUT(request: NextRequest) {
     })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Notifications PUT error:', error)
+    logger.error({ err: error }, 'Notifications PUT error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

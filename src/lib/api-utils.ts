@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { verifyAuthToken } from '@/lib/auth-middleware'
 import type { AuthResult, AuthError } from '@/lib/auth-middleware'
+import { logger } from '@/lib/logger'
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -452,7 +453,7 @@ export function withErrorHandler(
       return await handler(request, context)
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Internal server error'
-      console.error(`API Error [${request.method} ${new URL(request.url).pathname}]:`, error)
+      logger.error({ err: error, method: request.method, path: new URL(request.url).pathname }, 'API Error')
       return errorResponse(message, 500)
     }
   }

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
-import { logBusinessEvent } from '@/lib/logger'
+import { logger, logBusinessEvent } from '@/lib/logger'
 
 // GET /api/admin/withdrawals - Fetch all withdrawal requests with seller info
 export async function GET(request: NextRequest) {
@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(serializeDecimal({ success: true, data: mapped }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Admin withdrawals GET error:', error)
+    logger.error({ err: error }, 'Admin withdrawals GET error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -232,7 +232,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json(serializeDecimal({ success: true, data: withdrawal }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Admin withdrawals PUT error:', error)
+    logger.error({ err: error }, 'Admin withdrawals PUT error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

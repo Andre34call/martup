@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
+import { logger } from '@/lib/logger'
 export async function PUT(request: Request) {
   try {
     const { userId } = await request.json()
@@ -19,7 +20,7 @@ export async function PUT(request: Request) {
 
     return NextResponse.json({ message: 'Semua notifikasi ditandai telah dibaca' })
   } catch (error) {
-    console.error('Mark all notifications read error:', error)
+    logger.error({ err: error }, 'Mark all notifications read error')
     return NextResponse.json(
       { error: 'Terjadi kesalahan server' },
       { status: 500 }

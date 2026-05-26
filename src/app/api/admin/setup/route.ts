@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { checkRateLimit, verifyAuth, verifyAdmin, authErrorResponse, AuthResult } from '@/lib/auth-middleware'
 
+import { logger } from '@/lib/logger'
 // POST /api/admin/setup - Promote a user to admin role
 // SECURITY: Requires EITHER:
 // 1. An existing admin making the request (recommended for production), OR
@@ -45,7 +46,7 @@ export async function POST(request: NextRequest) {
       // No admin exists yet - allow secret key for initial setup ONLY
       const adminSecret = process.env.ADMIN_SETUP_SECRET
       if (!adminSecret) {
-        console.error('[SECURITY] ADMIN_SETUP_SECRET not set in environment!')
+        logger.error('[SECURITY] ADMIN_SETUP_SECRET not set in environment!')
         return NextResponse.json(
           { success: false, error: 'Admin setup is not configured. Set ADMIN_SETUP_SECRET env variable.' },
           { status: 500 }
@@ -53,7 +54,7 @@ export async function POST(request: NextRequest) {
       }
 
       if (!secret || secret !== adminSecret) {
-        console.warn(`[SECURITY] Invalid admin setup attempt from IP: ${clientIp}`)
+        logger.warn(`[SECURITY] Invalid admin setup attempt from IP: ${clientIp}`)
         return NextResponse.json(
           { success: false, error: 'Secret key tidak valid' },
           { status: 403 }
@@ -115,7 +116,7 @@ export async function POST(request: NextRequest) {
 
     // Log the promotion for audit
     const promoter = authResult ? `admin "${authResult.user.email}"` : `secret key from IP: ${clientIp}`
-    console.log(`[AUDIT] User "${email}" promoted to admin by ${promoter}`)
+    logger.info(`[AUDIT] User "${email}" promoted to admin by ${promoter}`)
 
     // Create welcome notification
     await db.notification.create({
@@ -141,7 +142,7 @@ export async function POST(request: NextRequest) {
     })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Admin setup error:', error)
+    logger.error({ err: error }, 'Admin setup error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

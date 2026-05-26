@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
 
+import { logger } from '@/lib/logger'
 const MAX_QUANTITY = 99
 
 // POST /api/cart/add - Add item to cart (SECURED with verifyAuth)
@@ -198,7 +199,7 @@ export async function POST(request: NextRequest) {
       message: 'Produk ditambahkan ke keranjang',
     }), { status: 201 })
   } catch (error) {
-    console.error('Cart add error:', error)
+    logger.error({ err: error }, 'Cart add error')
     return NextResponse.json(
       { success: false, error: 'Terjadi kesalahan server' },
       { status: 500 }

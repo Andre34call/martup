@@ -300,6 +300,15 @@ export function LoginScreen() {
       })
       const data = await res.json()
 
+      // 2FA check — if user has 2FA enabled, redirect to OTP verification
+      if (data.success && data.requires2FA) {
+        useAppStore.setState({ otpPhoneNumber: data.phone || '' })
+        navigate('otp')
+        showToast(data.message || 'Verifikasi 2FA diperlukan', 'info')
+        setIsLoading(false)
+        return
+      }
+
       if (data.success && data.user) {
         // Store auth token
         if (data.token) {
@@ -315,6 +324,7 @@ export function LoginScreen() {
           isVerified: data.user.isVerified || false,
           loyaltyPoints: data.user.loyaltyPoints || 0,
           coins: data.user.coins || 0,
+          twoFactorEnabled: data.user.twoFactorEnabled || false,
         }
         login(user)
         const { fetchUserData, connectSocket } = useAppStore.getState()
@@ -326,7 +336,7 @@ export function LoginScreen() {
         showToast(data.error || 'Login gagal. Periksa email dan password Anda.', 'error')
       }
     } catch (error) {
-      console.error('Login failed:', error)
+      if (process.env.NODE_ENV === 'development') console.error('Login failed:', error)
       showToast('Terjadi kesalahan koneksi. Coba lagi nanti.', 'error')
     }
 
@@ -589,6 +599,7 @@ export function RegisterScreen() {
           isVerified: data.user.isVerified || false,
           loyaltyPoints: data.user.loyaltyPoints || 0,
           coins: data.user.coins || 0,
+          twoFactorEnabled: data.user.twoFactorEnabled || false,
         }
         login(user)
         const { fetchUserData, connectSocket } = useAppStore.getState()
@@ -601,7 +612,7 @@ export function RegisterScreen() {
         showToast(data.error || 'Registrasi gagal. Coba lagi.', "error")
       }
     } catch (error) {
-      console.error('Register failed:', error)
+      if (process.env.NODE_ENV === 'development') console.error('Register failed:', error)
       showToast('Terjadi kesalahan koneksi. Coba lagi nanti.', "error")
     }
 
@@ -866,7 +877,7 @@ export function OTPScreen() {
         showToast(data.error || 'Gagal mengirim OTP. Coba lagi.', 'error')
       }
     } catch (error) {
-      console.error('OTP send failed:', error)
+      if (process.env.NODE_ENV === 'development') console.error('OTP send failed:', error)
       showToast('Terjadi kesalahan koneksi. Coba lagi nanti.', 'error')
     }
 
@@ -904,6 +915,7 @@ export function OTPScreen() {
           isVerified: true,
           loyaltyPoints: data.user.loyaltyPoints || 0,
           coins: data.user.coins || 0,
+          twoFactorEnabled: data.user.twoFactorEnabled || false,
         }
         login(user)
         const { fetchUserData, connectSocket } = useAppStore.getState()
@@ -916,7 +928,7 @@ export function OTPScreen() {
         showToast(data.error || 'Verifikasi OTP gagal. Coba lagi.', 'error')
       }
     } catch (error) {
-      console.error('OTP verification failed:', error)
+      if (process.env.NODE_ENV === 'development') console.error('OTP verification failed:', error)
       showToast('Terjadi kesalahan koneksi. Coba lagi nanti.', 'error')
     }
 

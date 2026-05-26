@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuth } from '@/lib/auth-helpers'
 
+import { logger } from '@/lib/logger'
 // POST /api/orders/[id]/cancel — Cancel order
 export async function POST(
   request: NextRequest,
@@ -135,7 +136,7 @@ export async function POST(
     if (message === 'Unauthorized') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    console.error('POST /api/orders/[id]/cancel error:', error)
+    logger.error({ err: error }, 'POST /api/orders/[id]/cancel error')
     return NextResponse.json(
       { error: 'Failed to cancel order' },
       { status: 500 }

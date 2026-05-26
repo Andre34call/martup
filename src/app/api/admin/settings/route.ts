@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 import { db } from '@/lib/db'
 
+import { logger } from '@/lib/logger'
 // Default platform settings
 const DEFAULT_SETTINGS: Record<string, number | boolean | string> = {
   commissionRate: 5,       // percentage
@@ -56,7 +57,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: true, data: settings })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Admin settings GET error:', error)
+    logger.error({ err: error }, 'Admin settings GET error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -99,7 +100,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ success: true, data: merged })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Admin settings PUT error:', error)
+    logger.error({ err: error }, 'Admin settings PUT error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

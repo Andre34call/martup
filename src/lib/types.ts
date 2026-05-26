@@ -29,6 +29,7 @@ export interface User {
   loyaltyPoints: number
   coins: number
   referralCode?: string
+  twoFactorEnabled?: boolean
 }
 
 export interface Seller {

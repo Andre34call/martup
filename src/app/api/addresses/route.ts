@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middleware'
 
+import { logger } from '@/lib/logger'
 // ==================== VALIDATION HELPERS ====================
 
 const MAX_ADDRESSES_PER_USER = 10
@@ -108,7 +109,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Addresses GET error:', error)
+    logger.error({ err: error }, 'Addresses GET error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -196,7 +197,7 @@ export async function POST(request: NextRequest) {
     )
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Addresses POST error:', error)
+    logger.error({ err: error }, 'Addresses POST error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -328,7 +329,7 @@ export async function PUT(request: NextRequest) {
     })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Addresses PUT error:', error)
+    logger.error({ err: error }, 'Addresses PUT error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -401,7 +402,7 @@ export async function DELETE(request: NextRequest) {
     })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Addresses DELETE error:', error)
+    logger.error({ err: error }, 'Addresses DELETE error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

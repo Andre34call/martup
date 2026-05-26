@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth-helpers'
 
+import { logger } from '@/lib/logger'
 // GET /api/orders/[id] — Get single order detail
 export async function GET(
   _request: NextRequest,
@@ -77,7 +78,7 @@ export async function GET(
 
     return NextResponse.json(responseOrder)
   } catch (error) {
-    console.error('GET /api/orders/[id] error:', error)
+    logger.error({ err: error }, 'GET /api/orders/[id] error')
     return NextResponse.json(
       { error: 'Failed to fetch order' },
       { status: 500 }
@@ -300,7 +301,7 @@ export async function PUT(
       { status: 400 }
     )
   } catch (error) {
-    console.error('PUT /api/orders/[id]/status error:', error)
+    logger.error({ err: error }, 'PUT /api/orders/[id]/status error')
     return NextResponse.json(
       { error: 'Failed to update order status' },
       { status: 500 }

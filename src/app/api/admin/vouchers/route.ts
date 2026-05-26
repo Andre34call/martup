@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
 
+import { logger } from '@/lib/logger'
 // GET /api/admin/vouchers - List all vouchers with usage stats
 export async function GET(request: NextRequest) {
   try {
@@ -45,7 +46,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(serializeDecimal({ success: true, data: mapped }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Admin vouchers GET error:', error)
+    logger.error({ err: error }, 'Admin vouchers GET error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -121,7 +122,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(serializeDecimal({ success: true, data: voucher }), { status: 201 })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Admin vouchers POST error:', error)
+    logger.error({ err: error }, 'Admin vouchers POST error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -185,7 +186,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json(serializeDecimal({ success: true, data: voucher }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Admin vouchers PUT error:', error)
+    logger.error({ err: error }, 'Admin vouchers PUT error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -219,7 +220,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json(serializeDecimal({ success: true, data: voucher }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Admin vouchers DELETE error:', error)
+    logger.error({ err: error }, 'Admin vouchers DELETE error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

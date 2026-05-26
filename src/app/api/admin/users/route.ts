@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
 
+import { logger } from '@/lib/logger'
 // GET /api/admin/users - Fetch all users with seller info, order count, total spent
 export async function GET(request: NextRequest) {
   const authResult = await verifyAdmin(request)
@@ -63,7 +64,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(serializeDecimal({ success: true, data: mapped }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Admin users GET error:', error)
+    logger.error({ err: error }, 'Admin users GET error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -150,7 +151,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json(serializeDecimal({ success: true, data: user }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Admin users PUT error:', error)
+    logger.error({ err: error }, 'Admin users PUT error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -210,7 +211,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json(serializeDecimal({ success: true, data: user }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Admin users DELETE error:', error)
+    logger.error({ err: error }, 'Admin users DELETE error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

@@ -37,12 +37,12 @@ function DataFetcher({ children }: { children: React.ReactNode }) {
         .then(res => res.json())
         .then(data => {
           if (data.success) {
-            console.log('[Storage] Bucket ready:', data.message)
+
           } else {
-            console.warn('[Storage] Setup failed:', data.error)
+
           }
         })
-        .catch(err => console.warn('[Storage] Setup error:', err))
+        .catch(() => {/* dev-only */})
     }
   }, [fetchProducts, fetchCategories])
 
@@ -84,7 +84,7 @@ function DataFetcher({ children }: { children: React.ReactNode }) {
           }
         })
         .catch(err => {
-          console.error('Failed to fetch user data:', err)
+          if (process.env.NODE_ENV === 'development') console.error('Failed to fetch user data:', err)
         })
     }
   }, [status, session, fetchUserData, isAuthenticated, login, connectSocket])

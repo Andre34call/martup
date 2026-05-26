@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middleware'
 import { sanitizeInput } from '@/lib/sanitize'
 
+import { logger } from '@/lib/logger'
 const MAX_MESSAGE_LENGTH = 2000
 const VALID_MESSAGE_TYPES = ['text', 'image', 'product', 'order']
 
@@ -61,7 +62,7 @@ export async function GET(
       data: sortedMessages,
     })
   } catch (error) {
-    console.error('Get messages error:', error)
+    logger.error({ err: error }, 'Get messages error')
     return NextResponse.json(
       { success: false, error: 'Terjadi kesalahan server' },
       { status: 500 }
@@ -169,7 +170,7 @@ export async function POST(
       },
     }, { status: 201 })
   } catch (error) {
-    console.error('Create message error:', error)
+    logger.error({ err: error }, 'Create message error')
     return NextResponse.json(
       { success: false, error: 'Terjadi kesalahan server' },
       { status: 500 }

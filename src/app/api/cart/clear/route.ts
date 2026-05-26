@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middleware'
 
+import { logger } from '@/lib/logger'
 // POST /api/cart/clear - Clear cart items (SECURED with verifyAuth)
 export async function POST(request: NextRequest) {
   try {
@@ -63,7 +64,7 @@ export async function POST(request: NextRequest) {
       message: `Keranjang berhasil dikosongkan (${result.count} item dihapus)`,
     })
   } catch (error) {
-    console.error('Cart clear error:', error)
+    logger.error({ err: error }, 'Cart clear error')
     return NextResponse.json(
       { success: false, error: 'Terjadi kesalahan server' },
       { status: 500 }

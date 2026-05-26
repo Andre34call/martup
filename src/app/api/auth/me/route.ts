@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
 
+import { logger } from '@/lib/logger'
 // GET /api/auth/me - Get current authenticated user from NextAuth session
 // This is called client-side after Google OAuth to get user data
 // If the user doesn't exist in DB yet (sync-user failed), create them here
@@ -76,7 +77,7 @@ export async function GET() {
       user: userWithoutPassword,
     })
   } catch (error) {
-    console.error('Get current user error:', error)
+    logger.error({ err: error }, 'Get current user error')
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }

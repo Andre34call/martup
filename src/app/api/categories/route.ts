@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
+import { logger } from '@/lib/logger'
 // GET /api/categories - Fetch categories with sub-categories (hierarchical)
 // Query params:
 //   parentId: optional - filter by parentId ("null" for root categories, or a category ID)
@@ -134,7 +135,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Categories GET error:', error)
+    logger.error({ err: error }, 'Categories GET error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

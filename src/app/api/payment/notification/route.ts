@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import crypto from 'crypto'
 
+import { logger } from '@/lib/logger'
 // ==================== Midtrans Configuration ====================
 
 const MIDTRANS_SERVER_KEY = process.env.MIDTRANS_SERVER_KEY || ''
@@ -39,10 +40,7 @@ export async function POST(request: NextRequest) {
       .digest('hex')
 
     if (signature_key !== expectedSignature) {
-      console.error('Midtrans notification signature mismatch:', {
-        orderId: order_id,
-        receivedSignature: signature_key,
-      })
+      logger.error({ orderId: order_id, receivedSignature: signature_key }, 'Midtrans notification signature mismatch')
       return NextResponse.json(
         { success: false, error: 'Invalid signature' },
         { status: 403 }
@@ -74,7 +72,7 @@ export async function POST(request: NextRequest) {
     })
 
     if (!order) {
-      console.error('Midtrans notification: Order not found for orderNumber:', order_id)
+      logger.error({ err: order_id }, 'Midtrans notification: Order not found for orderNumber')
       // Return 200 so Midtrans doesn't retry indefinitely
       return NextResponse.json({ success: false, error: 'Order not found' })
     }
@@ -83,22 +81,22 @@ export async function POST(request: NextRequest) {
     // This prevents duplicate wallet mutations from Midtrans retrying notifications
     if (transaction_status === 'settlement' || (transaction_status === 'capture' && fraud_status === 'accept')) {
       if (order.paymentStatus === 'paid') {
-        console.log('Midtrans notification: Order already paid, skipping duplicate processing:', {
+        logger.info({
           orderId: order.id,
           orderNumber: order.orderNumber,
           currentPaymentStatus: order.paymentStatus,
-        })
+        }, 'Midtrans notification: Order already paid, skipping duplicate processing:')
         return NextResponse.json({ success: true, message: 'Notification already processed' })
       }
     }
 
     if (transaction_status === 'cancel' || transaction_status === 'expire' || transaction_status === 'deny') {
       if (order.paymentStatus === 'cancelled' || order.paymentStatus === 'expired' || order.paymentStatus === 'denied') {
-        console.log('Midtrans notification: Order already in terminal state, skipping:', {
+        logger.info({
           orderId: order.id,
           orderNumber: order.orderNumber,
           currentPaymentStatus: order.paymentStatus,
-        })
+        }, 'Midtrans notification: Order already in terminal state, skipping:')
         return NextResponse.json({ success: true, message: 'Notification already processed' })
       }
     }
@@ -177,7 +175,7 @@ export async function POST(request: NextRequest) {
         break
 
       default:
-        console.warn('Midtrans notification: Unhandled transaction_status:', transaction_status)
+        logger.warn({ transaction_status }, 'Midtrans notification: Unhandled transaction_status')
         // Acknowledge receipt but don't process unknown statuses
         return NextResponse.json({ success: true, message: 'Notification received but status not handled' })
     }
@@ -240,7 +238,7 @@ export async function POST(request: NextRequest) {
         })
 
         if (existingMutation) {
-          console.log('Midtrans notification: Seller payout already processed for order:', order.orderNumber)
+          logger.info({ orderNumber: order.orderNumber }, 'Midtrans notification: Seller payout already processed for order')
           return // Skip payout, already processed
         }
 
@@ -363,7 +361,7 @@ export async function POST(request: NextRequest) {
     })
 
     // Log the notification for audit purposes
-    console.log('Midtrans notification processed:', {
+    logger.info({
       orderId: order.id,
       orderNumber: order.orderNumber,
       transactionStatus: transaction_status,
@@ -372,13 +370,13 @@ export async function POST(request: NextRequest) {
       newPaymentStatus,
       transactionId: transaction_id,
       transactionTime: transaction_time,
-    })
+    }, 'Midtrans notification processed:')
 
     // Always return 200 to acknowledge receipt to Midtrans
     return NextResponse.json({ success: true, message: 'Notification processed' })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Payment Notification POST error:', error)
+    logger.error({ err: error }, 'Payment Notification POST error')
     // Still return 200 so Midtrans doesn't keep retrying
     // But log the error for investigation
     return NextResponse.json({ success: false, error: message })

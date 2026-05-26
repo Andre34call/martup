@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 
+import { logger } from '@/lib/logger'
 // GET /api/admin/campaigns - List all campaigns with seller info, support ?status=active filter
 export async function GET(request: NextRequest) {
   try {
@@ -54,7 +55,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: true, data: mapped })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Admin campaigns GET error:', error)
+    logger.error({ err: error }, 'Admin campaigns GET error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -123,7 +124,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ success: true, data: campaign })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Admin campaigns PUT error:', error)
+    logger.error({ err: error }, 'Admin campaigns PUT error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

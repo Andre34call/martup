@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 
+import { logger } from '@/lib/logger'
 function slugify(name: string): string {
   return name
     .toLowerCase()
@@ -55,7 +56,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: true, data: mapped })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Admin categories GET error:', error)
+    logger.error({ err: error }, 'Admin categories GET error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -107,7 +108,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, data: category }, { status: 201 })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Admin categories POST error:', error)
+    logger.error({ err: error }, 'Admin categories POST error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -151,7 +152,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ success: true, data: category })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Admin categories PUT error:', error)
+    logger.error({ err: error }, 'Admin categories PUT error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -183,7 +184,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ success: true, data: category })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Admin categories DELETE error:', error)
+    logger.error({ err: error }, 'Admin categories DELETE error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

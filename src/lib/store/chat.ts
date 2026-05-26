@@ -112,7 +112,7 @@ export const createChatSlice: StateCreator<AppStore, [], [], ChatSlice> = (set, 
         }
       }
     } catch (error) {
-      console.error('Fetch chat rooms error:', error)
+      if (process.env.NODE_ENV === 'development') console.error('Fetch chat rooms error:', error)
     }
   },
 
@@ -139,7 +139,7 @@ export const createChatSlice: StateCreator<AppStore, [], [], ChatSlice> = (set, 
         }))
       }
     } catch (error) {
-      console.error('Fetch chat messages error:', error)
+      if (process.env.NODE_ENV === 'development') console.error('Fetch chat messages error:', error)
     }
   },
 
@@ -194,7 +194,7 @@ export const createChatSlice: StateCreator<AppStore, [], [], ChatSlice> = (set, 
         }))
       }
     } catch (error) {
-      console.error('Send chat message error:', error)
+      if (process.env.NODE_ENV === 'development') console.error('Send chat message error:', error)
     }
   },
 
@@ -250,7 +250,7 @@ export const createChatSlice: StateCreator<AppStore, [], [], ChatSlice> = (set, 
       }
       return null
     } catch (error) {
-      console.error('Create chat room error:', error)
+      if (process.env.NODE_ENV === 'development') console.error('Create chat room error:', error)
       return null
     }
   },
@@ -379,7 +379,7 @@ export const createChatSlice: StateCreator<AppStore, [], [], ChatSlice> = (set, 
 
     // Handle connection errors
     socket.on('connect_error', (error) => {
-      console.error('Socket connection error:', error)
+      if (process.env.NODE_ENV === 'development') console.error('Socket connection error:', error)
       set({ isSocketConnected: false })
     })
 

@@ -5,6 +5,7 @@ import { QueryProvider } from "@/components/ecommerce/providers";
 import { Analytics } from "@vercel/analytics/react";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
+import { headers } from "next/headers";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -138,17 +139,22 @@ const jsonLd = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Read the CSP nonce set by middleware (for strict CSP without unsafe-inline)
+  const headersList = await headers();
+  const nonce = headersList.get("x-nonce") || undefined;
+
   return (
     <html lang="id" suppressHydrationWarning>
       <head>
-        {/* JSON-LD Structured Data for SEO */}
+        {/* JSON-LD Structured Data for SEO — nonce required by strict CSP */}
         <script
           type="application/ld+json"
+          nonce={nonce}
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
         {/* Preconnect to external resources for performance */}

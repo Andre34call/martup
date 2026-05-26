@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAuth, checkRateLimit, authErrorResponse } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
-import { logSecurityEvent, logBusinessEvent } from '@/lib/logger'
+import { logger, logSecurityEvent, logBusinessEvent } from '@/lib/logger'
 
 // ==================== WALLET TOP UP ====================
 // SECURITY: Requires authentication + ownership verification
@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
     }), { status: 201 })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Top up error:', error)
+    logger.error({ err: error }, 'Top up error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

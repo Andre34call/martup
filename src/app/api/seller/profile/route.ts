@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireSeller } from '@/lib/auth-helpers'
 
+import { logger } from '@/lib/logger'
 export async function GET() {
   try {
     const { seller } = await requireSeller()
@@ -87,7 +88,7 @@ export async function GET() {
     if (message === 'Seller account required') {
       return NextResponse.json({ error: 'Seller account required' }, { status: 403 })
     }
-    console.error('GET /api/seller/profile error:', error)
+    logger.error({ err: error }, 'GET /api/seller/profile error')
     return NextResponse.json(
       { error: 'Failed to fetch seller profile' },
       { status: 500 }

@@ -239,7 +239,7 @@ export function SellerAddProductScreen() {
           url: result.url,
         })
       } catch (error) {
-        console.error('Image upload failed:', error)
+        if (process.env.NODE_ENV === 'development') console.error('Image upload failed:', error)
         newImages.push({
           id: `pimg-${Date.now()}-${Math.random().toString(36).slice(2)}`,
           url: URL.createObjectURL(file),
@@ -275,7 +275,7 @@ export function SellerAddProductScreen() {
       setProductVideo({ file, url: result.url })
       showToast('Video berhasil diupload', 'success')
     } catch (error) {
-      console.error('Video upload failed:', error)
+      if (process.env.NODE_ENV === 'development') console.error('Video upload failed:', error)
       setProductVideo({ file, url: URL.createObjectURL(file) })
       showToast('Gagal upload video ke server, menggunakan preview sementara', 'error')
     }
@@ -464,7 +464,7 @@ export function SellerAddProductScreen() {
       showToast(editingProduct ? "Produk berhasil diperbarui! 🎉" : "Produk berhasil dipublikasikan! 🎉", "success")
       setTimeout(() => navigate("seller-products"), 1500)
     } catch (error) {
-      console.error('Product save failed:', error)
+      if (process.env.NODE_ENV === 'development') console.error('Product save failed:', error)
       showToast("Terjadi kesalahan saat menyimpan produk", "error")
     }
     setIsUploading(false)
@@ -1065,7 +1065,6 @@ export function SellerAddProductScreen() {
           </Button>
         </motion.div>
       </div>
-
 
       {/* Upload Loading Overlay */}
       <AnimatePresence>

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
-import { logBusinessEvent } from '@/lib/logger'
+import { logger, logBusinessEvent } from '@/lib/logger'
 
 // GET /api/admin/deposits - List all deposits with user info, support ?status=pending filter
 export async function GET(request: NextRequest) {
@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(serializeDecimal({ success: true, data: mapped }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Admin deposits GET error:', error)
+    logger.error({ err: error }, 'Admin deposits GET error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -188,7 +188,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json(serializeDecimal({ success: true, data: updatedDeposit }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Admin deposits PUT error:', error)
+    logger.error({ err: error }, 'Admin deposits PUT error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

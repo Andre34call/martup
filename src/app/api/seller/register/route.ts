@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAuth, checkRateLimit } from '@/lib/auth-middleware'
 
+import { logger } from '@/lib/logger'
 // POST /api/seller/register - Register user as seller
 export async function POST(request: NextRequest) {
   try {
@@ -158,7 +159,7 @@ export async function POST(request: NextRequest) {
     }, { status: 201 })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Seller Register POST error:', error)
+    logger.error({ err: error }, 'Seller Register POST error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

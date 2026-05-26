@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 import { db } from '@/lib/db'
 
+import { logger } from '@/lib/logger'
 /**
  * Setup Supabase Storage bucket for product uploads.
  * Creates the "products" bucket with public read access and upload policies.
@@ -52,7 +53,7 @@ export async function POST(request: NextRequest) {
       })
     } catch (dbError: unknown) {
       const errorMsg = dbError instanceof Error ? dbError.message : 'Unknown error'
-      console.error('Storage setup DB error:', errorMsg)
+      logger.error({ err: errorMsg }, 'Storage setup DB error')
       return NextResponse.json(
         { success: false, error: `Storage setup failed: ${errorMsg}` },
         { status: 500 }
@@ -60,7 +61,7 @@ export async function POST(request: NextRequest) {
     }
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Storage setup error:', error)
+    logger.error({ err: error }, 'Storage setup error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middleware'
 import { UPLOAD_LIMITS } from '@/lib/upload-limits'
 
+import { logger } from '@/lib/logger'
 // ==================== CONFIG ====================
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -164,7 +165,7 @@ export async function POST(request: NextRequest) {
       } catch {
         errorData = { message: `HTTP ${uploadResponse.status}` }
       }
-      console.error('Avatar upload error:', errorData)
+      logger.error({ err: errorData }, 'Avatar upload error')
 
       const errorMsg = errorData.message || errorData.error || 'Unknown error'
       let userMessage = 'Avatar upload failed'
@@ -210,7 +211,7 @@ export async function POST(request: NextRequest) {
     })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Avatar POST error:', error)
+    logger.error({ err: error }, 'Avatar POST error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -267,7 +268,7 @@ export async function DELETE(request: NextRequest) {
     })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Avatar DELETE error:', error)
+    logger.error({ err: error }, 'Avatar DELETE error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

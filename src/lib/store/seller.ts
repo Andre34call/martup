@@ -60,7 +60,7 @@ export const createSellerSlice: StateCreator<AppStore, [], [], SellerSlice> = (s
         },
       }))
     } catch (error) {
-      console.error('requestWithdraw error:', error)
+      if (process.env.NODE_ENV === 'development') console.error('requestWithdraw error:', error)
       throw error
     }
   },
@@ -110,7 +110,7 @@ export const createSellerSlice: StateCreator<AppStore, [], [], SellerSlice> = (s
         set({ sellerStats: data.data as SellerStats })
       }
     } catch (error) {
-      console.error('Failed to fetch seller stats:', error)
+      if (process.env.NODE_ENV === 'development') console.error('Failed to fetch seller stats:', error)
     }
   },
   fetchWithdrawHistory: async (sellerId) => {
@@ -127,7 +127,7 @@ export const createSellerSlice: StateCreator<AppStore, [], [], SellerSlice> = (s
       const serverWithdrawals: WithdrawRequest[] = data.data?.withdrawals || data.data || []
       set({ withdrawRequests: serverWithdrawals })
     } catch (error) {
-      console.error('fetchWithdrawHistory error:', error)
+      if (process.env.NODE_ENV === 'development') console.error('fetchWithdrawHistory error:', error)
       throw error
     }
   },

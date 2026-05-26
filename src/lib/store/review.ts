@@ -18,7 +18,7 @@ export const createReviewSlice: StateCreator<AppStore, [], [], ReviewSlice> = (s
         images: review.images,
       }),
     }).catch((error) => {
-      console.error('Create review API error:', error)
+      if (process.env.NODE_ENV === 'development') console.error('Create review API error:', error)
     })
 
     // Also update local state for immediate UI feedback
@@ -109,7 +109,7 @@ export const createReviewSlice: StateCreator<AppStore, [], [], ReviewSlice> = (s
         })
       }
     } catch (error) {
-      console.error('Fetch product reviews error:', error)
+      if (process.env.NODE_ENV === 'development') console.error('Fetch product reviews error:', error)
     }
   },
 })

@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { verifyAuth, checkRateLimit } from '@/lib/auth-middleware'
 import { sanitizeInput } from '@/lib/sanitize'
 
+import { logger } from '@/lib/logger'
 const MAX_MESSAGE_LENGTH = 2000
 const VALID_MESSAGE_TYPES = ['text', 'image', 'product', 'order']
 
@@ -119,7 +120,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Chat messages GET error:', error)
+    logger.error({ err: error }, 'Chat messages GET error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -264,7 +265,7 @@ export async function POST(request: NextRequest) {
     )
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Chat messages POST error:', error)
+    logger.error({ err: error }, 'Chat messages POST error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -342,7 +343,7 @@ export async function PUT(request: NextRequest) {
     })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
-    console.error('Chat messages PUT error:', error)
+    logger.error({ err: error }, 'Chat messages PUT error')
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

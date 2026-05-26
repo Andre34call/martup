@@ -48,10 +48,10 @@ export const authOptions: NextAuthOptions = {
         })
         const data = await response.json()
         if (!data.success) {
-          console.error('Failed to sync user:', data.error)
+          if (process.env.NODE_ENV === 'development') console.error('Failed to sync user:', data.error)
         }
       } catch (error) {
-        console.error('Error syncing user:', error)
+        if (process.env.NODE_ENV === 'development') console.error('Error syncing user:', error)
       }
       return true
     },
