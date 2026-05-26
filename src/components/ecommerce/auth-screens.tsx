@@ -10,6 +10,7 @@ import { InputOTP, InputOTPGroup, InputOTPSlot, InputOTPSeparator } from "@/comp
 import { useAppStore, useCartStore, useWishlistStore } from "@/lib/store"
 import { signIn } from "next-auth/react"
 import { useState, useEffect, useCallback } from "react"
+import { useSearchParams } from "next/navigation"
 import type { User } from "@/lib/types"
 import { logger } from '@/lib/logger'
 
@@ -256,12 +257,34 @@ export function OnboardingScreen() {
 // ==================== LOGIN SCREEN ====================
 export function LoginScreen() {
   const { navigate, login, showToast } = useAppStore()
+  const searchParams = useSearchParams()
   const [emailOrPhone, setEmailOrPhone] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [touchedEmailOrPhone, setTouchedEmailOrPhone] = useState(false)
   const [touchedPassword, setTouchedPassword] = useState(false)
+
+  // Show OAuth error from URL params
+  useEffect(() => {
+    const error = searchParams.get('error')
+    if (error) {
+      const errorMessages: Record<string, string> = {
+        Configuration: 'Login Google belum dikonfigurasi. Hubungi admin.',
+        AccessDenied: 'Akses ditolak oleh Google.',
+        Verification: 'Verifikasi gagal. Coba lagi.',
+        OAuthSignin: 'Gagal terhubung ke Google. Coba lagi.',
+        OAuthCallback: 'Gagal memproses login Google. Coba lagi.',
+        OAuthCreateAccount: 'Gagal membuat akun dari Google.',
+        EmailCreateAccount: 'Gagal membuat akun dengan email ini.',
+        Callback: 'Terjadi kesalahan saat login. Coba lagi.',
+        Default: 'Login gagal. Coba lagi nanti.',
+      }
+      showToast(errorMessages[error] || `Login gagal: ${error}`, 'error')
+      // Clean URL without reload
+      window.history.replaceState({}, '', '/')
+    }
+  }, [searchParams, showToast])
 
   const emailOrPhoneError = touchedEmailOrPhone && emailOrPhone
     ? (!isValidEmailOrPhone(emailOrPhone) ? "Masukkan email atau nomor HP yang valid" : "")
