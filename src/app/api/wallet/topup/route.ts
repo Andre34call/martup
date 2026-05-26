@@ -1,66 +1,113 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { verifyAuth, checkRateLimit, authErrorResponse } from '@/lib/auth-middleware'
+import { serializeDecimal } from '@/lib/decimal-utils'
+import { logSecurityEvent, logBusinessEvent } from '@/lib/logger'
 
-export async function POST(request: Request) {
+// ==================== WALLET TOP UP ====================
+// SECURITY: Requires authentication + ownership verification
+// Creates a PENDING deposit — must be verified by payment gateway or admin
+// BEFORE balance is credited. No auto-approve.
+
+export async function POST(request: NextRequest) {
   try {
-    const { userId, amount, method } = await request.json()
+    // SECURITY: Require authentication
+    const authResult = await verifyAuth(request)
+    if (!authResult.success) {
+      return authErrorResponse(authResult)
+    }
 
-    if (!userId || !amount || amount <= 0) {
+    // SECURITY: Rate limit — 5 top-up requests per minute per user
+    if (!checkRateLimit(`topup:${authResult.user.id}`, 5)) {
       return NextResponse.json(
-        { error: 'UserId dan jumlah top up wajib diisi' },
+        { success: false, error: 'Terlalu banyak request. Coba lagi dalam 1 menit.' },
+        { status: 429 }
+      )
+    }
+
+    const body = await request.json()
+    const { amount, method } = body as { amount?: number; method?: string }
+
+    // Validate amount
+    if (!amount || typeof amount !== 'number' || amount <= 0) {
+      return NextResponse.json(
+        { success: false, error: 'Jumlah top up harus lebih dari 0' },
         { status: 400 }
       )
     }
 
-    const wallet = await db.wallet.findUnique({ where: { userId } })
-
-    if (!wallet) {
+    // SECURITY: Cap top-up amount
+    if (amount > 10000000) {
       return NextResponse.json(
-        { error: 'Wallet tidak ditemukan' },
-        { status: 404 }
+        { success: false, error: 'Top up maksimal Rp 10.000.000 per transaksi' },
+        { status: 400 }
       )
     }
 
-    // Add balance to wallet
-    const updatedWallet = await db.wallet.update({
-      where: { userId },
-      data: { balance: { increment: amount } },
-    })
+    if (amount < 10000) {
+      return NextResponse.json(
+        { success: false, error: 'Top up minimal Rp 10.000' },
+        { status: 400 }
+      )
+    }
 
-    // Create mutation record
-    await db.walletMutation.create({
+    // Validate method
+    const validMethods = ['bank_transfer', 'gopay', 'ovo', 'dana']
+    if (!method || !validMethods.includes(method)) {
+      return NextResponse.json(
+        { success: false, error: `Metode pembayaran tidak valid. Pilih: ${validMethods.join(', ')}` },
+        { status: 400 }
+      )
+    }
+
+    // Create PENDING deposit record — NO balance credit until payment verified
+    const deposit = await db.deposit.create({
       data: {
-        walletId: wallet.id,
-        type: 'credit',
+        userId: authResult.user.id,
         amount,
-        balance: updatedWallet.balance,
-        description: `Top up via ${method || 'unknown'}`,
-        refType: 'deposit',
+        method,
+        status: 'pending', // MUST remain pending until payment gateway confirms
       },
     })
 
-    // Create deposit record
-    await db.deposit.create({
+    // Create a PENDING transaction record
+    await db.transaction.create({
       data: {
-        userId,
+        userId: authResult.user.id,
+        type: 'deposit',
         amount,
-        method: method || 'unknown',
-        status: 'success',
+        fee: 0,
+        netAmount: amount,
+        method,
+        status: 'pending', // NOT success — awaiting payment
+        description: `Top up via ${method} — menunggu pembayaran`,
+        refId: deposit.id,
       },
     })
 
-    return NextResponse.json({
-      wallet: {
-        id: updatedWallet.id,
-        balance: updatedWallet.balance,
-        holdBalance: updatedWallet.holdBalance,
-      },
-      message: 'Top up berhasil',
+    logBusinessEvent({
+      event: 'DEPOSIT_REQUESTED',
+      userId: authResult.user.id,
+      details: { depositId: deposit.id, amount, method },
     })
-  } catch (error) {
+
+    // In production: integrate with Midtrans/payment gateway here to create payment token
+    // For now, return the deposit ID so the client can redirect to payment
+    return NextResponse.json(serializeDecimal({
+      success: true,
+      data: {
+        depositId: deposit.id,
+        amount,
+        method,
+        status: 'pending',
+        message: 'Deposit dibuat. Silakan selesaikan pembayaran.',
+      },
+    }), { status: 201 })
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Internal server error'
     console.error('Top up error:', error)
     return NextResponse.json(
-      { error: 'Terjadi kesalahan server' },
+      { success: false, error: message },
       { status: 500 }
     )
   }

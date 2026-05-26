@@ -1,17 +1,40 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
+import { serializeDecimal } from '@/lib/decimal-utils'
+import { logSecurityEvent, logBusinessEvent } from '@/lib/logger'
+
+// ==================== WITHDRAWAL APPROVAL/REJECTION ====================
+// SECURITY: Only admins can approve/reject withdrawals
+// This is the ONLY way to change withdrawal status — prevents auto-approve
 
 export async function PUT(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // SECURITY: Require admin authentication
+    const authResult = await verifyAdmin(request)
+    if (!authResult.success) {
+      return authErrorResponse(authResult)
+    }
+
     const { id } = await params
-    const { status, adminNote } = await request.json()
+    const body = await request.json()
+    const { status, adminNote } = body as { status?: string; adminNote?: string }
 
     if (!status) {
       return NextResponse.json(
-        { error: 'Status wajib diisi' },
+        { success: false, error: 'Status wajib diisi' },
+        { status: 400 }
+      )
+    }
+
+    // Only allow valid status transitions
+    const validStatuses = ['approved', 'rejected', 'processed']
+    if (!validStatuses.includes(status)) {
+      return NextResponse.json(
+        { success: false, error: `Status tidak valid. Gunakan: ${validStatuses.join(', ')}` },
         { status: 400 }
       )
     }
@@ -19,8 +42,16 @@ export async function PUT(
     const withdrawal = await db.withdrawal.findUnique({ where: { id } })
     if (!withdrawal) {
       return NextResponse.json(
-        { error: 'Penarikan dana tidak ditemukan' },
+        { success: false, error: 'Penarikan dana tidak ditemukan' },
         { status: 404 }
+      )
+    }
+
+    // SECURITY: Only allow status changes from 'pending' (prevent double-processing)
+    if (withdrawal.status !== 'pending') {
+      return NextResponse.json(
+        { success: false, error: `Penarikan sudah berstatus "${withdrawal.status}". Hanya penarikan "pending" yang bisa diproses.` },
+        { status: 400 }
       )
     }
 
@@ -30,41 +61,56 @@ export async function PUT(
       updateData.processedAt = new Date()
     }
 
-    const updated = await db.withdrawal.update({
-      where: { id },
-      data: updateData,
+    const updated = await db.$transaction(async (tx) => {
+      const updatedWithdrawal = await tx.withdrawal.update({
+        where: { id },
+        data: updateData,
+      })
+
+      // If rejected, refund the amount to seller wallet
+      if (status === 'rejected') {
+        const wallet = await tx.wallet.findUnique({
+          where: { sellerId: withdrawal.sellerId },
+        })
+        if (wallet) {
+          const newBalance = wallet.balance + withdrawal.amount
+          await tx.wallet.update({
+            where: { id: wallet.id },
+            data: { balance: { increment: withdrawal.amount } },
+          })
+
+          await tx.walletMutation.create({
+            data: {
+              walletId: wallet.id,
+              type: 'credit',
+              amount: withdrawal.amount,
+              balance: newBalance,
+              description: `Pengembalian dana penarikan yang ditolak${adminNote ? `: ${adminNote}` : ''}`,
+              refType: 'withdraw',
+              refId: withdrawal.id,
+            },
+          })
+        }
+      }
+
+      return updatedWithdrawal
     })
 
-    // If rejected, refund the amount to seller wallet
-    if (status === 'rejected') {
-      const wallet = await db.wallet.findUnique({
-        where: { sellerId: withdrawal.sellerId },
-      })
-      if (wallet) {
-        await db.wallet.update({
-          where: { sellerId: withdrawal.sellerId },
-          data: { balance: { increment: withdrawal.amount } },
-        })
+    logBusinessEvent({
+      event: 'WITHDRAWAL_STATUS_CHANGED',
+      userId: authResult.user.id,
+      details: { withdrawalId: id, newStatus: status, adminNote },
+    })
 
-        await db.walletMutation.create({
-          data: {
-            walletId: wallet.id,
-            type: 'credit',
-            amount: withdrawal.amount,
-            balance: wallet.balance + withdrawal.amount,
-            description: `Pengembalian dana penarikan yang ditolak`,
-            refType: 'withdraw',
-            refId: withdrawal.id,
-          },
-        })
-      }
-    }
-
-    return NextResponse.json({ withdrawal: updated })
-  } catch (error) {
+    return NextResponse.json(serializeDecimal({
+      success: true,
+      data: updated,
+    }))
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Internal server error'
     console.error('Update withdrawal error:', error)
     return NextResponse.json(
-      { error: 'Terjadi kesalahan server' },
+      { success: false, error: message },
       { status: 500 }
     )
   }

@@ -55,6 +55,9 @@ import { AdminOrdersScreen } from '@/components/ecommerce/admin-orders-screen'
 import { AdminDivisions } from '@/components/ecommerce/admin-divisions-screen'
 import { AdminCategories, AdminVouchers, AdminDeposits, AdminCampaigns, AdminSettings } from '@/components/ecommerce/admin-new-screens'
 
+// Legal screens
+import { PrivacyPolicyScreen, TermsOfServiceScreen, RefundPolicyScreen } from '@/components/ecommerce/legal/legal-screens'
+
 const AUTH_SCREENS = ['splash', 'onboarding', 'login', 'register', 'otp', 'forgot-password']
 const SELLER_SCREENS = ['seller-dashboard', 'seller-products', 'seller-add-product', 'seller-orders', 'seller-analytics', 'seller-wallet', 'seller-chat', 'seller-settings', 'seller-campaign', 'seller-withdraw', 'seller-withdraw-history']
 const ADMIN_SCREENS = ['admin-dashboard', 'admin-users', 'admin-products', 'admin-orders', 'admin-withdraw', 'admin-banner', 'admin-analytics', 'admin-complaints', 'admin-divisions', 'admin-categories', 'admin-vouchers', 'admin-deposits', 'admin-campaigns', 'admin-settings']
@@ -65,6 +68,7 @@ const SUB_SCREENS = [
   'address', 'help', 'followed-stores', 'deposit', 'withdraw',
   'settings', 'voucher', 'order-tracking', 'seller-add-product',
   'chat-room', 'category-detail', 'seller-withdraw', 'seller-withdraw-history',
+  'privacy-policy', 'terms-of-service', 'refund-policy',
 ]
 
 // ==================== GLOBAL TOAST ====================
@@ -173,6 +177,11 @@ function ScreenRenderer() {
       case 'followed-stores': return <FollowedStoresScreen />
       case 'seller-shop': return <SellerShopScreen />
       case 'wishlist': return <WishlistScreen />
+
+      // Legal
+      case 'privacy-policy': return <PrivacyPolicyScreen onBack={() => navigate('settings')} />
+      case 'terms-of-service': return <TermsOfServiceScreen onBack={() => navigate('settings')} />
+      case 'refund-policy': return <RefundPolicyScreen onBack={() => navigate('settings')} />
 
       // Seller
       case 'seller-dashboard': return <SellerDashboard />

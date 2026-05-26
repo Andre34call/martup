@@ -5,7 +5,7 @@ import { useAppStore, getAuthHeaders } from "@/lib/store"
 import { formatPrice } from "@/lib/utils"
 import { PageHeader, SectionHeader, EmptyState, SearchBar, WalletBalanceCard } from "./shared"
 import { useState, useRef, useCallback, useEffect, useMemo } from "react"
-import { Settings as SettingsIcon, Shield, Bell, Globe, Lock, Trash2, CreditCard, Ticket, Copy, Check, MapPin, Plus, Star, Camera, Send, RotateCcw, HelpCircle, ChevronDown, ChevronUp, MessageSquare, Phone, Heart, Store, Wallet, ArrowUpRight, Clock, Banknote, Edit, ChevronRight, Package, ImagePlus, Video, Play, X, Eye, EyeOff, KeyRound, ThumbsUp, ThumbsDown, Meh, CheckCircle2 } from "lucide-react"
+import { Settings as SettingsIcon, Shield, Bell, Globe, Lock, Trash2, CreditCard, Ticket, Copy, Check, MapPin, Plus, Star, Camera, Send, RotateCcw, HelpCircle, ChevronDown, ChevronUp, MessageSquare, Phone, Heart, Store, Wallet, ArrowUpRight, Clock, Banknote, Edit, ChevronRight, Package, ImagePlus, Video, Play, X, Eye, EyeOff, KeyRound, ThumbsUp, ThumbsDown, Meh, CheckCircle2, FileText } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
@@ -324,21 +324,59 @@ export function SettingsScreen() {
           </Card>
         </motion.div>
 
-        {/* Privacy */}
+        {/* Legal */}
         <motion.div {...fadeIn}>
-          <SectionHeader title="Privasi" icon={<Shield className="w-4 h-4" />} />
+          <SectionHeader title="Legal & Privasi" icon={<Shield className="w-4 h-4" />} />
           <Card className="mt-3 p-4">
-            <div className="flex items-center justify-between py-1">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-red-50 dark:bg-red-900/30 flex items-center justify-center">
-                  <Lock className="w-4 h-4 text-red-600" />
+            <div className="space-y-1">
+              <button onClick={() => navigate('privacy-policy')} className="flex items-center justify-between w-full py-2.5 hover:opacity-80 transition-opacity">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center">
+                    <Shield className="w-4 h-4 text-blue-600" />
+                  </div>
+                  <div className="text-left">
+                    <span className="text-sm font-medium text-foreground">Kebijakan Privasi</span>
+                    <p className="text-xs text-muted-foreground">Cara kami melindungi data Anda</p>
+                  </div>
                 </div>
-                <div>
-                  <span className="text-sm font-medium text-foreground">Berbagi Data</span>
-                  <p className="text-xs text-muted-foreground">Izinkan berbagi data untuk analitik</p>
+                <ChevronRight className="w-4 h-4 text-muted-foreground" />
+              </button>
+              <button onClick={() => navigate('terms-of-service')} className="flex items-center justify-between w-full py-2.5 hover:opacity-80 transition-opacity">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-50 dark:bg-emerald-900/30 flex items-center justify-center">
+                    <FileText className="w-4 h-4 text-emerald-600" />
+                  </div>
+                  <div className="text-left">
+                    <span className="text-sm font-medium text-foreground">Syarat & Ketentuan</span>
+                    <p className="text-xs text-muted-foreground">Ketentuan penggunaan platform</p>
+                  </div>
                 </div>
+                <ChevronRight className="w-4 h-4 text-muted-foreground" />
+              </button>
+              <button onClick={() => navigate('refund-policy')} className="flex items-center justify-between w-full py-2.5 hover:opacity-80 transition-opacity">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-amber-50 dark:bg-amber-900/30 flex items-center justify-center">
+                    <RotateCcw className="w-4 h-4 text-amber-600" />
+                  </div>
+                  <div className="text-left">
+                    <span className="text-sm font-medium text-foreground">Kebijakan Pengembalian Dana</span>
+                    <p className="text-xs text-muted-foreground">Hak refund & proses klaim</p>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-muted-foreground" />
+              </button>
+              <div className="flex items-center justify-between py-2.5">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-red-50 dark:bg-red-900/30 flex items-center justify-center">
+                    <Lock className="w-4 h-4 text-red-600" />
+                  </div>
+                  <div>
+                    <span className="text-sm font-medium text-foreground">Berbagi Data</span>
+                    <p className="text-xs text-muted-foreground">Izinkan berbagi data untuk analitik</p>
+                  </div>
+                </div>
+                <Switch checked={settings.dataSharing} onCheckedChange={() => updateSettings({ dataSharing: !settings.dataSharing })} />
               </div>
-              <Switch checked={settings.dataSharing} onCheckedChange={() => updateSettings({ dataSharing: !settings.dataSharing })} />
             </div>
           </Card>
         </motion.div>
