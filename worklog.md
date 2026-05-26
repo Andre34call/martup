@@ -569,3 +569,44 @@ Stage Summary:
 - notification.ts bonus fix: now includes proper auth headers (was only sending Content-Type before)
 - Component files now use getAuthHeaders(true) instead of manually constructing auth headers
 - FormData uploads (avatar) properly exclude Content-Type while retaining auth + CSRF
+
+---
+Task ID: 4-final
+Agent: Main Agent
+Task: Phase 4 — Production Hardening (Complete)
+
+Work Log:
+- Verified project state: Phase 1, 2, 2-security all complete
+- Installed packages: @sentry/nextjs, @vercel/analytics, pino, pino-pretty
+- Created structured logger (src/lib/logger.ts) with Pino — JSON output (prod), pretty printing (dev), sensitive field redaction, child loggers for request/auth/payment/db/chat/security
+- Created CSRF protection (src/lib/csrf.ts) — double-submit cookie pattern, Web Crypto API (Edge Runtime compatible), HMAC-signed tokens, 24h expiry, exempt paths for auth/payment webhooks
+- Created CSRF client utility (src/lib/csrf-client.ts) — reads CSRF cookie and attaches to headers
+- Updated getAuthHeaders (src/lib/store/getAuthHeaders.ts) — added includeCsrf parameter
+- Created distributed rate limiting (src/lib/rate-limit.ts) — abstraction layer with in-memory + Redis/Vercel KV backends, pre-configured limiters (api, auth, payment, upload, chat)
+- Created health check endpoint (src/app/api/health/route.ts) — database + memory checks, healthy/degraded/unhealthy status
+- Created analytics tracking (src/lib/analytics/index.ts) — batched client-side events, e-commerce tracking helpers, sendBeacon on page unload
+- Created analytics endpoint (src/app/api/analytics/track/route.ts) — receives batched events, validates, logs server-side
+- Updated middleware.ts — CSRF protection, security headers (CSP, HSTS, X-Request-ID), async Edge-compatible
+- Updated layout.tsx — comprehensive SEO: OpenGraph, Twitter Cards, JSON-LD structured data, PWA manifest, preconnect, canonical URLs
+- Updated api-client.ts — CSRF token included in all mutating requests
+- Created PWA manifest (public/manifest.json)
+- Created load testing script (scripts/load-test.js) — zero dependencies, configurable, weighted scenarios, percentile reporting
+- Updated .env with new environment variables (CSRF_SECRET, SENTRY_DSN, APP_VERSION, LOG_LEVEL, SITE_URL)
+- Added scripts/ to ESLint ignore
+- All subagent tasks completed: Sentry setup (4.1), CSRF store integration (4.3b)
+- Lint check passes with 0 errors
+- Dev server running cleanly with health check returning {"status":"healthy"}
+- Pushed to GitHub, auto-deploying to Vercel
+
+Stage Summary:
+- Phase 4 Production Hardening complete — 8/8 items implemented
+- Sentry error monitoring (with DSN guard for no-op when unconfigured)
+- Structured logging with Pino (JSON output + sensitive redaction)
+- CSRF protection (double-submit cookie, Edge Runtime compatible)
+- Distributed rate limiting (Redis/Vercel KV abstraction, in-memory fallback)
+- Health check endpoint (database + memory checks)
+- Analytics integration (Vercel Analytics + custom event tracking)
+- SEO meta tags (OpenGraph, Twitter Cards, JSON-LD, PWA manifest)
+- Load testing script (zero-dependency, percentile reporting)
+- 41 files changed, 2387 insertions, 76 deletions
+- All phases (1-4) now complete
