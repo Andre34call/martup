@@ -5,7 +5,8 @@ import { Plus, Minus, X, Camera, ChevronDown, Tag, Package, DollarSign, Upload, 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
-import { useAppStore, getAuthHeaders } from "@/lib/store"
+import { useAppStore } from "@/lib/store"
+import { apiClient } from "@/lib/api-client"
 import { uploadFile } from "@/lib/upload"
 import { formatPrice } from "@/lib/utils"
 import { PageHeader } from "./shared"
@@ -342,10 +343,7 @@ export function SellerAddProductScreen() {
     try {
       if (editingProduct) {
         // Update existing product via API
-        const res = await fetch('/api/seller/products', {
-          method: 'PUT',
-          headers: getAuthHeaders(true),
-          body: JSON.stringify({
+        const res = await apiClient.rawPut('/api/seller/products', {
             productId: editingProduct.id,
             name: productName.trim(),
             slug: productName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
@@ -362,8 +360,7 @@ export function SellerAddProductScreen() {
             tags: tags.length > 0 ? tags : null,
             videoUrl: productVideo?.url || null,
             variants: apiVariants.length > 0 ? apiVariants : undefined,
-          }),
-        })
+          })
         const data = await res.json()
         if (!data.success) {
           showToast(data.error || "Gagal memperbarui produk", "error")
@@ -397,10 +394,7 @@ export function SellerAddProductScreen() {
         })
       } else {
         // Create new product via API
-        const res = await fetch('/api/seller/products', {
-          method: 'POST',
-          headers: getAuthHeaders(true),
-          body: JSON.stringify({
+        const res = await apiClient.rawPost('/api/seller/products', {
             sellerId,
             categoryId: category,
             name: productName.trim(),
@@ -417,8 +411,7 @@ export function SellerAddProductScreen() {
             variants: apiVariants,
             tags: tags.length > 0 ? tags : null,
             videoUrl: productVideo?.url || null,
-          }),
-        })
+          })
         const data = await res.json()
         if (!data.success) {
           showToast(data.error || "Gagal membuat produk", "error")

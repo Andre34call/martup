@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { SessionProvider } from "next-auth/react"
 import { useState, useEffect, useRef } from "react"
 import { useSession } from "next-auth/react"
-import { useAppStore } from "@/lib/store"
+import { useAppStore, getAuthHeaders } from "@/lib/store"
 import { setSentryUser, clearSentryUser } from "@/lib/sentry"
 import { logger } from '@/lib/logger'
 import { useDataSync } from '@/lib/use-data-sync'
@@ -42,7 +42,8 @@ function DataFetcher({ children }: { children: React.ReactNode }) {
       fetchProducts()
       fetchCategories()
       // Setup Supabase Storage bucket (idempotent - safe to call multiple times)
-      fetch('/api/setup/storage', { method: 'POST' })
+      // Include auth headers so the setup route can verify the user
+      fetch('/api/setup/storage', { method: 'POST', headers: getAuthHeaders(true) })
         .then(res => res.json())
         .then(data => {
           if (data.success) {

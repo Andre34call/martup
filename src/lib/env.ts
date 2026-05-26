@@ -44,6 +44,8 @@ export const env = {
   NEXTAUTH_URL: process.env.NEXTAUTH_URL || 'http://localhost:3000',
   SUPABASE_DATABASE_URL: process.env.SUPABASE_DATABASE_URL || '',
   SUPABASE_DIRECT_URL: process.env.SUPABASE_DIRECT_URL || '',
+  NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
   TOKEN_SECRET: process.env.TOKEN_SECRET || process.env.NEXTAUTH_SECRET || '',
   CSRF_SECRET: process.env.CSRF_SECRET || process.env.NEXTAUTH_SECRET || '',
   CRON_SECRET: process.env.CRON_SECRET || '',

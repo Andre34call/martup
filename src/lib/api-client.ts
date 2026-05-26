@@ -1,6 +1,12 @@
 /**
- * API Client - A simple fetch wrapper for the MartUp e-commerce API.
- * Handles base URL, Authorization headers, CSRF protection, JSON parsing, and error responses.
+ * API Client - A comprehensive fetch wrapper for the MartUp e-commerce API.
+ * Handles base URL, Authorization headers, CSRF protection with retry, JSON parsing, and error responses.
+ *
+ * Key features:
+ * - Checks both `authToken` and `martup_token` localStorage keys for auth
+ * - Automatic CSRF token injection for mutating requests (POST, PUT, DELETE, PATCH)
+ * - CSRF retry: if a 403 CSRF error occurs, waits for the fresh cookie and retries once
+ * - Consistent error handling with ApiClientError
  */
 
 import { getCsrfToken } from '@/lib/csrf-client'
@@ -19,9 +25,13 @@ class ApiClientError extends Error {
   }
 }
 
+/**
+ * Get auth token from localStorage.
+ * Checks both `authToken` and `martup_token` for compatibility with the dual-token login flow.
+ */
 function getToken(): string | null {
   if (typeof window === 'undefined') return null
-  return localStorage.getItem('martup_token')
+  return localStorage.getItem('authToken') || localStorage.getItem('martup_token')
 }
 
 function buildUrl(path: string, params?: Record<string, string | undefined>): string {
@@ -54,6 +64,48 @@ function getHeaders(includeCsrf: boolean = false): HeadersInit {
   return headers
 }
 
+function getUploadHeaders(): HeadersInit {
+  const headers: HeadersInit = {}
+  const token = getToken()
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+  const csrfToken = getCsrfToken()
+  if (csrfToken) {
+    headers['x-csrf-token'] = csrfToken
+  }
+  return headers
+}
+
+/**
+ * Fetch with CSRF retry — if the first request fails with 403 CSRF error,
+ * wait for the fresh CSRF cookie from the error response and retry once.
+ */
+async function fetchWithCsrfRetry(url: string, options: RequestInit): Promise<Response> {
+  const response = await fetch(url, options)
+
+  // If CSRF validation failed, the server returns 403 with a fresh CSRF cookie
+  if (response.status === 403) {
+    const data = await response.clone().json().catch(() => null)
+    if (data?.error?.includes('CSRF')) {
+      // Wait for the new CSRF cookie to be available
+      await new Promise(resolve => setTimeout(resolve, 200))
+
+      // Re-read the fresh CSRF token and retry
+      const freshCsrfToken = getCsrfToken()
+      if (freshCsrfToken) {
+        const newHeaders = {
+          ...(options.headers as Record<string, string>),
+          'x-csrf-token': freshCsrfToken,
+        }
+        return fetch(url, { ...options, headers: newHeaders })
+      }
+    }
+  }
+
+  return response
+}
+
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     let errorMessage = 'Terjadi kesalahan server'
@@ -80,7 +132,7 @@ export const apiClient = {
 
   post: async <T>(url: string, body?: unknown): Promise<T> => {
     const fullUrl = buildUrl(url)
-    const response = await fetch(fullUrl, {
+    const response = await fetchWithCsrfRetry(fullUrl, {
       method: 'POST',
       headers: getHeaders(true),
       body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -90,7 +142,7 @@ export const apiClient = {
 
   put: async <T>(url: string, body?: unknown): Promise<T> => {
     const fullUrl = buildUrl(url)
-    const response = await fetch(fullUrl, {
+    const response = await fetchWithCsrfRetry(fullUrl, {
       method: 'PUT',
       headers: getHeaders(true),
       body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -98,32 +150,55 @@ export const apiClient = {
     return handleResponse<T>(response)
   },
 
-  del: async <T>(url: string): Promise<T> => {
+  del: async <T>(url: string, body?: unknown): Promise<T> => {
     const fullUrl = buildUrl(url)
-    const response = await fetch(fullUrl, {
+    const response = await fetchWithCsrfRetry(fullUrl, {
       method: 'DELETE',
       headers: getHeaders(true),
+      body: body !== undefined ? JSON.stringify(body) : undefined,
     })
     return handleResponse<T>(response)
   },
 
   upload: async <T>(url: string, formData: FormData): Promise<T> => {
     const fullUrl = buildUrl(url)
-    const token = getToken()
-    const csrfToken = getCsrfToken()
-    const headers: HeadersInit = {}
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`
-    }
-    if (csrfToken) {
-      headers['x-csrf-token'] = csrfToken
-    }
-    const response = await fetch(fullUrl, {
+    const response = await fetchWithCsrfRetry(fullUrl, {
       method: 'POST',
-      headers,
+      headers: getUploadHeaders(),
       body: formData,
     })
     return handleResponse<T>(response)
+  },
+
+  /**
+   * Raw fetch with auth + CSRF + retry — returns the Response object directly.
+   * Use this when you need to inspect the response status/body manually.
+   */
+  rawPost: async (url: string, body: unknown): Promise<Response> => {
+    const fullUrl = buildUrl(url)
+    return fetchWithCsrfRetry(fullUrl, {
+      method: 'POST',
+      headers: getHeaders(true),
+      body: JSON.stringify(body),
+    })
+  },
+
+  rawPut: async (url: string, body: unknown): Promise<Response> => {
+    const fullUrl = buildUrl(url)
+    return fetchWithCsrfRetry(fullUrl, {
+      method: 'PUT',
+      headers: getHeaders(true),
+      body: JSON.stringify(body),
+    })
+  },
+
+  rawDelete: async (url: string, body?: unknown): Promise<Response> => {
+    const fullUrl = buildUrl(url)
+    return fetchWithCsrfRetry(fullUrl, {
+      method: 'DELETE',
+      headers: getHeaders(true),
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    })
   },
 }
 

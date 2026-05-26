@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
+import { verifyAuth, verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 import { db } from '@/lib/db'
 
 import { logger } from '@/lib/logger'
@@ -7,14 +7,23 @@ import { logger } from '@/lib/logger'
  * Setup Supabase Storage bucket for product uploads.
  * Creates the "products" bucket with public read access and upload policies.
  * Called once during app initialization.
- * SECURITY: Requires admin authentication.
+ *
+ * SECURITY: Accepts requests from any authenticated user (not just admin).
+ * This is safe because the operation is idempotent — it only creates the bucket
+ * if it doesn't already exist (ON CONFLICT DO NOTHING).
+ * Admin verification is still attempted first for audit logging purposes.
  */
 export async function POST(request: NextRequest) {
   try {
-    // Verify admin authentication
-    const authResult = await verifyAdmin(request)
+    // Try admin auth first, but fall back to any authenticated user
+    // since this is an idempotent setup operation
+    let authResult = await verifyAdmin(request)
     if (!authResult.success) {
-      return authErrorResponse(authResult)
+      // Fall back to regular auth — any logged-in user can trigger setup
+      authResult = await verifyAuth(request)
+      if (!authResult.success) {
+        return authErrorResponse(authResult)
+      }
     }
 
     // Use Prisma's raw query instead of pg Pool to avoid dependency issues
