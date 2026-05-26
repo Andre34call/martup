@@ -114,7 +114,7 @@ async function flushEvents(): Promise<void> {
 
   try {
     // Get CSRF token from cookie
-    const csrfToken = getCookie('__Host-csrf-token')
+    const csrfToken = getCookie('csrf-token')
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     }
@@ -147,7 +147,7 @@ if (typeof window !== 'undefined') {
   window.addEventListener('beforeunload', () => {
     if (eventQueue.length > 0) {
       // Use sendBeacon for reliability during page unload
-      const csrfToken = getCookie('__Host-csrf-token')
+      const csrfToken = getCookie('csrf-token')
       const payload = JSON.stringify({ events: eventQueue })
       const blob = new Blob([payload], { type: 'application/json' })
       // sendBeacon doesn't support custom headers, but analytics is best-effort

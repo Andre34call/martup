@@ -96,7 +96,7 @@ function requiresCsrfCheck(request: NextRequest): boolean {
 
 /**
  * Validate CSRF token from request.
- * Checks the X-CSRF-Token header against the __Host-csrf-token cookie.
+ * Checks the X-CSRF-Token header against the csrf-token cookie.
  */
 export async function validateCsrfRequest(request: NextRequest): Promise<{ valid: boolean; reason?: string }> {
   if (!requiresCsrfCheck(request)) {
