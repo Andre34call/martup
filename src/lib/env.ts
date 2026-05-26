@@ -11,6 +11,8 @@ const recommendedVars = [
   'TOKEN_SECRET',
   'CSRF_SECRET',
   'CRON_SECRET',
+  'GOOGLE_CLIENT_ID',
+  'GOOGLE_CLIENT_SECRET',
 ] as const
 
 // Validate at module load time
@@ -45,5 +47,7 @@ export const env = {
   SMS_PROVIDER: process.env.SMS_PROVIDER || 'mock',
   MIDTRANS_SERVER_KEY: process.env.MIDTRANS_SERVER_KEY || '',
   MIDTRANS_IS_PRODUCTION: process.env.MIDTRANS_IS_PRODUCTION === 'true',
+  GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || '',
+  GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET || '',
   NODE_ENV: process.env.NODE_ENV || 'development',
 } as const
