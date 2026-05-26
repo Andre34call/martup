@@ -1048,3 +1048,37 @@ Stage Summary:
 - Google OAuth users still work through DataFetcher bridge + useDataSync
 - Single point of data sync (useDataSync) eliminates race conditions from multiple sync paths
 - No double-sync due to isDataLoaded flag + syncingRef + lastSyncedUserIdRef guards
+
+---
+Task ID: Phase1-DataLoss
+Agent: Main Agent
+Task: Phase 1 — Fix Critical Data Loss (Cart/Wishlist sync, User Settings persistence, Admin Settings hardening)
+
+Work Log:
+- Discovered useDataSync hook was defined but NEVER imported — root cause of cart/wishlist not syncing on refresh
+- Rewrote useDataSync to work with BOTH auth stores (useAuthStore + useAppStore) with guards against double-sync
+- Wired useDataSync into providers.tsx via DataSyncWrapper component
+- Removed duplicate sync calls from DataFetcher (now only handles NextAuth bridge)
+- Removed syncAllStores from auth-store.ts (useDataSync is now single sync point)
+- Added UserSetting model to Prisma schema with per-user key-value store
+- Created /api/user/settings API route (GET/PUT) with verifyAuth + CSRF
+- Updated settings.ts Zustand slice: fetchSettings() + optimistic updateSettings() with server persist + revert on failure
+- Added fetchSettings() to useDataSync Promise.all
+- Added isSettingsLoaded + platformSettings reset to auth.ts logout/deleteAccount
+- Added platformSettings + fetchPlatformSettings to AdminSlice (admin store)
+- Updated data-fetch.ts: auto-fetches platform settings when admin user logs in
+- AdminSettings component now syncs to global store on fetch and save
+- Checkout screen: platformFee now reads from platformSettings with fallback
+- Seller withdraw: minWithdrawal now reads from PlatformSetting table at runtime
+- Admin settings API: added range validation + security logging for all numeric fields
+- Pushed Prisma schema changes (UserSetting model) with db:push
+- Lint passes clean, dev server running
+- Pushed to GitHub, auto-deploying to Vercel
+
+Stage Summary:
+- CRITICAL BUG FIXED: useDataSync was never imported — cart/wishlist now sync on every page load
+- User personal settings (2FA, notifications, data sharing) now persist to database
+- Admin platform settings now used dynamically in checkout + withdrawals
+- Admin settings API hardened with range validation + security audit logging
+- 14 files changed, 287 insertions, 72 deletions
+- Estimated readiness improvement: 52% → 60%
