@@ -1316,3 +1316,27 @@ Stage Summary:
 - Rate limited at 30 req/min per IP
 - Response format consistent with existing /api/products endpoint
 - Efficient two-pass query strategy avoids fetching full data for all matches
+
+---
+Task ID: Phase2-Complete
+Agent: Main Agent
+Task: Phase 2 — Critical Security Fixes & Core Features
+
+Work Log:
+- Fixed P0: /api/orders/[id]/status had ZERO auth — complete rewrite with verifyAuth, role-based authorization, $transaction for all financial ops, PlatformSetting commission rate
+- Fixed P0: SMS Gateway integration — created /lib/sms-gateway.ts with mock/twilio/fonnte providers, updated OTP send + 2FA routes
+- Fixed P1: Added PUT handler to /api/seller/profile for bank account + store info updates with validation
+- Fixed P1: Created /api/search endpoint with multi-field search, faceted filtering, 6 sort options, pagination
+- Fixed P2: Sentry config TS errors — moved replayIntegration to integrations array, removed invalid hideSourceMaps
+- Fixed TS errors in /api/search/route.ts (price filter type issues)
+- All lint checks pass (0 errors, 0 warnings)
+- All TypeScript checks pass (0 errors in src/)
+- Pushed to GitHub, auto-deploying to Vercel
+
+Stage Summary:
+- 5 critical/important issues fixed across 14 files
+- Order status API now fully secured (was completely open to unauthenticated abuse)
+- OTP/2FA now has real SMS/WhatsApp delivery (Twilio + Fonnte)
+- Sellers can now update bank account and store details
+- Advanced product search with facets available
+- Estimated readiness: 60% → 70%+
