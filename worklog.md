@@ -758,3 +758,37 @@ Work Log:
 - Final tsc check: 0 errors in src/ directory (only 1 unrelated error in skills/ directory)
 - ESLint: 0 errors, 0 warnings
 - Dev server running cleanly on port 3000
+
+---
+Task ID: 1-8
+Agent: Main Orchestrator
+Task: Fix all Priority 1 (launch-blocking) items with the best approach
+
+Work Log:
+- Analyzed current project state: found many Priority 1 items were already partially fixed from previous phases
+- Discovered NEW critical issues not in original audit: broken CSRF system, admin financial bugs
+- Fixed CSRF system: changed httpOnly=true to httpOnly=false for __Host-csrf-token cookie (double-submit pattern requires JS to read the cookie)
+- Fixed CSRF client: rewrote cookie parser to handle base64 tokens with =/+ chars properly
+- Fixed admin deposit approval: wrapped entire deposit approval + wallet credit in $transaction to prevent race condition; also updates transaction status
+- Fixed admin withdrawal rejection: CRITICAL bug — holdBalance was NOT refunded back to balance on rejection; now properly moves funds from holdBalance to balance atomically
+- Fixed admin withdrawal processed: added holdBalance decrement and mutation record when withdrawal is completed
+- Fixed ScreenName type: added 'privacy-policy' | 'terms-of-service' | 'refund-policy'
+- Fixed WithdrawStatus type: added 'processed' state
+- Set reactStrictMode: true in next.config.ts
+- Removed /api/test-db debug endpoint (security risk — exposed DB info)
+- Changed "Switch Role (Demo)" to dev-only (hidden in production with NODE_ENV check)
+- Replaced MOCK_USER with DEFAULT_USER_VALUES (sensible defaults, not mock data)
+- Delegated TypeScript error fixing to 2 parallel subagents — all 60+ errors in src/ resolved
+- All TypeScript errors in src/ are now 0
+- ESLint passes clean
+- Pushed to GitHub for Vercel auto-deploy
+
+Stage Summary:
+- CSRF system now works correctly (was completely broken before — all mutating API calls would fail with 403)
+- Admin financial operations are now atomic and correct (previously: race condition in deposits, lost funds on withdrawal rejection)
+- All TypeScript errors fixed — build is clean
+- Demo/test artifacts removed from production
+- Legal pages accessible via settings screen
+- reactStrictMode enabled for better React behavior
+- 35 files changed, 472 insertions, 191 deletions
+- Commit: 50181c8 pushed to main
