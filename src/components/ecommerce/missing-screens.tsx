@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { logger } from '@/lib/logger'
 
 const fadeIn = {
   initial: { opacity: 0, y: 16 },
@@ -817,7 +818,7 @@ export function VoucherScreen() {
           }
         }
       } catch (error) {
-        if (process.env.NODE_ENV === 'development') console.error('Failed to fetch vouchers:', error)
+        logger.warn({ component: 'vouchers', err: error }, 'Failed to fetch vouchers')
       }
       setIsLoadingVouchers(false)
     }

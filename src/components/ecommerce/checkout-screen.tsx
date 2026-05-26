@@ -16,6 +16,7 @@ import {
   PageHeader, EmptyState
 } from "./shared"
 import type { CartItem, ShippingOption, Address } from "@/lib/types"
+import { logger } from '@/lib/logger'
 import { useState, useMemo } from "react"
 
 // ==================== CHECKOUT STEP INDICATOR ====================
@@ -462,7 +463,7 @@ export function CheckoutScreen() {
             addOrder(localOrder)
           }
         } catch (error) {
-          if (process.env.NODE_ENV === 'development') console.error('Order creation failed:', error)
+          logger.warn({ component: 'checkout', err: error }, 'Order creation failed')
           // Fallback: add locally even if API fails — use correct status
           const order = {
             id: `o${Date.now()}-${group.seller.id}`,

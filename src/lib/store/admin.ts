@@ -1,4 +1,5 @@
 import type { StateCreator } from 'zustand'
+import { logger } from '@/lib/logger'
 import type { AdminSlice, AppStore } from './types'
 import type { AdminStats, WithdrawStatus, Order } from '../types'
 import { getAuthHeaders } from './getAuthHeaders'
@@ -38,7 +39,7 @@ export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set
         set({ divisions: data.divisions })
       }
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') console.error('Fetch divisions error:', error)
+      logger.warn({ component: 'admin', err: error }, 'Fetch divisions error')
     }
   },
   fetchAdminUsers: async () => {
@@ -65,7 +66,7 @@ export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set
         })
       }
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') console.error('Fetch admin users error:', error)
+      logger.warn({ component: 'admin', err: error }, 'Fetch admin users error')
     }
   },
   assignUserToDivision: async (userId, divisionId) => {
@@ -80,7 +81,7 @@ export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set
       get().fetchDivisions()
       get().fetchAdminUsers()
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') console.error('Assign user to division error:', error)
+      logger.warn({ component: 'admin', err: error }, 'Assign user to division error')
     }
   },
   updateDivision: async (divisionId, updates) => {
@@ -94,7 +95,7 @@ export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set
       // Refresh divisions
       get().fetchDivisions()
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') console.error('Update division error:', error)
+      logger.warn({ component: 'admin', err: error }, 'Update division error')
     }
   },
 
@@ -109,7 +110,7 @@ export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set
         set({ adminOrders: data.data as Order[] })
       }
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') console.error('Fetch admin orders error:', error)
+      logger.warn({ component: 'admin', err: error }, 'Fetch admin orders error')
     }
   },
   fetchAdminStats: async () => {
@@ -121,7 +122,7 @@ export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set
         set({ adminStats: data.data as AdminStats })
       }
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') console.error('Fetch admin stats error:', error)
+      logger.warn({ component: 'admin', err: error }, 'Fetch admin stats error')
     }
   },
   fetchAdminWithdrawals: async () => {
@@ -154,7 +155,7 @@ export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set
         set({ withdrawRequests: withdrawals })
       }
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') console.error('Fetch admin withdrawals error:', error)
+      logger.warn({ component: 'admin', err: error }, 'Fetch admin withdrawals error')
     }
   },
   fetchAdminBanners: async () => {
@@ -178,7 +179,7 @@ export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set
         })
       }
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') console.error('Fetch admin banners error:', error)
+      logger.warn({ component: 'admin', err: error }, 'Fetch admin banners error')
     }
   },
   fetchAdminComplaints: async () => {
@@ -204,7 +205,7 @@ export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set
         })
       }
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') console.error('Fetch admin complaints error:', error)
+      logger.warn({ component: 'admin', err: error }, 'Fetch admin complaints error')
     }
   },
 })

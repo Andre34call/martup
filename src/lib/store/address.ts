@@ -1,4 +1,5 @@
 import type { StateCreator } from 'zustand'
+import { logger } from '@/lib/logger'
 import type { AddressSlice, AppStore } from './types'
 import type { Address } from '../types'
 import { getAuthHeaders } from './getAuthHeaders'
@@ -38,7 +39,7 @@ export const createAddressSlice: StateCreator<AppStore, [], [], AddressSlice> = 
         }
       })
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') console.error('addAddress error:', error)
+      logger.warn({ component: 'address', err: error }, 'addAddress error')
       throw error
     }
   },
@@ -77,7 +78,7 @@ export const createAddressSlice: StateCreator<AppStore, [], [], AddressSlice> = 
         }
       })
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') console.error('updateAddress error:', error)
+      logger.warn({ component: 'address', err: error }, 'updateAddress error')
       throw error
     }
   },
@@ -108,7 +109,7 @@ export const createAddressSlice: StateCreator<AppStore, [], [], AddressSlice> = 
         }
       })
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') console.error('deleteAddress error:', error)
+      logger.warn({ component: 'address', err: error }, 'deleteAddress error')
       throw error
     }
   },
@@ -128,7 +129,7 @@ export const createAddressSlice: StateCreator<AppStore, [], [], AddressSlice> = 
         selectedAddressId: id,
       }))
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') console.error('setDefaultAddress error:', error)
+      logger.warn({ component: 'address', err: error }, 'setDefaultAddress error')
       throw error
     }
   },
@@ -150,7 +151,7 @@ export const createAddressSlice: StateCreator<AppStore, [], [], AddressSlice> = 
         selectedAddressId: defaultAddr?.id ?? get().selectedAddressId,
       })
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') console.error('fetchAddresses error:', error)
+      logger.warn({ component: 'address', err: error }, 'fetchAddresses error')
       throw error
     }
   },

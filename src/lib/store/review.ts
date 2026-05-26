@@ -1,4 +1,5 @@
 import type { StateCreator } from 'zustand'
+import { logger } from '@/lib/logger'
 import type { ReviewSlice, AppStore } from './types'
 import type { Review } from '../types'
 import { getAuthHeaders } from './getAuthHeaders'
@@ -18,7 +19,7 @@ export const createReviewSlice: StateCreator<AppStore, [], [], ReviewSlice> = (s
         images: review.images,
       }),
     }).catch((error) => {
-      if (process.env.NODE_ENV === 'development') console.error('Create review API error:', error)
+      logger.warn({ component: 'review', err: error }, 'Create review API error')
     })
 
     // Also update local state for immediate UI feedback
@@ -109,7 +110,7 @@ export const createReviewSlice: StateCreator<AppStore, [], [], ReviewSlice> = (s
         })
       }
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') console.error('Fetch product reviews error:', error)
+      logger.warn({ component: 'review', err: error }, 'Fetch product reviews error')
     }
   },
 })

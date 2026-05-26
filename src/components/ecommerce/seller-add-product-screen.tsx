@@ -10,6 +10,7 @@ import { uploadFile } from "@/lib/upload"
 import { formatPrice } from "@/lib/utils"
 import { PageHeader } from "./shared"
 import type { Product } from "@/lib/types"
+import { logger } from '@/lib/logger'
 import { useState, useRef } from "react"
 
 // ==================== CONSTANTS ====================
@@ -239,7 +240,7 @@ export function SellerAddProductScreen() {
           url: result.url,
         })
       } catch (error) {
-        if (process.env.NODE_ENV === 'development') console.error('Image upload failed:', error)
+        logger.warn({ component: 'seller-product', err: error }, 'Image upload failed')
         newImages.push({
           id: `pimg-${Date.now()}-${Math.random().toString(36).slice(2)}`,
           url: URL.createObjectURL(file),
@@ -275,7 +276,7 @@ export function SellerAddProductScreen() {
       setProductVideo({ file, url: result.url })
       showToast('Video berhasil diupload', 'success')
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') console.error('Video upload failed:', error)
+      logger.warn({ component: 'seller-product', err: error }, 'Video upload failed')
       setProductVideo({ file, url: URL.createObjectURL(file) })
       showToast('Gagal upload video ke server, menggunakan preview sementara', 'error')
     }
@@ -464,7 +465,7 @@ export function SellerAddProductScreen() {
       showToast(editingProduct ? "Produk berhasil diperbarui! 🎉" : "Produk berhasil dipublikasikan! 🎉", "success")
       setTimeout(() => navigate("seller-products"), 1500)
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') console.error('Product save failed:', error)
+      logger.warn({ component: 'seller-product', err: error }, 'Product save failed')
       showToast("Terjadi kesalahan saat menyimpan produk", "error")
     }
     setIsUploading(false)

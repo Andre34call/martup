@@ -1,4 +1,5 @@
 import type { StateCreator } from 'zustand'
+import { logger } from '@/lib/logger'
 import { signOut } from 'next-auth/react'
 import type { AuthSlice, AppStore } from './types'
 import type { Seller, UserRole, User } from '../types'
@@ -160,11 +161,11 @@ export const createAuthSlice: StateCreator<AppStore, [], [], AuthSlice> = (set, 
               }
             }
           } catch (fetchErr) {
-            if (process.env.NODE_ENV === 'development') console.error('Failed to fetch existing seller data:', fetchErr)
+            logger.warn({ component: 'auth', err: fetchErr }, 'Failed to fetch existing seller data')
           }
         }
       } catch (err) {
-        if (process.env.NODE_ENV === 'development') console.error('Auto seller register failed:', err)
+        logger.warn({ component: 'auth', err }, 'Auto seller register failed')
       }
     }
 

@@ -1,4 +1,5 @@
 import type { StateCreator } from 'zustand'
+import { logger } from '@/lib/logger'
 import type { ProductSlice, AppStore } from './types'
 import type { Product } from '../types'
 
@@ -95,7 +96,7 @@ export const createProductSlice: StateCreator<AppStore, [], [], ProductSlice> = 
 
       set({ products })
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') console.error('Failed to fetch products:', error)
+      logger.warn({ component: 'product', err: error }, 'Failed to fetch products')
     }
   },
   fetchCategories: async () => {
@@ -117,7 +118,7 @@ export const createProductSlice: StateCreator<AppStore, [], [], ProductSlice> = 
 
       set({ categories: (data.data || data.categories || []).map(mapCategory) })
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') console.error('Failed to fetch categories:', error)
+      logger.warn({ component: 'product', err: error }, 'Failed to fetch categories')
     }
   },
 })

@@ -1,3 +1,6 @@
+import { getCsrfToken } from '@/lib/csrf-client'
+import { logger } from '@/lib/logger'
+
 export interface UploadResult {
   url: string
   path: string
@@ -11,6 +14,10 @@ function getUploadAuthHeaders(): Record<string, string> {
     if (token) {
       headers['Authorization'] = `Bearer ${token}`
     }
+    const csrfToken = getCsrfToken()
+    if (csrfToken) {
+      headers['x-csrf-token'] = csrfToken
+    }
   }
   return headers
 }
@@ -20,24 +27,29 @@ export async function uploadFile(
   bucket: string = 'products',
   folder: string = 'images'
 ): Promise<UploadResult> {
-  const formData = new FormData()
-  formData.append('file', file)
-  formData.append('bucket', bucket)
-  formData.append('folder', folder)
+  try {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('bucket', bucket)
+    formData.append('folder', folder)
 
-  const response = await fetch('/api/upload', {
-    method: 'POST',
-    headers: getUploadAuthHeaders(),
-    body: formData,
-  })
+    const response = await fetch('/api/upload', {
+      method: 'POST',
+      headers: getUploadAuthHeaders(),
+      body: formData,
+    })
 
-  const data = await response.json()
+    const data = await response.json()
 
-  if (!data.success) {
-    throw new Error(data.error || 'Upload failed')
+    if (!data.success) {
+      throw new Error(data.error || 'Upload failed')
+    }
+
+    return data.data
+  } catch (error) {
+    logger.error({ error, file: file.name, bucket, folder }, 'File upload failed')
+    throw error
   }
-
-  return data.data
 }
 
 export async function uploadMultipleFiles(
@@ -45,6 +57,11 @@ export async function uploadMultipleFiles(
   bucket: string = 'products',
   folder: string = 'images'
 ): Promise<UploadResult[]> {
-  const results = await Promise.all(files.map((file) => uploadFile(file, bucket, folder)))
-  return results
+  try {
+    const results = await Promise.all(files.map((file) => uploadFile(file, bucket, folder)))
+    return results
+  } catch (error) {
+    logger.error({ error, fileCount: files.length, bucket, folder }, 'Multiple file upload failed')
+    throw error
+  }
 }

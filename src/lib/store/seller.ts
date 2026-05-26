@@ -1,4 +1,5 @@
 import type { StateCreator } from 'zustand'
+import { logger } from '@/lib/logger'
 import type { SellerSlice, AppStore } from './types'
 import type { WithdrawRequest, WithdrawStatus, SellerStats } from '../types'
 import { getAuthHeaders } from './getAuthHeaders'
@@ -60,7 +61,7 @@ export const createSellerSlice: StateCreator<AppStore, [], [], SellerSlice> = (s
         },
       }))
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') console.error('requestWithdraw error:', error)
+      logger.warn({ component: 'seller', err: error }, 'requestWithdraw error')
       throw error
     }
   },
@@ -110,7 +111,7 @@ export const createSellerSlice: StateCreator<AppStore, [], [], SellerSlice> = (s
         set({ sellerStats: data.data as SellerStats })
       }
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') console.error('Failed to fetch seller stats:', error)
+      logger.warn({ component: 'seller', err: error }, 'Failed to fetch seller stats')
     }
   },
   fetchWithdrawHistory: async (sellerId) => {
@@ -127,7 +128,7 @@ export const createSellerSlice: StateCreator<AppStore, [], [], SellerSlice> = (s
       const serverWithdrawals: WithdrawRequest[] = data.data?.withdrawals || data.data || []
       set({ withdrawRequests: serverWithdrawals })
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') console.error('fetchWithdrawHistory error:', error)
+      logger.warn({ component: 'seller', err: error }, 'fetchWithdrawHistory error')
       throw error
     }
   },

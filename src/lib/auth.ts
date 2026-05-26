@@ -1,4 +1,5 @@
 import type { NextAuthOptions } from 'next-auth'
+import { logger } from '@/lib/logger'
 import GoogleProvider from 'next-auth/providers/google'
 
 export const authOptions: NextAuthOptions = {
@@ -48,10 +49,10 @@ export const authOptions: NextAuthOptions = {
         })
         const data = await response.json()
         if (!data.success) {
-          if (process.env.NODE_ENV === 'development') console.error('Failed to sync user:', data.error)
+          logger.warn({ component: 'auth', error: data.error }, 'Failed to sync user')
         }
       } catch (error) {
-        if (process.env.NODE_ENV === 'development') console.error('Error syncing user:', error)
+        logger.warn({ component: 'auth', err: error }, 'Error syncing user')
       }
       return true
     },

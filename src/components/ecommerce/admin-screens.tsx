@@ -28,19 +28,7 @@ import { AnimatePresence } from "framer-motion"
 import { ConfirmDialog } from "./confirm-dialog"
 import { LoadingSpinner } from "./loading-spinner"
 
-// ==================== AUTH HEADER HELPER ====================
-// SECURITY: Only uses HMAC-signed bearer token
-// REMOVED: x-auth-user-id header (critical security vulnerability - allowed impersonation)
-function getAdminAuthHeaders(): Record<string, string> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('authToken')
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`
-    }
-  }
-  return headers
-}
+import { getAuthHeaders } from '@/lib/store/getAuthHeaders'
 
 // ==================== ANIMATION VARIANTS ====================
 const fadeIn = {
@@ -411,7 +399,7 @@ export function AdminUsers() {
     try {
       const res = await fetch('/api/admin/users', {
         method: 'PUT',
-        headers: getAdminAuthHeaders(),
+        headers: getAuthHeaders(true),
         body: JSON.stringify({ userId, updates }),
       })
       const data = await res.json()
@@ -430,7 +418,7 @@ export function AdminUsers() {
 
   const handleDeleteUser = async (userId: string) => {
     try {
-      const res = await fetch('/api/admin/users', { method: 'DELETE', headers: getAdminAuthHeaders(), body: JSON.stringify({ userId }) })
+      const res = await fetch('/api/admin/users', { method: 'DELETE', headers: getAuthHeaders(true), body: JSON.stringify({ userId }) })
       const data = await res.json()
       if (data.success) {
         showToast("User dihapus", "info")
@@ -627,7 +615,7 @@ export function AdminProducts() {
   const fetchAdminProducts = useCallback(async () => {
     try {
       setLoading(true)
-      const res = await fetch('/api/admin/products?limit=500')
+      const res = await fetch('/api/admin/products?limit=500', { headers: getAuthHeaders() })
       const data = await res.json()
       if (data.success) {
         const mapped: AdminProductItem[] = (data.data || []).map((p: any) => ({
@@ -656,7 +644,7 @@ export function AdminProducts() {
     try {
       const res = await fetch('/api/admin/products', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(true),
         body: JSON.stringify({ productId, status: newStatus }),
       })
       const data = await res.json()
@@ -675,7 +663,7 @@ export function AdminProducts() {
     try {
       const res = await fetch('/api/admin/products', {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(true),
         body: JSON.stringify({ productId }),
       })
       const data = await res.json()
@@ -1151,7 +1139,7 @@ export function AdminBanner() {
     try {
       const res = await fetch('/api/admin/banners', {
         method: 'PUT',
-        headers: getAdminAuthHeaders(),
+        headers: getAuthHeaders(true),
         body: JSON.stringify({ bannerId, isActive: !isActive }),
       })
       const data = await res.json()
@@ -1170,7 +1158,7 @@ export function AdminBanner() {
     try {
       const res = await fetch('/api/admin/banners', {
         method: 'DELETE',
-        headers: getAdminAuthHeaders(),
+        headers: getAuthHeaders(true),
         body: JSON.stringify({ bannerId }),
       })
       const data = await res.json()
@@ -1210,7 +1198,7 @@ export function AdminBanner() {
 
       const res = await fetch('/api/admin/banners', {
         method: 'POST',
-        headers: getAdminAuthHeaders(),
+        headers: getAuthHeaders(true),
         body: JSON.stringify(body),
       })
       const data = await res.json()

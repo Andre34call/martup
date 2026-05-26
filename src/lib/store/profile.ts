@@ -1,4 +1,5 @@
 import type { StateCreator } from 'zustand'
+import { logger } from '@/lib/logger'
 import type { ProfileSlice, AppStore } from './types'
 import { getAuthHeaders } from './getAuthHeaders'
 
@@ -37,7 +38,7 @@ export const createProfileSlice: StateCreator<AppStore, [], [], ProfileSlice> = 
           : null,
       }))
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') console.error('uploadAvatar error:', error)
+      logger.warn({ component: 'profile', err: error }, 'uploadAvatar error')
       throw error
     }
   },
@@ -58,7 +59,7 @@ export const createProfileSlice: StateCreator<AppStore, [], [], ProfileSlice> = 
           : null,
       }))
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') console.error('removeAvatar error:', error)
+      logger.warn({ component: 'profile', err: error }, 'removeAvatar error')
       throw error
     }
   },

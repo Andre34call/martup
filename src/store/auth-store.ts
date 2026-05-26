@@ -4,6 +4,7 @@ import { create } from 'zustand'
 import { apiClient } from '@/lib/api-client'
 import { useAppStore, useCartStore, useWishlistStore } from '@/lib/store'
 import type { User, Seller, UserRole } from '@/lib/types'
+import { logger } from '@/lib/logger'
 
 // ==================== AUTH STORE ====================
 
@@ -101,7 +102,7 @@ function syncAllStores(userId: string) {
     useAppStore.getState().fetchUserData(userId),
     useCartStore.getState().mergeLocalToServer(userId),
   ]).catch((err) => {
-    if (process.env.NODE_ENV === 'development') console.error('Failed to sync stores after auth:', err)
+    logger.warn({ component: 'auth-store', err: err }, 'Failed to sync stores after auth')
   })
 }
 

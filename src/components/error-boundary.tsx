@@ -4,6 +4,7 @@ import { Component, ReactNode } from 'react'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { captureException } from '@/lib/sentry'
+import { logger } from '@/lib/logger'
 
 interface Props {
   children: ReactNode
@@ -26,7 +27,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    if (process.env.NODE_ENV === 'development') console.error('ErrorBoundary caught:', error, errorInfo)
+    logger.warn({ component: 'error-boundary', err: error, componentStack: errorInfo.componentStack }, 'ErrorBoundary caught')
     captureException(error, {
       componentStack: errorInfo.componentStack ?? undefined,
     })

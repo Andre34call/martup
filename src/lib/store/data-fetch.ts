@@ -1,4 +1,5 @@
 import type { StateCreator } from 'zustand'
+import { logger } from '@/lib/logger'
 import type { DataFetchSlice, AppStore } from './types'
 import type { User, UserRole, Seller, OrderStatus, Notification as AppNotification } from '../types'
 import { getAuthHeaders } from './getAuthHeaders'
@@ -249,7 +250,7 @@ export const createDataFetchSlice: StateCreator<AppStore, [], [], DataFetchSlice
 
       set({ isDataLoaded: true })
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') console.error('Failed to fetch user data:', error)
+      logger.warn({ component: 'data-fetch', err: error }, 'Failed to fetch user data')
     }
   },
 
@@ -270,7 +271,7 @@ export const createDataFetchSlice: StateCreator<AppStore, [], [], DataFetchSlice
         })
       }
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') console.error('Failed to fetch home banners:', error)
+      logger.warn({ component: 'data-fetch', err: error }, 'Failed to fetch home banners')
     }
   },
 })

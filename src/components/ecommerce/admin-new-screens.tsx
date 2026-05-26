@@ -21,19 +21,7 @@ import { useState, useEffect, useCallback } from "react"
 import { ConfirmDialog } from "./confirm-dialog"
 import { LoadingSpinner } from "./loading-spinner"
 
-// ==================== AUTH HEADER HELPER ====================
-// SECURITY: Only uses HMAC-signed bearer token
-// REMOVED: x-auth-user-id header (critical security vulnerability - allowed impersonation)
-function getAdminAuthHeaders(): Record<string, string> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('authToken')
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`
-    }
-  }
-  return headers
-}
+import { getAuthHeaders } from '@/lib/store/getAuthHeaders'
 
 // ==================== ANIMATION VARIANTS ====================
 const fadeIn = {
@@ -153,7 +141,7 @@ export function AdminCategories() {
   const fetchCategories = useCallback(async () => {
     try {
       setLoading(true)
-      const res = await fetch("/api/admin/categories", { headers: getAdminAuthHeaders() })
+      const res = await fetch("/api/admin/categories", { headers: getAuthHeaders() })
       const data = await res.json()
       if (data.success) {
         setCategories(data.data)
@@ -187,7 +175,7 @@ export function AdminCategories() {
     try {
       const res = await fetch("/api/admin/categories", {
         method: "POST",
-        headers: getAdminAuthHeaders(),
+        headers: getAuthHeaders(true),
         body: JSON.stringify({
           name: form.name,
           icon: form.icon || null,
@@ -214,7 +202,7 @@ export function AdminCategories() {
     try {
       const res = await fetch("/api/admin/categories", {
         method: "PUT",
-        headers: getAdminAuthHeaders(),
+        headers: getAuthHeaders(true),
         body: JSON.stringify({ categoryId, ...updates }),
       })
       const data = await res.json()
@@ -233,7 +221,7 @@ export function AdminCategories() {
     try {
       const res = await fetch("/api/admin/categories", {
         method: "DELETE",
-        headers: getAdminAuthHeaders(),
+        headers: getAuthHeaders(true),
         body: JSON.stringify({ categoryId }),
       })
       const data = await res.json()
@@ -454,7 +442,7 @@ export function AdminVouchers() {
   const fetchVouchers = useCallback(async () => {
     try {
       setLoading(true)
-      const res = await fetch("/api/admin/vouchers", { headers: getAdminAuthHeaders() })
+      const res = await fetch("/api/admin/vouchers", { headers: getAuthHeaders() })
       const data = await res.json()
       if (data.success) {
         setVouchers(data.data)
@@ -492,7 +480,7 @@ export function AdminVouchers() {
     try {
       const res = await fetch("/api/admin/vouchers", {
         method: "POST",
-        headers: getAdminAuthHeaders(),
+        headers: getAuthHeaders(true),
         body: JSON.stringify({
           code: form.code.toUpperCase(),
           name: form.name,
@@ -525,7 +513,7 @@ export function AdminVouchers() {
     try {
       const res = await fetch("/api/admin/vouchers", {
         method: "PUT",
-        headers: getAdminAuthHeaders(),
+        headers: getAuthHeaders(true),
         body: JSON.stringify({ voucherId, isActive: !isActive }),
       })
       const data = await res.json()
@@ -544,7 +532,7 @@ export function AdminVouchers() {
     try {
       const res = await fetch("/api/admin/vouchers", {
         method: "DELETE",
-        headers: getAdminAuthHeaders(),
+        headers: getAuthHeaders(true),
         body: JSON.stringify({ voucherId }),
       })
       const data = await res.json()
@@ -849,7 +837,7 @@ export function AdminDeposits() {
   const fetchDeposits = useCallback(async () => {
     try {
       setLoading(true)
-      const res = await fetch("/api/admin/deposits", { headers: getAdminAuthHeaders() })
+      const res = await fetch("/api/admin/deposits", { headers: getAuthHeaders() })
       const data = await res.json()
       if (data.success) {
         setDeposits(data.data)
@@ -877,7 +865,7 @@ export function AdminDeposits() {
     try {
       const res = await fetch("/api/admin/deposits", {
         method: "PUT",
-        headers: getAdminAuthHeaders(),
+        headers: getAuthHeaders(true),
         body: JSON.stringify({ depositId, status: "success" }),
       })
       const data = await res.json()
@@ -899,7 +887,7 @@ export function AdminDeposits() {
         try {
           const res = await fetch("/api/admin/deposits", {
             method: "PUT",
-            headers: getAdminAuthHeaders(),
+            headers: getAuthHeaders(true),
             body: JSON.stringify({ depositId: showRejectModal, status: "failed", adminNote: rejectNote || "Ditolak oleh admin" }),
           })
           const data = await res.json()
@@ -1165,7 +1153,7 @@ export function AdminCampaigns() {
   const fetchCampaigns = useCallback(async () => {
     try {
       setLoading(true)
-      const res = await fetch("/api/admin/campaigns", { headers: getAdminAuthHeaders() })
+      const res = await fetch("/api/admin/campaigns", { headers: getAuthHeaders() })
       const data = await res.json()
       if (data.success) {
         setCampaigns(data.data)
@@ -1196,7 +1184,7 @@ export function AdminCampaigns() {
     try {
       const res = await fetch("/api/admin/campaigns", {
         method: "PUT",
-        headers: getAdminAuthHeaders(),
+        headers: getAuthHeaders(true),
         body: JSON.stringify({ campaignId, isActive: !isActive }),
       })
       const data = await res.json()
@@ -1478,7 +1466,7 @@ export function AdminSettings() {
   const fetchSettings = useCallback(async () => {
     try {
       setLoading(true)
-      const res = await fetch("/api/admin/settings", { headers: getAdminAuthHeaders() })
+      const res = await fetch("/api/admin/settings", { headers: getAuthHeaders() })
       const data = await res.json()
       if (data.success) {
         setSettings(data.data)
@@ -1500,7 +1488,7 @@ export function AdminSettings() {
       setSaving(true)
       const res = await fetch("/api/admin/settings", {
         method: "PUT",
-        headers: getAdminAuthHeaders(),
+        headers: getAuthHeaders(true),
         body: JSON.stringify(settings),
       })
       const data = await res.json()

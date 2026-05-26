@@ -3,25 +3,23 @@
 import { useEffect, useRef } from 'react'
 import { useAuthStore } from '@/store/auth-store'
 import { useAppStore, useCartStore, useWishlistStore } from '@/lib/store'
+import { logger } from '@/lib/logger'
 
 /**
  * useDataSync - Watches auth state and syncs data from API when user logs in.
- * Call this hook once in a top-level client component (e.g. the app layout or provider).
  *
- * When the user becomes authenticated (isAuthenticated + userId), it calls
- * fetchUserData on the app store and mergeLocalToServer/syncFromServer on cart/wishlist.
- * When the user logs out, it resets the isDataLoaded flag so data will be
- * re-fetched on next login.
+ * On login: fetches user data, merges local cart to server, syncs wishlist from server.
+ * Note: mergeLocalToServer internally calls syncFromServer, so we don't need a separate call.
+ * On logout: resets the isDataLoaded flag so data will be re-fetched on next login.
  */
 export function useDataSync() {
   const userId = useAuthStore((s) => s.userId)
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   const isDataLoaded = useAppStore((s) => s.isDataLoaded)
 
-  // Use refs to hold stable references to store actions
   const fetchUserData = useAppStore((s) => s.fetchUserData)
   const cartMergeLocalToServer = useCartStore((s) => s.mergeLocalToServer)
-  const cartSyncFromServer = useCartStore((s) => s.syncFromServer)
+  const wishlistSyncFromServer = useWishlistStore((s) => s.syncWishlistFromServer)
 
   const prevAuthRef = useRef(false)
   const syncingRef = useRef(false)
@@ -36,10 +34,10 @@ export function useDataSync() {
         syncingRef.current = true
         Promise.all([
           fetchUserData(userId),
-          cartMergeLocalToServer(userId),
-          cartSyncFromServer(userId),
+          cartMergeLocalToServer(userId), // mergeLocalToServer internally calls syncFromServer
+          wishlistSyncFromServer(userId),  // Sync wishlist from server
         ]).catch((err) => {
-          if (process.env.NODE_ENV === 'development') console.error('Failed to sync data from API:', err)
+          logger.warn({ component: 'data-sync', err }, 'Failed to sync data from API')
         }).finally(() => {
           syncingRef.current = false
         })
@@ -50,5 +48,5 @@ export function useDataSync() {
     if (wasAuthenticated && !isAuthenticated) {
       useAppStore.setState({ isDataLoaded: false })
     }
-  }, [isAuthenticated, userId, isDataLoaded, fetchUserData, cartMergeLocalToServer, cartSyncFromServer])
+  }, [isAuthenticated, userId, isDataLoaded, fetchUserData, cartMergeLocalToServer, wishlistSyncFromServer])
 }

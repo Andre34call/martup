@@ -6,6 +6,7 @@ import { useState, useEffect, useRef } from "react"
 import { useSession } from "next-auth/react"
 import { useAppStore, useCartStore, useWishlistStore } from "@/lib/store"
 import { setSentryUser, clearSentryUser } from "@/lib/sentry"
+import { logger } from '@/lib/logger'
 
 function ZustandHydration({ children }: { children: React.ReactNode }) {
   const hydrated = useRef(false)
@@ -80,11 +81,12 @@ function DataFetcher({ children }: { children: React.ReactNode }) {
             fetchUserData(data.user.id)
             // Merge local cart to server & connect WebSocket
             useCartStore.getState().mergeLocalToServer(data.user.id)
+            useWishlistStore.getState().syncWishlistFromServer(data.user.id)
             connectSocket()
           }
         })
         .catch(err => {
-          if (process.env.NODE_ENV === 'development') console.error('Failed to fetch user data:', err)
+          logger.warn({ component: 'providers', err: err }, 'Failed to fetch user data')
         })
     }
   }, [status, session, fetchUserData, isAuthenticated, login, connectSocket])

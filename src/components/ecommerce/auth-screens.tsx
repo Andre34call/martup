@@ -7,10 +7,11 @@ import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Separator } from "@/components/ui/separator"
 import { InputOTP, InputOTPGroup, InputOTPSlot, InputOTPSeparator } from "@/components/ui/input-otp"
-import { useAppStore, useCartStore } from "@/lib/store"
+import { useAppStore, useCartStore, useWishlistStore } from "@/lib/store"
 import { signIn } from "next-auth/react"
 import { useState, useEffect, useCallback } from "react"
 import type { User } from "@/lib/types"
+import { logger } from '@/lib/logger'
 
 // ==================== VALIDATION HELPERS ====================
 function isValidEmail(email: string): boolean {
@@ -331,12 +332,13 @@ export function LoginScreen() {
         await fetchUserData(data.user.id)
         // Merge local cart to server & connect WebSocket
         useCartStore.getState().mergeLocalToServer(data.user.id)
+        useWishlistStore.getState().syncWishlistFromServer(data.user.id)
         connectSocket()
       } else {
         showToast(data.error || 'Login gagal. Periksa email dan password Anda.', 'error')
       }
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') console.error('Login failed:', error)
+      logger.warn({ component: 'auth', err: error }, 'Login failed')
       showToast('Terjadi kesalahan koneksi. Coba lagi nanti.', 'error')
     }
 
@@ -606,13 +608,14 @@ export function RegisterScreen() {
         await fetchUserData(data.user.id)
         // Merge local cart to server & connect WebSocket
         useCartStore.getState().mergeLocalToServer(data.user.id)
+        useWishlistStore.getState().syncWishlistFromServer(data.user.id)
         connectSocket()
         showToast("Registrasi berhasil! 🎉", "success")
       } else {
         showToast(data.error || 'Registrasi gagal. Coba lagi.', "error")
       }
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') console.error('Register failed:', error)
+      logger.warn({ component: 'auth', err: error }, 'Register failed')
       showToast('Terjadi kesalahan koneksi. Coba lagi nanti.', "error")
     }
 
@@ -877,7 +880,7 @@ export function OTPScreen() {
         showToast(data.error || 'Gagal mengirim OTP. Coba lagi.', 'error')
       }
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') console.error('OTP send failed:', error)
+      logger.warn({ component: 'auth', err: error }, 'OTP send failed')
       showToast('Terjadi kesalahan koneksi. Coba lagi nanti.', 'error')
     }
 
@@ -922,13 +925,14 @@ export function OTPScreen() {
         await fetchUserData(data.user.id)
         // Merge local cart to server & connect WebSocket
         useCartStore.getState().mergeLocalToServer(data.user.id)
+        useWishlistStore.getState().syncWishlistFromServer(data.user.id)
         connectSocket()
         showToast('Login berhasil! 🎉', 'success')
       } else {
         showToast(data.error || 'Verifikasi OTP gagal. Coba lagi.', 'error')
       }
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') console.error('OTP verification failed:', error)
+      logger.warn({ component: 'auth', err: error }, 'OTP verification failed')
       showToast('Terjadi kesalahan koneksi. Coba lagi nanti.', 'error')
     }
 

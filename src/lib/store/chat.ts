@@ -1,4 +1,5 @@
 import type { StateCreator } from 'zustand'
+import { logger } from '@/lib/logger'
 import type { ChatSlice, AppStore } from './types'
 import type { ChatRoom, ChatMessage } from '../types'
 import { getAuthHeaders } from './getAuthHeaders'
@@ -112,7 +113,7 @@ export const createChatSlice: StateCreator<AppStore, [], [], ChatSlice> = (set, 
         }
       }
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') console.error('Fetch chat rooms error:', error)
+      logger.warn({ component: 'chat', err: error }, 'Fetch chat rooms error')
     }
   },
 
@@ -139,7 +140,7 @@ export const createChatSlice: StateCreator<AppStore, [], [], ChatSlice> = (set, 
         }))
       }
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') console.error('Fetch chat messages error:', error)
+      logger.warn({ component: 'chat', err: error }, 'Fetch chat messages error')
     }
   },
 
@@ -194,7 +195,7 @@ export const createChatSlice: StateCreator<AppStore, [], [], ChatSlice> = (set, 
         }))
       }
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') console.error('Send chat message error:', error)
+      logger.warn({ component: 'chat', err: error }, 'Send chat message error')
     }
   },
 
@@ -250,7 +251,7 @@ export const createChatSlice: StateCreator<AppStore, [], [], ChatSlice> = (set, 
       }
       return null
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') console.error('Create chat room error:', error)
+      logger.warn({ component: 'chat', err: error }, 'Create chat room error')
       return null
     }
   },
@@ -379,7 +380,7 @@ export const createChatSlice: StateCreator<AppStore, [], [], ChatSlice> = (set, 
 
     // Handle connection errors
     socket.on('connect_error', (error) => {
-      if (process.env.NODE_ENV === 'development') console.error('Socket connection error:', error)
+      logger.warn({ component: 'chat', err: error }, 'Socket connection error')
       set({ isSocketConnected: false })
     })
 

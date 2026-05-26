@@ -997,3 +997,27 @@ Stage Summary:
 - Console statements reduced from 206 to 67 (all production-safe, dev-only guarded)
 - ESLint clean, TypeScript clean in src/, server responding HTTP 200
 - Commit: 8b28f39 pushed to main, auto-deploying to Vercel
+
+---
+Task ID: Phase-1-Fix
+Agent: Main Agent
+Task: Phase 1 — Fix Critical Data Loss (CSRF, Wishlist Sync, Cart Sync, Upload, Logger)
+
+Work Log:
+- Fixed upload.ts — replaced duplicate getUploadAuthHeaders() with CSRF-aware version using getCsrfToken()
+- Fixed admin-new-screens.tsx — replaced local getAdminAuthHeaders() with shared getAuthHeaders() including CSRF for mutations
+- Fixed admin-screens.tsx — same fix: replaced getAdminAuthHeaders() + added auth headers to previously unprotected admin API calls (products GET/PUT/DELETE)
+- Fixed wishlist.ts — toggleWishlist now checks API response success (not just network errors), reverts on API failure
+- Fixed use-data-sync.ts — added syncWishlistFromServer call on login, removed redundant cartSyncFromServer (mergeLocalToServer already calls it)
+- Fixed providers.tsx — added useWishlistStore.getState().syncWishlistFromServer() after Google OAuth login
+- Fixed auth-screens.tsx — added wishlist sync after email login, registration, and OTP verification
+- Replaced 50+ console.error calls with Pino logger across 18 files (stores, components, lib)
+- Removed shared.tsx.bak cleanup file
+- ESLint passes clean, dev server running without errors
+
+Stage Summary:
+- CSRF protection now covers ALL mutating API calls (admin, upload, cart, wishlist)
+- Wishlist properly syncs from server on all login paths
+- Cart sync no longer has redundant double-fetch
+- All console.error replaced with structured Pino logging
+- Only console.warn remaining is in middleware.ts (Edge Runtime, intentional)
