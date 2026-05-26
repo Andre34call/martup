@@ -9,9 +9,11 @@ if (SENTRY_DSN) {
     replaysOnErrorSampleRate: 1.0,
     debug: false,
     tracesSampleRate: 0.1,
-    replaysIntegration: Sentry.replayIntegration({
-      maskAllText: true,
-      maskAllInputs: true,
-    }),
+    integrations: [
+      Sentry.replayIntegration({
+        maskAllText: true,
+        maskAllInputs: true,
+      }),
+    ],
   });
 }

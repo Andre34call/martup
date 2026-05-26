@@ -4,6 +4,7 @@ import { checkRateLimit } from '@/lib/auth-middleware'
 import crypto from 'crypto'
 
 import { logger } from '@/lib/logger'
+import { sendOTP } from '@/lib/sms-gateway'
 // OTP configuration
 const OTP_LENGTH = 6
 const OTP_EXPIRY_MINUTES = 5
@@ -97,9 +98,19 @@ export async function POST(request: NextRequest) {
       `${user.id}:${Date.now()}:${crypto.createHmac('sha256', process.env.NEXTAUTH_SECRET || 'dev-secret').update(`${user.id}:${otpCode}`).digest('hex').slice(0, 16)}`
     ).toString('base64url')
 
-    // In production: Send OTP via SMS gateway (Twilio, Vonage, etc.)
-    // For now: Log it and return it in dev mode
-    logger.info(`[OTP] Code ${otpCode} sent to ${normalizedPhone} (expires in ${OTP_EXPIRY_MINUTES} min)`)
+    // Send OTP via configured SMS gateway (mock/twilio/fonnte)
+    const smsResult = await sendOTP(normalizedPhone, otpCode, OTP_EXPIRY_MINUTES)
+    if (smsResult.success) {
+      logger.info(
+        { component: 'otp', provider: smsResult.provider, messageId: smsResult.messageId, phone: normalizedPhone },
+        `[OTP] Code sent to ${normalizedPhone} via ${smsResult.provider}`
+      )
+    } else {
+      logger.warn(
+        { component: 'otp', provider: smsResult.provider, error: smsResult.error, phone: normalizedPhone },
+        `[OTP] Failed to send code to ${normalizedPhone} via ${smsResult.provider}: ${smsResult.error}`
+      )
+    }
 
     const isDev = process.env.NODE_ENV === 'development'
 

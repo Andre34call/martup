@@ -4,6 +4,7 @@ import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middle
 import crypto from 'crypto'
 import bcrypt from 'bcryptjs'
 import { logger } from '@/lib/logger'
+import { sendOTP } from '@/lib/sms-gateway'
 
 // OTP configuration for 2FA
 const OTP_LENGTH = 6
@@ -105,8 +106,19 @@ export async function POST(request: NextRequest) {
         data: { otpCode: newOtpCode, otpExpiry },
       })
 
-      // In production: Send OTP via SMS gateway
-      logger.info({ phone: maskPhone(user.phone) }, `[2FA] OTP sent (expires in ${OTP_EXPIRY_MINUTES} min)`)
+      // Send OTP via configured SMS gateway (mock/twilio/fonnte)
+      const smsResult = await sendOTP(user.phone, newOtpCode, OTP_EXPIRY_MINUTES)
+      if (smsResult.success) {
+        logger.info(
+          { component: '2fa', provider: smsResult.provider, messageId: smsResult.messageId, phone: maskPhone(user.phone) },
+          `[2FA] OTP sent via ${smsResult.provider} (expires in ${OTP_EXPIRY_MINUTES} min)`
+        )
+      } else {
+        logger.warn(
+          { component: '2fa', provider: smsResult.provider, error: smsResult.error, phone: maskPhone(user.phone) },
+          `[2FA] Failed to send OTP via ${smsResult.provider}: ${smsResult.error}`
+        )
+      }
 
       const isDev = process.env.NODE_ENV === 'development'
 
