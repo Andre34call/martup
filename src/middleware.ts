@@ -140,7 +140,7 @@ export async function middleware(request: NextRequest) {
   if (!pathname.startsWith('/api/')) {
     // Page requests: just ensure CSRF cookie exists, no validation needed
     if (request.method === 'GET') {
-      const existingCsrfCookie = request.cookies.get('__Host-csrf-token')
+      const existingCsrfCookie = request.cookies.get('csrf-token')
       if (!existingCsrfCookie) {
         const { response: updatedResponse } = await issueCsrfToken(response)
         return updatedResponse
@@ -151,7 +151,7 @@ export async function middleware(request: NextRequest) {
 
   // For API GET requests: issue a new CSRF token if one doesn't exist
   if (request.method === 'GET') {
-    const existingCsrfCookie = request.cookies.get('__Host-csrf-token')
+    const existingCsrfCookie = request.cookies.get('csrf-token')
     if (!existingCsrfCookie) {
       const { response: updatedResponse } = await issueCsrfToken(response)
       return updatedResponse

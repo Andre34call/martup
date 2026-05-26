@@ -1006,6 +1006,19 @@ export function AddressScreen() {
       return
     }
 
+    // Validate phone format (Indonesian: starts with 0 or +62, 10-15 digits)
+    const phoneDigits = formPhone.replace(/[^\d+]/g, '')
+    if (!/^(0\d{9,14}|\+62\d{9,14})$/.test(phoneDigits)) {
+      showToast("Format nomor HP tidak valid (gunakan 08xx atau +628xx, 10-15 digit)", "error")
+      return
+    }
+
+    // Validate postal code (exactly 5 digits)
+    if (!/^\d{5}$/.test(formPostalCode.trim())) {
+      showToast("Kode pos harus 5 digit angka", "error")
+      return
+    }
+
     setIsSaving(true)
     try {
       if (editingId) {
@@ -1038,8 +1051,9 @@ export function AddressScreen() {
       }
       resetForm()
       setShowAddForm(false)
-    } catch {
-      showToast("Gagal menyimpan alamat", "error")
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Gagal menyimpan alamat"
+      showToast(message, "error")
     } finally {
       setIsSaving(false)
     }

@@ -337,6 +337,7 @@ export function LoginScreen() {
         // Store auth token
         if (data.token) {
           localStorage.setItem('authToken', data.token)
+          localStorage.setItem('martup_token', data.token)
         }
         const user: User = {
           id: data.user.id,
@@ -613,6 +614,7 @@ export function RegisterScreen() {
         // Store auth token if provided
         if (data.token) {
           localStorage.setItem('authToken', data.token)
+          localStorage.setItem('martup_token', data.token)
         }
         const user: User = {
           id: data.user.id,
@@ -930,6 +932,7 @@ export function OTPScreen() {
       if (data.success && data.user) {
         if (data.token) {
           localStorage.setItem('authToken', data.token)
+          localStorage.setItem('martup_token', data.token)
         }
         const user: User = {
           id: data.user.id,

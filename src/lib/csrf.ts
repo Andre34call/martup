@@ -11,7 +11,7 @@ import { env } from '@/lib/env'
 // 4. The cookie is NOT httpOnly because the double-submit pattern requires JS to read it
 //    and copy the value to a custom header. Protection comes from SameSite + CORS.
 
-const CSRF_COOKIE_NAME = '__Host-csrf-token'
+const CSRF_COOKIE_NAME = 'csrf-token'
 const CSRF_HEADER_NAME = 'x-csrf-token'
 const CSRF_TOKEN_EXPIRY = 24 * 60 * 60 * 1000 // 24 hours
 
@@ -146,8 +146,8 @@ export function setCsrfCookie(response: NextResponse, token: string): NextRespon
     // (2) attackers cannot read cross-origin cookies, (3) attackers cannot set custom headers.
     // This cookie is NOT a session identifier — it's a single-use CSRF nonce.
     httpOnly: false,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    secure: true,
+    sameSite: 'lax',
     path: '/',
     maxAge: 86400, // 24 hours
   })

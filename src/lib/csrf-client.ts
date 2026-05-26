@@ -4,10 +4,10 @@
 // Reads the CSRF token from cookie and attaches it to outgoing requests.
 // Works with the server-side CSRF middleware in src/lib/csrf.ts
 //
-// IMPORTANT: The __Host-csrf-token cookie is set with httpOnly=false
+// IMPORTANT: The csrf-token cookie is set with httpOnly=false
 // specifically so that JavaScript can read it for the double-submit pattern.
 
-const CSRF_COOKIE_NAME = '__Host-csrf-token'
+const CSRF_COOKIE_NAME = 'csrf-token'
 const CSRF_HEADER_NAME = 'x-csrf-token'
 
 /**

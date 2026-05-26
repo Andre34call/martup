@@ -24,8 +24,9 @@ export const createAuthSlice: StateCreator<AppStore, [], [], AuthSlice> = (set, 
   }),
 
   logout: async () => {
-    // Clear auth token
+    // Clear auth tokens
     localStorage.removeItem('authToken')
+    localStorage.removeItem('martup_token')
     // Sign out from NextAuth to clear the session cookie
     // This prevents DataFetcher from re-authenticating the user
     try {
