@@ -512,3 +512,60 @@ Stage Summary:
 - CartItem has unique constraint preventing duplicate entries
 - Product search has query limit caps (DoS prevention)
 - Database info endpoint now admin-only
+
+---
+Task ID: 4.1
+Agent: Sentry Setup Agent
+Task: Set up Sentry error monitoring for the MartUp Next.js project
+
+Work Log:
+- Created sentry.client.config.ts at project root — client-side Sentry init with DSN guard, session replay (10% session, 100% on-error), traces 10%, text/input masking
+- Created sentry.server.config.ts at project root — server-side Sentry init with DSN guard, traces 10%
+- Created sentry.edge.config.ts at project root — edge runtime Sentry init with DSN guard, traces 10%
+- Updated next.config.ts — wrapped with withSentryConfig from @sentry/nextjs, preserved output:"standalone", ignoreBuildErrors:true, reactStrictMode:false; added silent:true, hideSourceMaps:true
+- Created src/lib/sentry.ts — shared utilities: captureException, captureMessage, setSentryUser, clearSentryUser, addBreadcrumb, setTag, setExtra, isSentryReady; all are safe no-ops when DSN not configured
+- Updated src/components/error-boundary.tsx — componentDidCatch now calls captureException with componentStack as extra
+- Updated src/components/ecommerce/providers.tsx — setSentryUser on login, clearSentryUser on logout
+- All lint checks pass (0 errors, 0 warnings)
+- Dev server running cleanly, auto-restarted after next.config.ts change
+
+Stage Summary:
+- Sentry error monitoring fully integrated with @sentry/nextjs v10.53.1
+- DSN comes from NEXT_PUBLIC_SENTRY_DSN env var; if missing, all Sentry calls are silent no-ops
+- Client config includes session replay with privacy masking
+- next.config.ts wrapped with withSentryConfig preserving all existing options
+- ErrorBoundary now reports caught errors to Sentry
+- User context (id, email, name, role) set on login, cleared on logout
+- No existing functionality broken
+
+---
+Task ID: 4.3b
+Agent: CSRF Store Update Agent
+Task: Update all Zustand store files and component files to use CSRF tokens for mutating requests
+
+Work Log:
+- Updated 10 store files to use `getAuthHeaders(true)` for mutating requests (POST, PUT, DELETE, PATCH) while keeping `getAuthHeaders()` for GET requests
+- Updated 4 component files that make direct mutating fetch calls
+- cart.ts: 7 mutations updated (addItem POST, removeItem DELETE, updateQuantity PUT, toggleCheck PUT, checkAll PUT, clearCart POST, mergeLocalToServer POST)
+- wishlist.ts: 2 mutations updated (DELETE, POST)
+- address.ts: 4 mutations updated (POST add, PUT update, DELETE, PUT setDefault)
+- review.ts: 1 mutation updated (POST)
+- auth.ts: 1 mutation updated (POST seller/register)
+- seller.ts: 1 mutation updated (POST withdraw)
+- profile.ts: 2 mutations updated (POST avatar upload with FormData Content-Type removal, DELETE avatar)
+- chat.ts: 3 mutations updated (PUT markRead, POST sendMessage, POST createRoom)
+- admin.ts: 2 mutations updated (PATCH assignDivision, PATCH updateDivision)
+- notification.ts: 2 mutations updated (PUT markRead, PUT markAll) — also fixed missing auth headers (was using only Content-Type)
+- checkout-screen.tsx: 3 mutations updated (POST voucher validate, POST order create, POST wallet deduct)
+- seller-add-product-screen.tsx: 2 mutations updated (PUT update product, POST create product)
+- seller-screens.tsx: 3 mutations updated (DELETE product, PUT update order status x2)
+- missing-screens.tsx: 1 mutation updated (POST wallet top up)
+- All GET requests correctly continue using `getAuthHeaders()` without CSRF
+- `bun run lint` passes with 0 errors, 0 warnings
+- Dev server running cleanly
+
+Stage Summary:
+- 28 mutating request calls across 14 files now include CSRF token via `getAuthHeaders(true)`
+- notification.ts bonus fix: now includes proper auth headers (was only sending Content-Type before)
+- Component files now use getAuthHeaders(true) instead of manually constructing auth headers
+- FormData uploads (avatar) properly exclude Content-Type while retaining auth + CSRF

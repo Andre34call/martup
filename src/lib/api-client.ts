@@ -1,7 +1,9 @@
 /**
  * API Client - A simple fetch wrapper for the MartUp e-commerce API.
- * Handles base URL, Authorization headers, JSON parsing, and error responses.
+ * Handles base URL, Authorization headers, CSRF protection, JSON parsing, and error responses.
  */
+
+import { getCsrfToken } from '@/lib/csrf-client'
 
 interface ApiError {
   error: string
@@ -34,13 +36,20 @@ function buildUrl(path: string, params?: Record<string, string | undefined>): st
   return url.toString()
 }
 
-function getHeaders(): HeadersInit {
+function getHeaders(includeCsrf: boolean = false): HeadersInit {
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
   }
   const token = getToken()
   if (token) {
     headers['Authorization'] = `Bearer ${token}`
+  }
+  // Add CSRF token for mutating requests
+  if (includeCsrf) {
+    const csrfToken = getCsrfToken()
+    if (csrfToken) {
+      headers['x-csrf-token'] = csrfToken
+    }
   }
   return headers
 }
@@ -73,7 +82,7 @@ export const apiClient = {
     const fullUrl = buildUrl(url)
     const response = await fetch(fullUrl, {
       method: 'POST',
-      headers: getHeaders(),
+      headers: getHeaders(true),
       body: body !== undefined ? JSON.stringify(body) : undefined,
     })
     return handleResponse<T>(response)
@@ -83,7 +92,7 @@ export const apiClient = {
     const fullUrl = buildUrl(url)
     const response = await fetch(fullUrl, {
       method: 'PUT',
-      headers: getHeaders(),
+      headers: getHeaders(true),
       body: body !== undefined ? JSON.stringify(body) : undefined,
     })
     return handleResponse<T>(response)
@@ -93,7 +102,7 @@ export const apiClient = {
     const fullUrl = buildUrl(url)
     const response = await fetch(fullUrl, {
       method: 'DELETE',
-      headers: getHeaders(),
+      headers: getHeaders(true),
     })
     return handleResponse<T>(response)
   },
@@ -101,9 +110,13 @@ export const apiClient = {
   upload: async <T>(url: string, formData: FormData): Promise<T> => {
     const fullUrl = buildUrl(url)
     const token = getToken()
+    const csrfToken = getCsrfToken()
     const headers: HeadersInit = {}
     if (token) {
       headers['Authorization'] = `Bearer ${token}`
+    }
+    if (csrfToken) {
+      headers['x-csrf-token'] = csrfToken
     }
     const response = await fetch(fullUrl, {
       method: 'POST',

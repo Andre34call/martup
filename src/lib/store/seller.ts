@@ -39,7 +39,7 @@ export const createSellerSlice: StateCreator<AppStore, [], [], SellerSlice> = (s
 
       const res = await fetch('/api/seller/withdraw', {
         method: 'POST',
-        headers: getAuthHeaders(),
+        headers: getAuthHeaders(true),
         body: JSON.stringify(body),
       })
       if (!res.ok) {

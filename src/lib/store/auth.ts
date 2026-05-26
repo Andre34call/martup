@@ -85,7 +85,7 @@ export const createAuthSlice: StateCreator<AppStore, [], [], AuthSlice> = (set, 
         // Try to register as seller
         const registerRes = await fetch('/api/seller/register', {
           method: 'POST',
-          headers: getAuthHeaders(),
+          headers: getAuthHeaders(true),
           body: JSON.stringify({ userId, storeName }),
         })
         const registerData = await registerRes.json()

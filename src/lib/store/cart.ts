@@ -96,7 +96,7 @@ export const useCartStore = create<CartState>()(
           const previousItems = existing ? get().items : optimisticUpdate.items
           fetch('/api/cart', {
             method: 'POST',
-            headers: getAuthHeaders(),
+            headers: getAuthHeaders(true),
             body: JSON.stringify({ productId: product.id, variantId: variantId || null, quantity }),
           })
             .then((res) => res.json())
@@ -137,7 +137,7 @@ export const useCartStore = create<CartState>()(
         if (isUserAuthenticated() && removedItem) {
           fetch('/api/cart', {
             method: 'DELETE',
-            headers: getAuthHeaders(),
+            headers: getAuthHeaders(true),
             body: JSON.stringify({ cartItemId: id }),
           })
             .then((res) => res.json())
@@ -172,7 +172,7 @@ export const useCartStore = create<CartState>()(
         if (isUserAuthenticated() && targetItem) {
           fetch('/api/cart', {
             method: 'PUT',
-            headers: getAuthHeaders(),
+            headers: getAuthHeaders(true),
             body: JSON.stringify({ cartItemId: id, quantity }),
           })
             .then((res) => res.json())
@@ -216,7 +216,7 @@ export const useCartStore = create<CartState>()(
           const newChecked = !targetItem.isChecked
           fetch('/api/cart', {
             method: 'PUT',
-            headers: getAuthHeaders(),
+            headers: getAuthHeaders(true),
             body: JSON.stringify({ cartItemId: id, isChecked: newChecked }),
           })
             .then((res) => res.json())
@@ -249,7 +249,7 @@ export const useCartStore = create<CartState>()(
           const updates = previousItems.map((item) =>
             fetch('/api/cart', {
               method: 'PUT',
-              headers: getAuthHeaders(),
+              headers: getAuthHeaders(true),
               body: JSON.stringify({ cartItemId: item.id, isChecked: checked }),
             })
               .then((res) => res.json())
@@ -285,7 +285,7 @@ export const useCartStore = create<CartState>()(
         if (isUserAuthenticated()) {
           fetch('/api/cart?clear=true', {
             method: 'POST',
-            headers: getAuthHeaders(),
+            headers: getAuthHeaders(true),
           })
             .then((res) => res.json())
             .then((data) => {
@@ -371,7 +371,7 @@ export const useCartStore = create<CartState>()(
 
           const res = await fetch('/api/cart?merge=true', {
             method: 'POST',
-            headers: getAuthHeaders(),
+            headers: getAuthHeaders(true),
             body: JSON.stringify({ items: mergeItems }),
           })
           const data = await res.json()

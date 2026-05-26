@@ -27,7 +27,7 @@ export const useWishlistStore = create<WishlistState>()(
         if (isCurrentlyWishlisted) {
           fetch('/api/wishlist', {
             method: 'DELETE',
-            headers: getAuthHeaders(),
+            headers: getAuthHeaders(true),
             body: JSON.stringify({ productId }),
           }).catch((error) => {
             console.error('Remove from wishlist API error:', error)
@@ -37,7 +37,7 @@ export const useWishlistStore = create<WishlistState>()(
         } else {
           fetch('/api/wishlist', {
             method: 'POST',
-            headers: getAuthHeaders(),
+            headers: getAuthHeaders(true),
             body: JSON.stringify({ productId }),
           }).catch((error) => {
             console.error('Add to wishlist API error:', error)

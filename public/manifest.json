@@ -1,0 +1,30 @@
+{
+  "name": "MartUp - Belanja Online Terpercaya",
+  "short_name": "MartUp",
+  "description": "Platform e-commerce terpercaya di Indonesia. Belanja online dengan harga terbaik, promo menarik, dan pengiriman cepat.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#10b981",
+  "orientation": "portrait-primary",
+  "categories": ["shopping", "lifestyle"],
+  "lang": "id",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

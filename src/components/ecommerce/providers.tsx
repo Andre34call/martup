@@ -5,6 +5,7 @@ import { SessionProvider } from "next-auth/react"
 import { useState, useEffect, useRef } from "react"
 import { useSession } from "next-auth/react"
 import { useAppStore, useCartStore, useWishlistStore } from "@/lib/store"
+import { setSentryUser, clearSentryUser } from "@/lib/sentry"
 
 function ZustandHydration({ children }: { children: React.ReactNode }) {
   const hydrated = useRef(false)
@@ -67,6 +68,14 @@ function DataFetcher({ children }: { children: React.ReactNode }) {
               coins: data.user.coins || 0,
               referralCode: data.user.referralCode || undefined,
             })
+            // Set Sentry user context for error tracking
+            setSentryUser({
+              id: data.user.id,
+              email: data.user.email,
+              name: data.user.name,
+              phone: data.user.phone || undefined,
+              role: data.user.role || 'buyer',
+            })
             // Now fetch all user-specific data
             fetchUserData(data.user.id)
             // Merge local cart to server & connect WebSocket
@@ -80,10 +89,11 @@ function DataFetcher({ children }: { children: React.ReactNode }) {
     }
   }, [status, session, fetchUserData, isAuthenticated, login, connectSocket])
 
-  // Disconnect socket when user logs out
+  // Disconnect socket and clear Sentry user when user logs out
   useEffect(() => {
     if (!isAuthenticated) {
       disconnectSocket()
+      clearSentryUser()
     }
   }, [isAuthenticated, disconnectSocket])
 

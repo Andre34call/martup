@@ -11,7 +11,7 @@ export const createNotificationSlice: StateCreator<AppStore, [], [], Notificatio
     // Also update on server
     fetch('/api/notifications', {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(true),
       body: JSON.stringify({ notificationId: id }),
     }).catch(() => {})
     return {
@@ -24,7 +24,7 @@ export const createNotificationSlice: StateCreator<AppStore, [], [], Notificatio
     if (userId) {
       fetch('/api/notifications', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(true),
         body: JSON.stringify({ markAll: true, userId }),
       }).catch(() => {})
     }

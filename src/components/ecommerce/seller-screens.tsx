@@ -422,7 +422,7 @@ export function SellerProducts() {
                       try {
                         const res = await fetch('/api/seller/products', {
                           method: 'DELETE',
-                          headers: getAuthHeaders(),
+                          headers: getAuthHeaders(true),
                           body: JSON.stringify({ productId: product.id }),
                         })
                         const data = await res.json()
@@ -547,7 +547,7 @@ export function SellerOrders() {
                           // Also update via API
                           fetch('/api/orders', {
                             method: 'PUT',
-                            headers: { 'Content-Type': 'application/json' },
+                            headers: getAuthHeaders(true),
                             body: JSON.stringify({ orderId: order.id, status: 'processing' }),
                           }).catch(() => {})
                           showToast("Pesanan sedang diproses", "success")
@@ -608,7 +608,7 @@ export function SellerOrders() {
                   // Also update via API
                   fetch('/api/orders', {
                     method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: getAuthHeaders(true),
                     body: JSON.stringify({ orderId: trackingOrderId, status: 'shipped', trackingNumber: trackingNumber.trim() }),
                   }).catch(() => {})
                   showToast("Pesanan sedang dikirim", "success")

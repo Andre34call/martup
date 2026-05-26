@@ -343,7 +343,7 @@ export function SellerAddProductScreen() {
         // Update existing product via API
         const res = await fetch('/api/seller/products', {
           method: 'PUT',
-          headers: getAuthHeaders(),
+          headers: getAuthHeaders(true),
           body: JSON.stringify({
             productId: editingProduct.id,
             name: productName.trim(),
@@ -398,7 +398,7 @@ export function SellerAddProductScreen() {
         // Create new product via API
         const res = await fetch('/api/seller/products', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthHeaders(true),
           body: JSON.stringify({
             sellerId,
             categoryId: category,

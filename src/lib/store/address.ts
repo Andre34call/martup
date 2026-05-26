@@ -10,7 +10,7 @@ export const createAddressSlice: StateCreator<AppStore, [], [], AddressSlice> = 
     try {
       const res = await fetch('/api/addresses', {
         method: 'POST',
-        headers: getAuthHeaders(),
+        headers: getAuthHeaders(true),
         body: JSON.stringify({
           label: address.label,
           recipient: address.recipient,
@@ -46,7 +46,7 @@ export const createAddressSlice: StateCreator<AppStore, [], [], AddressSlice> = 
     try {
       const res = await fetch('/api/addresses', {
         method: 'PUT',
-        headers: getAuthHeaders(),
+        headers: getAuthHeaders(true),
         body: JSON.stringify({
           addressId: address.id,
           label: address.label,
@@ -85,7 +85,7 @@ export const createAddressSlice: StateCreator<AppStore, [], [], AddressSlice> = 
     try {
       const res = await fetch('/api/addresses', {
         method: 'DELETE',
-        headers: getAuthHeaders(),
+        headers: getAuthHeaders(true),
         body: JSON.stringify({ addressId: id }),
       })
       if (!res.ok) {
@@ -116,7 +116,7 @@ export const createAddressSlice: StateCreator<AppStore, [], [], AddressSlice> = 
     try {
       const res = await fetch('/api/addresses', {
         method: 'PUT',
-        headers: getAuthHeaders(),
+        headers: getAuthHeaders(true),
         body: JSON.stringify({ addressId: id, isDefault: true }),
       })
       if (!res.ok) {

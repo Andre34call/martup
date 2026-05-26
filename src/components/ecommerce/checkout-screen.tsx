@@ -335,7 +335,7 @@ export function CheckoutScreen() {
       try {
         const validateRes = await fetch('/api/vouchers/validate', {
           method: 'POST',
-          headers: getAuthHeaders(),
+          headers: getAuthHeaders(true),
           body: JSON.stringify({
             code: selectedVoucher.code,
             userId: currentUser?.id,
@@ -409,14 +409,8 @@ export function CheckoutScreen() {
         const orderPaymentStatus = isImmediatePayment ? 'paid' : 'pending'
 
         try {
-          // SECURITY: Include auth headers for authenticated order creation
-          const orderHeaders: Record<string, string> = {
-            'Content-Type': 'application/json',
-          }
-          if (typeof window !== 'undefined') {
-            const token = localStorage.getItem('authToken')
-            if (token) orderHeaders['Authorization'] = `Bearer ${token}`
-          }
+          // SECURITY: Include auth headers + CSRF for authenticated order creation
+          const orderHeaders = getAuthHeaders(true)
 
           const res = await fetch('/api/orders', {
             method: 'POST',
@@ -517,11 +511,7 @@ export function CheckoutScreen() {
       // Deduct wallet balance if paying with MartUp Pay (via API + local)
       if (selectedPayment === 'wallet') {
         try {
-          const walletHeaders: Record<string, string> = { 'Content-Type': 'application/json' }
-          if (typeof window !== 'undefined') {
-            const token = localStorage.getItem('authToken')
-            if (token) walletHeaders['Authorization'] = `Bearer ${token}`
-          }
+          const walletHeaders = getAuthHeaders(true)
           await fetch('/api/wallet', {
             method: 'POST',
             headers: walletHeaders,

@@ -15,10 +15,14 @@ export const createProfileSlice: StateCreator<AppStore, [], [], ProfileSlice> = 
       const formData = new FormData()
       formData.append('file', file)
 
+      // For FormData uploads, we need auth + CSRF but NOT Content-Type
+      // (browser sets Content-Type automatically with boundary for multipart/form-data)
+      const uploadHeaders = getAuthHeaders(true)
+      delete uploadHeaders['Content-Type']
       const res = await fetch('/api/user/avatar', {
         method: 'POST',
+        headers: uploadHeaders,
         body: formData,
-        // Don't set Content-Type header - browser sets it automatically with boundary
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
@@ -41,7 +45,7 @@ export const createProfileSlice: StateCreator<AppStore, [], [], ProfileSlice> = 
     try {
       const res = await fetch('/api/user/avatar', {
         method: 'DELETE',
-        headers: getAuthHeaders(),
+        headers: getAuthHeaders(true),
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))

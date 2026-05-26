@@ -10,7 +10,7 @@ export const createReviewSlice: StateCreator<AppStore, [], [], ReviewSlice> = (s
     // Call the API to persist the review
     fetch('/api/reviews', {
       method: 'POST',
-      headers: getAuthHeaders(),
+      headers: getAuthHeaders(true),
       body: JSON.stringify({
         productId: review.productId,
         rating: review.rating,

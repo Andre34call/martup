@@ -72,7 +72,7 @@ export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set
     try {
       const res = await fetch('/api/admin/users', {
         method: 'PATCH',
-        headers: getAuthHeaders(),
+        headers: getAuthHeaders(true),
         body: JSON.stringify({ userId, updates: { divisionId } }),
       })
       if (!res.ok) throw new Error('Failed to assign user to division')
@@ -87,7 +87,7 @@ export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set
     try {
       const res = await fetch('/api/admin/divisions', {
         method: 'PATCH',
-        headers: getAuthHeaders(),
+        headers: getAuthHeaders(true),
         body: JSON.stringify({ divisionId, updates }),
       })
       if (!res.ok) throw new Error('Failed to update division')

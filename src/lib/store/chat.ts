@@ -39,7 +39,7 @@ export const createChatSlice: StateCreator<AppStore, [], [], ChatSlice> = (set, 
     // Also call REST API as fallback / for persistence
     fetch('/api/chat/messages', {
       method: 'PUT',
-      headers: getAuthHeaders(),
+      headers: getAuthHeaders(true),
       body: JSON.stringify({ roomId }),
     }).catch(() => {})
 
@@ -167,7 +167,7 @@ export const createChatSlice: StateCreator<AppStore, [], [], ChatSlice> = (set, 
     try {
       const res = await fetch('/api/chat/messages', {
         method: 'POST',
-        headers: getAuthHeaders(),
+        headers: getAuthHeaders(true),
         body: JSON.stringify({ roomId, content, type }),
       })
       if (!res.ok) throw new Error('Failed to send message')
@@ -202,7 +202,7 @@ export const createChatSlice: StateCreator<AppStore, [], [], ChatSlice> = (set, 
     try {
       const res = await fetch('/api/chat/rooms', {
         method: 'POST',
-        headers: getAuthHeaders(),
+        headers: getAuthHeaders(true),
         body: JSON.stringify({ sellerId, productId }),
       })
       if (!res.ok) throw new Error('Failed to create chat room')

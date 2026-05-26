@@ -1942,11 +1942,7 @@ export function DepositScreen() {
     }
     try {
       // Create a deposit record via API
-      const walletHeaders: Record<string, string> = { 'Content-Type': 'application/json' }
-      if (typeof window !== 'undefined') {
-        const token = localStorage.getItem('authToken')
-        if (token) walletHeaders['Authorization'] = `Bearer ${token}`
-      }
+      const walletHeaders = getAuthHeaders(true)
       const res = await fetch('/api/wallet', {
         method: 'POST',
         headers: walletHeaders,
