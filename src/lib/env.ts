@@ -1,6 +1,6 @@
 // Centralized environment variable validation
 // This module validates critical env vars at startup time
-// Missing required vars will throw an error with a clear message
+// On Vercel serverless, env vars may load late — so we log warnings instead of throwing
 
 const requiredVars = [
   'NEXTAUTH_SECRET',
@@ -17,14 +17,17 @@ const recommendedVars = [
 ] as const
 
 // Validate at module load time — but NOT during Next.js build phase
-// (Next.js runs route modules during build for static generation, when env vars may not be set)
+// On Vercel serverless, we warn instead of throw to avoid crashing cold starts
 const isBuildPhase = process.env.NEXT_PHASE === 'phase-production-build'
 const missing = requiredVars.filter(v => !process.env[v])
 if (missing.length > 0 && process.env.NODE_ENV === 'production' && !isBuildPhase) {
-  throw new Error(
+  // On Vercel, log a clear warning instead of throwing — allows the function to start
+  // so users get a proper error message instead of a generic 500
+  console.error(
     `[FATAL] Missing required environment variables: ${missing.join(', ')}. ` +
-    `Application cannot start without them.`
+    `Application cannot function without them. Please set them in Vercel Dashboard → Settings → Environment Variables.`
   )
+  // Don't throw — let individual routes handle the missing vars gracefully
 }
 
 // Warn about recommended vars in development

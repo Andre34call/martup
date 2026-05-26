@@ -164,8 +164,16 @@ export async function POST(request: NextRequest) {
     })
   } catch (error: any) {
     logger.error({ err: error }, 'Login error')
+    
+    // Provide more specific error messages for common issues
+    const errorMessage = error?.code === 'P1001' 
+      ? 'Database tidak dapat diakses. Pastikan env vars DATABASE_URL sudah dikonfigurasi di Vercel.'
+      : error?.code === 'P1002'
+      ? 'Database connection timeout. Coba lagi dalam beberapa detik.'
+      : 'Terjadi kesalahan server. Coba lagi nanti.'
+    
     return NextResponse.json(
-      { success: false, error: 'Terjadi kesalahan server. Coba lagi nanti.' },
+      { success: false, error: errorMessage, ...(process.env.NODE_ENV === 'development' ? { debug: error?.message, code: error?.code } : {}) },
       { status: 500 }
     )
   }
