@@ -146,7 +146,7 @@ export function setCsrfCookie(response: NextResponse, token: string): NextRespon
     // (2) attackers cannot read cross-origin cookies, (3) attackers cannot set custom headers.
     // This cookie is NOT a session identifier — it's a single-use CSRF nonce.
     httpOnly: false,
-    secure: true,
+    secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     path: '/',
     maxAge: 86400, // 24 hours
