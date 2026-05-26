@@ -1,87 +1,56 @@
 /**
- * Shared Sentry utilities for the MartUp project.
- *
- * All functions are safe no-ops when the Sentry DSN is not configured,
- * so the app works identically in development without a DSN.
+ * Sentry stub — all functions are safe no-ops.
+ * Sentry SDK was removed to fix Vercel build failures.
+ * Re-install @sentry/nextjs and restore the real implementation if needed.
  */
-import * as Sentry from '@sentry/nextjs';
 
-const SENTRY_DSN = process.env.NEXT_PUBLIC_SENTRY_DSN;
-const isSentryEnabled = !!SENTRY_DSN;
-
-/** Capture an exception and send it to Sentry. */
-export function captureException(error: unknown, extra?: Record<string, unknown>): void {
-  if (!isSentryEnabled) return;
-  Sentry.captureException(error, { extra });
+/** Capture an exception (no-op). */
+export function captureException(_error: unknown, _extra?: Record<string, unknown>): void {
+  // no-op
 }
 
-/** Capture a manual message at the given level. */
-export function captureMessage(
-  message: string,
-  level: Sentry.SeverityLevel = 'info',
-  extra?: Record<string, unknown>,
-): void {
-  if (!isSentryEnabled) return;
-  Sentry.captureMessage(message, { level, extra });
+/** Capture a manual message (no-op). */
+export function captureMessage(_message: string, _level?: string, _extra?: Record<string, unknown>): void {
+  // no-op
 }
 
-/** Set the currently authenticated user in Sentry scope. */
-export function setSentryUser(user: {
+/** Set the currently authenticated user (no-op). */
+export function setSentryUser(_user: {
   id: string;
   email?: string;
   name?: string;
   phone?: string;
   role?: string;
 }): void {
-  if (!isSentryEnabled) return;
-  Sentry.setUser({
-    id: user.id,
-    email: user.email,
-    username: user.name,
-  });
-  if (user.role) {
-    Sentry.setTag('user.role', user.role);
-  }
-  if (user.phone) {
-    Sentry.setExtra('user.phone', user.phone);
-  }
+  // no-op
 }
 
-/** Clear the Sentry user scope (on logout). */
+/** Clear the user scope (no-op). */
 export function clearSentryUser(): void {
-  if (!isSentryEnabled) return;
-  Sentry.setUser(null);
+  // no-op
 }
 
-/** Add a breadcrumb for navigation or user action tracking. */
-export function addBreadcrumb(breadcrumb: {
+/** Add a breadcrumb (no-op). */
+export function addBreadcrumb(_breadcrumb: {
   category: string;
   message: string;
-  level?: Sentry.SeverityLevel;
+  level?: string;
   data?: Record<string, unknown>;
 }): void {
-  if (!isSentryEnabled) return;
-  Sentry.addBreadcrumb({
-    category: breadcrumb.category,
-    message: breadcrumb.message,
-    level: breadcrumb.level ?? 'info',
-    data: breadcrumb.data,
-  });
+  // no-op
 }
 
-/** Set a tag on the current Sentry scope. */
-export function setTag(key: string, value: string): void {
-  if (!isSentryEnabled) return;
-  Sentry.setTag(key, value);
+/** Set a tag (no-op). */
+export function setTag(_key: string, _value: string): void {
+  // no-op
 }
 
-/** Set extra context data on the current Sentry scope. */
-export function setExtra(key: string, value: unknown): void {
-  if (!isSentryEnabled) return;
-  Sentry.setExtra(key, value);
+/** Set extra context data (no-op). */
+export function setExtra(_key: string, _value: unknown): void {
+  // no-op
 }
 
-/** Check whether Sentry is initialised (useful for conditional logging). */
+/** Check whether Sentry is initialised — always false since SDK is removed. */
 export function isSentryReady(): boolean {
-  return isSentryEnabled;
+  return false;
 }
