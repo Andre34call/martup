@@ -3,7 +3,7 @@
 import { motion, AnimatePresence } from "framer-motion"
 import {
   MapPin, ChevronRight, Truck, Ticket, CreditCard, Wallet,
-  Package, Check, ShoppingBag, Clock, BadgeCheck, ArrowRight,
+  Check, ShoppingBag, Clock, BadgeCheck, ArrowRight,
   ShieldCheck, Info, Banknote, Smartphone, AlertTriangle
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -11,13 +11,13 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { useAppStore, useCartStore, getAuthHeaders } from "@/lib/store"
 import { formatPrice } from "@/lib/utils"
-import { SHIPPING_OPTIONS } from "@/lib/constants"
+import { DEFAULT_SHIPPING_OPTIONS } from "@/lib/constants"
 import {
   PageHeader, EmptyState
 } from "./shared"
 import type { CartItem, ShippingOption, Address } from "@/lib/types"
 import { logger } from '@/lib/logger'
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect, useCallback } from "react"
 
 // ==================== CHECKOUT STEP INDICATOR ====================
 const CHECKOUT_STEPS = [
@@ -141,10 +141,14 @@ function AddressCard({ address, onChange }: { address: Address | null; onChange:
 // ==================== SHIPPING SELECTOR ====================
 function ShippingSelector({
   selectedShipping,
-  onSelect
+  onSelect,
+  options,
+  isLoading
 }: {
   selectedShipping: ShippingOption | null
   onSelect: (option: ShippingOption) => void
+  options: ShippingOption[]
+  isLoading?: boolean
 }) {
   const [isExpanded, setIsExpanded] = useState(false)
 
@@ -157,7 +161,7 @@ function ShippingSelector({
         <div className="flex items-center gap-2">
           <Truck className="w-4 h-4 text-emerald-500" />
           <span className="text-sm font-medium">
-            {selectedShipping ? selectedShipping.name : 'Pilih Pengiriman'}
+            {isLoading ? 'Menghitung ongkir...' : selectedShipping ? selectedShipping.name : 'Pilih Pengiriman'}
           </span>
         </div>
         <motion.div animate={{ rotate: isExpanded ? 180 : 0 }} transition={{ duration: 0.2 }}>
@@ -175,42 +179,57 @@ function ShippingSelector({
             className="overflow-hidden"
           >
             <div className="space-y-2 pt-1">
-              {SHIPPING_OPTIONS.map((option) => {
-                const isSelected = selectedShipping?.service === option.service && selectedShipping?.provider === option.provider
+              {isLoading ? (
+                <div className="flex items-center justify-center gap-2 p-4">
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                    className="w-5 h-5 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full"
+                  />
+                  <span className="text-xs text-muted-foreground">Menghitung ongkos kirim...</span>
+                </div>
+              ) : options.length === 0 ? (
+                <div className="p-3 text-center">
+                  <p className="text-xs text-muted-foreground">Tidak ada layanan pengiriman tersedia</p>
+                </div>
+              ) : (
+                options.map((option) => {
+                  const isSelected = selectedShipping?.service === option.service && selectedShipping?.provider === option.provider
 
-                return (
-                  <motion.button
-                    key={`${option.provider}-${option.service}`}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => {
-                      onSelect(option)
-                      setIsExpanded(false)
-                    }}
-                    className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all ${
-                      isSelected
-                        ? "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-500"
-                        : "bg-card border-border/50 hover:border-emerald-300"
-                    }`}
-                  >
-                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
-                      isSelected ? "border-emerald-500 bg-emerald-500" : "border-gray-300 dark:border-gray-600"
-                    }`}>
-                      {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
-                    </div>
+                  return (
+                    <motion.button
+                      key={`${option.provider}-${option.service}`}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => {
+                        onSelect(option)
+                        setIsExpanded(false)
+                      }}
+                      className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all ${
+                        isSelected
+                          ? "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-500"
+                          : "bg-card border-border/50 hover:border-emerald-300"
+                      }`}
+                    >
+                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                        isSelected ? "border-emerald-500 bg-emerald-500" : "border-gray-300 dark:border-gray-600"
+                      }`}>
+                        {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
+                      </div>
 
-                    <span className="text-lg flex-shrink-0">{option.logo}</span>
+                      <span className="text-lg flex-shrink-0">{option.logo}</span>
 
-                    <div className="flex-1 text-left min-w-0">
-                      <p className="text-sm font-medium">{option.name}</p>
-                      <p className="text-[10px] text-muted-foreground">Estimasi {option.estimatedDays}</p>
-                    </div>
+                      <div className="flex-1 text-left min-w-0">
+                        <p className="text-sm font-medium">{option.name}</p>
+                        <p className="text-[10px] text-muted-foreground">Estimasi {option.estimatedDays}</p>
+                      </div>
 
-                    <span className="text-sm font-bold text-foreground flex-shrink-0">
-                      {option.price === 0 ? 'Gratis' : formatPrice(option.price)}
-                    </span>
-                  </motion.button>
-                )
-              })}
+                      <span className="text-sm font-bold text-foreground flex-shrink-0">
+                        {option.price === 0 ? 'Gratis' : formatPrice(option.price)}
+                      </span>
+                    </motion.button>
+                  )
+                })
+              )}
             </div>
           </motion.div>
         )}
@@ -238,6 +257,8 @@ export function CheckoutScreen() {
   const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [orderNumber, setOrderNumber] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
+  const [shippingRatesBySeller, setShippingRatesBySeller] = useState<Record<string, ShippingOption[]>>({})
+  const [isLoadingRates, setIsLoadingRates] = useState<Record<string, boolean>>({})
 
   const checkedItems = getCheckedItems()
   const checkedTotal = getCheckedTotal()
@@ -261,6 +282,79 @@ export function CheckoutScreen() {
     })
     return Object.values(groups)
   }, [checkedItems])
+
+  // Calculate total weight per seller group
+  const weightBySeller = useMemo(() => {
+    const weights: Record<string, number> = {}
+    groupedBySeller.forEach(group => {
+      const sellerId = group.seller.id
+      weights[sellerId] = group.items.reduce((sum, item) => {
+        const itemWeight = (item.product.weight || 500) * item.quantity // default 500g if not set
+        return sum + itemWeight
+      }, 0)
+    })
+    return weights
+  }, [groupedBySeller])
+
+  // Fetch shipping rates from API when address is selected
+  const fetchShippingRates = useCallback(async (sellerId: string, destinationCity: string, weightGrams: number) => {
+    setIsLoadingRates(prev => ({ ...prev, [sellerId]: true }))
+    try {
+      const res = await fetch('/api/shipping/calculate', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          originCity: 'Jakarta', // Default origin — in production, this would come from seller's store address
+          destinationCity,
+          weight: weightGrams,
+        }),
+      })
+      const data = await res.json()
+      if (data.success && data.data?.rates?.length > 0) {
+        setShippingRatesBySeller(prev => ({ ...prev, [sellerId]: data.data.rates }))
+      } else {
+        // Fallback to default options
+        setShippingRatesBySeller(prev => ({ ...prev, [sellerId]: DEFAULT_SHIPPING_OPTIONS }))
+      }
+    } catch (err) {
+      logger.warn({ component: 'checkout', err }, 'Shipping rate fetch failed, using defaults')
+      // Fallback to default options
+      setShippingRatesBySeller(prev => ({ ...prev, [sellerId]: DEFAULT_SHIPPING_OPTIONS }))
+    } finally {
+      setIsLoadingRates(prev => ({ ...prev, [sellerId]: false }))
+    }
+  }, [])
+
+  // Auto-fetch shipping rates when address changes and items are in cart
+  useEffect(() => {
+    if (!defaultAddress || groupedBySeller.length === 0) return
+
+    groupedBySeller.forEach(group => {
+      const sellerId = group.seller.id
+      const weight = weightBySeller[sellerId] || 1000
+      // Only fetch if we don't have rates yet for this seller or if address changed
+      const currentRates = shippingRatesBySeller[sellerId]
+      if (!currentRates || currentRates.length === 0) {
+        fetchShippingRates(sellerId, defaultAddress.city, weight)
+      }
+    })
+  }, [defaultAddress?.id, groupedBySeller.length])
+
+  // Re-fetch rates when address changes (different city)
+  useEffect(() => {
+    if (!defaultAddress || groupedBySeller.length === 0) return
+
+    groupedBySeller.forEach(group => {
+      const sellerId = group.seller.id
+      const weight = weightBySeller[sellerId] || 1000
+      fetchShippingRates(sellerId, defaultAddress.city, weight)
+    })
+  }, [defaultAddress?.city])
+
+  // Get shipping options for a seller (dynamic or fallback)
+  const getShippingOptions = useCallback((sellerId: string): ShippingOption[] => {
+    return shippingRatesBySeller[sellerId] || DEFAULT_SHIPPING_OPTIONS
+  }, [shippingRatesBySeller])
 
   // Calculate totals — use platform settings with fallback defaults
   const subtotal = checkedTotal
@@ -594,7 +688,7 @@ export function CheckoutScreen() {
           transition={{ delay: 0.1 }}
           className="space-y-3"
         >
-          {groupedBySeller.map((group, groupIdx) => (
+          {groupedBySeller.map((group) => (
             <div key={group.seller.id} className="bg-card rounded-xl border border-border/50 overflow-hidden">
               {/* Seller header */}
               <div className="flex items-center gap-2 px-4 py-3 border-b border-border/30">
@@ -655,6 +749,8 @@ export function CheckoutScreen() {
                 <ShippingSelector
                   selectedShipping={shippingBySeller[group.seller.id] || null}
                   onSelect={(option) => handleShippingSelect(group.seller.id, option)}
+                  options={getShippingOptions(group.seller.id)}
+                  isLoading={isLoadingRates[group.seller.id]}
                 />
               </div>
             </div>

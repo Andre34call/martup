@@ -1,6 +1,16 @@
 import { createServer } from 'http'
 import { Server, Socket } from 'socket.io'
 import crypto from 'crypto'
+import pino from 'pino'
+
+// ==================== LOGGER ====================
+
+const logger = pino({
+  level: process.env.LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'info' : 'debug'),
+  ...(process.env.NODE_ENV !== 'production' ? {
+    transport: { target: 'pino-pretty', options: { colorize: true } }
+  } : {}),
+})
 
 // ==================== CONFIGURATION ====================
 
@@ -10,7 +20,7 @@ const PORT = 3004
 const TOKEN_SECRET = (() => {
   const secret = process.env.TOKEN_SECRET || process.env.NEXTAUTH_SECRET
   if (!secret) {
-    console.error('[FATAL] TOKEN_SECRET or NEXTAUTH_SECRET environment variable must be set. Chat service cannot start without it.')
+    logger.fatal('TOKEN_SECRET or NEXTAUTH_SECRET environment variable must be set. Chat service cannot start without it.')
     process.exit(1)
   }
   return secret
@@ -32,7 +42,7 @@ const STALE_TIMEOUT = 5 * 60 * 1000 // 5 minutes of no activity = stale
 
 // SECURITY: DATABASE_URL must come from environment — NO hardcoded credentials
 if (!process.env.DATABASE_URL) {
-  console.error('[FATAL] DATABASE_URL environment variable must be set. Chat service cannot start without it.')
+  logger.fatal('DATABASE_URL environment variable must be set. Chat service cannot start without it.')
   process.exit(1)
 }
 
@@ -154,7 +164,23 @@ function sanitizeInput(input: string): string {
     .trim()
 }
 
-// ==================== ALLOWED ORIGINS =============// ==================== SOCKET.IO SERVER ====================
+// ==================== ALLOWED ORIGINS ====================
+
+const ALLOWED_ORIGINS = (() => {
+  const origins = (process.env.ALLOWED_ORIGINS || 'https://martup-seven.vercel.app')
+    .split(',')
+    .map(origin => origin.trim())
+    .filter(Boolean)
+
+  // Add localhost in development
+  if (process.env.NODE_ENV !== 'production') {
+    origins.push('http://localhost:3000')
+  }
+
+  return origins
+})()
+
+// ==================== SOCKET.IO SERVER ====================
 
 const httpServer = createServer()
 const io = new Server(httpServer, {
@@ -173,7 +199,7 @@ const io = new Server(httpServer, {
 // ==================== CONNECTION HANDLER ====================
 
 io.on('connection', (socket: Socket) => {
-  console.log(`[ChatService] Socket connected: ${socket.id}`)
+  logger.info({ socketId: socket.id }, 'Socket connected')
 
   let isAuthenticated = false
   let userId: string | null = null
@@ -182,7 +208,7 @@ io.on('connection', (socket: Socket) => {
   socket.on('auth', async (data: { userId?: string; token?: string }) => {
     try {
       if (!data || !data.token) {
-        console.warn(`[ChatService] Auth failed for socket ${socket.id}: no token provided`)
+        logger.warn({ socketId: socket.id }, 'Auth failed: no token provided')
         socket.emit('auth-error', { message: 'Authentication token required' })
         socket.disconnect(true)
         return
@@ -191,7 +217,7 @@ io.on('connection', (socket: Socket) => {
       // Verify HMAC token
       const verifiedUserId = verifyAuthToken(data.token)
       if (!verifiedUserId) {
-        console.warn(`[ChatService] Auth failed for socket ${socket.id}: invalid token`)
+        logger.warn({ socketId: socket.id }, 'Auth failed: invalid or expired token')
         socket.emit('auth-error', { message: 'Invalid or expired authentication token' })
         socket.disconnect(true)
         return
@@ -217,7 +243,7 @@ io.on('connection', (socket: Socket) => {
       })
 
       if (!user || !user.isActive) {
-        console.warn(`[ChatService] Auth failed for socket ${socket.id}: user not found or inactive`)
+        logger.warn({ socketId: socket.id, userId: verifiedUserId }, 'Auth failed: user not found or inactive')
         socket.emit('auth-error', { message: 'User not found or inactive' })
         socket.disconnect(true)
         return
@@ -261,11 +287,12 @@ io.on('connection', (socket: Socket) => {
         rooms: participations.map((p) => p.roomId),
       })
 
-      console.log(
-        `[ChatService] User ${user.name} (${verifiedUserId}) authenticated on socket ${socket.id}, joined ${participations.length} rooms`
+      logger.info(
+        { socketId: socket.id, userId: verifiedUserId, userName: user.name, roomCount: participations.length },
+        'User authenticated'
       )
     } catch (error) {
-      console.error('[ChatService] Auth error:', error)
+      logger.error({ error, socketId: socket.id }, 'Auth error')
       socket.emit('auth-error', { message: 'Authentication failed' })
       socket.disconnect(true)
     }
@@ -308,9 +335,9 @@ io.on('connection', (socket: Socket) => {
       if (userInfo) userInfo.lastActivity = Date.now()
 
       socket.emit('room-joined', { roomId })
-      console.log(`[ChatService] User ${userId} joined room ${roomId}`)
+      logger.info({ userId, roomId }, 'User joined room')
     } catch (error) {
-      console.error('[ChatService] Join room error:', error)
+      logger.error({ error, userId, socketId: socket.id }, 'Join room error')
       socket.emit('error', { message: 'Failed to join room' })
     }
   })
@@ -345,7 +372,7 @@ io.on('connection', (socket: Socket) => {
     if (userInfo) userInfo.lastActivity = Date.now()
 
     socket.emit('room-left', { roomId })
-    console.log(`[ChatService] User ${userId} left room ${roomId}`)
+    logger.info({ userId, roomId }, 'User left room')
   })
 
   // ---------- SEND MESSAGE EVENT ----------
@@ -482,9 +509,12 @@ io.on('connection', (socket: Socket) => {
       const userInfo = connectedUsers.get(socket.id)
       if (userInfo) userInfo.lastActivity = Date.now()
 
-      console.log(`[ChatService] Message from ${userId} in room ${roomId}: ${sanitizedContent.substring(0, 50)}...`)
+      logger.info(
+        { userId, roomId, messageType, contentLength: sanitizedContent.length },
+        'Message sent'
+      )
     } catch (error) {
-      console.error('[ChatService] Send message error:', error)
+      logger.error({ error, userId, socketId: socket.id, roomId: data.roomId }, 'Send message error')
       socket.emit('error', { message: 'Failed to send message' })
     }
   })
@@ -596,9 +626,9 @@ io.on('connection', (socket: Socket) => {
       const userInfo = connectedUsers.get(socket.id)
       if (userInfo) userInfo.lastActivity = Date.now()
 
-      console.log(`[ChatService] User ${userId} marked messages as read in room ${roomId}`)
+      logger.info({ userId, roomId }, 'Messages marked as read')
     } catch (error) {
-      console.error('[ChatService] Mark read error:', error)
+      logger.error({ error, userId, socketId: socket.id, roomId: data.roomId }, 'Mark read error')
       socket.emit('error', { message: 'Failed to mark messages as read' })
     }
   })
@@ -646,30 +676,31 @@ io.on('connection', (socket: Socket) => {
             }
           }
 
-          console.log(`[ChatService] User ${disconnectedUserId} fully disconnected (no more sockets)`)
+          logger.info({ userId: disconnectedUserId }, 'User fully disconnected (no more sockets)')
         }
       }
 
       // Remove from connected users
       connectedUsers.delete(socket.id)
 
-      console.log(
-        `[ChatService] Socket ${socket.id} disconnected (user: ${disconnectedUserId}, reason: ${reason})`
+      logger.info(
+        { socketId: socket.id, userId: disconnectedUserId, reason },
+        'Socket disconnected'
       )
     } else {
-      console.log(`[ChatService] Unauthenticated socket ${socket.id} disconnected (reason: ${reason})`)
+      logger.info({ socketId: socket.id, reason }, 'Unauthenticated socket disconnected')
     }
   })
 
   // ---------- ERROR EVENT ----------
   socket.on('error', (error) => {
-    console.error(`[ChatService] Socket error (${socket.id}):`, error)
+    logger.error({ error, socketId: socket.id }, 'Socket error')
   })
 
   // Auto-disconnect if not authenticated within 10 seconds
   setTimeout(() => {
     if (!isAuthenticated && socket.connected) {
-      console.warn(`[ChatService] Disconnecting unauthenticated socket ${socket.id}`)
+      logger.warn({ socketId: socket.id }, 'Disconnecting unauthenticated socket (auth timeout)')
       socket.emit('auth-error', { message: 'Authentication timeout' })
       socket.disconnect(true)
     }
@@ -684,7 +715,7 @@ setInterval(() => {
     if (now - userInfo.lastActivity > STALE_TIMEOUT) {
       const socket = io.sockets.sockets.get(socketId)
       if (socket) {
-        console.warn(`[ChatService] Disconnecting stale connection: ${socketId} (user: ${userInfo.userId})`)
+        logger.warn({ socketId, userId: userInfo.userId }, 'Disconnecting stale connection')
         socket.emit('error', { message: 'Connection timed out due to inactivity' })
         socket.disconnect(true)
       }
@@ -692,34 +723,58 @@ setInterval(() => {
   }
 }, STALE_CHECK_INTERVAL)
 
+// ==================== PERIODIC CONNECTION STATS ====================
+
+setInterval(() => {
+  const totalSockets = connectedUsers.size
+  const totalUsers = userSockets.size
+  const activeRooms = new Set<string>()
+  for (const userInfo of connectedUsers.values()) {
+    for (const roomId of userInfo.rooms) {
+      activeRooms.add(roomId)
+    }
+  }
+  const totalTypingRooms = typingUsers.size
+
+  logger.info(
+    {
+      totalSockets,
+      totalUsers,
+      activeRooms: activeRooms.size,
+      typingRooms: totalTypingRooms,
+      rateLimitEntries: rateLimitMap.size,
+    },
+    'Connection statistics'
+  )
+}, 5 * 60 * 1000) // every 5 minutes
+
 // ==================== SERVER START ====================
 
 httpServer.listen(PORT, () => {
-  console.log(`[ChatService] MartUp Chat WebSocket server running on port ${PORT}`)
-  console.log(`[ChatService] Path: / (for Caddy gateway compatibility)`)
-  console.log(`[ChatService] Auth: HMAC token verification enabled`)
-  console.log(`[ChatService] DB: Environment-based Prisma access (no hardcoded credentials)`)
-  console.log(`[ChatService] CORS: Restricted to allowed origins only`)
+  logger.info({ port: PORT, path: '/', auth: 'HMAC', db: 'Prisma (env-based)' }, 'MartUp Chat WebSocket server started')
+  logger.info({ origins: ALLOWED_ORIGINS }, 'CORS allowed origins')
 })
 
 // ==================== GRACEFUL SHUTDOWN ====================
 
 async function gracefulShutdown(signal: string) {
-  console.log(`[ChatService] Received ${signal}, shutting down...`)
+  logger.info({ signal }, 'Shutting down...')
 
   // Close all socket connections
   io.disconnectSockets(true)
 
   // Close HTTP server
   httpServer.close(() => {
-    console.log('[ChatService] HTTP server closed')
+    logger.info('HTTP server closed')
   })
 
   // Disconnect Prisma
-  await prisma
-    .$disconnect()
-    .then(() => console.log('[ChatService] Prisma disconnected'))
-    .catch((err) => console.error('[ChatService] Prisma disconnect error:', err))
+  try {
+    await prisma.$disconnect()
+    logger.info('Prisma disconnected')
+  } catch (err) {
+    logger.error({ error: err }, 'Prisma disconnect error')
+  }
 
   process.exit(0)
 }

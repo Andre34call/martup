@@ -1576,3 +1576,194 @@ Stage Summary:
 - 1 P2 improvement: 12 missing DB indexes
 - 19 files changed, 1841 insertions, 240 deletions
 - Estimated readiness: 70% → 80%+
+
+---
+Task ID: 4b
+Agent: Chat Service Fix Agent
+Task: Fix WebSocket Chat Service (ALLOWED_ORIGINS bug + Pino logging)
+
+Work Log:
+- Read worklog.md and current chat service code to understand previous work
+- Identified critical bug: Line 157 had broken comment concatenation `// ==================== ALLOWED ORIGINS =============// ==================== SOCKET.IO SERVER ====================` which meant the ALLOWED_ORIGINS variable declaration was completely missing
+- Line 164 referenced `ALLOWED_ORIGINS.length > 0` which would throw ReferenceError at runtime since the variable was never defined
+- Installed pino (v10.3.1) and pino-pretty (v13.1.3) in the chat service
+- Fixed ALLOWED_ORIGINS bug:
+  - Added proper `ALLOWED_ORIGINS` constant that reads from `process.env.ALLOWED_ORIGINS` (defaults to 'https://martup-seven.vercel.app')
+  - Splits comma-separated values, trims whitespace, filters empty strings
+  - Adds `http://localhost:3000` when NODE_ENV !== 'production'
+  - Separated the two comment sections properly (one for ALLOWED_ORIGINS, one for SOCKET.IO SERVER)
+- Added Pino structured logging:
+  - Created logger at top of index.ts with environment-aware configuration
+  - Production: JSON output, info level
+  - Development: pino-pretty with colorization, debug level
+  - Supports LOG_LEVEL env var override
+- Replaced ALL console.log → logger.info with structured context objects:
+  - `console.log('[ChatService] Socket connected: ${socket.id}')` → `logger.info({ socketId: socket.id }, 'Socket connected')`
+  - `console.log('[ChatService] User ... authenticated on socket ...')` → `logger.info({ socketId, userId, userName, roomCount }, 'User authenticated')`
+  - `console.log('[ChatService] Message from ...')` → `logger.info({ userId, roomId, messageType, contentLength }, 'Message sent')`
+- Replaced ALL console.warn → logger.warn with structured context:
+  - Auth failures, stale connections, auth timeouts all use structured objects
+- Replaced ALL console.error → logger.error with structured context:
+  - Auth errors, join room errors, send message errors, mark read errors, socket errors, Prisma disconnect errors
+- Added server startup logging with ALLOWED_ORIGINS display:
+  - `logger.info({ port, path, auth, db }, 'MartUp Chat WebSocket server started')`
+  - `logger.info({ origins: ALLOWED_ORIGINS }, 'CORS allowed origins')`
+- Added periodic connection statistics logging (every 5 minutes):
+  - Logs totalSockets, totalUsers, activeRooms, typingRooms, rateLimitEntries
+- Updated graceful shutdown to use logger
+- Service verified starting cleanly: Pino pretty-printed output shows structured logs, CORS origins listed correctly (both production URL and localhost in dev mode)
+- No main app code was modified
+
+Stage Summary:
+- CRITICAL BUG FIX: ALLOWED_ORIGINS variable was never declared (broken comment concatenation), causing ReferenceError at runtime — now properly defined with env-based configuration
+- Structured logging with Pino replaces all console.log/warn/error throughout the chat service
+- Log messages use structured objects instead of string concatenation for better parsing and filtering
+- Periodic connection stats (every 5 min) for operational monitoring
+- Development mode automatically includes localhost in CORS origins
+- Service starts and runs correctly on port 3004
+
+---
+Task ID: 4c
+Agent: Auto-Complete Cron Agent
+Task: Create Auto-Complete Shipped Orders Cron Job
+
+Work Log:
+- Read worklog.md and understood previous agent work (Phases 1-4 complete, P1 critical fixes done)
+- Read existing cancel-expired cron pattern at /src/app/api/cron/cancel-expired/route.ts
+- Read payment notification handler to understand escrow crediting logic (pendingBalance on payment confirmation)
+- Read Prisma schema for Order, Shipping, Seller, Wallet, WalletMutation, Notification models
+- Read logger.ts and decimal-utils.ts for utility patterns
+
+- Created /src/app/api/cron/auto-complete/route.ts:
+  - Follows exact same pattern as cancel-expired (auth, rate limiting, structure)
+  - verifyCronAuth() with CRON_SECRET and timing-safe comparison
+  - checkCronRateLimit() with in-memory rate limit (1 call/minute)
+  - Configurable AUTO_COMPLETE_DAYS from env var (default 7)
+  - Core logic: autoCompleteShippedOrders()
+    - Finds orders with status: 'shipped' AND shippedAt < cutoffDate
+    - For each qualifying order, in a Prisma transaction:
+      a. Updates order status to 'delivered', sets deliveredAt: new Date()
+      b. Updates Shipping status to 'delivered', sets deliveredAt: new Date()
+      c. Releases escrow: idempotency check via 'order_release' WalletMutation
+         - Calculates: subtotal * (1 - commissionRate) = sellerEarnings
+         - Finds or creates seller Wallet
+         - Decrements pendingBalance, increments balance (availableBalance)
+         - Creates WalletMutation (credit, refType: 'order_release', refId: order.id)
+      d. Creates Notification for buyer: "Pesanan Selesai"
+      e. Creates Notification for seller: "Dana Diterima"
+    - Logs business events for each auto-completed order
+  - Supports both GET (Vercel Cron) and POST (manual trigger)
+
+- Created /src/app/api/cron/auto-complete-stuck/route.ts:
+  - Same auth and rate limiting pattern as cancel-expired
+  - Configurable STUCK_PROCESSING_DAYS from env var (default 3)
+  - Core logic: remindStuckProcessingOrders()
+    - Finds orders with status: 'processing' AND updatedAt < cutoffDate
+    - For each, creates a notification for the seller: "Segera Kirim Pesanan"
+    - Does NOT auto-cancel or change status — just reminds
+    - Logs business events for each reminder sent
+  - Supports both GET (Vercel Cron) and POST (manual trigger)
+
+- Updated /home/z/my-project/vercel.json with new cron schedules:
+  - /api/cron/cancel-expired → 0 * * * * (every hour, unchanged)
+  - /api/cron/auto-complete → 0 */6 * * * (every 6 hours)
+  - /api/cron/auto-complete-stuck → 0 9 * * * (daily at 9am)
+
+- Fixed pre-existing lint error in /src/lib/shipping-calculator.ts line 484:
+  - Changed { component: 'shipping, ... } to { component: 'shipping', ... }
+
+- Lint check passes with 0 errors, 0 warnings
+- Dev server running cleanly
+
+Stage Summary:
+- Two new cron endpoints created for order lifecycle automation
+- auto-complete: Releases escrow funds to seller's available balance when shipped orders reach 7 days
+- auto-complete-stuck: Sends reminder notifications to sellers with unshipped orders after 3 days
+- Both follow exact same auth/rate-limit/response pattern as existing cancel-expired cron
+- Escrow release includes idempotency check to prevent duplicate wallet mutations
+- Vercel cron config updated with schedules for all three cron jobs
+
+---
+Task ID: 4a
+Agent: Shipping Calculator Agent
+Task: Build Shipping Cost Calculator API (RajaOngkir-style)
+
+Work Log:
+- Read worklog.md and existing codebase: constants.ts, checkout-screen.tsx, auth-middleware.ts, logger.ts, Prisma schema, types.ts
+- Created /src/lib/shipping-calculator.ts — Core shipping calculation engine:
+  - Defined ShippingRateResult interface (provider, service, name, price, estimatedDays, logo)
+  - Defined ShippingCalculationRequest interface (originCity, destinationCity, weight, courier?)
+  - Implemented detectZone() function with 4 zones: same_city, same_province, same_island, inter_island
+  - Built CITY_ISLAND_MAP with 50+ Indonesian cities mapped to islands (Sumatra, Java, Kalimantan, Sulawesi, Bali/NT, Maluku, Papua)
+  - Built PROVINCE_ISLAND_MAP for province-based zone detection fallback
+  - Built PROVINCE_CITY_MAP for same-province city groupings
+  - Created COURIER_CONFIG with 6 couriers (JNE, SiCepat, J&T, AnterAja, Tiki, POS Indonesia):
+    - JNE: REG + YES services, base 8k-25k by zone, +2k-5k/kg
+    - SiCepat: REG + BEST services, base 7k-22k, +1.5k-4k/kg
+    - J&T: EZ service, base 6k-20k, +1.5k-3.5k/kg
+    - AnterAja: REG service, base 5k-18k, +1k-3k/kg
+    - Tiki: REG service, base 7k-23k, +2k-4k/kg
+    - POS Indonesia: KILAT service, base 6k-20k, +1k-3k/kg
+  - Implemented calculateShippingRates() async function:
+    - Tries RajaOngkir API first if RAJAONGKIR_API_KEY env var exists
+    - Falls back to local zone-based calculation if API unavailable or fails
+    - Price formula: base rate + perKgRate * (ceil(weight/1000) - 1), rounded to nearest 100 IDR
+    - Minimum weight: 1kg
+  - Added RajaOngkir API integration stub (fetchRajaOngkirRates):
+    - Reads RAJAONGKIR_API_KEY env var
+    - Calls api.rajaongkir.com/starter/cost with proper params
+    - Parses response into ShippingRateResult format
+    - Returns empty array on failure (triggers local fallback)
+  - Exported getSupportedCouriers() and isValidCourier() utility functions
+  - Used Pino logger from @/lib/logger
+- Created /src/app/api/shipping/calculate/route.ts — POST endpoint:
+  - Auth required via verifyAuth
+  - Rate limit: 20 req/min per user via checkRateLimit
+  - Validates originCity/destinationCity (required, max 100 chars)
+  - Validates weight (required, positive number, max 100000g/100kg)
+  - Validates courier (optional, must be valid provider)
+  - Returns { success: true, data: { rates, origin, destination, weight } }
+  - Uses Pino logger and logBusinessEvent
+  - Error handling with try/catch and proper status codes
+- Created /src/app/api/shipping/couriers/route.ts — GET endpoint:
+  - Public endpoint (no auth required)
+  - Returns list of all supported couriers with services and descriptions
+  - Response: { success: true, data: [{ provider, services, logo }] }
+  - Uses Pino logger
+- Updated /src/lib/constants.ts:
+  - Kept existing SHIPPING_OPTIONS for backward compatibility
+  - Added DEFAULT_SHIPPING_OPTIONS (copy of SHIPPING_OPTIONS for fallback)
+  - Added COURIER_PROVIDERS config with metadata (provider, logo, description, services)
+  - Added CourierProviderConfig TypeScript interface
+  - 6 couriers documented: JNE, SiCepat, J&T, AnterAja, Tiki, POS Indonesia
+- Updated /src/components/ecommerce/checkout-screen.tsx:
+  - Changed import from SHIPPING_OPTIONS to DEFAULT_SHIPPING_OPTIONS
+  - Added useEffect, useCallback imports
+  - Added state: shippingRatesBySeller, isLoadingRates
+  - Added weightBySeller useMemo for calculating total weight per seller group
+  - Added fetchShippingRates callback that calls POST /api/shipping/calculate
+  - Added useEffect to auto-fetch shipping rates when address is selected
+  - Added useEffect to re-fetch rates when address city changes
+  - Added getShippingOptions callback (dynamic rates or DEFAULT_SHIPPING_OPTIONS fallback)
+  - Updated ShippingSelector component:
+    - Added `options` prop (dynamic ShippingOption[]) and `isLoading` prop
+    - Shows loading spinner while fetching rates ("Menghitung ongkos kirim...")
+    - Shows "Menghitung ongkir..." in header while loading
+    - Shows "Tidak ada layanan pengiriman tersedia" when no options
+    - Maps dynamic options instead of static SHIPPING_OPTIONS
+  - Updated ShippingSelector usage to pass dynamic options and loading state
+  - Removed unused Package import
+  - Removed unused groupIdx variable
+  - Error handling: falls back to DEFAULT_SHIPPING_OPTIONS on API failure
+- Ran bun run lint: 0 errors, 0 warnings
+- Dev server running cleanly
+
+Stage Summary:
+- Shipping Cost Calculator API fully implemented (RajaOngkir-style)
+- 2 new API endpoints: POST /api/shipping/calculate and GET /api/shipping/couriers
+- Intelligent zone-based pricing algorithm with 4 zones, 6 couriers, 10 services
+- RajaOngkir API integration stub ready for production (env-var gated)
+- Checkout screen now fetches dynamic shipping rates from API with loading states
+- Graceful fallback to DEFAULT_SHIPPING_OPTIONS on API failure
+- Weight-based calculation using product.weight field from cart items
+- All code follows existing patterns (auth-middleware, logger, response format)

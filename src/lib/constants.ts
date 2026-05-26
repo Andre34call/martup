@@ -1,6 +1,7 @@
 import type { ShippingOption } from './types'
 
-// Shipping options available for checkout
+// ==================== SHIPPING OPTIONS ====================
+// Default hardcoded shipping options for fallback when API is unavailable
 export const SHIPPING_OPTIONS: ShippingOption[] = [
   { provider: 'JNE', service: 'REG', name: 'JNE Reguler', price: 15000, estimatedDays: '2-3 hari', logo: '📦' },
   { provider: 'JNE', service: 'YES', name: 'JNE YES', price: 25000, estimatedDays: '1 hari', logo: '🚀' },
@@ -9,4 +10,74 @@ export const SHIPPING_OPTIONS: ShippingOption[] = [
   { provider: 'J&T', service: 'EZ', name: 'J&T Express', price: 10000, estimatedDays: '2-4 hari', logo: '🚚' },
   { provider: 'AnterAja', service: 'REG', name: 'AnterAja Reguler', price: 9000, estimatedDays: '3-5 hari', logo: '📮' },
   { provider: 'Tiki', service: 'REG', name: 'Tiki Reguler', price: 14000, estimatedDays: '2-3 hari', logo: '📬' },
+]
+
+// Default shipping options — used as fallback when shipping calculation API fails
+export const DEFAULT_SHIPPING_OPTIONS: ShippingOption[] = [...SHIPPING_OPTIONS]
+
+// ==================== COURIER PROVIDERS CONFIG ====================
+// Metadata for all supported courier providers
+
+export interface CourierProviderConfig {
+  provider: string
+  logo: string
+  description: string
+  services: {
+    service: string
+    name: string
+    description: string
+  }[]
+}
+
+export const COURIER_PROVIDERS: CourierProviderConfig[] = [
+  {
+    provider: 'JNE',
+    logo: '📦',
+    description: 'Jalur Nugraha Ekakurir — salah satu kurir terbesar di Indonesia',
+    services: [
+      { service: 'REG', name: 'JNE Reguler', description: 'Layanan reguler JNE, estimasi 2-3 hari' },
+      { service: 'YES', name: 'JNE YES (Yakin Esok Sampai)', description: 'Layanan express JNE, estimasi 1 hari' },
+    ],
+  },
+  {
+    provider: 'SiCepat',
+    logo: '✈️',
+    description: 'SiCepat Express — layanan pengiriman cepat dan terpercaya',
+    services: [
+      { service: 'REG', name: 'SiCepat Reguler', description: 'Layanan reguler SiCepat, estimasi 2-3 hari' },
+      { service: 'BEST', name: 'SiCepat BEST (Besok Sampai Tinggal)', description: 'Layanan express SiCepat, estimasi 1-2 hari' },
+    ],
+  },
+  {
+    provider: 'J&T',
+    logo: '🚚',
+    description: 'J&T Express — jaringan pengiriman luas di seluruh Indonesia',
+    services: [
+      { service: 'EZ', name: 'J&T Express EZ', description: 'Layanan express J&T, estimasi 2-3 hari' },
+    ],
+  },
+  {
+    provider: 'AnterAja',
+    logo: '📮',
+    description: 'AnterAja — solusi pengiriman terjangkau dari Astra',
+    services: [
+      { service: 'REG', name: 'AnterAja Reguler', description: 'Layanan reguler AnterAja, estimasi 3-5 hari' },
+    ],
+  },
+  {
+    provider: 'Tiki',
+    logo: '📬',
+    description: 'Tiki — Citra Van Titipan Kilat, kurir nasional terpercaya',
+    services: [
+      { service: 'REG', name: 'Tiki Reguler', description: 'Layanan reguler Tiki, estimasi 2-3 hari' },
+    ],
+  },
+  {
+    provider: 'POS Indonesia',
+    logo: '🏣',
+    description: 'POS Indonesia — layanan pengiriman nasional',
+    services: [
+      { service: 'KILAT', name: 'POS Kilat Khusus', description: 'Layanan kilat POS Indonesia, estimasi 2-4 hari' },
+    ],
+  },
 ]
