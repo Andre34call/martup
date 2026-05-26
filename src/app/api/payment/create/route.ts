@@ -94,16 +94,56 @@ export async function POST(request: NextRequest) {
     const orderAge = Date.now() - order.createdAt.getTime()
     const expiryMs = ORDER_EXPIRY_HOURS * 60 * 60 * 1000
     if (orderAge > expiryMs) {
-      // Auto-cancel the expired order
-      await db.order.update({
-        where: { id: orderId },
-        data: {
-          status: 'cancelled',
-          paymentStatus: 'expired',
-          cancelledAt: new Date(),
-          cancelReason: 'Order expired (unpaid for 24 hours)',
-        },
+      // Auto-cancel the expired order and restore stock
+      await db.$transaction(async (tx) => {
+        // Update order status
+        await tx.order.update({
+          where: { id: orderId },
+          data: {
+            status: 'cancelled',
+            paymentStatus: 'expired',
+            cancelledAt: new Date(),
+            cancelReason: 'Order expired (unpaid for 24 hours)',
+          },
+        })
+
+        // Restore product stock for all order items
+        for (const item of order.items) {
+          // Restore variant stock if variantId exists
+          if (item.variantId) {
+            await tx.productVariant.update({
+              where: { id: item.variantId },
+              data: { stock: { increment: item.quantity } },
+            })
+          }
+          // Restore product stock and decrement sold count
+          await tx.product.update({
+            where: { id: item.productId },
+            data: {
+              stock: { increment: item.quantity },
+              sold: { decrement: item.quantity },
+            },
+          })
+        }
+
+        // Create notification for buyer
+        await tx.notification.create({
+          data: {
+            userId: order.userId,
+            title: 'Pesanan Dibatalkan',
+            content: `Pesanan ${order.orderNumber} dibatalkan otomatis karena pembayaran tidak diterima dalam 24 jam`,
+            type: 'order',
+            refType: 'order',
+            refId: order.id,
+          },
+        })
       })
+
+      logger.info(
+        { orderId: order.id, orderNumber: order.orderNumber },
+        'Auto-cancelled expired order during payment attempt'
+      )
+
       return NextResponse.json(
         { success: false, error: 'Order has expired. Unpaid orders are automatically cancelled after 24 hours.' },
         { status: 400 }

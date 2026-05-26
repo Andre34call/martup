@@ -1340,3 +1340,211 @@ Stage Summary:
 - Sellers can now update bank account and store details
 - Advanced product search with facets available
 - Estimated readiness: 60% → 70%+
+
+---
+Task ID: Phase3-1
+Agent: Order Store API Sync Agent
+Task: Rewrite order Zustand store to sync with server-side APIs
+
+Work Log:
+- Read all relevant files: order.ts, types.ts, getAuthHeaders.ts, API routes (orders, orders/[id]/status, orders/[id], payment/create), React Query hooks, and all UI consumers (order-screen.tsx, checkout-screen.tsx, seller-screens.tsx)
+- Updated types.ts:
+  - Added `isOrdersLoaded: boolean` to OrderSlice
+  - Added `fetchOrders: (userId: string) => Promise<void>` to OrderSlice
+  - Updated `updateOrderStatus` signature to accept optional `options?: { trackingNumber?: string; cancelReason?: string }` (backward-compatible: existing callers with 2 args still work)
+  - Updated `payForOrder` signature to return `Promise<{ token?: string; redirectUrl?: string } | void>` (backward-compatible: callers that ignore return value still work)
+  - Updated `cancelOrder` and `updateOrderTracking` signatures to return `Promise<void>`
+- Rewrote order.ts with full API sync:
+
+  **`updateOrderStatus(orderId, status, options?)`**:
+  - Optimistic update: changes local state immediately (status, seller balance adjustments, timestamps)
+  - Calls `PUT /api/orders/${orderId}/status` with `{ status, trackingNumber?, cancelReason? }` using `getAuthHeaders(true)` for CSRF
+  - On API success: replaces optimistic update with server response via `mapServerOrder()`
+  - On API failure: rollback to pre-mutation snapshot
+  - For 'cancelled' status without explicit cancelReason: defaults to 'Dibatalkan oleh pengguna'
+  - For 'shipped' status: uses trackingNumber from options or falls back to local order shipping data
+
+  **`payForOrder(orderId)`**:
+  - Optimistic update: marks order as paid locally, adjusts wallet/seller balances for wallet payments
+  - For wallet payment method: attempts wallet deduction API, then calls `PUT /api/orders/${orderId}/status` with `{ status: 'paid' }`
+  - For Midtrans/card/other: calls `POST /api/payment/create` with `{ orderId }` to get Snap token
+  - For Midtrans: rolls back optimistic "paid" status (order stays pending until webhook confirms), returns `{ token, redirectUrl }` for UI to open Snap popup
+  - On API failure: rollback to pre-mutation snapshot
+
+  **`cancelOrder(orderId)`**:
+  - Optimistic update: marks as cancelled locally, adjusts seller pending balance, refunds wallet if applicable
+  - Calls `PUT /api/orders/${orderId}/status` with `{ status: 'cancelled', cancelReason: 'Dibatalkan oleh pembeli' }`
+  - On API failure: rollback to pre-mutation snapshot
+
+  **`updateOrderTracking(orderId, trackingNumber)`**:
+  - Optimistic update: updates tracking number in local shipping data
+  - Calls `PUT /api/orders/${orderId}/status` with `{ status: 'shipped', trackingNumber }`
+  - On API failure: rollback to pre-mutation snapshot
+
+  **`addOrder(order)`**:
+  - Kept as local-only state update (API call happens in checkout-screen.tsx)
+
+  **`fetchOrders(userId)` — NEW method**:
+  - Calls `GET /api/orders?userId=${userId}` with `getAuthHeaders()`
+  - Replaces local orders array with server data via `mapServerOrder()`
+  - Sets `isOrdersLoaded: true` on completion (even on failure)
+
+- Added `mapServerOrder()` helper to normalize server response objects to local Order type
+- Added `snapshotOrders()` and `restoreOrders()` helpers for rollback support
+- All mutating API calls use `getAuthHeaders(true)` for CSRF token; fetchOrders uses `getAuthHeaders()` without CSRF
+- Lint check passes with 0 errors
+- Dev server running cleanly
+
+Stage Summary:
+- All 5 order store methods now sync with server APIs (was 100% local-only before)
+- Optimistic updates with rollback provide responsive UX even with network latency
+- payForOrder returns Midtrans Snap token for non-wallet payments, enabling proper payment flow
+- cancelOrder now persists cancellation on server with proper cancelReason
+- updateOrderStatus supports optional trackingNumber and cancelReason parameters
+- New fetchOrders method enables loading orders from server on app init
+- Backward compatibility maintained: existing UI component calls still work without changes
+
+---
+Task ID: Phase3-4
+Agent: Auto-Cancel Cron Agent
+Task: Auto-Cancel Expired Orders Cron Job
+
+Work Log:
+- Created /api/cron/cancel-expired route (src/app/api/cron/cancel-expired/route.ts):
+  - GET handler for Vercel Cron calls
+  - POST handler for manual triggering (same auth)
+  - Security: Verifies Authorization: Bearer ${CRON_SECRET} header with timing-safe comparison, returns 401 if missing/invalid
+  - Rate limit: Max 1 call per minute using in-memory rate limiter (prevents abuse)
+  - Logic: Finds all orders where status='pending' AND paymentStatus='unpaid' AND createdAt < now() - 24h
+  - For each expired order, in a $transaction:
+    a. Updates order: status='cancelled', paymentStatus='expired', cancelledAt=now(), cancelReason='Otomatis dibatalkan: pembayaran tidak diterima dalam 24 jam'
+    b. Restores product stock for all order items (increment stock, decrement sold)
+    c. Restores variant stock if variantId exists
+    d. Creates notification for buyer
+  - Returns { success: true, data: { cancelledCount, orderIds } }
+  - Uses structured logging via logger and logBusinessEvent from @/lib/logger
+  - Per-order error handling: if one order fails, others still process
+- Created vercel.json with cron schedule: 0 * * * * (runs every hour)
+- Generated CRON_SECRET via openssl rand -base64 32 and added to .env
+- Fixed /api/payment/create/route.ts:
+  - Previous auto-cancel logic (lines 93-111) only updated order status but did NOT restore stock
+  - Wrapped auto-cancel logic in db.$transaction that now:
+    a. Updates order status to cancelled/expired
+    b. Restores product stock for all order items (increment stock, decrement sold)
+    c. Restores variant stock if variantId exists
+    d. Creates notification for buyer
+  - Added structured logging for the auto-cancel event
+- Lint check passes with 0 errors, 0 warnings
+- Dev server running cleanly
+
+Stage Summary:
+- Unpaid orders no longer hold stock indefinitely — Vercel Cron cancels them every hour
+- Both proactive (cron) and reactive (payment attempt) auto-cancel paths now properly restore stock
+- CRON_SECRET prevents unauthorized access to the cron endpoint
+- Rate limiting prevents cron endpoint abuse
+- Stock restoration covers both product-level and variant-level stock
+
+---
+Task ID: Phase3-2
+Agent: Wallet Store API Sync Agent
+Task: Rewrite wallet Zustand store to sync with server-side Wallet APIs
+
+Work Log:
+- Read existing files: wallet.ts, types.ts, getAuthHeaders.ts, and 4 wallet API routes (topup, withdraw, main wallet GET, mutations GET)
+- Read UI consumers: DepositScreen (missing-screens.tsx), WithdrawScreen (missing-screens.tsx), CheckoutScreen (checkout-screen.tsx)
+- Updated WalletSlice interface in types.ts:
+  - Added `isWalletLoaded: boolean` state field
+  - Added `fetchWalletBalance: (userId: string) => Promise<void>` method
+  - Added `fetchWalletMutations: (userId: string) => Promise<void>` method
+  - Changed `topUpWallet: (amount: number) => void` → `(amount: number, method?: string) => Promise<void>`
+  - Changed `withdrawWallet: (amount: number, bankAccount: string) => void` → `(amount: number, bankAccount: string, bankDetails?: { bankAccount: string; bankName: string; bankHolder: string }) => Promise<void>`
+  - Kept `deductWallet: (amount: number, description: string) => void` unchanged (local-only, API call happens in checkout-screen.tsx)
+- Rewrote wallet.ts with API sync:
+  - `topUpWallet(amount, method)`: Calls POST /api/wallet/topup with { amount, method } using getAuthHeaders(true) for CSRF. API creates PENDING deposit — does NOT increment balance until admin approves. Adds pending mutation to local state. On failure, does not update local state and re-throws error.
+  - `withdrawWallet(amount, bankAccount, bankDetails)`: Calls POST /api/wallet/withdraw with { amount, bankAccount, bankName, bankHolder } using getAuthHeaders(true). On success, updates local state (balance decremented, holdBalance incremented) to reflect the escrow move. On failure, does not update local state and re-throws error.
+  - `deductWallet(amount, description)`: Kept as local-only update — the actual API call happens during checkout in checkout-screen.tsx.
+  - `fetchWalletBalance(userId)`: NEW method — Calls GET /api/wallet?userId=${userId} with getAuthHeaders(). Updates walletBalance, walletHoldBalance, walletCoins, and walletMutations from server data. Sets isWalletLoaded=true.
+  - `fetchWalletMutations(userId)`: NEW method — Calls GET /api/wallet/mutations?userId=${userId} with getAuthHeaders(). Updates walletMutations array from server data. Handles both array and { items } response formats.
+- Updated DepositScreen (missing-screens.tsx):
+  - Removed direct API call to deprecated POST /api/wallet
+  - Now calls topUpWallet(amount, method) which handles the API call internally
+  - Maps UI payment method keys (gopay/ovo/dana/bank) to API method names
+  - Proper error handling: shows toast with error message instead of always showing success
+  - Updated success message to indicate "menunggu pembayaran" (pending payment)
+- Updated WithdrawScreen (missing-screens.tsx):
+  - Changed handleWithdraw from sync to async
+  - Now calls withdrawWallet with structured bank details (accountNumber, bankName, accountHolder)
+  - Proper error handling with try/catch and error toast
+- All existing method signatures backward-compatible: method added as optional param, bankDetails added as optional param
+- Lint check passes with 0 errors, 0 warnings
+- Dev server running cleanly
+
+Stage Summary:
+- Wallet store methods now sync with server APIs instead of being local-only
+- topUpWallet calls POST /api/wallet/topup — creates PENDING deposit, no balance credit until verified
+- withdrawWallet calls POST /api/wallet/withdraw — moves balance to holdBalance on success
+- deductWallet remains local-only (checkout handles the API call)
+- New fetchWalletBalance and fetchWalletMutations methods enable server-state hydration
+- isWalletLoaded tracks whether wallet data has been fetched from server
+- UI components updated for proper async error handling
+- Server is source of truth: if API fails, local state is not updated
+
+---
+Task ID: Phase3-5-6-7
+Agent: Multi-Fix Agent
+Task: Fix Search Screen API, Seller Settings Save, and Centralized Env Validation
+
+Work Log:
+- Fix 1 (P1): Rewrote search-screen.tsx to use /api/search endpoint instead of client-side filtering
+  - Added debounced (300ms) API calls to GET /api/search?q=...&category=...&sortBy=...&minPrice=...&maxPrice=...&condition=...&page=...&limit=20
+  - Added loading state with spinner while API call is in progress
+  - Added error state with retry option on API failure
+  - Added filter bar with Filter and Sort buttons
+  - Added expandable filters panel showing facets from API: category (with counts), condition (Baru/Bekas with counts), price range inputs
+  - Added sort dropdown with 6 options: Relevan, Harga Terendah, Harga Tertinggi, Terbaru, Terpopuler, Rating Tertinggi
+  - Added pagination with page number buttons (Previous/Next + numbered pages)
+  - Added reset filters button showing active filter count badge
+  - Uses getAuthHeaders() for auth personalization
+  - Maps API response products to local Product type with proper type coercion (Decimal→number, JSON arrays, nested seller/category objects)
+  - Preserved original UI design for default view (search history, trending, categories, recent products)
+  - AbortController for proper cleanup of stale requests
+  - Category slug set from selectedCategoryId when navigating from category screen
+
+- Fix 2 (P1): Seller settings save now calls PUT /api/seller/profile
+  - Added local state for bankAccount, bankName, bankHolder, storeAddress (was using uncontrolled defaultValue inputs)
+  - Changed all bank fields from defaultValue to value + onChange (controlled inputs)
+  - Added storeAddress textarea field (was missing from UI)
+  - Added handleSave async function that calls PUT /api/seller/profile with all 7 fields
+  - Added isSaving loading state, button shows "Menyimpan..." while saving and is disabled
+  - Success: shows "Pengaturan berhasil disimpan!" toast
+  - Failure: shows error toast with API error message
+  - Uses getAuthHeaders(true) for CSRF token
+
+- Fix 2 (P1): Fixed fire-and-forget order status updates in seller-screens.tsx
+  - "Proses" button (paid→processing): Now calls PUT /api/orders/{id}/status with proper error handling
+    - On success: updates local state and shows success toast
+    - On failure: shows error toast, does NOT update local state
+  - "Kirim Pesanan" button (processing→shipped): Now calls PUT /api/orders/{id}/status with tracking number
+    - On success: updates local state (order tracking + status) and shows success toast
+    - On failure: shows error toast, does NOT update local state, does NOT close dialog (allows retry)
+  - Both previously used fetch('/api/orders', PUT).catch(() => {}) — silent error swallowing
+  - Both now use the proper /api/orders/{id}/status endpoint instead of the generic /api/orders endpoint
+
+- Fix 3 (P1): Created centralized environment variable validation at src/lib/env.ts
+  - Validates required vars at module load time (throws in production if NEXTAUTH_SECRET or SUPABASE_DATABASE_URL missing)
+  - Warns about recommended vars in development (TOKEN_SECRET, CSRF_SECRET, CRON_SECRET)
+  - Exports typed `env` const object with all env vars, providing sensible fallbacks
+  - TOKEN_SECRET falls back to NEXTAUTH_SECRET, CSRF_SECRET falls back to NEXTAUTH_SECRET
+  - Updated auth-middleware.ts: imports env from @/lib/env, uses env.TOKEN_SECRET instead of process.env.TOKEN_SECRET
+  - Updated csrf.ts: imports env from @/lib/env, uses env.CSRF_SECRET instead of process.env.CSRF_SECRET
+  - Updated auth.ts: imports env from @/lib/env, uses env.NEXTAUTH_SECRET and env.NEXTAUTH_URL instead of process.env
+
+- Lint check passes with 0 errors, 0 warnings
+- Dev server running cleanly
+
+Stage Summary:
+- Search screen now uses server-side search API with facets, pagination, sorting, and filters
+- Seller settings now properly saves to server via PUT /api/seller/profile with controlled inputs and error handling
+- Seller order status updates now have proper API-first error handling (no more silent failures)
+- Centralized env.ts provides startup validation and typed env accessor for all env vars
+- 6 files modified/created: search-screen.tsx, seller-screens.tsx, env.ts, auth-middleware.ts, csrf.ts, auth.ts

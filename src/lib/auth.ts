@@ -1,5 +1,6 @@
 import type { NextAuthOptions } from 'next-auth'
 import { logger } from '@/lib/logger'
+import { env } from '@/lib/env'
 import GoogleProvider from 'next-auth/providers/google'
 
 export const authOptions: NextAuthOptions = {
@@ -32,8 +33,8 @@ export const authOptions: NextAuthOptions = {
       // Sync user to our database
       try {
         // SECURITY: Add internal secret to verify this is from NextAuth callback, not external caller
-        const internalSecret = process.env.NEXTAUTH_SECRET || ''
-        const response = await fetch(`${process.env.NEXTAUTH_URL || ''}/api/auth/sync-user`, {
+        const internalSecret = env.NEXTAUTH_SECRET
+        const response = await fetch(`${env.NEXTAUTH_URL}/api/auth/sync-user`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -61,5 +62,5 @@ export const authOptions: NextAuthOptions = {
     signIn: '/',
     error: '/',
   },
-  secret: process.env.NEXTAUTH_SECRET,
+  secret: env.NEXTAUTH_SECRET || undefined,
 }

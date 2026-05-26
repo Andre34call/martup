@@ -542,15 +542,23 @@ export function SellerOrders() {
                     <p className="text-base font-bold text-foreground">{formatPrice(order.amount)}</p>
                     <div className="flex gap-2">
                       {order.status === "paid" && (
-                        <Button size="sm" className="h-8 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={() => {
-                          updateOrderStatus(order.id, 'processing')
-                          // Also update via API
-                          fetch('/api/orders', {
-                            method: 'PUT',
-                            headers: getAuthHeaders(true),
-                            body: JSON.stringify({ orderId: order.id, status: 'processing' }),
-                          }).catch(() => {})
-                          showToast("Pesanan sedang diproses", "success")
+                        <Button size="sm" className="h-8 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={async () => {
+                          try {
+                            const res = await fetch(`/api/orders/${order.id}/status`, {
+                              method: 'PUT',
+                              headers: getAuthHeaders(true),
+                              body: JSON.stringify({ status: 'processing' }),
+                            })
+                            const data = await res.json()
+                            if (!res.ok || !data.success) {
+                              throw new Error(data.error || 'Gagal mengubah status')
+                            }
+                            updateOrderStatus(order.id, 'processing')
+                            showToast("Pesanan sedang diproses", "success")
+                          } catch (err: unknown) {
+                            const message = err instanceof Error ? err.message : 'Gagal mengubah status pesanan'
+                            showToast(message, "error")
+                          }
                         }}>
                           <Package className="w-3 h-3 mr-1" /> Proses
                         </Button>
@@ -597,21 +605,30 @@ export function SellerOrders() {
               Batal
             </Button>
             <Button
-              onClick={() => {
+              onClick={async () => {
                 if (!trackingNumber.trim()) {
                   showToast("Masukkan nomor resi", "error")
                   return
                 }
                 if (trackingOrderId) {
-                  updateOrderTracking(trackingOrderId, trackingNumber.trim())
-                  updateOrderStatus(trackingOrderId, 'shipped')
-                  // Also update via API
-                  fetch('/api/orders', {
-                    method: 'PUT',
-                    headers: getAuthHeaders(true),
-                    body: JSON.stringify({ orderId: trackingOrderId, status: 'shipped', trackingNumber: trackingNumber.trim() }),
-                  }).catch(() => {})
-                  showToast("Pesanan sedang dikirim", "success")
+                  try {
+                    const res = await fetch(`/api/orders/${trackingOrderId}/status`, {
+                      method: 'PUT',
+                      headers: getAuthHeaders(true),
+                      body: JSON.stringify({ status: 'shipped', trackingNumber: trackingNumber.trim() }),
+                    })
+                    const data = await res.json()
+                    if (!res.ok || !data.success) {
+                      throw new Error(data.error || 'Gagal mengubah status')
+                    }
+                    updateOrderTracking(trackingOrderId, trackingNumber.trim())
+                    updateOrderStatus(trackingOrderId, 'shipped')
+                    showToast("Pesanan sedang dikirim", "success")
+                  } catch (err: unknown) {
+                    const message = err instanceof Error ? err.message : 'Gagal mengubah status pesanan'
+                    showToast(message, "error")
+                    return // Don't close dialog on error
+                  }
                 }
                 setShowTrackingDialog(false)
                 setTrackingOrderId(null)
@@ -1128,7 +1145,41 @@ export function SellerSettings() {
   const { showToast, seller } = useAppStore()
   const [storeName, setStoreName] = useState(seller?.storeName || "My Store")
   const [storeDesc, setStoreDesc] = useState(seller?.storeDesc || "")
+  const [storeAddress, setStoreAddress] = useState(seller?.storeAddress || "")
   const [autoReplyMsg, setAutoReplyMsg] = useState(seller?.autoReply || "Terima kasih sudah menghubungi kami. Kami akan membalas pesan Anda secepatnya.")
+  const [bankAccount, setBankAccount] = useState(seller?.bankAccount || "")
+  const [bankName, setBankName] = useState(seller?.bankName || "")
+  const [bankHolder, setBankHolder] = useState(seller?.bankHolder || "")
+  const [isSaving, setIsSaving] = useState(false)
+
+  const handleSave = async () => {
+    setIsSaving(true)
+    try {
+      const res = await fetch('/api/seller/profile', {
+        method: 'PUT',
+        headers: getAuthHeaders(true),
+        body: JSON.stringify({
+          storeName,
+          storeDesc,
+          storeAddress,
+          autoReply: autoReplyMsg,
+          bankAccount,
+          bankName,
+          bankHolder,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Gagal menyimpan pengaturan')
+      }
+      showToast("Pengaturan berhasil disimpan!", "success")
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Gagal menyimpan pengaturan'
+      showToast(message, "error")
+    } finally {
+      setIsSaving(false)
+    }
+  }
 
   return (
     <div className="pb-20">
@@ -1149,6 +1200,15 @@ export function SellerSettings() {
                 value={storeDesc}
                 onChange={e => setStoreDesc(e.target.value)}
                 className="w-full min-h-[80px] rounded-xl border border-input bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 resize-none"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-foreground">Alamat Toko</label>
+              <textarea
+                value={storeAddress}
+                onChange={e => setStoreAddress(e.target.value)}
+                className="w-full min-h-[60px] rounded-xl border border-input bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 resize-none"
+                placeholder="Alamat lengkap toko"
               />
             </div>
           </Card>
@@ -1172,15 +1232,15 @@ export function SellerSettings() {
           <Card className="mt-3 p-4 space-y-4">
             <div className="space-y-2">
               <label className="text-xs font-medium text-foreground">Nama Bank <span className="text-red-500">*</span></label>
-              <Input defaultValue={seller?.bankName || ""} className="rounded-xl" placeholder="Contoh: BCA" />
+              <Input value={bankName} onChange={e => setBankName(e.target.value)} className="rounded-xl" placeholder="Contoh: BCA" />
             </div>
             <div className="space-y-2">
               <label className="text-xs font-medium text-foreground">Nomor Rekening <span className="text-red-500">*</span></label>
-              <Input defaultValue={seller?.bankAccount || ""} className="rounded-xl" placeholder="Nomor rekening" />
+              <Input value={bankAccount} onChange={e => setBankAccount(e.target.value)} className="rounded-xl" placeholder="Nomor rekening" />
             </div>
             <div className="space-y-2">
               <label className="text-xs font-medium text-foreground">Nama Pemilik <span className="text-red-500">*</span></label>
-              <Input defaultValue={seller?.bankHolder || ""} className="rounded-xl" placeholder="Nama sesuai rekening" />
+              <Input value={bankHolder} onChange={e => setBankHolder(e.target.value)} className="rounded-xl" placeholder="Nama sesuai rekening" />
             </div>
           </Card>
         </motion.div>
@@ -1212,8 +1272,8 @@ export function SellerSettings() {
 
         {/* Save Button */}
         <motion.div {...fadeIn}>
-          <Button className="w-full bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-11" onClick={() => showToast("Pengaturan berhasil disimpan!", "success")}>
-            Simpan Pengaturan
+          <Button className="w-full bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-11" onClick={handleSave} disabled={isSaving}>
+            {isSaving ? "Menyimpan..." : "Simpan Pengaturan"}
           </Button>
         </motion.div>
       </div>

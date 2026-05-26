@@ -1,9 +1,82 @@
 import type { StateCreator } from 'zustand'
 import type { OrderSlice, AppStore } from './types'
-import type { OrderStatus } from '../types'
+import type { Order, OrderStatus } from '../types'
+import { getAuthHeaders } from './getAuthHeaders'
+
+/**
+ * Helper: take a snapshot of the current orders array for rollback.
+ */
+function snapshotOrders(state: AppStore): Order[] {
+  return [...state.orders]
+}
+
+/**
+ * Helper: restore orders from a snapshot.
+ */
+function restoreOrders(orders: Order[]) {
+  return { orders }
+}
+
+/**
+ * Map a raw server order object to the local Order type.
+ * Server responses may contain extra DB fields (createdAt as Date, Decimal numbers, etc.)
+ * that we need to normalize for local state.
+ */
+function mapServerOrder(raw: Record<string, unknown>): Order {
+  return {
+    id: raw.id as string,
+    orderNumber: raw.orderNumber as string,
+    userId: raw.userId as string,
+    sellerId: raw.sellerId as string,
+    status: raw.status as OrderStatus,
+    subtotal: Number(raw.subtotal ?? 0),
+    shippingCost: Number(raw.shippingCost ?? 0),
+    discountAmount: Number(raw.discountAmount ?? 0),
+    taxAmount: Number(raw.taxAmount ?? 0),
+    platformFee: Number(raw.platformFee ?? 0),
+    totalAmount: Number(raw.totalAmount ?? 0),
+    paymentMethod: (raw.paymentMethod as string) || undefined,
+    paymentStatus: (raw.paymentStatus as string) || 'unpaid',
+    items: Array.isArray(raw.items)
+      ? raw.items.map((item: Record<string, unknown>) => ({
+          id: item.id as string,
+          productId: item.productId as string,
+          productName: item.productName as string,
+          variantName: (item.variantName as string) || undefined,
+          variantId: (item.variantId as string) || undefined,
+          price: Number(item.price ?? 0),
+          quantity: Number(item.quantity ?? 0),
+          subtotal: Number(item.subtotal ?? 0),
+          image: (item.image as string) || undefined,
+        }))
+      : [],
+    shipping: raw.shipping
+      ? {
+          id: (raw.shipping as Record<string, unknown>).id as string,
+          provider: (raw.shipping as Record<string, unknown>).provider as string,
+          service: (raw.shipping as Record<string, unknown>).service as string,
+          trackingNumber: ((raw.shipping as Record<string, unknown>).trackingNumber as string) || undefined,
+          estimatedDays: ((raw.shipping as Record<string, unknown>).estimatedDays as string) || undefined,
+          status: (raw.shipping as Record<string, unknown>).status as string,
+        }
+      : undefined,
+    // address may not be present in list API responses
+    address: raw.address as Order['address'],
+    seller: raw.seller as Order['seller'],
+    buyerName: (raw.buyerName as string) || undefined,
+    createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : new Date(raw.createdAt as number | string).toISOString(),
+    paidAt: typeof raw.paidAt === 'string' ? raw.paidAt : raw.paidAt ? new Date(raw.paidAt as number | string).toISOString() : undefined,
+    shippedAt: typeof raw.shippedAt === 'string' ? raw.shippedAt : raw.shippedAt ? new Date(raw.shippedAt as number | string).toISOString() : undefined,
+    deliveredAt: typeof raw.deliveredAt === 'string' ? raw.deliveredAt : raw.deliveredAt ? new Date(raw.deliveredAt as number | string).toISOString() : undefined,
+  }
+}
 
 export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set, get) => ({
   orders: [],
+  isOrdersLoaded: false,
+
+  // ==================== addOrder ====================
+  // Local-only — the API call happens in checkout-screen.tsx
   addOrder: (order) => set((state) => {
     const sellerCredit = order.status === 'paid' ? order.subtotal * 0.95 : 0
     const newSellerBalance = sellerCredit > 0
@@ -15,7 +88,6 @@ export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set
       : state.sellerBalance
 
     const updatedProducts = state.products.map(p => {
-      // Sum all quantities for this product (may have multiple variants)
       const totalQty = order.items
         .filter(item => item.productId === p.id)
         .reduce((sum, item) => sum + item.quantity, 0)
@@ -38,104 +110,345 @@ export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set
       products: updatedProducts,
     }
   }),
-  updateOrderStatus: (orderId, status) => set((state) => {
-    const order = state.orders.find(o => o.id === orderId)
-    if (!order) return state
-    const prevStatus = order.status
-    const sellerCredit = order.subtotal * 0.95
-    let newSellerBalance = { ...state.sellerBalance }
 
-    if (status === 'paid' && prevStatus !== 'paid') {
-      newSellerBalance.pendingBalance += sellerCredit
-    } else if (status === 'delivered') {
-      newSellerBalance.pendingBalance -= sellerCredit
-      newSellerBalance.availableBalance += sellerCredit
-    } else if (status === 'cancelled' && (prevStatus === 'paid' || prevStatus === 'processing' || prevStatus === 'shipped')) {
-      newSellerBalance.pendingBalance -= sellerCredit
+  // ==================== updateOrderStatus ====================
+  // Optimistic update + API sync with rollback
+  updateOrderStatus: async (orderId, status, options) => {
+    const preSnapshot = snapshotOrders(get())
+
+    // Optimistic update
+    set((state) => {
+      const order = state.orders.find(o => o.id === orderId)
+      if (!order) return state
+      const prevStatus = order.status
+      const sellerCredit = order.subtotal * 0.95
+      let newSellerBalance = { ...state.sellerBalance }
+
+      if (status === 'paid' && prevStatus !== 'paid') {
+        newSellerBalance.pendingBalance += sellerCredit
+      } else if (status === 'delivered') {
+        newSellerBalance.pendingBalance -= sellerCredit
+        newSellerBalance.availableBalance += sellerCredit
+      } else if (status === 'cancelled' && (prevStatus === 'paid' || prevStatus === 'processing' || prevStatus === 'shipped')) {
+        newSellerBalance.pendingBalance -= sellerCredit
+      }
+
+      newSellerBalance.totalBalance = newSellerBalance.availableBalance + newSellerBalance.pendingBalance + newSellerBalance.holdBalance
+
+      return {
+        orders: state.orders.map(o => o.id === orderId ? {
+          ...o, status,
+          ...(status === 'paid' ? { paymentStatus: 'paid', paidAt: new Date().toISOString() } : {}),
+          ...(status === 'shipped' ? { shippedAt: new Date().toISOString() } : {}),
+          ...(status === 'delivered' ? { deliveredAt: new Date().toISOString() } : {}),
+          ...(status === 'cancelled' ? { paymentStatus: 'refunded' } : {}),
+        } : o),
+        sellerBalance: newSellerBalance,
+      }
+    })
+
+    // API call
+    try {
+      const body: Record<string, unknown> = { status }
+      if (options?.trackingNumber) body.trackingNumber = options.trackingNumber
+      if (options?.cancelReason) body.cancelReason = options.cancelReason
+      if (status === 'cancelled' && !body.cancelReason) body.cancelReason = 'Dibatalkan oleh pengguna'
+      if (status === 'shipped' && !body.trackingNumber) {
+        // Try to use tracking from the local order's shipping data if available
+        const localOrder = get().orders.find(o => o.id === orderId)
+        if (localOrder?.shipping?.trackingNumber) {
+          body.trackingNumber = localOrder.shipping.trackingNumber
+        }
+      }
+
+      const res = await fetch(`/api/orders/${orderId}/status`, {
+        method: 'PUT',
+        headers: getAuthHeaders(true),
+        body: JSON.stringify(body),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok || !data.success) {
+        // Rollback on failure
+        set(restoreOrders(preSnapshot))
+        return
+      }
+
+      // On success: optionally update local state with server response
+      if (data.data) {
+        const serverOrder = mapServerOrder(data.data)
+        set((state) => ({
+          orders: state.orders.map(o => o.id === orderId ? serverOrder : o),
+        }))
+      }
+    } catch {
+      // Rollback on network error
+      set(restoreOrders(preSnapshot))
     }
+  },
 
-    newSellerBalance.totalBalance = newSellerBalance.availableBalance + newSellerBalance.pendingBalance + newSellerBalance.holdBalance
+  // ==================== payForOrder ====================
+  // Calls Midtrans for payment token or wallet deduction for wallet payments
+  payForOrder: async (orderId) => {
+    const preSnapshot = snapshotOrders(get())
+    const order = get().orders.find(o => o.id === orderId)
+    if (!order || order.status !== 'pending') return
 
-    return {
+    // Optimistic update: mark as paid locally
+    set((state) => {
+      const currentOrder = state.orders.find(o => o.id === orderId)
+      if (!currentOrder || currentOrder.status !== 'pending') return state
+
+      const sellerCredit = currentOrder.subtotal * 0.95
+      let newWalletBalance = state.walletBalance
+      let newWalletMutations = [...state.walletMutations]
+
+      if (currentOrder.paymentMethod?.toLowerCase() === 'wallet') {
+        if (currentOrder.totalAmount > state.walletBalance) return state
+        newWalletBalance = state.walletBalance - currentOrder.totalAmount
+        newWalletMutations = [{
+          id: `wm${Date.now()}`, type: 'debit' as const, amount: currentOrder.totalAmount, balance: newWalletBalance,
+          description: `Pembayaran Order #${currentOrder.orderNumber}`, refType: 'order', createdAt: new Date().toISOString()
+        }, ...state.walletMutations]
+      }
+
+      const newSellerBalance = {
+        ...state.sellerBalance,
+        pendingBalance: state.sellerBalance.pendingBalance + sellerCredit,
+        totalBalance: state.sellerBalance.availableBalance + state.sellerBalance.pendingBalance + sellerCredit + state.sellerBalance.holdBalance,
+      }
+
+      return {
+        orders: state.orders.map(o => o.id === orderId ? {
+          ...o, status: 'paid' as OrderStatus, paymentStatus: 'paid', paidAt: new Date().toISOString(),
+        } : o),
+        walletBalance: newWalletBalance,
+        walletMutations: newWalletMutations,
+        sellerBalance: newSellerBalance,
+      }
+    })
+
+    // API call: different flow based on payment method
+    try {
+      const paymentMethod = order.paymentMethod?.toLowerCase()
+
+      if (paymentMethod === 'wallet') {
+        // Wallet payment: deduct via wallet API, then mark order as paid
+        try {
+          await fetch('/api/wallet', {
+            method: 'POST',
+            headers: getAuthHeaders(true),
+            body: JSON.stringify({
+              userId: order.userId,
+              amount: -Math.max(0, order.totalAmount),
+              type: 'debit',
+              description: `Pembayaran Order #${order.orderNumber}`,
+            }),
+          })
+        } catch {
+          // Wallet deduction API may be deprecated; continue to status update
+        }
+
+        // Update order status to paid via the status API
+        const statusRes = await fetch(`/api/orders/${orderId}/status`, {
+          method: 'PUT',
+          headers: getAuthHeaders(true),
+          body: JSON.stringify({ status: 'paid' }),
+        })
+
+        if (!statusRes.ok) {
+          // If marking as paid fails (e.g., non-admin), rollback
+          // Note: wallet payments during checkout are handled separately in checkout-screen
+          // This path is for re-payment attempts
+          set(restoreOrders(preSnapshot))
+          return
+        }
+
+        const statusData = await statusRes.json()
+        if (statusData.success && statusData.data) {
+          const serverOrder = mapServerOrder(statusData.data)
+          set((state) => ({
+            orders: state.orders.map(o => o.id === orderId ? serverOrder : o),
+          }))
+        }
+
+        return
+      }
+
+      // Midtrans / card / other payment: create payment token
+      const res = await fetch('/api/payment/create', {
+        method: 'POST',
+        headers: getAuthHeaders(true),
+        body: JSON.stringify({ orderId }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok || !data.success) {
+        // Rollback optimistic update — payment wasn't actually completed yet
+        set(restoreOrders(preSnapshot))
+        return { token: undefined, redirectUrl: undefined }
+      }
+
+      // For Midtrans payments, the order stays 'pending' until webhook confirms
+      // Rollback the optimistic "paid" status since payment is not yet confirmed
+      set(restoreOrders(preSnapshot))
+
+      // Return the payment token for the UI to use (open Midtrans Snap popup)
+      return {
+        token: data.data?.token,
+        redirectUrl: data.data?.redirectUrl,
+      }
+    } catch {
+      // Rollback on network error
+      set(restoreOrders(preSnapshot))
+      return { token: undefined, redirectUrl: undefined }
+    }
+  },
+
+  // ==================== cancelOrder ====================
+  // Optimistic update + API call with rollback
+  cancelOrder: async (orderId) => {
+    const preSnapshot = snapshotOrders(get())
+
+    // Optimistic update
+    set((state) => {
+      const order = state.orders.find(o => o.id === orderId)
+      if (!order) return state
+
+      const wasPaid = order.paymentStatus === 'paid' || order.status === 'paid' || order.status === 'processing' || order.status === 'shipped'
+      const sellerCredit = order.subtotal * 0.95
+
+      let newSellerBalance = { ...state.sellerBalance }
+      let newWalletBalance = state.walletBalance
+      let newWalletMutations = [...state.walletMutations]
+
+      if (wasPaid) {
+        newSellerBalance.pendingBalance -= sellerCredit
+      }
+
+      if (order.paymentMethod?.toLowerCase() === 'wallet' && wasPaid) {
+        newWalletBalance = state.walletBalance + order.totalAmount
+        newWalletMutations = [{
+          id: `wm${Date.now()}`, type: 'credit' as const, amount: order.totalAmount, balance: newWalletBalance,
+          description: `Refund Order #${order.orderNumber}`, refType: 'refund', createdAt: new Date().toISOString()
+        }, ...state.walletMutations]
+      }
+
+      newSellerBalance.totalBalance = newSellerBalance.availableBalance + newSellerBalance.pendingBalance + newSellerBalance.holdBalance
+
+      return {
+        orders: state.orders.map(o => o.id === orderId ? {
+          ...o, status: 'cancelled' as OrderStatus, paymentStatus: 'refunded',
+        } : o),
+        sellerBalance: newSellerBalance,
+        walletBalance: newWalletBalance,
+        walletMutations: newWalletMutations,
+      }
+    })
+
+    // API call
+    try {
+      const res = await fetch(`/api/orders/${orderId}/status`, {
+        method: 'PUT',
+        headers: getAuthHeaders(true),
+        body: JSON.stringify({
+          status: 'cancelled',
+          cancelReason: 'Dibatalkan oleh pembeli',
+        }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok || !data.success) {
+        // Rollback on failure
+        set(restoreOrders(preSnapshot))
+        return
+      }
+
+      // On success: update with server response
+      if (data.data) {
+        const serverOrder = mapServerOrder(data.data)
+        set((state) => ({
+          orders: state.orders.map(o => o.id === orderId ? serverOrder : o),
+        }))
+      }
+    } catch {
+      // Rollback on network error
+      set(restoreOrders(preSnapshot))
+    }
+  },
+
+  // ==================== updateOrderTracking ====================
+  // Optimistic update + API call with rollback
+  updateOrderTracking: async (orderId, trackingNumber) => {
+    const preSnapshot = snapshotOrders(get())
+
+    // Optimistic update
+    set((state) => ({
       orders: state.orders.map(o => o.id === orderId ? {
-        ...o, status,
-        ...(status === 'paid' ? { paymentStatus: 'paid', paidAt: new Date().toISOString() } : {}),
-        ...(status === 'shipped' ? { shippedAt: new Date().toISOString() } : {}),
-        ...(status === 'delivered' ? { deliveredAt: new Date().toISOString() } : {}),
+        ...o,
+        shipping: o.shipping ? { ...o.shipping, trackingNumber } : undefined,
       } : o),
-      sellerBalance: newSellerBalance,
+    }))
+
+    // API call: use the status endpoint with shipped + trackingNumber
+    try {
+      const res = await fetch(`/api/orders/${orderId}/status`, {
+        method: 'PUT',
+        headers: getAuthHeaders(true),
+        body: JSON.stringify({
+          status: 'shipped',
+          trackingNumber,
+        }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok || !data.success) {
+        // Rollback on failure
+        set(restoreOrders(preSnapshot))
+        return
+      }
+
+      // On success: update with server response
+      if (data.data) {
+        const serverOrder = mapServerOrder(data.data)
+        set((state) => ({
+          orders: state.orders.map(o => o.id === orderId ? serverOrder : o),
+        }))
+      }
+    } catch {
+      // Rollback on network error
+      set(restoreOrders(preSnapshot))
     }
-  }),
-  payForOrder: (orderId) => set((state) => {
-    const order = state.orders.find(o => o.id === orderId)
-    if (!order || order.status !== 'pending') return state
+  },
 
-    const sellerCredit = order.subtotal * 0.95
-    let newWalletBalance = state.walletBalance
-    let newWalletMutations = [...state.walletMutations]
+  // ==================== fetchOrders ====================
+  // Fetch orders from the server and replace local state
+  fetchOrders: async (userId) => {
+    try {
+      const res = await fetch(`/api/orders?userId=${encodeURIComponent(userId)}`, {
+        method: 'GET',
+        headers: getAuthHeaders(),
+      })
 
-    if (order.paymentMethod?.toLowerCase() === 'wallet') {
-      if (order.totalAmount > state.walletBalance) return state
-      newWalletBalance = state.walletBalance - order.totalAmount
-      newWalletMutations = [{
-        id: `wm${Date.now()}`, type: 'debit' as const, amount: order.totalAmount, balance: newWalletBalance,
-        description: `Pembayaran Order #${order.orderNumber}`, refType: 'order', createdAt: new Date().toISOString()
-      }, ...state.walletMutations]
+      const data = await res.json()
+
+      if (res.ok && data.success && Array.isArray(data.data)) {
+        const serverOrders = data.data.map((raw: Record<string, unknown>) => mapServerOrder(raw))
+        set({
+          orders: serverOrders,
+          isOrdersLoaded: true,
+        })
+      } else {
+        // Even on failure, mark as loaded (we tried)
+        set({ isOrdersLoaded: true })
+      }
+    } catch {
+      // Even on failure, mark as loaded (we tried)
+      set({ isOrdersLoaded: true })
     }
-
-    const newSellerBalance = {
-      ...state.sellerBalance,
-      pendingBalance: state.sellerBalance.pendingBalance + sellerCredit,
-      totalBalance: state.sellerBalance.availableBalance + state.sellerBalance.pendingBalance + sellerCredit + state.sellerBalance.holdBalance,
-    }
-
-    return {
-      orders: state.orders.map(o => o.id === orderId ? {
-        ...o, status: 'paid' as OrderStatus, paymentStatus: 'paid', paidAt: new Date().toISOString(),
-      } : o),
-      walletBalance: newWalletBalance,
-      walletMutations: newWalletMutations,
-      sellerBalance: newSellerBalance,
-    }
-  }),
-  cancelOrder: (orderId) => set((state) => {
-    const order = state.orders.find(o => o.id === orderId)
-    if (!order) return state
-
-    const wasPaid = order.paymentStatus === 'paid' || order.status === 'paid' || order.status === 'processing' || order.status === 'shipped'
-    const sellerCredit = order.subtotal * 0.95
-
-    let newSellerBalance = { ...state.sellerBalance }
-    let newWalletBalance = state.walletBalance
-    let newWalletMutations = [...state.walletMutations]
-
-    if (wasPaid) {
-      newSellerBalance.pendingBalance -= sellerCredit
-    }
-
-    if (order.paymentMethod?.toLowerCase() === 'wallet' && wasPaid) {
-      newWalletBalance = state.walletBalance + order.totalAmount
-      newWalletMutations = [{
-        id: `wm${Date.now()}`, type: 'credit' as const, amount: order.totalAmount, balance: newWalletBalance,
-        description: `Refund Order #${order.orderNumber}`, refType: 'refund', createdAt: new Date().toISOString()
-      }, ...state.walletMutations]
-    }
-
-    newSellerBalance.totalBalance = newSellerBalance.availableBalance + newSellerBalance.pendingBalance + newSellerBalance.holdBalance
-
-    return {
-      orders: state.orders.map(o => o.id === orderId ? {
-        ...o, status: 'cancelled' as OrderStatus, paymentStatus: 'refunded',
-      } : o),
-      sellerBalance: newSellerBalance,
-      walletBalance: newWalletBalance,
-      walletMutations: newWalletMutations,
-    }
-  }),
-  updateOrderTracking: (orderId, trackingNumber) => set((state) => ({
-    orders: state.orders.map(o => o.id === orderId ? {
-      ...o,
-      shipping: o.shipping ? { ...o.shipping, trackingNumber } : undefined,
-    } : o),
-  })),
+  },
 })

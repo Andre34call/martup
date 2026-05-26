@@ -2299,30 +2299,15 @@ export function DepositScreen() {
       return
     }
     try {
-      // Create a deposit record via API
-      const walletHeaders = getAuthHeaders(true)
-      const res = await fetch('/api/wallet', {
-        method: 'POST',
-        headers: walletHeaders,
-        body: JSON.stringify({ userId: currentUser?.id, amount }),
-      })
-      const data = await res.json()
-      if (data.success) {
-        // Also update local state
-        topUpWallet(amount)
-        showToast(`Top up ${formatPrice(amount)} berhasil!`, "success")
-        goBack()
-      } else {
-        // Fallback to local-only top up if API fails
-        topUpWallet(amount)
-        showToast(`Top up ${formatPrice(amount)} berhasil!`, "success")
-        goBack()
-      }
-    } catch {
-      // Fallback to local-only top up
-      topUpWallet(amount)
-      showToast(`Top up ${formatPrice(amount)} berhasil!`, "success")
+      // topUpWallet now calls the API internally — creates PENDING deposit
+      // Map UI method key to API method name
+      const methodMap: Record<string, string> = { gopay: 'gopay', ovo: 'ovo', dana: 'dana', bank: 'bank_transfer' }
+      await topUpWallet(amount, methodMap[paymentMethod] || 'bank_transfer')
+      showToast(`Top up ${formatPrice(amount)} berhasil diajukan! Menunggu pembayaran.`, "success")
       goBack()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Top up gagal'
+      showToast(message, "error")
     }
   }
 
@@ -2435,7 +2420,7 @@ export function WithdrawScreen() {
     date: new Date(w.requestDate).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" }),
   }))
 
-  const handleWithdraw = () => {
+  const handleWithdraw = async () => {
     const withdrawAmount = Number(amount)
     if (!withdrawAmount || withdrawAmount <= 0) {
       showToast("Masukkan jumlah penarikan yang valid", "error")
@@ -2449,9 +2434,19 @@ export function WithdrawScreen() {
       showToast("Jumlah penarikan melebihi saldo tersedia", "error")
       return
     }
-    withdrawWallet(withdrawAmount, bankAccountLabel)
-    showToast(`Penarikan ${formatPrice(withdrawAmount)} berhasil diajukan!`, "success")
-    goBack()
+    try {
+      // withdrawWallet now calls the API internally
+      await withdrawWallet(withdrawAmount, bankAccountLabel, {
+        bankAccount: defaultBankAccount.accountNumber,
+        bankName: defaultBankAccount.bankName,
+        bankHolder: defaultBankAccount.accountHolder,
+      })
+      showToast(`Penarikan ${formatPrice(withdrawAmount)} berhasil diajukan!`, "success")
+      goBack()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Penarikan gagal'
+      showToast(message, "error")
+    }
   }
 
   return (

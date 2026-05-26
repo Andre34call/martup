@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { env } from '@/lib/env'
 
 // ==================== CSRF PROTECTION ====================
 // Double-submit cookie pattern for CSRF protection
@@ -27,10 +28,10 @@ const CSRF_EXEMPT_PATHS = new Set([
 ])
 
 /**
- * Get the CSRF secret from environment (lazy-loaded for Edge compatibility)
+ * Get the CSRF secret from centralized env (lazy-loaded for Edge compatibility)
  */
 function getCsrfSecret(): string {
-  const secret = process.env.CSRF_SECRET || process.env.NEXTAUTH_SECRET
+  const secret = env.CSRF_SECRET
   if (!secret) {
     // In middleware (Edge), we can't throw at module level, so return empty and let validation fail
     return ''

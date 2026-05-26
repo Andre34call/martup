@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import crypto from 'crypto'
 import { createRateLimiter, type RateLimitResult, rateLimitHeaders } from '@/lib/rate-limit'
+import { env } from '@/lib/env'
 
 // ==================== AUTH MIDDLEWARE ====================
 // SECURITY OVERHAUL: Removed insecure x-auth-user-id method
@@ -61,7 +62,7 @@ checkRateLimit.map = undefined as unknown as Map<string, { count: number; lastRe
 // ==================== TOKEN SIGNING ====================
 
 const TOKEN_SECRET = (() => {
-  const secret = process.env.TOKEN_SECRET || process.env.NEXTAUTH_SECRET
+  const secret = env.TOKEN_SECRET
   if (!secret) {
     throw new Error('[FATAL] TOKEN_SECRET or NEXTAUTH_SECRET environment variable must be set. Application cannot start without it.')
   }

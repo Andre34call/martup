@@ -69,11 +69,13 @@ export interface ChatSlice {
 
 export interface OrderSlice {
   orders: Order[]
+  isOrdersLoaded: boolean
   addOrder: (order: Order) => void
-  updateOrderStatus: (orderId: string, status: OrderStatus) => void
-  payForOrder: (orderId: string) => void
-  cancelOrder: (orderId: string) => void
-  updateOrderTracking: (orderId: string, trackingNumber: string) => void
+  updateOrderStatus: (orderId: string, status: OrderStatus, options?: { trackingNumber?: string; cancelReason?: string }) => Promise<void>
+  payForOrder: (orderId: string) => Promise<{ token?: string; redirectUrl?: string } | void>
+  cancelOrder: (orderId: string) => Promise<void>
+  updateOrderTracking: (orderId: string, trackingNumber: string) => Promise<void>
+  fetchOrders: (userId: string) => Promise<void>
 }
 
 export interface AddressSlice {
@@ -91,9 +93,12 @@ export interface WalletSlice {
   walletHoldBalance: number
   walletCoins: number
   walletMutations: WalletMutation[]
-  topUpWallet: (amount: number) => void
-  withdrawWallet: (amount: number, bankAccount: string) => void
+  isWalletLoaded: boolean
+  topUpWallet: (amount: number, method?: string) => Promise<void>
+  withdrawWallet: (amount: number, bankAccount: string, bankDetails?: { bankAccount: string; bankName: string; bankHolder: string }) => Promise<void>
   deductWallet: (amount: number, description: string) => void
+  fetchWalletBalance: (userId: string) => Promise<void>
+  fetchWalletMutations: (userId: string) => Promise<void>
 }
 
 export interface VoucherSlice {

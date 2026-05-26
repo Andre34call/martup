@@ -46,6 +46,7 @@ export interface Seller {
   totalSales: number
   totalProducts: number
   responseTime?: number
+  storeAddress?: string
   bankName?: string
   bankAccount?: string
   bankHolder?: string

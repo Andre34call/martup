@@ -96,6 +96,8 @@ model Address {
   updatedAt   DateTime @updatedAt
 
   user        User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
 }
 
 // ==================== WALLET & TRANSACTIONS ====================
@@ -143,6 +145,8 @@ model Deposit {
   updatedAt   DateTime @updatedAt
 
   user        User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, status])
 }
 
 model Withdrawal {
@@ -196,6 +200,9 @@ model Category {
   parent    Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
   children  Category[] @relation("CategoryHierarchy")
   products  Product[]
+
+  @@index([parentId])
+  @@index([isActive, sortOrder])
 }
 
 model Product {
@@ -251,6 +258,8 @@ model ProductVariant {
   product   Product       @relation(fields: [productId], references: [id])
   cartItems CartItem[]
   orderItems OrderItem[]
+
+  @@index([productId])
 }
 
 // ==================== CART & ORDER ====================
@@ -305,6 +314,8 @@ model Order {
   complaint       Complaint?
 
   @@index([userId, status])
+  @@index([sellerId])
+  @@index([status, paymentStatus])
   @@index([status])
   @@index([createdAt])
 }
@@ -325,6 +336,9 @@ model OrderItem {
   product     Product @relation(fields: [productId], references: [id])
   variant     ProductVariant? @relation(fields: [variantId], references: [id])
   review      Review?
+
+  @@index([orderId])
+  @@index([productId])
 }
 
 model Shipping {
@@ -358,6 +372,7 @@ model Review {
   orderItem OrderItem? @relation(fields: [orderItemId], references: [id])
 
   @@index([productId, createdAt])
+  @@index([userId])
 }
 
 model Wishlist {
@@ -478,6 +493,9 @@ model Campaign {
   createdAt   DateTime @default(now())
 
   seller      Seller   @relation(fields: [sellerId], references: [id])
+
+  @@index([sellerId])
+  @@index([isActive, startDate, endDate])
 }
 
 // ==================== BANNER & CMS ====================
@@ -493,6 +511,9 @@ model Banner {
   startDate DateTime?
   endDate   DateTime?
   createdAt DateTime @default(now())
+
+  @@index([position, isActive])
+  @@index([isActive, startDate, endDate])
 }
 
 // ==================== COMPLAINT & REFUND ====================
@@ -525,6 +546,9 @@ model Referral {
   createdAt   DateTime @default(now())
 
   referrer    User     @relation("UserReferrals", fields: [referrerId], references: [id])
+
+  @@index([referrerId])
+  @@index([referredId])
 }
 
 // ==================== DIVISION / DEPARTMENT ====================
