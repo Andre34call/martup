@@ -98,6 +98,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Check if email is verified
+    if (!user.isVerified) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Email belum diverifikasi. Silakan cek email Anda untuk link verifikasi.',
+          requiresVerification: true,
+          email: user.email,
+        },
+        { status: 403 }
+      )
+    }
+
     // Check if user has 2FA enabled
     if (user.twoFactorEnabled) {
       if (!user.phone) {

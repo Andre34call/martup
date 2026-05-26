@@ -7,7 +7,7 @@ import { BottomNav, AdminBottomNav, SellerBottomNav } from '@/components/ecommer
 import { ErrorBoundary } from '@/components/error-boundary'
 
 // Auth screens
-import { SplashScreen, OnboardingScreen, LoginScreen, RegisterScreen, OTPScreen, ForgotPasswordScreen } from '@/components/ecommerce/auth-screens'
+import { SplashScreen, OnboardingScreen, LoginScreen, RegisterScreen, OTPScreen, ForgotPasswordScreen, EmailVerificationScreen } from '@/components/ecommerce/auth-screens'
 
 // Buyer screens
 import { HomeScreen } from '@/components/ecommerce/home-screen'
@@ -150,6 +150,7 @@ function ScreenRenderer() {
       case 'register': return <RegisterScreen />
       case 'otp': return <OTPScreen />
       case 'forgot-password': return <ForgotPasswordScreen />
+      case 'email-verification': return <EmailVerificationScreen />
 
       // Buyer
       case 'home': return <HomeScreen />

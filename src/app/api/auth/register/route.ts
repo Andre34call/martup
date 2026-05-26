@@ -1,15 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { checkRateLimit, generateAuthToken } from '@/lib/auth-middleware'
+import { checkRateLimit } from '@/lib/auth-middleware'
 import bcrypt from 'bcryptjs'
-
+import crypto from 'crypto'
+import { sendEmail, emailVerificationTemplate } from '@/lib/email'
 import { logger } from '@/lib/logger'
+
 // POST /api/auth/register - Register a new user with email and password
+// Now requires email verification before login
 export async function POST(request: NextRequest) {
   try {
     // Rate limit check - stricter for register (3 per minute per IP)
     const clientIp = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
-    if (!checkRateLimit(`register:${clientIp}`)) {
+    if (!checkRateLimit(`register:${clientIp}`, 3)) {
       return NextResponse.json(
         { success: false, error: 'Terlalu banyak percobaan registrasi. Coba lagi dalam 1 menit.' },
         { status: 429 }
@@ -47,6 +50,48 @@ export async function POST(request: NextRequest) {
     })
 
     if (existingUser) {
+      // If user exists but is NOT verified, allow re-registration (resend verification)
+      if (!existingUser.isVerified) {
+        // Generate new verification token
+        const verificationToken = crypto.randomBytes(32).toString('hex')
+        const verificationExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
+
+        // Update password and verification token
+        const saltRounds = 12
+        const hashedPassword = await bcrypt.hash(password, saltRounds)
+
+        await db.user.update({
+          where: { id: existingUser.id },
+          data: {
+            name,
+            password: hashedPassword,
+            phone: phone || existingUser.phone,
+            emailVerificationToken: verificationToken,
+            emailVerificationExpiry: verificationExpiry,
+          },
+        })
+
+        // Send verification email
+        const baseUrl = process.env.NEXTAUTH_URL || 'https://martup-seven.vercel.app'
+        const verificationUrl = `${baseUrl}/api/auth/verify-email?token=${verificationToken}`
+        const template = emailVerificationTemplate(name, verificationUrl)
+        const emailResult = await sendEmail({
+          to: email,
+          subject: template.subject,
+          html: template.html,
+        })
+
+        logger.info({ component: 'auth', email, emailResult }, 'Verification email resent for unverified user')
+
+        return NextResponse.json({
+          success: true,
+          requiresVerification: true,
+          email,
+          message: 'Email verifikasi telah dikirim ulang. Silakan cek email Anda.',
+          devVerifyUrl: emailResult.devUrl, // For mock provider
+        })
+      }
+
       return NextResponse.json(
         { success: false, error: 'Email sudah terdaftar. Silakan login.' },
         { status: 409 }
@@ -57,15 +102,21 @@ export async function POST(request: NextRequest) {
     const saltRounds = 12
     const hashedPassword = await bcrypt.hash(password, saltRounds)
 
-    // Create user - ALWAYS as buyer (NEVER admin)
+    // Generate email verification token
+    const verificationToken = crypto.randomBytes(32).toString('hex')
+    const verificationExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
+
+    // Create user - ALWAYS as buyer (NEVER admin), with verification token
     const user = await db.user.create({
       data: {
         email,
         name,
         phone: phone || null,
         password: hashedPassword,
-        role: 'buyer', // ALWAYS buyer - admin must be promoted via /api/admin/setup
-        isVerified: false, // Email verification needed
+        role: 'buyer',
+        isVerified: false,
+        emailVerificationToken: verificationToken,
+        emailVerificationExpiry: verificationExpiry,
         wallet: {
           create: {
             balance: 0,
@@ -73,36 +124,41 @@ export async function POST(request: NextRequest) {
           },
         },
       },
-      include: {
-        seller: true,
-        wallet: true,
-      },
     })
 
-    // Generate auth token
-    const token = generateAuthToken(user.id)
+    // Send verification email
+    const baseUrl = process.env.NEXTAUTH_URL || 'https://martup-seven.vercel.app'
+    const verificationUrl = `${baseUrl}/api/auth/verify-email?token=${verificationToken}`
+    const template = emailVerificationTemplate(name, verificationUrl)
+    const emailResult = await sendEmail({
+      to: email,
+      subject: template.subject,
+      html: template.html,
+    })
 
-    // Create welcome notification
+    logger.info({ component: 'auth', email, emailResult }, 'Verification email sent')
+
+    // Create welcome notification (they'll see it after verifying)
     await db.notification.create({
       data: {
         userId: user.id,
         title: 'Selamat Datang di MartUp! 🎉',
-        content: 'Terima kasih telah bergabung. Mulai belanja atau jual produk sekarang!',
+        content: 'Terima kasih telah bergabung. Verifikasi email Anda untuk mulai belanja!',
         type: 'system',
         isRead: false,
       },
     })
 
-    // Return user data (without password)
-    const { password: _, ...userWithoutPassword } = user
-
+    // Return success WITHOUT token — user must verify email first
     return NextResponse.json({
       success: true,
-      user: userWithoutPassword,
-      token,
-      message: 'Registrasi berhasil! Selamat datang di MartUp.',
+      requiresVerification: true,
+      email,
+      message: 'Registrasi berhasil! Silakan cek email Anda untuk verifikasi.',
+      devVerifyUrl: emailResult.devUrl, // For mock provider in development
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Internal server error'
     logger.error({ err: error }, 'Register error')
     return NextResponse.json(
       { success: false, error: 'Terjadi kesalahan server. Coba lagi nanti.' },

@@ -23,6 +23,8 @@ model User {
   otpExpiry          DateTime?
   twoFactorEnabled   Boolean   @default(false)
   isVerified         Boolean   @default(false)
+  emailVerificationToken    String?
+  emailVerificationExpiry   DateTime?
   isActive           Boolean   @default(true)
   referralCode  String?   @unique
   referredBy    String?

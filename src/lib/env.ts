@@ -13,6 +13,7 @@ const recommendedVars = [
   'CRON_SECRET',
   'GOOGLE_CLIENT_ID',
   'GOOGLE_CLIENT_SECRET',
+  'RESEND_API_KEY',
 ] as const
 
 // Validate at module load time
@@ -49,5 +50,7 @@ export const env = {
   MIDTRANS_IS_PRODUCTION: process.env.MIDTRANS_IS_PRODUCTION === 'true',
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || '',
   GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET || '',
+  EMAIL_PROVIDER: process.env.EMAIL_PROVIDER || 'mock',
+  RESEND_API_KEY: process.env.RESEND_API_KEY || '',
   NODE_ENV: process.env.NODE_ENV || 'development',
 } as const

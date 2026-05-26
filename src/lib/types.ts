@@ -2,7 +2,7 @@
 
 export type UserRole = 'buyer' | 'seller' | 'admin' | 'finance' | 'pr' | 'tech' | 'cs' | 'marketing' | 'operations' | 'legal' | 'hr'
 export type ScreenName =
-  | 'splash' | 'onboarding' | 'login' | 'register' | 'otp' | 'forgot-password'
+  | 'splash' | 'onboarding' | 'login' | 'register' | 'otp' | 'forgot-password' | 'email-verification'
   | 'home' | 'search' | 'category' | 'product-detail' | 'wishlist'
   | 'cart' | 'checkout' | 'payment' | 'order-tracking' | 'orders'
   | 'wallet' | 'deposit' | 'withdraw' | 'chat' | 'chat-room'

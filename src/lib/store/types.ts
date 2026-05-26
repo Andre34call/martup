@@ -6,6 +6,7 @@ export interface NavigationSlice {
   currentScreen: ScreenName
   previousScreens: ScreenName[]
   otpPhoneNumber: string
+  pendingVerificationEmail: string
   navigate: (screen: ScreenName) => void
   goBack: () => void
 }
