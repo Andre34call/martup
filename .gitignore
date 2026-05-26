@@ -55,4 +55,4 @@ server.log
 # Mini services (run separately, not part of Next.js build)
 /mini-services/
 # Examples (not needed in production)
-/examples/upload/
+/examples/

@@ -4,9 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3000 2>&1 | tee dev.log",
-    "prebuild": "node -e \"const fs=require('fs');['examples','skills','mini-services'].forEach(d=>{try{fs.rmSync(d,{recursive:true,force:true});console.log('Removed '+d)}catch(e){console.log('Skip '+d+': '+e.message)}})\"",
-    "build": "next build",
-    "postinstall": "prisma generate && node -e \"const fs=require('fs');['examples','skills','mini-services'].forEach(d=>{try{fs.rmSync(d,{recursive:true,force:true})}catch(e){}})\"",
+    "prebuild": "node -e \"const fs=require('fs');['examples','skills','mini-services','.zscripts'].forEach(d=>{try{fs.rmSync(d,{recursive:true,force:true});console.log('Removed '+d)}catch(e){console.log('Skip '+d+': '+e.message)}})\"",
+    "build": "node -e \"const fs=require('fs');['examples','skills','mini-services','.zscripts'].forEach(d=>{try{fs.rmSync(d,{recursive:true,force:true})}catch(e){}})\" && next build",
+    "postinstall": "prisma generate && node -e \"const fs=require('fs');['examples','skills','mini-services','.zscripts'].forEach(d=>{try{fs.rmSync(d,{recursive:true,force:true})}catch(e){}})\"",
     "start": "next start",
     "lint": "eslint .",
     "db:push": "prisma db push",

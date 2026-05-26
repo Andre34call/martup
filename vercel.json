@@ -1,4 +1,7 @@
 {
+  "buildCommand": "node -e \"const fs=require('fs');['examples','skills','mini-services','.zscripts'].forEach(d=>{try{fs.rmSync(d,{recursive:true,force:true})}catch(e){}})\" && next build",
+  "installCommand": "bun install",
+  "framework": "nextjs",
   "crons": [
     {
       "path": "/api/cron/cancel-expired",
