@@ -169,6 +169,69 @@ export function emailVerificationTemplate(
   }
 }
 
+export function passwordResetTemplate(
+  userName: string,
+  resetUrl: string
+): { subject: string; html: string } {
+  return {
+    subject: 'Reset Password MartUp Anda',
+    html: `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body style="margin:0;padding:0;background:#f5f5f5;font-family:system-ui,-apple-system,sans-serif">
+  <table width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;margin:40px auto;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08)">
+    <!-- Header -->
+    <tr>
+      <td style="background:linear-gradient(135deg,#10b981,#14b8a6);padding:32px;text-align:center">
+        <h1 style="margin:0;color:#ffffff;font-size:28px;font-weight:800;letter-spacing:-0.5px">MartUp</h1>
+        <p style="margin:8px 0 0;color:rgba(255,255,255,0.9);font-size:14px">Shop Smart, Live Better</p>
+      </td>
+    </tr>
+    <!-- Body -->
+    <tr>
+      <td style="padding:32px">
+        <h2 style="margin:0 0 8px;color:#1f2937;font-size:20px;font-weight:700">Halo ${userName}! 🔐</h2>
+        <p style="margin:0 0 24px;color:#6b7280;font-size:15px;line-height:1.6">
+          Kami menerima permintaan untuk mereset password akun MartUp Anda. Klik tombol di bawah untuk membuat password baru:
+        </p>
+        <table width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            <td align="center">
+              <a href="${resetUrl}" target="_blank" style="display:inline-block;background:linear-gradient(135deg,#10b981,#14b8a6);color:#ffffff;text-decoration:none;padding:14px 36px;border-radius:12px;font-size:16px;font-weight:700;letter-spacing:0.3px">
+                Reset Password Saya
+              </a>
+            </td>
+          </tr>
+        </table>
+        <p style="margin:24px 0 0;color:#9ca3af;font-size:13px;line-height:1.5">
+          Jika tombol di atas tidak berfungsi, salin dan tempel link berikut di browser Anda:
+        </p>
+        <p style="margin:8px 0 0;color:#10b981;font-size:12px;word-break:break-all">
+          ${resetUrl}
+        </p>
+        <p style="margin:24px 0 0;color:#ef4444;font-size:13px;line-height:1.5">
+          ⚠️ Link ini hanya berlaku selama 1 jam. Jika Anda tidak meminta reset password, abaikan email ini. Password Anda tidak akan diubah.
+        </p>
+      </td>
+    </tr>
+    <!-- Footer -->
+    <tr>
+      <td style="padding:24px 32px;background:#f9fafb;border-top:1px solid #e5e7eb">
+        <p style="margin:0;color:#d1d5db;font-size:11px;text-align:center">
+          &copy; ${new Date().getFullYear()} MartUp. All rights reserved.
+        </p>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`,
+  }
+}
+
 export function emailVerifiedTemplate(userName: string): { subject: string; html: string } {
   return {
     subject: 'Email Terverifikasi - Selamat Datang di MartUp!',

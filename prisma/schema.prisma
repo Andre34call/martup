@@ -25,6 +25,8 @@ model User {
   isVerified         Boolean   @default(false)
   emailVerificationToken    String?
   emailVerificationExpiry   DateTime?
+  resetPasswordToken        String?
+  resetPasswordExpiry       DateTime?
   isActive           Boolean   @default(true)
   referralCode  String?   @unique
   referredBy    String?

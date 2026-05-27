@@ -1,7 +1,7 @@
 "use client"
 
 import { motion, AnimatePresence } from "framer-motion"
-import { Eye, EyeOff, ArrowLeft, Smartphone, Mail, Apple, CheckCircle } from "lucide-react"
+import { Eye, EyeOff, ArrowLeft, Smartphone, Mail, Apple, CheckCircle, Shield } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -1327,17 +1327,44 @@ export function OTPScreen() {
 
 // ==================== FORGOT PASSWORD SCREEN ====================
 export function ForgotPasswordScreen() {
-  const { navigate, goBack } = useAppStore()
+  const { navigate, showToast } = useAppStore()
   const [email, setEmail] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [isSent, setIsSent] = useState(false)
+  const [touchedEmail, setTouchedEmail] = useState(false)
+
+  const emailError = touchedEmail && !email
+    ? "Email wajib diisi"
+    : touchedEmail && email && !isValidEmail(email)
+    ? "Format email tidak valid"
+    : ""
+
+  const isFormValid = email && !emailError
 
   const handleReset = async () => {
-    if (!email) return
+    setTouchedEmail(true)
+    if (!isFormValid) return
     setIsLoading(true)
-    await new Promise((resolve) => setTimeout(resolve, 800))
+
+    try {
+      const res = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
+      const data = await res.json()
+
+      if (data.success) {
+        setIsSent(true)
+        showToast(data.message || 'Link reset password telah dikirim ke email Anda', 'success')
+      } else {
+        showToast(data.error || 'Gagal mengirim link reset password', 'error')
+      }
+    } catch {
+      showToast('Terjadi kesalahan koneksi. Coba lagi nanti.', 'error')
+    }
+
     setIsLoading(false)
-    setIsSent(true)
   }
 
   return (
@@ -1350,7 +1377,7 @@ export function ForgotPasswordScreen() {
       className="min-h-screen flex flex-col bg-background"
     >
       {/* Header */}
-      <PageHeader title="Lupa Password" />
+      <PageHeader title="Lupa Password" onBack={() => navigate("login")} />
 
       {/* Content */}
       <div className="flex-1 flex flex-col px-6 pb-8">
@@ -1381,15 +1408,19 @@ export function ForgotPasswordScreen() {
                 <Input
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  onBlur={() => setTouchedEmail(true)}
                   placeholder="contoh@email.com"
-                  className="pl-10 h-12 rounded-xl bg-muted/50 border-border/50 focus:border-emerald-500 focus:ring-emerald-500/20"
+                  className={`pl-10 h-12 rounded-xl bg-muted/50 border-border/50 focus:border-emerald-500 focus:ring-emerald-500/20 ${emailError ? "border-red-500 focus:border-red-500" : ""}`}
                 />
               </div>
+              {emailError && (
+                <p className="text-xs text-red-500">{emailError}</p>
+              )}
 
               {/* Submit button */}
               <Button
                 type="submit"
-                disabled={isLoading || !email}
+                disabled={isLoading || !isFormValid}
                 className="w-full h-12 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-semibold text-base disabled:opacity-50"
               >
                 {isLoading ? (
@@ -1416,14 +1447,17 @@ export function ForgotPasswordScreen() {
               transition={{ duration: 0.5, type: "spring" }}
               className="w-20 h-20 rounded-full bg-emerald-100 dark:bg-emerald-950/30 flex items-center justify-center mb-6"
             >
-              <span className="text-4xl">📧</span>
+              <CheckCircle className="w-10 h-10 text-emerald-500" />
             </motion.div>
             <h2 className="text-lg font-bold text-foreground mb-2">
               Email Terkirim!
             </h2>
             <p className="text-sm text-muted-foreground max-w-[280px] leading-relaxed">
               Kami telah mengirimkan link reset password ke{" "}
-              <span className="font-medium text-foreground">{email}</span>. Silakan cek inbox Anda.
+              <span className="font-medium text-foreground">{email}</span>. Silakan cek inbox dan folder spam Anda.
+            </p>
+            <p className="text-xs text-muted-foreground mt-3">
+              Link berlaku selama 1 jam.
             </p>
             <Button
               onClick={() => navigate("login")}
@@ -1447,6 +1481,246 @@ export function ForgotPasswordScreen() {
           </button>
         </div>
       )}
+    </motion.div>
+  )
+}
+
+// ==================== RESET PASSWORD SCREEN ====================
+export function ResetPasswordScreen() {
+  const { navigate, showToast } = useAppStore()
+  const resetToken = useAppStore((s) => s.resetPasswordToken) || ""
+  const [password, setPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [isSuccess, setIsSuccess] = useState(false)
+  const [touchedPassword, setTouchedPassword] = useState(false)
+  const [touchedConfirm, setTouchedConfirm] = useState(false)
+
+  // If no token, show invalid link message
+  const hasToken = !!resetToken
+
+  const passwordError = touchedPassword && !password
+    ? "Password baru wajib diisi"
+    : touchedPassword && password.length < 8
+    ? "Password minimal 8 karakter"
+    : touchedPassword && password && !/[a-zA-Z]/.test(password)
+    ? "Password harus mengandung huruf"
+    : touchedPassword && password && !/\d/.test(password)
+    ? "Password harus mengandung angka"
+    : ""
+
+  const passwordsMatch = !confirmPassword || password === confirmPassword
+  const confirmError = touchedConfirm && !confirmPassword
+    ? "Konfirmasi password wajib diisi"
+    : touchedConfirm && confirmPassword && !passwordsMatch
+    ? "Password tidak cocok"
+    : ""
+
+  const isFormValid = password && confirmPassword && !passwordError && !confirmError && passwordsMatch
+
+  const handleResetPassword = async () => {
+    setTouchedPassword(true)
+    setTouchedConfirm(true)
+    if (!isFormValid || !hasToken) return
+
+    setIsLoading(true)
+    try {
+      const res = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: resetToken, password }),
+      })
+      const data = await res.json()
+
+      if (data.success) {
+        setIsSuccess(true)
+        showToast(data.message || 'Password berhasil direset!', 'success')
+        // Clear the token from store
+        useAppStore.setState({ resetPasswordToken: '' })
+      } else {
+        showToast(data.error || 'Gagal mereset password', 'error')
+      }
+    } catch {
+      showToast('Terjadi kesalahan koneksi. Coba lagi nanti.', 'error')
+    }
+    setIsLoading(false)
+  }
+
+  // Invalid/expired token view
+  if (!hasToken) {
+    return (
+      <motion.div
+        variants={pageVariants}
+        initial="initial"
+        animate="animate"
+        exit="exit"
+        transition={pageTransition}
+        className="min-h-screen flex flex-col bg-background"
+      >
+        <PageHeader title="Reset Password" onBack={() => navigate("login")} />
+        <div className="flex-1 flex flex-col items-center justify-center px-6 pb-8">
+          <div className="w-20 h-20 rounded-2xl bg-red-50 dark:bg-red-950/30 flex items-center justify-center mb-6">
+            <span className="text-4xl">⚠️</span>
+          </div>
+          <h2 className="text-lg font-bold text-foreground text-center mb-2">
+            Link Tidak Valid
+          </h2>
+          <p className="text-sm text-muted-foreground text-center max-w-[280px]">
+            Link reset password sudah kedaluwarsa atau tidak valid. Silakan minta link reset baru.
+          </p>
+          <Button
+            onClick={() => navigate("forgot-password")}
+            className="mt-8 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-12 px-8 font-semibold"
+          >
+            Minta Link Baru
+          </Button>
+        </div>
+      </motion.div>
+    )
+  }
+
+  // Success view
+  if (isSuccess) {
+    return (
+      <motion.div
+        variants={pageVariants}
+        initial="initial"
+        animate="animate"
+        exit="exit"
+        transition={pageTransition}
+        className="min-h-screen flex flex-col bg-background"
+      >
+        <PageHeader title="Reset Password" />
+        <div className="flex-1 flex flex-col items-center justify-center px-6 pb-8">
+          <motion.div
+            initial={{ scale: 0.5 }}
+            animate={{ scale: 1 }}
+            transition={{ duration: 0.5, type: "spring" }}
+            className="w-20 h-20 rounded-full bg-emerald-100 dark:bg-emerald-950/30 flex items-center justify-center mb-6"
+          >
+            <CheckCircle className="w-10 h-10 text-emerald-500" />
+          </motion.div>
+          <h2 className="text-lg font-bold text-foreground text-center mb-2">
+            Password Berhasil Direset! 🎉
+          </h2>
+          <p className="text-sm text-muted-foreground text-center max-w-[280px]">
+            Password Anda telah berhasil diubah. Silakan login dengan password baru Anda.
+          </p>
+          <Button
+            onClick={() => navigate("login")}
+            className="mt-8 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-12 px-8 font-semibold"
+          >
+            Login Sekarang
+          </Button>
+        </div>
+      </motion.div>
+    )
+  }
+
+  // Reset password form
+  return (
+    <motion.div
+      variants={pageVariants}
+      initial="initial"
+      animate="animate"
+      exit="exit"
+      transition={pageTransition}
+      className="min-h-screen flex flex-col bg-background"
+    >
+      <PageHeader title="Reset Password" />
+
+      <div className="flex-1 flex flex-col px-6 pb-8">
+        {/* Icon */}
+        <motion.div
+          initial={{ scale: 0.8 }}
+          animate={{ scale: 1 }}
+          transition={{ duration: 0.4, type: "spring" }}
+          className="w-20 h-20 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 flex items-center justify-center mb-6 self-center"
+        >
+          <Shield className="w-10 h-10 text-emerald-500" />
+        </motion.div>
+
+        <h2 className="text-lg font-bold text-foreground text-center mb-2">
+          Buat Password Baru
+        </h2>
+        <p className="text-sm text-muted-foreground text-center mb-8">
+          Masukkan password baru untuk akun Anda.
+        </p>
+
+        <form onSubmit={(e) => { e.preventDefault(); handleResetPassword() }} className="space-y-4 flex-1">
+          {/* New Password */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-foreground">Password Baru</label>
+            <div className="relative">
+              <Input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onBlur={() => setTouchedPassword(true)}
+                placeholder="Minimal 8 karakter"
+                className={`pr-10 h-12 rounded-xl bg-muted/50 border-border/50 focus:border-emerald-500 focus:ring-emerald-500/20 ${passwordError ? "border-red-500 focus:border-red-500" : ""}`}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            {touchedPassword && password && (
+              <div className="space-y-1 mt-1">
+                <p className={`text-xs ${password.length >= 8 ? "text-emerald-500" : "text-muted-foreground"}`}>
+                  {password.length >= 8 ? "✓" : "○"} Minimal 8 karakter
+                </p>
+                <p className={`text-xs ${/[a-zA-Z]/.test(password) ? "text-emerald-500" : "text-muted-foreground"}`}>
+                  {/[a-zA-Z]/.test(password) ? "✓" : "○"} Mengandung huruf
+                </p>
+                <p className={`text-xs ${/\d/.test(password) ? "text-emerald-500" : "text-muted-foreground"}`}>
+                  {/\d/.test(password) ? "✓" : "○"} Mengandung angka
+                </p>
+              </div>
+            )}
+            {passwordError && (
+              <p className="text-xs text-red-500">{passwordError}</p>
+            )}
+          </div>
+
+          {/* Confirm Password */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-foreground">Konfirmasi Password</label>
+            <Input
+              type={showPassword ? "text" : "password"}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              onBlur={() => setTouchedConfirm(true)}
+              placeholder="Ulangi password baru"
+              className={`h-12 rounded-xl bg-muted/50 border-border/50 focus:border-emerald-500 focus:ring-emerald-500/20 ${confirmError ? "border-red-500 focus:border-red-500" : ""}`}
+            />
+            {confirmError && (
+              <p className="text-xs text-red-500">{confirmError}</p>
+            )}
+          </div>
+
+          {/* Submit button */}
+          <Button
+            type="submit"
+            disabled={isLoading || !isFormValid}
+            className="w-full h-12 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-semibold text-base disabled:opacity-50"
+          >
+            {isLoading ? (
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full"
+              />
+            ) : (
+              "Reset Password"
+            )}
+          </Button>
+        </form>
+      </div>
     </motion.div>
   )
 }

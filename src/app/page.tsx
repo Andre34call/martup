@@ -3,11 +3,12 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { Check, X, Info, AlertTriangle } from 'lucide-react'
 import { useAppStore } from '@/lib/store'
+import { useEffect } from 'react'
 import { BottomNav, AdminBottomNav, SellerBottomNav } from '@/components/ecommerce/shared'
 import { ErrorBoundary } from '@/components/error-boundary'
 
 // Auth screens
-import { SplashScreen, OnboardingScreen, LoginScreen, RegisterScreen, OTPScreen, ForgotPasswordScreen, EmailVerificationScreen } from '@/components/ecommerce/auth-screens'
+import { SplashScreen, OnboardingScreen, LoginScreen, RegisterScreen, OTPScreen, ForgotPasswordScreen, ResetPasswordScreen, EmailVerificationScreen } from '@/components/ecommerce/auth-screens'
 
 // Buyer screens
 import { HomeScreen } from '@/components/ecommerce/home-screen'
@@ -60,7 +61,7 @@ import { AdminCategories, AdminVouchers, AdminDeposits, AdminCampaigns, AdminSet
 // Legal screens
 import { PrivacyPolicyScreen, TermsOfServiceScreen, RefundPolicyScreen } from '@/components/ecommerce/legal/legal-screens'
 
-const AUTH_SCREENS = ['splash', 'onboarding', 'login', 'register', 'otp', 'forgot-password', 'email-verification']
+const AUTH_SCREENS = ['splash', 'onboarding', 'login', 'register', 'otp', 'forgot-password', 'reset-password', 'email-verification']
 const SELLER_SCREENS = ['seller-dashboard', 'seller-products', 'seller-add-product', 'seller-orders', 'seller-analytics', 'seller-wallet', 'seller-chat', 'seller-settings', 'seller-campaign', 'seller-withdraw', 'seller-withdraw-history']
 const ADMIN_SCREENS = ['admin-dashboard', 'admin-users', 'admin-products', 'admin-orders', 'admin-withdraw', 'admin-banner', 'admin-analytics', 'admin-complaints', 'admin-divisions', 'admin-workflow', 'admin-categories', 'admin-vouchers', 'admin-deposits', 'admin-campaigns', 'admin-reviews', 'admin-settings']
 
@@ -154,6 +155,7 @@ function ScreenRenderer() {
       case 'register': return <RegisterScreen />
       case 'otp': return <OTPScreen />
       case 'forgot-password': return <ForgotPasswordScreen />
+      case 'reset-password': return <ResetPasswordScreen />
       case 'email-verification': return <EmailVerificationScreen />
 
       // Buyer
@@ -242,10 +244,25 @@ function ScreenRenderer() {
 
 export default function Home() {
   const currentScreen = useAppStore((s) => s.currentScreen)
+  const navigate = useAppStore((s) => s.navigate)
   const isAuthScreen = AUTH_SCREENS.includes(currentScreen)
   const isSellerScreen = SELLER_SCREENS.includes(currentScreen)
   const isAdminScreen = ADMIN_SCREENS.includes(currentScreen)
   const isSubScreen = SUB_SCREENS.includes(currentScreen)
+
+  // Detect password reset token in URL on mount
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const resetToken = params.get('reset-token')
+    if (resetToken) {
+      // Store the token and navigate to reset-password screen
+      useAppStore.setState({ resetPasswordToken: resetToken })
+      navigate('reset-password')
+      // Clean URL without reload
+      window.history.replaceState({}, '', '/')
+    }
+  }, [navigate])
 
   const getBottomNav = () => {
     if (isAuthScreen || isSubScreen) return null
