@@ -186,7 +186,8 @@ export async function POST(request: NextRequest) {
       { 
         success: false, 
         error: errorMessage, 
-        ...(process.env.NODE_ENV === 'development' ? { debug: error?.message, code: error?.code } : {}) 
+        // Always include error code for diagnostics (safe to expose)
+        errorCode: error?.code || 'UNKNOWN',
       },
       { status: statusCode }
     )
