@@ -57,7 +57,7 @@ export async function GET() {
   const result: HealthCheckResult = {
     status: overallStatus,
     timestamp: new Date().toISOString(),
-    version: process.env.APP_VERSION || '1.1.0-csrf-fix',
+    version: process.env.APP_VERSION || '1.2.0-feature-sync',
     uptime: process.uptime(),
     checks,
   }
