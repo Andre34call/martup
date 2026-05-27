@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { validateCsrfRequest, issueCsrfToken } from '@/lib/csrf'
 
-// ==================== NEXT.JS MIDDLEWARE ====================
-// This middleware runs before all routes to add:
+// ==================== NEXT.JS PROXY (formerly middleware) ====================
+// Next.js 16 renames "middleware" to "proxy".
+// This proxy runs before all routes to add:
 // 1. Security headers (CSP with nonce, HSTS, etc.)
 // 2. CSRF protection (double-submit cookie)
 // 3. Rate limiting (in-memory for Edge, Redis for production)
@@ -15,8 +16,6 @@ import { validateCsrfRequest, issueCsrfToken } from '@/lib/csrf'
 // No Node.js modules (crypto, fs, etc.) can be used here.
 
 // ==================== EDGE-COMPATIBLE RATE LIMITING ====================
-// Simple in-memory rate limiter for Edge middleware.
-// For production with multiple instances, use Vercel KV / Upstash Redis.
 const rateLimitStore = new Map<string, { count: number; expiresAt: number }>()
 
 // Rate limit configurations per route pattern
@@ -29,7 +28,7 @@ const RATE_LIMITS: { pattern: RegExp; maxRequests: number; windowMs: number }[] 
   { pattern: /\/api\//, maxRequests: 60, windowMs: 60_000 }, // default
 ]
 
-function checkMiddlewareRateLimit(key: string, maxRequests: number, windowMs: number): { allowed: boolean; remaining: number; resetAt: number } {
+function checkProxyRateLimit(key: string, maxRequests: number, windowMs: number): { allowed: boolean; remaining: number; resetAt: number } {
   const now = Date.now()
   const entry = rateLimitStore.get(key)
 
@@ -54,11 +53,10 @@ if (typeof globalThis !== 'undefined') {
       if (now > entry.expiresAt) rateLimitStore.delete(key)
     }
   }
-  // Run cleanup every 5 minutes
   setInterval(cleanup, 5 * 60 * 1000)
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // Generate a simple request ID (Edge-compatible)
@@ -68,23 +66,20 @@ export async function middleware(request: NextRequest) {
   const nonce = generateNonce()
 
   // Forward the nonce to server components via request headers
-  // so layout.tsx can read it with headers().get('x-nonce')
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set('x-nonce', nonce)
   requestHeaders.set('x-request-id', requestId)
 
   // ===== Rate Limiting =====
-  // Apply rate limits based on route pattern and client IP (API routes only)
   if (pathname.startsWith('/api/') && (request.method !== 'GET' || pathname.startsWith('/api/auth/'))) {
     const clientIp = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
       || request.headers.get('x-real-ip')
       || 'unknown'
 
-    // Find matching rate limit config
     const rateLimitConfig = RATE_LIMITS.find(rl => rl.pattern.test(pathname))
     if (rateLimitConfig) {
       const rateLimitKey = `${rateLimitConfig.pattern.source}:${clientIp}`
-      const result = checkMiddlewareRateLimit(rateLimitKey, rateLimitConfig.maxRequests, rateLimitConfig.windowMs)
+      const result = checkProxyRateLimit(rateLimitKey, rateLimitConfig.maxRequests, rateLimitConfig.windowMs)
 
       if (!result.allowed) {
         const errorResponse = NextResponse.json(
@@ -100,8 +95,7 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // Create the response, forwarding modified request headers so server components
-  // can access x-nonce via headers()
+  // Create the response, forwarding modified request headers
   const response = NextResponse.next({
     request: { headers: requestHeaders },
   })
@@ -114,8 +108,7 @@ export async function middleware(request: NextRequest) {
   response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
   response.headers.set('X-Request-ID', requestId)
 
-  // Content Security Policy — strict nonce-based (no unsafe-inline/unsafe-eval for scripts)
-  // Midtrans Snap requires: script-src (snap.js), connect-src (API), frame-src (popup iframe), img-src (logos)
+  // Content Security Policy
   response.headers.set(
     'Content-Security-Policy',
     [
@@ -130,7 +123,6 @@ export async function middleware(request: NextRequest) {
     ].join('; ')
   )
 
-  // Expose nonce in response header for debugging / client-side use
   response.headers.set('X-Nonce', nonce)
 
   // Strict Transport Security (production only)
@@ -140,7 +132,6 @@ export async function middleware(request: NextRequest) {
 
   // ===== CSRF Protection (API routes only) =====
   if (!pathname.startsWith('/api/')) {
-    // Page requests: just ensure CSRF cookie exists, no validation needed
     if (request.method === 'GET') {
       const existingCsrfCookie = request.cookies.get('csrf-token')
       if (!existingCsrfCookie) {
@@ -164,8 +155,6 @@ export async function middleware(request: NextRequest) {
   // For API mutating requests (POST, PUT, DELETE, PATCH): validate CSRF
   const csrfResult = await validateCsrfRequest(request)
   if (!csrfResult.valid) {
-    // Edge Runtime: cannot use Pino logger here, console.warn is the only option.
-    // This is intentional — structured logging (Pino) requires Node.js runtime.
     console.warn(JSON.stringify({
       component: 'security',
       event: 'CSRF_VALIDATION_FAILED',
@@ -176,7 +165,6 @@ export async function middleware(request: NextRequest) {
       timestamp: new Date().toISOString(),
     }))
 
-    // Return a new CSRF token with the error response so client can retry
     const errorResponse = NextResponse.json(
       { success: false, error: 'CSRF validation failed. Please refresh and try again.' },
       { status: 403 }
@@ -202,10 +190,6 @@ export async function middleware(request: NextRequest) {
   return response
 }
 
-/**
- * Generate a simple request ID (Edge Runtime compatible).
- * Uses crypto.getRandomValues which is available in Edge.
- */
 function generateRequestId(): string {
   const bytes = new Uint8Array(16)
   crypto.getRandomValues(bytes)
@@ -215,10 +199,6 @@ function generateRequestId(): string {
     .replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, '$1-$2-$3-$4-$5')
 }
 
-/**
- * Generate a cryptographic nonce for CSP (Edge Runtime compatible).
- * Uses crypto.getRandomValues which is available in Edge.
- */
 function generateNonce(): string {
   const bytes = new Uint8Array(18)
   crypto.getRandomValues(bytes)
@@ -227,7 +207,6 @@ function generateNonce(): string {
 
 export const config = {
   matcher: [
-    // Match all routes except static assets and Next.js internals
     '/((?!_next/static|_next/image|favicon\\.ico|icon-|apple-icon|manifest\\.json|og-image|sw\\.js|workbox).*)',
   ],
 }
