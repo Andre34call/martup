@@ -13,8 +13,15 @@ if (process.env.DIRECT_URL?.startsWith('file:')) {
 }
 
 import { PrismaClient } from '@prisma/client'
+import bcrypt from 'bcryptjs'
 
 const prisma = new PrismaClient()
+
+// Hash passwords with bcrypt (same as the registration/login flow)
+const SALT_ROUNDS = 12
+async function hashPassword(password: string): Promise<string> {
+  return bcrypt.hash(password, SALT_ROUNDS)
+}
 
 async function main() {
   console.log('🌱 Seeding database...')
@@ -37,6 +44,8 @@ async function main() {
 
   // ==================== USERS ====================
   console.log('👤 Creating users...')
+  // Hash passwords with bcrypt so login (bcrypt.compare) works correctly
+  const hashedPassword = await hashPassword('password123')
   const users = await Promise.all([
     prisma.user.create({
       data: {
@@ -46,7 +55,7 @@ async function main() {
         name: 'Ahmad Fauzi',
         avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Ahmad',
         role: 'buyer',
-        password: 'password123',
+        password: hashedPassword,
         isVerified: true,
         loyaltyPoints: 1250,
         coins: 5000,
@@ -61,7 +70,7 @@ async function main() {
         name: 'Budi Santoso',
         avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Budi',
         role: 'seller',
-        password: 'password123',
+        password: hashedPassword,
         isVerified: true,
         loyaltyPoints: 500,
         coins: 2000,
@@ -76,7 +85,7 @@ async function main() {
         name: 'Admin MartUp',
         avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Admin',
         role: 'admin',
-        password: 'password123',
+        password: hashedPassword,
         isVerified: true,
         loyaltyPoints: 0,
         coins: 0,
@@ -91,7 +100,7 @@ async function main() {
         name: 'Citra Dewi',
         avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Citra',
         role: 'seller',
-        password: 'password123',
+        password: hashedPassword,
         isVerified: true,
         loyaltyPoints: 300,
         coins: 1500,

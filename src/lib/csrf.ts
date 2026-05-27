@@ -25,6 +25,7 @@ const CSRF_EXEMPT_PATHS = new Set([
   '/api/seed',                  // Seed data
   '/api/admin/setup',           // Admin initial setup
   '/api/analytics/track',       // Analytics beacon
+  '/api/debug/health',          // Diagnostic endpoint
 ])
 
 /**

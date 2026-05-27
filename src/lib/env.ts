@@ -47,7 +47,7 @@ if (process.env.NODE_ENV === 'development') {
 // Typed env accessor
 export const env = {
   NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET || '',
-  NEXTAUTH_URL: process.env.NEXTAUTH_URL || 'http://localhost:3000',
+  NEXTAUTH_URL: process.env.NEXTAUTH_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'),
   SUPABASE_DATABASE_URL: process.env.SUPABASE_DATABASE_URL || '',
   SUPABASE_DIRECT_URL: process.env.SUPABASE_DIRECT_URL || '',
   NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL || '',

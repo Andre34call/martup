@@ -34,7 +34,15 @@ export const authOptions: NextAuthOptions = {
       try {
         // SECURITY: Add internal secret to verify this is from NextAuth callback, not external caller
         const internalSecret = env.NEXTAUTH_SECRET
-        const response = await fetch(`${env.NEXTAUTH_URL}/api/auth/sync-user`, {
+        // Build the sync-user URL using VERCEL_URL in production (env.NEXTAUTH_URL may be localhost)
+        let baseUrl = env.NEXTAUTH_URL
+        if (process.env.VERCEL_URL) {
+          baseUrl = `https://${process.env.VERCEL_URL}`
+        } else if (baseUrl === 'http://localhost:3000' && process.env.NODE_ENV === 'production') {
+          // Fallback: if NEXTAUTH_URL is still localhost in production, use VERCEL_URL
+          logger.warn({ component: 'auth' }, 'NEXTAUTH_URL is localhost in production — sync-user may fail')
+        }
+        const response = await fetch(`${baseUrl}/api/auth/sync-user`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
