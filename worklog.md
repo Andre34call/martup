@@ -288,3 +288,35 @@ Stage Summary:
 - Status transitions enforced (open→in_progress→resolved/closed/escalated)
 - 4 existing API routes now auto-create work items
 - Product approve API now has proper auth (was a security bug)
+
+---
+Task ID: 1-10
+Agent: Main Agent
+Task: Fix profile screen crash + Add forgot password feature + Deploy to Vercel
+
+Work Log:
+- Found root cause of profile tab crash: `useEffect` was used in profile-screen.tsx but never imported (line 7 imported useState, useMemo, useRef but not useEffect)
+- Fixed by adding `useEffect` to the import statement
+- Found ForgotPasswordScreen was a FAKE placeholder using `setTimeout(800)` instead of real API
+- Added `resetPasswordToken` and `resetPasswordExpiry` fields to User model in Prisma schema
+- Ran `prisma db push` to sync schema to Supabase database
+- Created `/api/auth/forgot-password` API route with rate limiting, token generation, email sending
+- Created `/api/auth/reset-password` API route with token validation, password hashing
+- Added `passwordResetTemplate` email template to email.ts with professional HTML design
+- Added `reset-password` to ScreenName type in types.ts
+- Added `resetPasswordToken` to NavigationSlice in store types and navigation store
+- Rewrote ForgotPasswordScreen to call real `/api/auth/forgot-password` API with validation
+- Created ResetPasswordScreen with: password+confirm form, validation, invalid token view, success view
+- Added reset token detection on app load in page.tsx (reads `?reset-token=` from URL params)
+- Added `Shield` icon import for ResetPasswordScreen
+- Login Enter key already works via form onSubmit + Button type="submit"
+- All changes pass ESLint with zero errors
+- Dev server compiles successfully
+- Pushed to GitHub (commit 9f32254) → auto-deploys to Vercel
+
+Stage Summary:
+- Profile tab crash FIXED (missing useEffect import)
+- Forgot Password feature fully implemented with real backend API
+- Password reset flow: email → reset link → new password form → login
+- Security: rate limiting, token expiry (1hr), email enumeration protection
+- Deployed to Vercel via GitHub push
