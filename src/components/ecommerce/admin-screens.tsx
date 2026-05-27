@@ -11,7 +11,7 @@ import {
   TrendingUp, Megaphone, ImageIcon, Calendar, BarChart3, MessageSquare,
   Ban, FileText, ArrowUpRight, ArrowDownLeft, Clock, CreditCard, Plus,
   Store, FolderTree, Tag, Wallet,
-  Building2, Upload, Star, Edit
+  Building2, Upload, Star, Edit, ClipboardList
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -318,6 +318,7 @@ export function AdminDashboard() {
               { label: "Verifikasi Seller", count: stats?.pendingSellerVerifications ?? 0, icon: Shield, color: "text-blue-600 bg-blue-50 dark:bg-blue-900/30", screen: "admin-users" as const },
               { label: "Laporan Produk", count: 0, icon: Eye, color: "text-red-600 bg-red-50 dark:bg-red-900/30", screen: "admin-products" as const },
               { label: "Keluhan Terbuka", count: stats?.openComplaints ?? 0, icon: MessageSquare, color: "text-orange-600 bg-orange-50 dark:bg-orange-900/30", screen: "admin-complaints" as const },
+              { label: "Alur Kerja Divisi", count: 0, icon: ClipboardList, color: "text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30", screen: "admin-workflow" as const },
             ].map((item, i) => (
               <motion.div key={item.label} custom={i} variants={stagger} initial="initial" animate="animate">
                 <Card className="p-3">
@@ -353,6 +354,7 @@ export function AdminDashboard() {
             {[
               { label: "Users", icon: Users, screen: "admin-users" as const, color: "bg-blue-50 text-blue-600 dark:bg-blue-900/30" },
               { label: "Divisions", icon: Building2, screen: "admin-divisions" as const, color: "bg-teal-50 text-teal-600 dark:bg-teal-900/30" },
+              { label: "Workflow", icon: ClipboardList, screen: "admin-workflow" as const, color: "bg-indigo-50 text-indigo-600 dark:bg-indigo-900/30" },
               { label: "Products", icon: Box, screen: "admin-products" as const, color: "bg-purple-50 text-purple-600 dark:bg-purple-900/30" },
               { label: "Orders", icon: Package, screen: "admin-orders" as const, color: "bg-orange-50 text-orange-600 dark:bg-orange-900/30" },
               { label: "Withdraw", icon: DollarSign, screen: "admin-withdraw" as const, color: "bg-amber-50 text-amber-600 dark:bg-amber-900/30" },

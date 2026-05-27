@@ -15,7 +15,7 @@ export type ScreenName =
   | 'seller-campaign' | 'seller-wallet' | 'seller-withdraw' | 'seller-withdraw-history'
   | 'admin-dashboard' | 'admin-users' | 'admin-products' | 'admin-orders'
   | 'admin-withdraw' | 'admin-banner' | 'admin-analytics' | 'admin-complaints'
-  | 'admin-divisions'
+  | 'admin-divisions' | 'admin-workflow'
   | 'admin-categories' | 'admin-vouchers' | 'admin-deposits' | 'admin-campaigns' | 'admin-reviews' | 'admin-settings'
 
 export interface User {
@@ -370,6 +370,81 @@ export const DIVISION_ROLE_MAP: Record<string, string[]> = {
   operations: ['operations', 'admin'],
   legal: ['legal', 'admin'],
   hr: ['hr', 'admin'],
+}
+
+// ==================== WORKFLOW / WORK ITEM TYPES ====================
+
+export interface WorkItem {
+  id: string
+  type: string
+  title: string
+  description?: string
+  status: string
+  priority: string
+  divisionId: string
+  assigneeId?: string
+  refType?: string
+  refId?: string
+  metadata?: Record<string, unknown>
+  resolution?: string
+  createdBy?: string
+  createdAt: string
+  updatedAt: string
+  resolvedAt?: string
+  dueDate?: string
+  division?: {
+    id: string
+    name: string
+    slug: string
+    icon?: string
+    color?: string
+  }
+  assignee?: {
+    id: string
+    name: string
+    avatar?: string
+  }
+}
+
+export const WORK_TYPE_TO_DIVISION: Record<string, string> = {
+  complaint: 'cs',
+  withdrawal: 'finance',
+  deposit: 'finance',
+  refund: 'finance',
+  product_report: 'tech',
+  product_review: 'marketing',
+  order_issue: 'operations',
+  seller_verification: 'hr',
+  legal_issue: 'legal',
+  custom: 'operations',
+}
+
+export const WORK_TYPE_DISPLAY: Record<string, { label: string; icon: string; color: string }> = {
+  complaint: { label: 'Keluhan', icon: '📢', color: 'orange' },
+  withdrawal: { label: 'Penarikan Dana', icon: '💰', color: 'emerald' },
+  deposit: { label: 'Deposit', icon: '💳', color: 'emerald' },
+  refund: { label: 'Refund', icon: '↩️', color: 'red' },
+  product_report: { label: 'Laporan Produk', icon: '🚨', color: 'purple' },
+  product_review: { label: 'Review Produk', icon: '⭐', color: 'amber' },
+  order_issue: { label: 'Masalah Pesanan', icon: '📦', color: 'blue' },
+  seller_verification: { label: 'Verifikasi Seller', icon: '✅', color: 'teal' },
+  legal_issue: { label: 'Isu Legal', icon: '⚖️', color: 'red' },
+  custom: { label: 'Tugas Kustom', icon: '📋', color: 'gray' },
+}
+
+export const WORK_PRIORITY_DISPLAY: Record<string, { label: string; color: string }> = {
+  low: { label: 'Rendah', color: 'gray' },
+  normal: { label: 'Normal', color: 'blue' },
+  high: { label: 'Tinggi', color: 'orange' },
+  urgent: { label: 'Urgent', color: 'red' },
+}
+
+export const WORK_STATUS_DISPLAY: Record<string, { label: string; color: string }> = {
+  open: { label: 'Terbuka', color: 'blue' },
+  in_progress: { label: 'Dikerjakan', color: 'orange' },
+  resolved: { label: 'Diselesaikan', color: 'emerald' },
+  closed: { label: 'Ditutup', color: 'gray' },
+  escalated: { label: 'Eskalasi', color: 'red' },
 }
 
 // All staff roles (division-based)

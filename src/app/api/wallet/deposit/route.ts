@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { verifyAuth, checkRateLimit, authErrorResponse } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
 import { logger, logBusinessEvent } from '@/lib/logger'
+import { createWorkItemFromEntity } from '@/lib/workflow'
 
 // ==================== WALLET DEPOSIT ====================
 // SECURITY: Requires authentication
@@ -90,6 +91,18 @@ export async function POST(request: NextRequest) {
       userId: authResult.user.id,
       details: { depositId: deposit.id, amount, method },
     })
+
+    // Auto-create work item for Finance division
+    await createWorkItemFromEntity({
+      type: 'deposit',
+      title: `Deposit: ${authResult.user.name} - Rp ${amount.toLocaleString('id-ID')}`,
+      description: `Deposit Rp ${amount.toLocaleString('id-ID')} via ${method} oleh ${authResult.user.name} (${authResult.user.email})`,
+      refType: 'deposit',
+      refId: deposit.id,
+      metadata: { amount, method, userId: authResult.user.id },
+      priority: amount >= 5000000 ? 'high' : 'normal',
+      createdBy: authResult.user.id,
+    }).catch(err => logger.warn({ err }, 'Failed to auto-create deposit work item'))
 
     // In production: Call Midtrans/payment gateway to create payment token
     // For now, return deposit info for the client to process payment

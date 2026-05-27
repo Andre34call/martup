@@ -54,6 +54,7 @@ import {
 } from '@/components/ecommerce/admin-screens'
 import { AdminOrdersScreen } from '@/components/ecommerce/admin-orders-screen'
 import { AdminDivisions } from '@/components/ecommerce/admin-divisions-screen'
+import { AdminWorkflow } from '@/components/ecommerce/admin-workflow-screen'
 import { AdminCategories, AdminVouchers, AdminDeposits, AdminCampaigns, AdminSettings } from '@/components/ecommerce/admin-new-screens'
 
 // Legal screens
@@ -61,7 +62,7 @@ import { PrivacyPolicyScreen, TermsOfServiceScreen, RefundPolicyScreen } from '@
 
 const AUTH_SCREENS = ['splash', 'onboarding', 'login', 'register', 'otp', 'forgot-password', 'email-verification']
 const SELLER_SCREENS = ['seller-dashboard', 'seller-products', 'seller-add-product', 'seller-orders', 'seller-analytics', 'seller-wallet', 'seller-chat', 'seller-settings', 'seller-campaign', 'seller-withdraw', 'seller-withdraw-history']
-const ADMIN_SCREENS = ['admin-dashboard', 'admin-users', 'admin-products', 'admin-orders', 'admin-withdraw', 'admin-banner', 'admin-analytics', 'admin-complaints', 'admin-divisions', 'admin-categories', 'admin-vouchers', 'admin-deposits', 'admin-campaigns', 'admin-reviews', 'admin-settings']
+const ADMIN_SCREENS = ['admin-dashboard', 'admin-users', 'admin-products', 'admin-orders', 'admin-withdraw', 'admin-banner', 'admin-analytics', 'admin-complaints', 'admin-divisions', 'admin-workflow', 'admin-categories', 'admin-vouchers', 'admin-deposits', 'admin-campaigns', 'admin-reviews', 'admin-settings']
 
 // Sub-screens that should hide the bottom nav (they have their own back navigation headers)
 const SUB_SCREENS = [
@@ -210,6 +211,7 @@ function ScreenRenderer() {
       case 'admin-analytics': return <AdminAnalytics />
       case 'admin-complaints': return <AdminComplaints />
       case 'admin-divisions': return <AdminDivisions />
+      case 'admin-workflow': return <AdminWorkflow />
       case 'admin-categories': return <AdminCategories />
       case 'admin-vouchers': return <AdminVouchers />
       case 'admin-deposits': return <AdminDeposits />
