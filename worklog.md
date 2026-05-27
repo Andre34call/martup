@@ -1,25 +1,31 @@
 ---
-Task ID: 1
+Task ID: 2
 Agent: main
-Task: Fix login issues - user cannot login via email/password or Google OAuth, even as admin
+Task: Fix database connection + address creation + full app audit
 
 Work Log:
-- Analyzed entire auth system: login route, register route, NextAuth config, sync-user, auth/me, auth-middleware, CSRF, middleware
-- Identified 4 critical root causes for login failure:
-  1. Register creates unverified users but email provider is mock (doesn't send real emails) → users stuck in unverified state
-  2. No admin user exists → chicken-and-egg problem (seed requires admin auth but no admin exists)
-  3. NEXTAUTH_URL fallback to localhost on Vercel breaks Google OAuth sync-user flow
-  4. Poor error messages for database connectivity issues
-- Created /api/ping - zero-dependency health check endpoint
-- Fixed register route: auto-verify users when email provider is mock (no RESEND_API_KEY)
-- Created /api/admin/init endpoint: creates first admin user when no admin exists (fixes chicken-and-egg)
-- Fixed NEXTAUTH_URL fallback in auth.ts: VERCEL_URL > NEXTAUTH_URL > localhost
-- Improved login error messages for P1001/P1002/ENOTFOUND database errors
-- Added ADMIN_SETUP_SECRET to .env and env.ts
-- Added CSRF and middleware exemptions for new endpoints
-- Pushed all fixes to GitHub (commit 25b660e)
+- Diagnosed database connection failure: Supabase changed pooler domain from `.pooler.com` to `.pooler.supabase.com`
+- Updated all DB URLs in .env to use new pooler domain
+- Updated NEXT_PUBLIC_SUPABASE_ANON_KEY to new valid key (old one was rotated by Supabase)
+- Fixed admin password: converted from plain text to bcrypt hash (was causing login to always fail)
+- Fixed all test user passwords (buyer, seller, seller2) from plain text to bcrypt
+- Fixed address creation: removed unused client-side `id` field, fixed type to `Omit<Address, 'id'|'createdAt'|'updatedAt'>`
+- Fixed checkout shipping: added missing CSRF token on POST to `/api/shipping/calculate`
+- Fixed phone validation: unified regex between `/api/addresses` and `/api/addresses/[id]` routes
+- Fixed auth: case-insensitive Bearer token parsing (RFC 7235 compliance)
+- Fixed store types: async address functions now return `Promise<void>` instead of `void`
+- Fixed proxy.ts: replaced unreliable `setInterval` with lazy cleanup on each request
+- Fixed React Query hooks: response types now match actual API response shape
+- Added 'warning' toast type with amber styling and AlertTriangle icon
+- Fixed CSRF sameSite comment (Lax, not Strict)
+- Improved Prisma connection pool settings (connection_limit=5, pool_timeout=30)
+- Verified: login ✅, address creation ✅, address update ✅ on Vercel
+- All TypeScript errors resolved (zero `tsc --noEmit` errors)
+- All ESLint errors resolved (zero `bun run lint` errors)
 
 Stage Summary:
-- All auth fixes pushed to GitHub and auto-deploying to Vercel
-- User needs to set env vars in Vercel Dashboard and create admin via /api/admin/init
-- Key instruction for user: test /api/ping first, then /api/debug/health, then create admin
+- Database connection fixed (pooler domain change)
+- Address creation fully working on Vercel
+- 9 bugs fixed across auth, addresses, checkout, types, and proxy
+- Pushed to GitHub (commits 3bc9b0e, 3ce0b87)
+- Test account passwords: admin="admin123", buyer/seller="password123"
