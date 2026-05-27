@@ -18,11 +18,18 @@ const globalForPrisma = globalThis as unknown as {
 function getConnectionUrl(): string {
   let url = process.env.SUPABASE_DATABASE_URL || process.env.DATABASE_URL || ''
   
-  if (url && process.env.VERCEL) {
-    // On Vercel, add connection pooling parameters for serverless
+  if (url) {
+    // Add connection pooling parameters for both Vercel and dev
+    const params: string[] = []
     if (!url.includes('connection_limit')) {
+      params.push('connection_limit=5')
+    }
+    if (!url.includes('pool_timeout')) {
+      params.push('pool_timeout=30')
+    }
+    if (params.length > 0) {
       const separator = url.includes('?') ? '&' : '?'
-      url = `${url}${separator}connection_limit=1&pool_timeout=20`
+      url = `${url}${separator}${params.join('&')}`
     }
   }
   
