@@ -55,3 +55,22 @@ Stage Summary:
 - Critical sandbox/production mismatch fixed
 - Multi-seller payment now works (each seller gets own Snap popup)
 - User MUST set NEXT_PUBLIC_MIDTRANS_IS_PRODUCTION=true in Vercel Dashboard for production to work
+
+---
+Task ID: 2
+Agent: Main Agent
+Task: Fix 4 critical checkout bugs found in deep audit
+
+Work Log:
+- Deep code audit found 4 critical + 4 high issues preventing checkout from working
+- Fixed CSP in middleware.ts: added Midtrans domains to script-src, connect-src, frame-src, img-src
+- Fixed payment callback URLs: changed from /payment/{finish,error,pending} (404 pages) to /orders?payment=...
+- Added getBaseUrl() function that uses VERCEL_URL in production (not localhost NEXTAUTH_URL)
+- Created /api/wallet/debit endpoint for wallet payments (old POST /api/wallet always returned 400)
+- Updated checkout-screen.tsx wallet flow to use /api/wallet/debit with proper error handling
+- All changes lint clean and pushed to GitHub (commit b1deca1)
+
+Stage Summary:
+- 4 critical bugs fixed: CSP blocking Midtrans, callback 404, wallet payment broken, NEXTAUTH_URL localhost
+- Still need: user must set env vars in Vercel Dashboard, especially NEXT_PUBLIC_MIDTRANS_IS_PRODUCTION=true
+- Remaining HIGH issues not yet fixed: wallet order status mismatch on refresh, silent order failures, CSRF on first request
