@@ -1,5 +1,5 @@
 {
-  "buildCommand": "node -e \"const fs=require('fs');['examples','skills','mini-services','.zscripts'].forEach(d=>{try{fs.rmSync(d,{recursive:true,force:true})}catch(e){}})\" && next build",
+  "buildCommand": "prisma generate && next build",
   "installCommand": "bun install",
   "framework": "nextjs",
   "crons": [
