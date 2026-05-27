@@ -58,7 +58,7 @@ import { AdminCategories, AdminVouchers, AdminDeposits, AdminCampaigns, AdminSet
 // Legal screens
 import { PrivacyPolicyScreen, TermsOfServiceScreen, RefundPolicyScreen } from '@/components/ecommerce/legal/legal-screens'
 
-const AUTH_SCREENS = ['splash', 'onboarding', 'login', 'register', 'otp', 'forgot-password']
+const AUTH_SCREENS = ['splash', 'onboarding', 'login', 'register', 'otp', 'forgot-password', 'email-verification']
 const SELLER_SCREENS = ['seller-dashboard', 'seller-products', 'seller-add-product', 'seller-orders', 'seller-analytics', 'seller-wallet', 'seller-chat', 'seller-settings', 'seller-campaign', 'seller-withdraw', 'seller-withdraw-history']
 const ADMIN_SCREENS = ['admin-dashboard', 'admin-users', 'admin-products', 'admin-orders', 'admin-withdraw', 'admin-banner', 'admin-analytics', 'admin-complaints', 'admin-divisions', 'admin-categories', 'admin-vouchers', 'admin-deposits', 'admin-campaigns', 'admin-settings']
 

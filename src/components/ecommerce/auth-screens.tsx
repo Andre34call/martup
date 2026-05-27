@@ -8,6 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Separator } from "@/components/ui/separator"
 import { InputOTP, InputOTPGroup, InputOTPSlot, InputOTPSeparator } from "@/components/ui/input-otp"
 import { useAppStore, useCartStore, useWishlistStore } from "@/lib/store"
+import { PageHeader } from "@/components/ecommerce/shared"
 import { signIn } from "next-auth/react"
 import { useState, useEffect, useCallback } from "react"
 import { useSearchParams } from "next/navigation"
@@ -390,8 +391,13 @@ export function LoginScreen() {
       animate="animate"
       exit="exit"
       transition={pageTransition}
-      className="min-h-screen flex flex-col bg-background px-6 pt-12 pb-8"
+      className="min-h-screen flex flex-col bg-background"
     >
+      {/* Header */}
+      <PageHeader title="Login" onBack={() => navigate("onboarding")} />
+
+      {/* Logo + Form */}
+      <div className="flex-1 flex flex-col px-6 pb-8">
       {/* Logo */}
       <div className="flex flex-col items-center mb-8">
         <MartUpLogo size="md" />
@@ -554,6 +560,7 @@ export function LoginScreen() {
           Daftar
         </button>
       </div>
+      </div>
     </motion.div>
   )
 }
@@ -672,25 +679,13 @@ export function RegisterScreen() {
       animate="animate"
       exit="exit"
       transition={pageTransition}
-      className="min-h-screen flex flex-col bg-background px-6 pt-6 pb-8"
+      className="min-h-screen flex flex-col bg-background"
     >
       {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
-        <motion.button
-          whileTap={{ scale: 0.9 }}
-          onClick={() => navigate("login")}
-          className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-muted transition-colors"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </motion.button>
-        <div>
-          <h1 className="text-xl font-bold text-foreground">Buat Akun</h1>
-          <p className="text-xs text-muted-foreground">Isi data untuk mendaftar</p>
-        </div>
-      </div>
+      <PageHeader title="Buat Akun" onBack={() => navigate("login")} />
 
       {/* Form */}
-      <div className="space-y-4 flex-1 overflow-y-auto">
+      <div className="space-y-4 flex-1 overflow-y-auto px-6 pb-8">
         {/* Name */}
         <div className="space-y-2">
           <label className="text-sm font-medium text-foreground">Nama Lengkap</label>
@@ -925,21 +920,13 @@ export function EmailVerificationScreen() {
       animate="animate"
       exit="exit"
       transition={pageTransition}
-      className="min-h-screen flex flex-col bg-background px-6 pt-6 pb-8"
+      className="min-h-screen flex flex-col bg-background"
     >
       {/* Header */}
-      <div className="flex items-center gap-3 mb-8">
-        <motion.button
-          whileTap={{ scale: 0.9 }}
-          onClick={() => navigate('login')}
-          className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-muted transition-colors"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </motion.button>
-      </div>
+      <PageHeader title="Verifikasi Email" onBack={() => navigate('login')} />
 
       {/* Content */}
-      <div className="flex-1 flex flex-col items-center justify-center">
+      <div className="flex-1 flex flex-col items-center justify-center px-6 pb-8">
         {/* Icon */}
         <motion.div
           initial={{ scale: 0.8 }}
@@ -1182,21 +1169,13 @@ export function OTPScreen() {
       animate="animate"
       exit="exit"
       transition={pageTransition}
-      className="min-h-screen flex flex-col bg-background px-6 pt-6 pb-8"
+      className="min-h-screen flex flex-col bg-background"
     >
       {/* Header */}
-      <div className="flex items-center gap-3 mb-8">
-        <motion.button
-          whileTap={{ scale: 0.9 }}
-          onClick={step === 'otp' ? () => setStep('phone') : goBack}
-          className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-muted transition-colors"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </motion.button>
-      </div>
+      <PageHeader title="Login OTP" onBack={step === 'otp' ? () => setStep('phone') : goBack} />
 
       {/* Content */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col px-6 pb-8">
         {/* Icon */}
         <motion.div
           initial={{ scale: 0.8 }}
@@ -1359,22 +1338,13 @@ export function ForgotPasswordScreen() {
       animate="animate"
       exit="exit"
       transition={pageTransition}
-      className="min-h-screen flex flex-col bg-background px-6 pt-6 pb-8"
+      className="min-h-screen flex flex-col bg-background"
     >
       {/* Header */}
-      <div className="flex items-center gap-3 mb-8">
-        <motion.button
-          whileTap={{ scale: 0.9 }}
-          onClick={goBack}
-          className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-muted transition-colors"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </motion.button>
-        <h1 className="text-xl font-bold text-foreground">Lupa Password</h1>
-      </div>
+      <PageHeader title="Lupa Password" />
 
       {/* Content */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col px-6 pb-8">
         {!isSent ? (
           <>
             {/* Icon */}
