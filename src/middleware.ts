@@ -115,15 +115,17 @@ export async function middleware(request: NextRequest) {
   response.headers.set('X-Request-ID', requestId)
 
   // Content Security Policy — strict nonce-based (no unsafe-inline/unsafe-eval for scripts)
+  // Midtrans Snap requires: script-src (snap.js), connect-src (API), frame-src (popup iframe), img-src (logos)
   response.headers.set(
     'Content-Security-Policy',
     [
       "default-src 'self'",
-      `script-src 'self' 'nonce-${nonce}' https://vercel.live https://va.vercel-scripts.com`,
+      `script-src 'self' 'nonce-${nonce}' https://vercel.live https://va.vercel-scripts.com https://app.midtrans.com https://app.sandbox.midtrans.com`,
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' https://fonts.gstatic.com",
-      "img-src 'self' data: blob: https://rzrfouzuxcxdbhadbppi.supabase.co https://vercel.live",
-      "connect-src 'self' https://rzrfouzuxcxdbhadbppi.supabase.co wss: https://va.vercel-scripts.com",
+      "img-src 'self' data: blob: https://rzrfouzuxcxdbhadbppi.supabase.co https://vercel.live https://app.midtrans.com",
+      "connect-src 'self' https://rzrfouzuxcxdbhadbppi.supabase.co wss: https://va.vercel-scripts.com https://app.midtrans.com https://app.sandbox.midtrans.com",
+      "frame-src https://app.midtrans.com https://app.sandbox.midtrans.com",
       "frame-ancestors 'none'",
     ].join('; ')
   )

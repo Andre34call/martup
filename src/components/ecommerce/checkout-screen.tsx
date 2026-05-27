@@ -559,40 +559,54 @@ export function CheckoutScreen() {
         }
       }
 
-      // Remove checked items from cart
+      // Remove checked items from cart AFTER orders are created
+      // (Cart is cleared here because orders are already in the database)
       const checkedItemIds = checkedItems.map(i => i.id)
       checkedItemIds.forEach(id => removeItem(id))
 
       // ==================== Payment processing ====================
 
       if (selectedPayment === 'wallet') {
-        // Wallet payment: deduct immediately
-        try {
-          const walletHeaders = getAuthHeaders(true)
-          await fetch('/api/wallet', {
-            method: 'POST',
-            headers: walletHeaders,
-            body: JSON.stringify({
-              userId: currentUser?.id,
-              amount: -Math.max(0, totalAmount),
-              type: 'debit',
-              description: 'Pembayaran Order #' + newOrderNumber,
-            }),
-          })
-        } catch {
-          // Fallback: local deduction if API fails
-        }
-        deductWallet(Math.max(0, totalAmount), 'Pembayaran Order #' + newOrderNumber)
-
-        // Mark voucher as used
+        // Wallet payment: pay each order via /api/wallet/debit
         if (selectedVoucher) markVoucherUsed(selectedVoucher.id)
 
+        let walletPaymentSuccess = true
+        for (const orderId of createdOrderIds) {
+          try {
+            const walletRes = await fetch('/api/wallet/debit', {
+              method: 'POST',
+              headers: getAuthHeaders(true),
+              body: JSON.stringify({
+                orderId,
+                amount: totalAmount,
+                description: `Pembayaran pesanan via MartUp Pay`,
+              }),
+            })
+            const walletData = await walletRes.json()
+            if (!walletData.success) {
+              walletPaymentSuccess = false
+              showToast(walletData.error || 'Pembayaran wallet gagal', 'error')
+            }
+          } catch (error) {
+            walletPaymentSuccess = false
+            logger.warn({ component: 'checkout', err: error }, 'Wallet payment API failed')
+          }
+        }
+
+        // Update local wallet balance
+        deductWallet(Math.max(0, totalAmount), 'Pembayaran pesanan via MartUp Pay')
+
         setIsProcessing(false)
-        setShowSuccessModal(true)
-        setTimeout(() => {
-          setShowSuccessModal(false)
+        if (walletPaymentSuccess) {
+          setShowSuccessModal(true)
+          setTimeout(() => {
+            setShowSuccessModal(false)
+            navigate('orders')
+          }, 2500)
+        } else {
+          showToast('Pembayaran wallet gagal. Pesanan tersimpan sebagai "Belum Bayar".', 'error')
           navigate('orders')
-        }, 2500)
+        }
 
       } else if (selectedPayment === 'midtrans' || selectedPayment === 'card') {
         // Midtrans / Card payment: open Snap popup for each seller order

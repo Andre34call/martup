@@ -15,6 +15,13 @@ const SNAP_URL = MIDTRANS_IS_PRODUCTION
 // Orders expire after 24 hours if unpaid
 const ORDER_EXPIRY_HOURS = 24
 
+// Get base URL for Midtrans callbacks (VERCEL_URL in production, localhost for dev)
+function getBaseUrl(): string {
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`
+  if (process.env.NEXTAUTH_URL && process.env.NEXTAUTH_URL !== 'http://localhost:3000') return process.env.NEXTAUTH_URL
+  return process.env.NEXTAUTH_URL || 'http://localhost:3000'
+}
+
 // ==================== POST /api/payment/create ====================
 // Create a Midtrans Snap transaction token for an order
 
@@ -221,9 +228,10 @@ export async function POST(request: NextRequest) {
         phone: order.user.phone || undefined,
       },
       callbacks: {
-        finish: `${process.env.NEXTAUTH_URL}/payment/finish`,
-        error: `${process.env.NEXTAUTH_URL}/payment/error`,
-        pending: `${process.env.NEXTAUTH_URL}/payment/pending`,
+        // Use VERCEL_URL in production, NEXTAUTH_URL as fallback, localhost for dev
+        finish: `${getBaseUrl()}/orders?payment=finish`,
+        error: `${getBaseUrl()}/orders?payment=error`,
+        pending: `${getBaseUrl()}/orders?payment=pending`,
       },
     }
 
