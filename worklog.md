@@ -1,76 +1,25 @@
 ---
 Task ID: 1
-Agent: Main Agent
-Task: Check and fix errors when adding address and adding product
+Agent: main
+Task: Fix login issues - user cannot login via email/password or Google OAuth, even as admin
 
 Work Log:
-- Analyzed the full address creation flow: AddressScreen → Zustand store → /api/addresses → Prisma
-- Analyzed the full product creation flow: SellerAddProductScreen → upload → /api/seller/products → Prisma
-- Discovered CRITICAL: /api/upload route was completely missing - product image uploads would always fail
-- Discovered: upload.ts getUploadAuthHeaders() only checked 'authToken', not 'martup_token'
-- Discovered: apiClient.getToken() only checked 'martup_token', not 'authToken'
-- Discovered: No CSRF retry logic in apiClient for mutating requests
-- Discovered: seller-add-product-screen used raw fetch() without CSRF retry
-- Discovered: /api/setup/storage required admin auth but DataFetcher called it without auth headers
-- Created /api/upload route with Supabase Storage integration
-- Fixed upload.ts to check both token keys
-- Fixed apiClient to check both token keys and added CSRF retry for all mutating methods
-- Added rawPost/rawPut/rawDelete methods to apiClient for cases needing raw Response
-- Updated seller-add-product-screen to use apiClient.rawPost/rawPut
-- Fixed storage setup route to accept any authenticated user (fallback from admin-only)
-- Added auth headers to DataFetcher storage setup call
-- Added NEXT_PUBLIC_SUPABASE_URL/ANON_KEY to env.ts
-- Made supabase.ts handle missing credentials gracefully
-- Upload API: auto-retry bucket creation if bucket not found
-- Set up .env with Supabase credentials
-- All code passes lint and TypeScript type check
-- Pushed to GitHub: d55183e
+- Analyzed entire auth system: login route, register route, NextAuth config, sync-user, auth/me, auth-middleware, CSRF, middleware
+- Identified 4 critical root causes for login failure:
+  1. Register creates unverified users but email provider is mock (doesn't send real emails) → users stuck in unverified state
+  2. No admin user exists → chicken-and-egg problem (seed requires admin auth but no admin exists)
+  3. NEXTAUTH_URL fallback to localhost on Vercel breaks Google OAuth sync-user flow
+  4. Poor error messages for database connectivity issues
+- Created /api/ping - zero-dependency health check endpoint
+- Fixed register route: auto-verify users when email provider is mock (no RESEND_API_KEY)
+- Created /api/admin/init endpoint: creates first admin user when no admin exists (fixes chicken-and-egg)
+- Fixed NEXTAUTH_URL fallback in auth.ts: VERCEL_URL > NEXTAUTH_URL > localhost
+- Improved login error messages for P1001/P1002/ENOTFOUND database errors
+- Added ADMIN_SETUP_SECRET to .env and env.ts
+- Added CSRF and middleware exemptions for new endpoints
+- Pushed all fixes to GitHub (commit 25b660e)
 
 Stage Summary:
-- Created 1 new file: src/app/api/upload/route.ts
-- Modified 7 files with critical bug fixes
-- Address add: CSRF retry was already in place from previous fix, auth flow is correct
-- Product add: Was broken due to missing upload API route, now fixed
-- Both flows should work after Vercel deployment
----
-Task ID: 1
-Agent: Main Agent
-Task: Fix Midtrans payment integration for checkout flow
-
-Work Log:
-- Analyzed checkout-screen.tsx, payment/create route, payment/notification route, midtrans.ts client lib, .env file
-- Found CRITICAL bug: NEXT_PUBLIC_MIDTRANS_IS_PRODUCTION missing from .env, causing client to load sandbox Snap.js while server uses production keys
-- Found paymentStatus mismatch: checkout local state used 'pending' but server creates with 'unpaid'
-- Found /api/payment/create only allows paymentStatus='unpaid', but Midtrans sends 'pending' notification on transaction creation, blocking re-payment attempts
-- Found multi-seller Midtrans only paid for first order, remaining orders stayed unpaid
-- Added NEXT_PUBLIC_MIDTRANS_IS_PRODUCTION=true to .env
-- Fixed checkout local state paymentStatus from 'pending' to 'unpaid'
-- Modified /api/payment/create to allow both 'unpaid' and 'pending' paymentStatus
-- Rewrote multi-seller Midtrans flow to process each seller's order sequentially
-- Added Midtrans env vars to env.ts recommended vars list
-- Pushed to GitHub (commit 9814643)
-
-Stage Summary:
-- 3 files modified: payment/create/route.ts, checkout-screen.tsx, env.ts
-- Critical sandbox/production mismatch fixed
-- Multi-seller payment now works (each seller gets own Snap popup)
-- User MUST set NEXT_PUBLIC_MIDTRANS_IS_PRODUCTION=true in Vercel Dashboard for production to work
-
----
-Task ID: 2
-Agent: Main Agent
-Task: Fix 4 critical checkout bugs found in deep audit
-
-Work Log:
-- Deep code audit found 4 critical + 4 high issues preventing checkout from working
-- Fixed CSP in middleware.ts: added Midtrans domains to script-src, connect-src, frame-src, img-src
-- Fixed payment callback URLs: changed from /payment/{finish,error,pending} (404 pages) to /orders?payment=...
-- Added getBaseUrl() function that uses VERCEL_URL in production (not localhost NEXTAUTH_URL)
-- Created /api/wallet/debit endpoint for wallet payments (old POST /api/wallet always returned 400)
-- Updated checkout-screen.tsx wallet flow to use /api/wallet/debit with proper error handling
-- All changes lint clean and pushed to GitHub (commit b1deca1)
-
-Stage Summary:
-- 4 critical bugs fixed: CSP blocking Midtrans, callback 404, wallet payment broken, NEXTAUTH_URL localhost
-- Still need: user must set env vars in Vercel Dashboard, especially NEXT_PUBLIC_MIDTRANS_IS_PRODUCTION=true
-- Remaining HIGH issues not yet fixed: wallet order status mismatch on refresh, silent order failures, CSRF on first request
+- All auth fixes pushed to GitHub and auto-deploying to Vercel
+- User needs to set env vars in Vercel Dashboard and create admin via /api/admin/init
+- Key instruction for user: test /api/ping first, then /api/debug/health, then create admin
