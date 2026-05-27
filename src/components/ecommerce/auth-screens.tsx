@@ -8,6 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Separator } from "@/components/ui/separator"
 import { InputOTP, InputOTPGroup, InputOTPSlot, InputOTPSeparator } from "@/components/ui/input-otp"
 import { useAppStore, useCartStore, useWishlistStore } from "@/lib/store"
+import { PageHeader } from "@/components/ecommerce/shared"
 import { signIn } from "next-auth/react"
 import { useState, useEffect, useCallback } from "react"
 import { useSearchParams } from "next/navigation"
@@ -390,8 +391,13 @@ export function LoginScreen() {
       animate="animate"
       exit="exit"
       transition={pageTransition}
-      className="min-h-screen flex flex-col bg-background px-6 pt-12 pb-8"
+      className="min-h-screen flex flex-col bg-background"
     >
+      {/* Header */}
+      <PageHeader title="Login" onBack={() => navigate("onboarding")} />
+
+      {/* Logo + Form */}
+      <div className="flex-1 flex flex-col px-6 pb-8">
       {/* Logo */}
       <div className="flex flex-col items-center mb-8">
         <MartUpLogo size="md" />
@@ -408,7 +414,10 @@ export function LoginScreen() {
       </div>
 
       {/* Form */}
-      <div className="space-y-4 flex-1">
+      <form
+        onSubmit={(e) => { e.preventDefault(); handleLogin() }}
+        className="space-y-4 flex-1"
+      >
         {/* Email/Phone input */}
         <div className="space-y-2">
           <label className="text-sm font-medium text-foreground">
@@ -472,7 +481,7 @@ export function LoginScreen() {
 
         {/* Login button */}
         <Button
-          onClick={handleLogin}
+          type="submit"
           disabled={isLoading || !isFormValid}
           className="w-full h-12 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-semibold text-base disabled:opacity-50"
         >
@@ -497,6 +506,7 @@ export function LoginScreen() {
         {/* Social login */}
         <div className="space-y-3">
           <Button
+            type="button"
             variant="outline"
             className="w-full h-12 rounded-xl font-medium text-sm border-border/50"
             onClick={handleGoogleLogin}
@@ -524,6 +534,7 @@ export function LoginScreen() {
           </Button>
 
           <Button
+            type="button"
             variant="outline"
             className="w-full h-12 rounded-xl font-medium text-sm border-border/50"
             onClick={() => showToast("Apple Sign-In segera hadir!", "info")}
@@ -536,13 +547,14 @@ export function LoginScreen() {
 
         {/* OTP login */}
         <button
+          type="button"
           onClick={() => navigate("otp")}
           className="w-full flex items-center justify-center gap-2 py-3 text-sm text-emerald-600 hover:text-emerald-700 font-medium transition-colors"
         >
           <Smartphone className="w-4 h-4" />
           Masuk dengan OTP
         </button>
-      </div>
+      </form>
 
       {/* Register link */}
       <div className="flex items-center justify-center gap-1 pt-4">
@@ -553,6 +565,7 @@ export function LoginScreen() {
         >
           Daftar
         </button>
+      </div>
       </div>
     </motion.div>
   )
@@ -672,25 +685,16 @@ export function RegisterScreen() {
       animate="animate"
       exit="exit"
       transition={pageTransition}
-      className="min-h-screen flex flex-col bg-background px-6 pt-6 pb-8"
+      className="min-h-screen flex flex-col bg-background"
     >
       {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
-        <motion.button
-          whileTap={{ scale: 0.9 }}
-          onClick={() => navigate("login")}
-          className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-muted transition-colors"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </motion.button>
-        <div>
-          <h1 className="text-xl font-bold text-foreground">Buat Akun</h1>
-          <p className="text-xs text-muted-foreground">Isi data untuk mendaftar</p>
-        </div>
-      </div>
+      <PageHeader title="Buat Akun" onBack={() => navigate("login")} />
 
       {/* Form */}
-      <div className="space-y-4 flex-1 overflow-y-auto">
+      <form
+        onSubmit={(e) => { e.preventDefault(); handleRegister() }}
+        className="space-y-4 flex-1 overflow-y-auto px-6 pb-8"
+      >
         {/* Name */}
         <div className="space-y-2">
           <label className="text-sm font-medium text-foreground">Nama Lengkap</label>
@@ -817,7 +821,7 @@ export function RegisterScreen() {
 
         {/* Register button */}
         <Button
-          onClick={handleRegister}
+          type="submit"
           disabled={isLoading || !isFormValid}
           className="w-full h-12 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-semibold text-base disabled:opacity-50"
         >
@@ -831,7 +835,7 @@ export function RegisterScreen() {
             "Daftar"
           )}
         </Button>
-      </div>
+      </form>
 
       {/* Login link */}
       <div className="flex items-center justify-center gap-1 pt-4">
@@ -925,21 +929,13 @@ export function EmailVerificationScreen() {
       animate="animate"
       exit="exit"
       transition={pageTransition}
-      className="min-h-screen flex flex-col bg-background px-6 pt-6 pb-8"
+      className="min-h-screen flex flex-col bg-background"
     >
       {/* Header */}
-      <div className="flex items-center gap-3 mb-8">
-        <motion.button
-          whileTap={{ scale: 0.9 }}
-          onClick={() => navigate('login')}
-          className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-muted transition-colors"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </motion.button>
-      </div>
+      <PageHeader title="Verifikasi Email" onBack={() => navigate('login')} />
 
       {/* Content */}
-      <div className="flex-1 flex flex-col items-center justify-center">
+      <div className="flex-1 flex flex-col items-center justify-center px-6 pb-8">
         {/* Icon */}
         <motion.div
           initial={{ scale: 0.8 }}
@@ -1182,21 +1178,13 @@ export function OTPScreen() {
       animate="animate"
       exit="exit"
       transition={pageTransition}
-      className="min-h-screen flex flex-col bg-background px-6 pt-6 pb-8"
+      className="min-h-screen flex flex-col bg-background"
     >
       {/* Header */}
-      <div className="flex items-center gap-3 mb-8">
-        <motion.button
-          whileTap={{ scale: 0.9 }}
-          onClick={step === 'otp' ? () => setStep('phone') : goBack}
-          className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-muted transition-colors"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </motion.button>
-      </div>
+      <PageHeader title="Login OTP" onBack={step === 'otp' ? () => setStep('phone') : goBack} />
 
       {/* Content */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col px-6 pb-8">
         {/* Icon */}
         <motion.div
           initial={{ scale: 0.8 }}
@@ -1359,22 +1347,13 @@ export function ForgotPasswordScreen() {
       animate="animate"
       exit="exit"
       transition={pageTransition}
-      className="min-h-screen flex flex-col bg-background px-6 pt-6 pb-8"
+      className="min-h-screen flex flex-col bg-background"
     >
       {/* Header */}
-      <div className="flex items-center gap-3 mb-8">
-        <motion.button
-          whileTap={{ scale: 0.9 }}
-          onClick={goBack}
-          className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-muted transition-colors"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </motion.button>
-        <h1 className="text-xl font-bold text-foreground">Lupa Password</h1>
-      </div>
+      <PageHeader title="Lupa Password" />
 
       {/* Content */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col px-6 pb-8">
         {!isSent ? (
           <>
             {/* Icon */}
@@ -1395,7 +1374,7 @@ export function ForgotPasswordScreen() {
             </p>
 
             {/* Email input */}
-            <div className="space-y-2 mb-6">
+            <form onSubmit={(e) => { e.preventDefault(); handleReset() }} className="space-y-2 mb-6">
               <label className="text-sm font-medium text-foreground">Email</label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -1406,24 +1385,24 @@ export function ForgotPasswordScreen() {
                   className="pl-10 h-12 rounded-xl bg-muted/50 border-border/50 focus:border-emerald-500 focus:ring-emerald-500/20"
                 />
               </div>
-            </div>
 
-            {/* Submit button */}
-            <Button
-              onClick={handleReset}
-              disabled={isLoading || !email}
-              className="w-full h-12 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-semibold text-base disabled:opacity-50"
-            >
-              {isLoading ? (
-                <motion.div
-                  animate={{ rotate: 360 }}
-                  transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                  className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full"
-                />
-              ) : (
-                "Kirim Reset Link"
-              )}
-            </Button>
+              {/* Submit button */}
+              <Button
+                type="submit"
+                disabled={isLoading || !email}
+                className="w-full h-12 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-semibold text-base disabled:opacity-50"
+              >
+                {isLoading ? (
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                    className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full"
+                  />
+                ) : (
+                  "Kirim Reset Link"
+                )}
+              </Button>
+            </form>
           </>
         ) : (
           <motion.div

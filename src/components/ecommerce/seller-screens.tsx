@@ -7,7 +7,7 @@ import {
   BarChart3, Check, TrendingUp, ChevronRight, ArrowLeft, Search,
   Edit, Trash2, Truck, Printer, Calendar, Wallet, Banknote, Clock,
   Megaphone, Zap, Tag, Store, AlertTriangle, ArrowUpRight, ArrowDownLeft, Shield,
-  ShoppingBag
+  ShoppingBag, X
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -456,6 +456,9 @@ export function SellerOrders() {
   const [showTrackingDialog, setShowTrackingDialog] = useState(false)
   const [trackingOrderId, setTrackingOrderId] = useState<string | null>(null)
   const [trackingNumber, setTrackingNumber] = useState("")
+  const [showCancelDialog, setShowCancelDialog] = useState(false)
+  const [cancelOrderId, setCancelOrderId] = useState<string | null>(null)
+  const [cancelReason, setCancelReason] = useState("")
 
   // Derive sellerId from store seller
   const sellerId = seller?.id || ''
@@ -572,6 +575,15 @@ export function SellerOrders() {
                           <Truck className="w-3 h-3 mr-1" /> Kirim
                         </Button>
                       )}
+                      {(order.status === "paid" || order.status === "processing") && (
+                        <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20" onClick={() => {
+                          setCancelOrderId(order.id)
+                          setCancelReason("")
+                          setShowCancelDialog(true)
+                        }}>
+                          <X className="w-3 h-3 mr-1" /> Batalkan
+                        </Button>
+                      )}
                       <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg" onClick={() => showToast("Invoice dicetak", "info")}>
                         <Printer className="w-3 h-3 mr-1" /> Invoice
                       </Button>
@@ -637,6 +649,63 @@ export function SellerOrders() {
               className="bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-10 flex-1"
             >
               Kirim Pesanan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cancel Order Dialog */}
+      <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
+        <DialogContent className="max-w-[340px] rounded-2xl p-5">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold">Batalkan Pesanan</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 mt-2">
+            <label className="text-xs font-medium text-foreground">Alasan Pembatalan <span className="text-red-500">*</span></label>
+            <textarea
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+              placeholder="Contoh: Stok habis, tidak bisa memenuhi pesanan..."
+              className="w-full min-h-[80px] rounded-xl border border-input bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 resize-none"
+              autoFocus
+            />
+          </div>
+          <DialogFooter className="mt-4 gap-2">
+            <Button variant="outline" onClick={() => setShowCancelDialog(false)} className="rounded-xl h-10 flex-1">
+              Batal
+            </Button>
+            <Button
+              onClick={async () => {
+                if (!cancelReason.trim()) {
+                  showToast("Masukkan alasan pembatalan", "error")
+                  return
+                }
+                if (cancelOrderId) {
+                  try {
+                    const res = await fetch(`/api/orders/${cancelOrderId}/status`, {
+                      method: 'PUT',
+                      headers: getAuthHeaders(true),
+                      body: JSON.stringify({ status: 'cancelled', cancelReason: cancelReason.trim() }),
+                    })
+                    const data = await res.json()
+                    if (!res.ok || !data.success) {
+                      throw new Error(data.error || 'Gagal membatalkan pesanan')
+                    }
+                    updateOrderStatus(cancelOrderId, 'cancelled')
+                    showToast("Pesanan dibatalkan", "info")
+                  } catch (err: unknown) {
+                    const message = err instanceof Error ? err.message : 'Gagal membatalkan pesanan'
+                    showToast(message, "error")
+                    return
+                  }
+                }
+                setShowCancelDialog(false)
+                setCancelOrderId(null)
+                setCancelReason("")
+              }}
+              className="bg-red-500 hover:bg-red-600 text-white rounded-xl h-10 flex-1"
+            >
+              Batalkan Pesanan
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1142,15 +1211,19 @@ export function SellerChat() {
 
 // ==================== SELLER SETTINGS ====================
 export function SellerSettings() {
-  const { showToast, seller } = useAppStore()
+  const { showToast, seller, deleteAccount, logout } = useAppStore()
   const [storeName, setStoreName] = useState(seller?.storeName || "My Store")
   const [storeDesc, setStoreDesc] = useState(seller?.storeDesc || "")
   const [storeAddress, setStoreAddress] = useState(seller?.storeAddress || "")
+  const [storeCity, setStoreCity] = useState((seller as any)?.storeCity || "")
+  const [storeProvince, setStoreProvince] = useState((seller as any)?.storeProvince || "")
+  const [storePostalCode, setStorePostalCode] = useState((seller as any)?.storePostalCode || "")
   const [autoReplyMsg, setAutoReplyMsg] = useState(seller?.autoReply || "Terima kasih sudah menghubungi kami. Kami akan membalas pesan Anda secepatnya.")
   const [bankAccount, setBankAccount] = useState(seller?.bankAccount || "")
   const [bankName, setBankName] = useState(seller?.bankName || "")
   const [bankHolder, setBankHolder] = useState(seller?.bankHolder || "")
   const [isSaving, setIsSaving] = useState(false)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
 
   const handleSave = async () => {
     setIsSaving(true)
@@ -1162,6 +1235,9 @@ export function SellerSettings() {
           storeName,
           storeDesc,
           storeAddress,
+          storeCity,
+          storeProvince,
+          storePostalCode,
           autoReply: autoReplyMsg,
           bankAccount,
           bankName,
@@ -1179,6 +1255,24 @@ export function SellerSettings() {
     } finally {
       setIsSaving(false)
     }
+  }
+
+  const handleDeleteAccount = async () => {
+    try {
+      const res = await fetch('/api/auth/me', { headers: getAuthHeaders() })
+      const data = await res.json()
+      if (data?.user?.id) {
+        await fetch(`/api/admin/users`, {
+          method: 'DELETE',
+          headers: getAuthHeaders(true),
+          body: JSON.stringify({ userId: data.user.id }),
+        })
+      }
+    } catch {
+      // Best effort server-side cleanup
+    }
+    deleteAccount()
+    showToast("Akun berhasil dihapus", "success")
   }
 
   return (
@@ -1203,13 +1297,27 @@ export function SellerSettings() {
               />
             </div>
             <div className="space-y-2">
-              <label className="text-xs font-medium text-foreground">Alamat Toko</label>
+              <label className="text-xs font-medium text-foreground">Alamat Toko (Asal Pengiriman)</label>
               <textarea
                 value={storeAddress}
                 onChange={e => setStoreAddress(e.target.value)}
                 className="w-full min-h-[60px] rounded-xl border border-input bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 resize-none"
-                placeholder="Alamat lengkap toko"
+                placeholder="Alamat jalan, nomor rumah, gedung, dll."
               />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-foreground">Kota</label>
+                <Input value={storeCity} onChange={e => setStoreCity(e.target.value)} className="rounded-xl" placeholder="Jakarta" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-foreground">Kode Pos</label>
+                <Input value={storePostalCode} onChange={e => setStorePostalCode(e.target.value)} className="rounded-xl" placeholder="12345" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-foreground">Provinsi</label>
+              <Input value={storeProvince} onChange={e => setStoreProvince(e.target.value)} className="rounded-xl" placeholder="DKI Jakarta" />
             </div>
           </Card>
         </motion.div>
@@ -1276,7 +1384,56 @@ export function SellerSettings() {
             {isSaving ? "Menyimpan..." : "Simpan Pengaturan"}
           </Button>
         </motion.div>
+
+        {/* Danger Zone - Delete Account */}
+        <motion.div {...fadeIn}>
+          <SectionHeader title="Zona Bahaya" icon={<AlertTriangle className="w-4 h-4 text-red-500" />} />
+          <Card className="mt-3 p-4 border-red-200 dark:border-red-900/50">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-red-50 dark:bg-red-900/30 flex items-center justify-center flex-shrink-0">
+                <Trash2 className="w-5 h-5 text-red-500" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-foreground">Hapus Akun Penjual</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Tindakan ini tidak dapat dibatalkan. Semua data toko, produk, dan riwayat penjualan akan dihapus.</p>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              className="w-full mt-3 h-10 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 border-red-200 dark:border-red-900/50 rounded-xl"
+              onClick={() => setShowDeleteDialog(true)}
+            >
+              <Trash2 className="w-4 h-4 mr-2" /> Hapus Akun
+            </Button>
+          </Card>
+        </motion.div>
       </div>
+
+      {/* Delete Account Confirmation Dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent className="max-w-[340px] rounded-2xl p-5">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold text-red-600">Hapus Akun Penjual?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground mt-2">
+            Apakah Anda yakin ingin menghapus akun? Semua data toko, produk, pesanan, dan riwayat penjualan akan dihapus secara permanen. Tindakan ini <strong>tidak dapat dibatalkan</strong>.
+          </p>
+          <DialogFooter className="mt-4 gap-2">
+            <Button variant="outline" onClick={() => setShowDeleteDialog(false)} className="rounded-xl h-10 flex-1">
+              Batal
+            </Button>
+            <Button
+              onClick={() => {
+                handleDeleteAccount()
+                setShowDeleteDialog(false)
+              }}
+              className="bg-red-500 hover:bg-red-600 text-white rounded-xl h-10 flex-1"
+            >
+              Ya, Hapus Akun
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

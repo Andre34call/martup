@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 import { sanitizeInput } from '@/lib/sanitize'
 import { serializeDecimal } from '@/lib/decimal-utils'
+import { createWorkItemFromEntity } from '@/lib/workflow'
 
 import { logger } from '@/lib/logger'
 // GET /api/admin/complaints - Fetch all complaints with order and user info
@@ -88,6 +89,26 @@ export async function PUT(request: NextRequest) {
       where: { id: complaintId },
       data: updateData,
     })
+
+    // Auto-create work item for CS division when complaint is opened
+    if (status === 'open' || status === 'processing') {
+      const complaintFull = await db.complaint.findUnique({
+        where: { id: complaintId },
+        include: { order: { include: { user: { select: { name: true } }, seller: { select: { storeName: true } } } } },
+      })
+      if (complaintFull) {
+        await createWorkItemFromEntity({
+          type: 'complaint',
+          title: `Keluhan: ${complaintFull.order?.user?.name || 'Unknown'} - ${complaintFull.type}`,
+          description: `Keluhan ${complaintFull.type} dari ${complaintFull.order?.user?.name || 'Unknown'} terhadap ${complaintFull.order?.seller?.storeName || 'Unknown'}. ${complaintFull.reason || ''}`,
+          refType: 'complaint',
+          refId: complaintId,
+          metadata: { type: complaintFull.type, orderId: complaintFull.orderId, priority: complaintFull.type === 'refund' ? 'high' : 'normal' },
+          priority: complaintFull.type === 'refund' ? 'high' : 'normal',
+          createdBy: authResult.user.id,
+        }).catch(err => logger.warn({ err }, 'Failed to auto-create complaint work item'))
+      }
+    }
 
     return NextResponse.json(serializeDecimal({ success: true, data: complaint }))
   } catch (error: unknown) {

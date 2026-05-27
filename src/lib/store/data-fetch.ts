@@ -42,6 +42,7 @@ export const createDataFetchSlice: StateCreator<AppStore, [], [], DataFetchSlice
           currentUser: user,
           userRole: user.role,
           isAuthenticated: true,
+          avatarUrl: user.avatar || null,
         })
       }
 

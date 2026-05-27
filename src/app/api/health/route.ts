@@ -57,7 +57,7 @@ export async function GET() {
   const result: HealthCheckResult = {
     status: overallStatus,
     timestamp: new Date().toISOString(),
-    version: process.env.APP_VERSION || '1.0.0',
+    version: process.env.APP_VERSION || '1.3.0-admin-enhance',
     uptime: process.uptime(),
     checks,
   }

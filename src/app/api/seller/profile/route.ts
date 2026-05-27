@@ -163,6 +163,9 @@ export async function PUT(request: NextRequest) {
       storeName,
       storeDesc,
       storeAddress,
+      storeCity,
+      storeProvince,
+      storePostalCode,
       bankAccount,
       bankName,
       bankHolder,
@@ -221,6 +224,57 @@ export async function PUT(request: NextRequest) {
         )
       }
       updateData.storeAddress = storeAddress || null
+    }
+
+    // --- Validate storeCity ---
+    if (storeCity !== undefined) {
+      if (typeof storeCity !== 'string') {
+        return NextResponse.json(
+          { success: false, error: 'Kota toko tidak valid' },
+          { status: 400 }
+        )
+      }
+      if (storeCity.length > 100) {
+        return NextResponse.json(
+          { success: false, error: 'Kota toko maksimal 100 karakter' },
+          { status: 400 }
+        )
+      }
+      updateData.storeCity = storeCity || null
+    }
+
+    // --- Validate storeProvince ---
+    if (storeProvince !== undefined) {
+      if (typeof storeProvince !== 'string') {
+        return NextResponse.json(
+          { success: false, error: 'Provinsi toko tidak valid' },
+          { status: 400 }
+        )
+      }
+      if (storeProvince.length > 100) {
+        return NextResponse.json(
+          { success: false, error: 'Provinsi toko maksimal 100 karakter' },
+          { status: 400 }
+        )
+      }
+      updateData.storeProvince = storeProvince || null
+    }
+
+    // --- Validate storePostalCode ---
+    if (storePostalCode !== undefined) {
+      if (typeof storePostalCode !== 'string') {
+        return NextResponse.json(
+          { success: false, error: 'Kode pos toko tidak valid' },
+          { status: 400 }
+        )
+      }
+      if (storePostalCode.length > 10) {
+        return NextResponse.json(
+          { success: false, error: 'Kode pos toko maksimal 10 karakter' },
+          { status: 400 }
+        )
+      }
+      updateData.storePostalCode = storePostalCode || null
     }
 
     // --- Validate bank fields (all-or-nothing) ---

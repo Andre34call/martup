@@ -203,6 +203,47 @@ export function BottomNav() {
   )
 }
 
+// ==================== SAFE IMAGE (with broken image fallback) ====================
+function SafeImage({ src, alt, className, fallbackChar }: {
+  src: string
+  alt: string
+  className?: string
+  fallbackChar?: string
+}) {
+  const [imgError, setImgError] = useState(false)
+
+  // Validate URL - reject blob:, data: (large), and empty URLs
+  const isValidUrl = !(!src || src.startsWith('blob:') || src.startsWith('data:text'))
+
+  if (!isValidUrl || imgError) {
+    const char = fallbackChar || alt?.charAt(0) || '?'
+    const colors = [
+      "bg-emerald-100 dark:bg-emerald-900/30",
+      "bg-orange-100 dark:bg-orange-900/30",
+      "bg-pink-100 dark:bg-pink-900/30",
+      "bg-violet-100 dark:bg-violet-900/30",
+      "bg-cyan-100 dark:bg-cyan-900/30",
+      "bg-amber-100 dark:bg-amber-900/30",
+    ]
+    const colorIndex = alt ? alt.charCodeAt(0) % colors.length : 0
+    return (
+      <div className={`${className} flex items-center justify-center ${colors[colorIndex]}`}>
+        <span className="text-3xl font-bold text-emerald-600/70">{char.toUpperCase()}</span>
+      </div>
+    )
+  }
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className={className}
+      onError={() => setImgError(true)}
+      loading="lazy"
+    />
+  )
+}
+
 // ==================== PRODUCT CARD ====================
 interface ProductCardProps {
   product: Product
@@ -236,11 +277,12 @@ export function ProductCard({ product, onClick, layout = "grid" }: ProductCardPr
         className="flex gap-3 p-3 bg-card rounded-xl border border-border/50 shadow-sm cursor-pointer"
       >
         <div className="relative w-24 h-24 flex-shrink-0 rounded-lg overflow-hidden">
-          {product.images && product.images.length > 0 ? (
-            <img
+          {product.images && product.images.length > 0 && !product.images[0].startsWith('blob:') ? (
+            <SafeImage
               src={product.images[0]}
               alt={product.name}
               className="w-full h-full object-cover"
+              fallbackChar={product.name.charAt(0)}
             />
           ) : (
             <div className={`w-full h-full flex items-center justify-center ${colors[colorIndex]}`}>
@@ -288,11 +330,12 @@ export function ProductCard({ product, onClick, layout = "grid" }: ProductCardPr
     >
       {/* Image */}
       <div className="relative aspect-square overflow-hidden">
-        {product.images && product.images.length > 0 ? (
-          <img
+        {product.images && product.images.length > 0 && !product.images[0].startsWith('blob:') ? (
+          <SafeImage
             src={product.images[0]}
             alt={product.name}
             className="w-full h-full object-cover image-zoom"
+            fallbackChar={product.name.charAt(0)}
           />
         ) : (
           <div className={`w-full h-full flex items-center justify-center ${colors[colorIndex]}`}>
@@ -946,14 +989,21 @@ export function AvatarWithName({
             src={avatarUrl}
             alt={name}
             className={`${s.avatar} rounded-full object-cover`}
+            onError={(e) => {
+              // Hide broken image and show fallback initial instead
+              (e.target as HTMLImageElement).style.display = 'none'
+              if (e.target.nextElementSibling) {
+                (e.target.nextElementSibling as HTMLElement).style.display = 'flex'
+              }
+            }}
           />
-        ) : (
-          <div
-            className={`${s.avatar} rounded-full ${colors[colorIndex]} text-white font-bold flex items-center justify-center`}
-          >
-            {name.charAt(0).toUpperCase()}
-          </div>
-        )}
+        ) : null}
+        <div
+          className={`${s.avatar} rounded-full ${colors[colorIndex]} text-white font-bold items-center justify-center`}
+          style={{ display: avatarUrl ? 'none' : 'flex' }}
+        >
+          {name.charAt(0).toUpperCase()}
+        </div>
         {isVerified && (
           <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-emerald-500 rounded-full flex items-center justify-center border-2 border-background">
             <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />
@@ -1360,10 +1410,11 @@ export function StoreCard({
     >
       <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center flex-shrink-0 overflow-hidden">
         {storeAvatar ? (
-          <img src={storeAvatar} alt={storeName} className="w-full h-full object-cover" />
-        ) : (
+          <img src={storeAvatar} alt={storeName} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; if (e.target.nextElementSibling) (e.target.nextElementSibling as HTMLElement).style.display = 'flex' }} />
+        ) : null}
+        <div className="w-full h-full items-center justify-center" style={{ display: storeAvatar ? 'none' : 'flex' }}>
           <Store className="w-6 h-6 text-muted-foreground" />
-        )}
+        </div>
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">

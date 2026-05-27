@@ -94,14 +94,14 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// PUT /api/admin/products - Update product status (block, approve, etc.)
+// PUT /api/admin/products - Update product status & content (block, approve, edit, etc.)
 export async function PUT(request: NextRequest) {
   const authResult = await verifyAdmin(request)
   if (!authResult.success) return authErrorResponse(authResult)
 
   try {
     const body = await request.json()
-    const { productId, status, isFeatured } = body
+    const { productId, status, isFeatured, name, description, price, discountPrice, images, videoUrl, categoryId, condition, weight, stock, tags } = body
 
     if (!productId) {
       return NextResponse.json(
@@ -110,14 +110,89 @@ export async function PUT(request: NextRequest) {
       )
     }
 
+    // Verify product exists
+    const existing = await db.product.findUnique({ where: { id: productId } })
+    if (!existing) {
+      return NextResponse.json(
+        { success: false, error: 'Produk tidak ditemukan' },
+        { status: 404 }
+      )
+    }
+
     const updateData: Record<string, unknown> = {}
+
+    // Status & featured flags
     if (status !== undefined) updateData.status = status
     if (isFeatured !== undefined) updateData.isFeatured = isFeatured
+
+    // Content fields for moderation
+    if (name !== undefined) {
+      if (typeof name !== 'string' || name.trim().length === 0) {
+        return NextResponse.json({ success: false, error: 'Nama produk tidak boleh kosong' }, { status: 400 })
+      }
+      updateData.name = name.trim()
+      // Auto-generate slug from name
+      const slug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+      const slugWithId = `${slug}-${productId.slice(-6)}`
+      updateData.slug = slugWithId
+    }
+    if (description !== undefined) updateData.description = description
+    if (price !== undefined) {
+      const priceNum = Number(price)
+      if (isNaN(priceNum) || priceNum < 0) {
+        return NextResponse.json({ success: false, error: 'Harga tidak valid' }, { status: 400 })
+      }
+      updateData.price = priceNum
+    }
+    if (discountPrice !== undefined) updateData.discountPrice = discountPrice || null
+    if (images !== undefined) {
+      // Validate images is array of strings, filter out blob URLs
+      const validImages = Array.isArray(images)
+        ? images.filter((img: string) => typeof img === 'string' && !img.startsWith('blob:'))
+        : null
+      updateData.images = validImages ? JSON.stringify(validImages) : existing.images
+    }
+    if (categoryId !== undefined) updateData.categoryId = categoryId
+    if (condition !== undefined) updateData.condition = condition
+    if (weight !== undefined) updateData.weight = Number(weight) || existing.weight
+    if (stock !== undefined) {
+      const stockNum = Number(stock)
+      if (!isNaN(stockNum) && stockNum >= 0) updateData.stock = stockNum
+    }
+    if (videoUrl !== undefined) updateData.videoUrl = videoUrl || null
+    if (tags !== undefined) {
+      const validTags = Array.isArray(tags)
+        ? tags.filter((t: string) => typeof t === 'string' && t.trim().length > 0)
+        : null
+      updateData.tags = validTags ? JSON.stringify(validTags) : existing.tags
+    }
 
     const product = await db.product.update({
       where: { id: productId },
       data: updateData,
     })
+
+    // Create notification to seller about product edit if content was changed
+    const contentFields = ['name', 'description', 'price', 'images', 'videoUrl', 'categoryId', 'condition', 'weight', 'stock', 'tags']
+    const hasContentChange = contentFields.some(f => body[f] !== undefined)
+    if (hasContentChange && existing.sellerId) {
+      const seller = await db.seller.findUnique({
+        where: { id: existing.sellerId },
+        select: { userId: true },
+      })
+      if (seller?.userId) {
+        await db.notification.create({
+          data: {
+            userId: seller.userId,
+            title: 'Produk Diedit Admin',
+            content: `Produk "${existing.name}" telah diedit oleh admin untuk moderasi.`,
+            type: 'system',
+            refType: 'product',
+            refId: productId,
+          },
+        })
+      }
+    }
 
     return NextResponse.json(serializeDecimal({ success: true, data: product }))
   } catch (error: unknown) {
@@ -130,7 +205,7 @@ export async function PUT(request: NextRequest) {
   }
 }
 
-// DELETE /api/admin/products - Delete product
+// DELETE /api/admin/products - Soft-delete product (set status to 'blocked')
 export async function DELETE(request: NextRequest) {
   const authResult = await verifyAdmin(request)
   if (!authResult.success) return authErrorResponse(authResult)
@@ -146,9 +221,31 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    const product = await db.product.delete({
+    // Soft-delete: set status to 'blocked' instead of hard-deleting
+    // Hard-delete causes referential integrity issues with orders, reviews, etc.
+    const product = await db.product.update({
       where: { id: productId },
+      data: { status: 'blocked' },
     })
+
+    // Create notification to seller about product removal
+    const productWithSeller = await db.product.findUnique({
+      where: { id: productId },
+      select: { seller: { select: { userId: true, storeName: true } }, name: true },
+    })
+
+    if (productWithSeller?.seller?.userId) {
+      await db.notification.create({
+        data: {
+          userId: productWithSeller.seller.userId,
+          title: 'Produk Dihapus Admin',
+          content: `Produk "${productWithSeller.name}" telah dihapus oleh admin karena melanggar ketentuan platform.`,
+          type: 'system',
+          refType: 'product',
+          refId: productId,
+        },
+      })
+    }
 
     return NextResponse.json(serializeDecimal({ success: true, data: product }))
   } catch (error: unknown) {

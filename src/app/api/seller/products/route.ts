@@ -171,8 +171,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Stringify JSON fields for storage
-    const imagesStr = typeof images === 'string' ? images : JSON.stringify(images || [])
+    // SECURITY: Filter out blob: URLs that can never be served to other users
+    const safeImages = Array.isArray(images)
+      ? images.filter((url: string) => typeof url === 'string' && !url.startsWith('blob:'))
+      : images
+    const imagesStr = typeof safeImages === 'string' ? safeImages : JSON.stringify(safeImages || [])
     const tagsStr = typeof tags === 'string' ? tags : (tags ? JSON.stringify(tags) : null)
+    // SECURITY: Block blob: video URLs
+    const safeVideoUrl = (typeof videoUrl === 'string' && !videoUrl.startsWith('blob:')) ? videoUrl : null
 
     const product = await db.product.create({
       data: {
@@ -184,7 +190,7 @@ export async function POST(request: NextRequest) {
         price,
         discountPrice: discountPrice || null,
         images: imagesStr,
-        videoUrl: videoUrl || null,
+        videoUrl: safeVideoUrl || null,
         stock: stock || 0,
         minOrder,
         weight,
@@ -389,7 +395,8 @@ export async function PUT(request: NextRequest) {
     if (description !== undefined) updateData.description = description
     if (price !== undefined) updateData.price = price
     if (discountPrice !== undefined) updateData.discountPrice = discountPrice || null
-    if (videoUrl !== undefined) updateData.videoUrl = videoUrl || null
+    // SECURITY: Block blob: video URLs
+    if (videoUrl !== undefined) updateData.videoUrl = (typeof videoUrl === 'string' && !videoUrl.startsWith('blob:')) ? videoUrl : null
     if (stock !== undefined) updateData.stock = stock
     if (minOrder !== undefined) updateData.minOrder = minOrder
     if (weight !== undefined) updateData.weight = weight
@@ -399,8 +406,12 @@ export async function PUT(request: NextRequest) {
     if (flashSaleEnd !== undefined) updateData.flashSaleEnd = flashSaleEnd ? new Date(flashSaleEnd) : null
 
     // Stringify JSON fields for storage
+    // SECURITY: Filter out blob: URLs that can never be served to other users
     if (images !== undefined) {
-      updateData.images = typeof images === 'string' ? images : JSON.stringify(images || [])
+      const safeImages = Array.isArray(images)
+        ? images.filter((url: string) => typeof url === 'string' && !url.startsWith('blob:'))
+        : images
+      updateData.images = typeof safeImages === 'string' ? safeImages : JSON.stringify(safeImages || [])
     }
     if (tags !== undefined) {
       updateData.tags = typeof tags === 'string' ? tags : (tags ? JSON.stringify(tags) : null)

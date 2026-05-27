@@ -326,8 +326,18 @@ export function SellerAddProductScreen() {
 
     const selectedCategoryObj = categories.find(c => c.id === category)
     const productImages2 = productImages.length > 0
-      ? productImages.map(img => img.url)
+      ? productImages.map(img => img.url).filter(url => !url.startsWith('blob:'))
       : (editingProduct?.images || [])
+
+    // SECURITY: Block submission if any images are blob: URLs (not properly uploaded)
+    if (productImages.length > 0 && productImages2.length === 0) {
+      showToast("Gambar gagal diupload ke server. Silakan hapus dan upload ulang.", "error")
+      setIsUploading(false)
+      return
+    }
+    if (productImages.length > 0 && productImages2.length < productImages.length) {
+      showToast(`${productImages.length - productImages2.length} gambar gagal upload dan dilewati. Gunakan gambar yang berhasil.`, "warning")
+    }
 
     // Build variant data for API
     const apiVariants = variants.flatMap(v =>
@@ -358,7 +368,7 @@ export function SellerAddProductScreen() {
             status: 'active',
             categoryId: category,
             tags: tags.length > 0 ? tags : null,
-            videoUrl: productVideo?.url || null,
+            videoUrl: (productVideo?.url && !productVideo.url.startsWith('blob:')) ? productVideo.url : null,
             variants: apiVariants.length > 0 ? apiVariants : undefined,
           })
         const data = await res.json()
@@ -390,7 +400,7 @@ export function SellerAddProductScreen() {
           categoryId: category,
           variants: productVariants,
           ...(tags.length > 0 ? { tags } : {}),
-          ...(productVideo ? { videoUrl: productVideo.url } : {}),
+          ...(productVideo ? { videoUrl: productVideo.url.startsWith('blob:') ? null : productVideo.url } : {}),
         })
       } else {
         // Create new product via API
@@ -410,7 +420,7 @@ export function SellerAddProductScreen() {
             status: 'active',
             variants: apiVariants,
             tags: tags.length > 0 ? tags : null,
-            videoUrl: productVideo?.url || null,
+            videoUrl: (productVideo?.url && !productVideo.url.startsWith('blob:')) ? productVideo.url : null,
           })
         const data = await res.json()
         if (!data.success) {
@@ -451,7 +461,7 @@ export function SellerAddProductScreen() {
           seller: sellerInfo,
           category: selectedCategoryObj ? { id: selectedCategoryObj.id, name: selectedCategoryObj.name, slug: selectedCategoryObj.slug } : { id: category, name: category, slug: category },
           ...(tags.length > 0 ? { tags } : {}),
-          ...(productVideo ? { videoUrl: productVideo.url } : {}),
+          ...(productVideo ? { videoUrl: productVideo.url.startsWith('blob:') ? null : productVideo.url } : {}),
         }
         addProduct(newProduct)
       }
@@ -509,7 +519,7 @@ export function SellerAddProductScreen() {
       seller: sellerInfo,
       category: selectedCategoryObj ? { id: selectedCategoryObj.id, name: selectedCategoryObj.name, slug: selectedCategoryObj.slug } : (editingProduct?.category || { id: category || '', name: category || '', slug: category || '' }),
       ...(tags.length > 0 ? { tags } : {}),
-      ...(productVideo ? { videoUrl: productVideo.url } : {}),
+      ...(productVideo ? { videoUrl: productVideo.url.startsWith('blob:') ? null : productVideo.url } : {}),
     }
 
     if (editingProduct) {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
+import { Prisma } from '@prisma/client'
 
 import { logger } from '@/lib/logger'
 // Helper to safely parse JSON fields
@@ -114,14 +115,19 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// PUT /api/admin/orders - Update order status (admin-protected)
+// PUT /api/admin/orders - Update order status (admin-protected) with proper business logic
 export async function PUT(request: NextRequest) {
   try {
     const authResult = await verifyAdmin(request)
     if (!authResult.success) return authErrorResponse(authResult)
 
     const body = await request.json()
-    const { orderId, status } = body
+    const { orderId, status, cancelReason, trackingNumber } = body as {
+      orderId: string
+      status: string
+      cancelReason?: string
+      trackingNumber?: string
+    }
 
     if (!orderId) {
       return NextResponse.json(
@@ -137,9 +143,42 @@ export async function PUT(request: NextRequest) {
       )
     }
 
+    // Validate status value
+    const validStatuses = ['pending', 'paid', 'processing', 'shipped', 'delivered', 'cancelled']
+    if (!validStatuses.includes(status)) {
+      return NextResponse.json(
+        { success: false, error: `Status tidak valid. Pilihan: ${validStatuses.join(', ')}` },
+        { status: 400 }
+      )
+    }
+
+    // Validate cancel reason when status is 'cancelled'
+    if (status === 'cancelled') {
+      if (!cancelReason || typeof cancelReason !== 'string' || cancelReason.trim().length === 0) {
+        return NextResponse.json(
+          { success: false, error: 'Alasan pembatalan wajib diisi saat membatalkan pesanan' },
+          { status: 400 }
+        )
+      }
+    }
+
     // Find the order
     const existingOrder = await db.order.findUnique({
       where: { id: orderId },
+      include: {
+        items: true,
+        seller: {
+          select: {
+            id: true,
+            userId: true,
+            storeName: true,
+            storeAvatar: true,
+            commissionRate: true,
+            wallet: true,
+          },
+        },
+        shipping: true,
+      },
     })
 
     if (!existingOrder) {
@@ -149,30 +188,51 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    // Build update data
-    const updateData: Record<string, unknown> = { status }
-
-    // Set timestamp fields based on status
-    if (status === 'paid') {
-      updateData.paidAt = new Date()
-      updateData.paymentStatus = 'paid'
-    }
-    if (status === 'shipped') {
-      updateData.shippedAt = new Date()
-    }
-    if (status === 'delivered') {
-      updateData.deliveredAt = new Date()
-    }
-    if (status === 'cancelled') {
-      updateData.cancelledAt = new Date()
+    // Validate status transition - admin can only move forward or cancel
+    const VALID_TRANSITIONS: Record<string, string[]> = {
+      pending: ['paid', 'cancelled'],
+      paid: ['processing', 'cancelled'],
+      processing: ['shipped', 'cancelled'],
+      shipped: ['delivered', 'cancelled'],
+      delivered: [], // No further transitions
+      cancelled: [], // No further transitions
     }
 
-    const updatedOrder = await db.order.update({
-      where: { id: orderId },
-      data: updateData,
+    const allowedNextStatuses = VALID_TRANSITIONS[existingOrder.status]
+    if (!allowedNextStatuses || !allowedNextStatuses.includes(status)) {
+      return NextResponse.json(
+        { success: false, error: `Tidak dapat mengubah status dari "${existingOrder.status}" ke "${status}". Transisi tidak valid.` },
+        { status: 400 }
+      )
+    }
+
+    // Use the same business logic as /api/orders/[id]/status by forwarding the request
+    // This ensures escrow, refunds, stock, and notifications are handled consistently
+    const adminToken = request.headers.get('authorization')
+    const internalRes = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/orders/${orderId}/status`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(adminToken ? { 'Authorization': adminToken } : {}),
+        'Cookie': request.headers.get('cookie') || '',
+      },
+      body: JSON.stringify({
+        status,
+        ...(cancelReason ? { cancelReason: cancelReason.trim() } : {}),
+        ...(trackingNumber ? { trackingNumber: trackingNumber.trim() } : {}),
+      }),
     })
 
-    return NextResponse.json(serializeDecimal({ success: true, data: updatedOrder }))
+    const internalData = await internalRes.json()
+
+    if (!internalRes.ok || !internalData.success) {
+      return NextResponse.json(
+        { success: false, error: internalData.error || 'Gagal mengubah status pesanan' },
+        { status: internalRes.status }
+      )
+    }
+
+    return NextResponse.json(serializeDecimal({ success: true, data: internalData.data }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     logger.error({ err: error }, 'Admin orders PUT error')

@@ -50,6 +50,7 @@ model User {
   division      Division? @relation(fields: [divisionId], references: [id])
   ledDivision   Division? @relation("DivisionHead")
   userSettings  UserSetting[]
+  workAssignments WorkItem[] @relation("WorkAssignments")
 }
 
 model Seller {
@@ -62,6 +63,8 @@ model Seller {
   storeBanner     String?
   storeAddress    String?
   storeCity       String?
+  storeProvince   String?
+  storePostalCode String?
   isVerified      Boolean  @default(false)
   isPremium       Boolean  @default(false)
   rating          Float    @default(0)
@@ -361,14 +364,18 @@ model Shipping {
 // ==================== REVIEWS & WISHLIST ====================
 
 model Review {
-  id        String   @id @default(cuid())
-  userId    String
-  productId String
-  orderItemId String?  @unique
-  rating    Int      // 1-5
-  content   String?
-  images    String?  // JSON array
-  createdAt DateTime @default(now())
+  id            String    @id @default(cuid())
+  userId        String
+  productId     String
+  orderItemId   String?   @unique
+  rating        Int       // 1-5
+  content       String?
+  images        String?   // JSON array
+  sellerReply   String?
+  sellerReplyAt DateTime?
+  isHidden      Boolean   @default(false) // admin can hide inappropriate reviews
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @default(now()) @updatedAt
 
   user      User       @relation(fields: [userId], references: [id])
   product   Product    @relation(fields: [productId], references: [id])
@@ -571,6 +578,38 @@ model Division {
 
   members     User[]
   headUser    User?    @relation("DivisionHead", fields: [headUserId], references: [id])
+  workItems   WorkItem[]
+}
+
+// ==================== WORKFLOW / TASK QUEUE ====================
+
+model WorkItem {
+  id              String   @id @default(cuid())
+  type            String   // complaint, withdrawal, deposit, product_review, product_report, order_issue, refund, seller_verification, custom
+  title           String
+  description     String?
+  status          String   @default("open") // open, in_progress, resolved, closed, escalated
+  priority        String   @default("normal") // low, normal, high, urgent
+  divisionId      String   // FK to Division — which division handles this
+  assigneeId      String?  // FK to User — specific staff member assigned
+  refType         String?  // complaint, withdrawal, deposit, product, order, seller
+  refId           String?  // ID of the referenced entity
+  metadata        String?  // JSON string — extra data (e.g. amount, product name, etc.)
+  resolution      String?  // resolution notes when closed/resolved
+  createdBy       String?  // who created this work item (system, admin userId)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  resolvedAt      DateTime?
+  dueDate         DateTime?
+
+  division        Division @relation(fields: [divisionId], references: [id])
+  assignee        User?    @relation("WorkAssignments", fields: [assigneeId], references: [id])
+
+  @@index([divisionId, status])
+  @@index([assigneeId, status])
+  @@index([status, priority])
+  @@index([refType, refId])
+  @@index([createdAt])
 }
 
 // ==================== PLATFORM SETTINGS ====================

@@ -20,7 +20,8 @@ export const createAuthSlice: StateCreator<AppStore, [], [], AuthSlice> = (set, 
     isAuthenticated: true,
     currentUser: user,
     userRole: user.role,
-    currentScreen: 'home'
+    currentScreen: 'home',
+    avatarUrl: user.avatar || null,
   }),
 
   logout: async () => {

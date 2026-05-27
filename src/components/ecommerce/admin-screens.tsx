@@ -11,7 +11,7 @@ import {
   TrendingUp, Megaphone, ImageIcon, Calendar, BarChart3, MessageSquare,
   Ban, FileText, ArrowUpRight, ArrowDownLeft, Clock, CreditCard, Plus,
   Store, FolderTree, Tag, Wallet,
-  Building2, Upload
+  Building2, Upload, Star, Edit, ClipboardList
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -29,6 +29,7 @@ import { ConfirmDialog } from "./confirm-dialog"
 import { LoadingSpinner } from "./loading-spinner"
 
 import { getAuthHeaders } from '@/lib/store/getAuthHeaders'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 
 // ==================== ANIMATION VARIANTS ====================
 const fadeIn = {
@@ -317,6 +318,7 @@ export function AdminDashboard() {
               { label: "Verifikasi Seller", count: stats?.pendingSellerVerifications ?? 0, icon: Shield, color: "text-blue-600 bg-blue-50 dark:bg-blue-900/30", screen: "admin-users" as const },
               { label: "Laporan Produk", count: 0, icon: Eye, color: "text-red-600 bg-red-50 dark:bg-red-900/30", screen: "admin-products" as const },
               { label: "Keluhan Terbuka", count: stats?.openComplaints ?? 0, icon: MessageSquare, color: "text-orange-600 bg-orange-50 dark:bg-orange-900/30", screen: "admin-complaints" as const },
+              { label: "Alur Kerja Divisi", count: 0, icon: ClipboardList, color: "text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30", screen: "admin-workflow" as const },
             ].map((item, i) => (
               <motion.div key={item.label} custom={i} variants={stagger} initial="initial" animate="animate">
                 <Card className="p-3">
@@ -352,6 +354,7 @@ export function AdminDashboard() {
             {[
               { label: "Users", icon: Users, screen: "admin-users" as const, color: "bg-blue-50 text-blue-600 dark:bg-blue-900/30" },
               { label: "Divisions", icon: Building2, screen: "admin-divisions" as const, color: "bg-teal-50 text-teal-600 dark:bg-teal-900/30" },
+              { label: "Workflow", icon: ClipboardList, screen: "admin-workflow" as const, color: "bg-indigo-50 text-indigo-600 dark:bg-indigo-900/30" },
               { label: "Products", icon: Box, screen: "admin-products" as const, color: "bg-purple-50 text-purple-600 dark:bg-purple-900/30" },
               { label: "Orders", icon: Package, screen: "admin-orders" as const, color: "bg-orange-50 text-orange-600 dark:bg-orange-900/30" },
               { label: "Withdraw", icon: DollarSign, screen: "admin-withdraw" as const, color: "bg-amber-50 text-amber-600 dark:bg-amber-900/30" },
@@ -362,6 +365,7 @@ export function AdminDashboard() {
               { label: "Vouchers", icon: Tag, screen: "admin-vouchers" as const, color: "bg-pink-50 text-pink-600 dark:bg-pink-900/30" },
               { label: "Deposits", icon: Wallet, screen: "admin-deposits" as const, color: "bg-lime-50 text-lime-600 dark:bg-lime-900/30" },
               { label: "Campaigns", icon: Megaphone, screen: "admin-campaigns" as const, color: "bg-violet-50 text-violet-600 dark:bg-violet-900/30" },
+              { label: "Reviews", icon: Star, screen: "admin-reviews" as const, color: "bg-amber-50 text-amber-600 dark:bg-amber-900/30" },
               { label: "Settings", icon: Settings, screen: "admin-settings" as const, color: "bg-slate-50 text-slate-600 dark:bg-slate-900/30" },
             ].map((item) => (
               <motion.button
@@ -384,16 +388,27 @@ export function AdminDashboard() {
 }
 
 // ==================== ADMIN USERS ====================
+const SUPER_ADMIN_EMAIL = 'kholisakm@gmail.com'
+
 export function AdminUsers() {
-  const { showToast, adminUsers, updateAdminUser, deleteAdminUser, fetchAdminUsers, currentUser } = useAppStore()
+  const { showToast, adminUsers, updateAdminUser, deleteAdminUser, fetchAdminUsers, currentUser, divisions, fetchDivisions } = useAppStore()
   const [search, setSearch] = useState("")
   const [roleFilter, setRoleFilter] = useState("all")
   const [isLoading, setIsLoading] = useState(true)
   const [confirmAction, setConfirmAction] = useState<{action: () => void, title: string, message: string} | null>(null)
 
+  // Super admin state
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false)
+  const [promoteUser, setPromoteUser] = useState<{id: string; name: string; email: string; role: string} | null>(null)
+  const [selectedDivisionId, setSelectedDivisionId] = useState<string>('')
+  const [promoteLoading, setPromoteLoading] = useState(false)
+
+  const isUserSuperAdmin = currentUser?.email === SUPER_ADMIN_EMAIL && currentUser?.role === 'admin'
+
   useEffect(() => {
-    fetchAdminUsers().finally(() => setIsLoading(false))
-  }, [fetchAdminUsers])
+    Promise.all([fetchAdminUsers(), fetchDivisions()]).finally(() => setIsLoading(false))
+    setIsSuperAdmin(isUserSuperAdmin)
+  }, [fetchAdminUsers, fetchDivisions, isUserSuperAdmin])
 
   const handleUpdateUser = async (userId: string, updates: Record<string, unknown>) => {
     try {
@@ -504,9 +519,17 @@ export function AdminUsers() {
                         <Badge variant="outline" className={`text-[9px] ${
                           user.role === "admin" ? "border-purple-300 text-purple-600" :
                           user.role === "seller" ? "border-orange-300 text-orange-600" :
+                          user.role === "finance" ? "border-emerald-300 text-emerald-600" :
+                          user.role === "pr" ? "border-blue-300 text-blue-600" :
+                          user.role === "tech" ? "border-purple-300 text-purple-500" :
+                          user.role === "cs" ? "border-orange-300 text-orange-500" :
+                          user.role === "marketing" ? "border-pink-300 text-pink-600" :
+                          user.role === "operations" ? "border-amber-300 text-amber-600" :
+                          user.role === "legal" ? "border-red-300 text-red-500" :
+                          user.role === "hr" ? "border-teal-300 text-teal-600" :
                           "border-emerald-300 text-emerald-600"
                         }`}>
-                          {user.role}
+                          {user.email === SUPER_ADMIN_EMAIL ? '👑 Super Admin' : user.role}
                         </Badge>
                       </div>
                       <p className="text-xs text-muted-foreground truncate">{user.email}</p>
@@ -548,24 +571,23 @@ export function AdminUsers() {
                         <Check className="w-3 h-3 mr-0.5" /> Unblock
                       </Button>
                     )}
-                    {/* Make Admin button - only show for non-admin users when current user is admin */}
-                    {user.role !== 'admin' && currentUser?.role === 'admin' && (
-                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-purple-500 hover:bg-purple-600 text-white" onClick={() => setConfirmAction({
-                        action: () => { handleUpdateUser(user.id, { role: 'admin' }).then(() => showToast(`${user.name} telah dijadikan admin`, "success")) },
-                        title: 'Jadikan Admin',
-                        message: `Apakah Anda yakin ingin menjadikan ${user.name} sebagai admin? User akan memiliki akses penuh ke panel admin.`
-                      })}>
-                        <Shield className="w-3 h-3 mr-0.5" /> Make Admin
+                    {/* Promote to Division button - only for super admin, for non-elevated-role users */}
+                    {isSuperAdmin && !['admin', 'finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr'].includes(user.role) && user.email !== SUPER_ADMIN_EMAIL && (
+                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-purple-500 hover:bg-purple-600 text-white" onClick={() => {
+                        setPromoteUser({ id: user.id, name: user.name, email: user.email, role: user.role })
+                        setSelectedDivisionId('')
+                      }}>
+                        <Shield className="w-3 h-3 mr-0.5" /> Promote
                       </Button>
                     )}
-                    {/* Remove Admin button - only show for admin users when current user is admin */}
-                    {user.role === 'admin' && currentUser?.role === 'admin' && user.id !== currentUser.id && (
+                    {/* Demote / Remove from Division - only super admin can demote elevated roles */}
+                    {isSuperAdmin && ['admin', 'finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr'].includes(user.role) && user.email !== SUPER_ADMIN_EMAIL && (
                       <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-purple-600 hover:text-purple-700 hover:bg-purple-50 dark:hover:bg-purple-900/20" onClick={() => setConfirmAction({
-                        action: () => { handleUpdateUser(user.id, { role: 'buyer' }).then(() => showToast(`${user.name} telah dihapus dari admin`, "info")) },
-                        title: 'Hapus Admin',
-                        message: `Apakah Anda yakin ingin menghapus akses admin ${user.name}? User akan kembali menjadi buyer.`
+                        action: () => { handleUpdateUser(user.id, { role: 'buyer', divisionId: null }).then(() => showToast(`${user.name} telah dikembalikan menjadi buyer`, "info")) },
+                        title: 'Kembalikan ke Buyer',
+                        message: `Apakah Anda yakin ingin menghapus akses ${user.role === 'admin' ? 'admin' : user.role} dari ${user.name}? User akan kembali menjadi buyer.`
                       })}>
-                        <Shield className="w-3 h-3 mr-0.5" /> Remove Admin
+                        <Shield className="w-3 h-3 mr-0.5" /> Demote
                       </Button>
                     )}
                     <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20" onClick={() => setConfirmAction({
@@ -589,6 +611,129 @@ export function AdminUsers() {
         title={confirmAction?.title || ''}
         message={confirmAction?.message || ''}
       />
+
+      {/* Promote to Division Dialog - Super Admin Only */}
+      <Dialog open={!!promoteUser} onOpenChange={(open) => { if (!open) setPromoteUser(null) }}>
+        <DialogContent className="max-w-[380px] rounded-2xl p-5">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold">Promosikan User</DialogTitle>
+          </DialogHeader>
+          {promoteUser && (
+            <div className="space-y-4 mt-2">
+              {/* User Info */}
+              <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-xl">
+                <div className="w-10 h-10 rounded-full bg-purple-500 text-white font-bold flex items-center justify-center flex-shrink-0">
+                  {promoteUser.name.charAt(0)}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">{promoteUser.name}</p>
+                  <p className="text-xs text-muted-foreground truncate">{promoteUser.email}</p>
+                  <Badge variant="outline" className="text-[9px] mt-0.5">{promoteUser.role}</Badge>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-foreground">Pilih Divisi</label>
+                <p className="text-[10px] text-muted-foreground">User akan menjadi admin divisi yang dipilih dengan akses sesuai divisi tersebut.</p>
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {/* Option: Regular Admin (no division) */}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDivisionId('__admin__')}
+                    className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-colors text-left ${
+                      selectedDivisionId === '__admin__'
+                        ? 'border-purple-400 bg-purple-50 dark:bg-purple-950/30'
+                        : 'border-border hover:bg-muted/50'
+                    }`}
+                  >
+                    <div className="w-9 h-9 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center flex-shrink-0">
+                      <Shield className="w-4 h-4 text-purple-600" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-foreground">Admin</p>
+                      <p className="text-[10px] text-muted-foreground">Akses penuh ke panel admin (tanpa divisi spesifik)</p>
+                    </div>
+                    {selectedDivisionId === '__admin__' && (
+                      <Check className="w-4 h-4 text-purple-600 ml-auto flex-shrink-0" />
+                    )}
+                  </button>
+                  {/* Division Options */}
+                  {divisions.filter(d => d.isActive).map(division => (
+                    <button
+                      key={division.id}
+                      type="button"
+                      onClick={() => setSelectedDivisionId(division.id)}
+                      className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-colors text-left ${
+                        selectedDivisionId === division.id
+                          ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-950/30'
+                          : 'border-border hover:bg-muted/50'
+                      }`}
+                    >
+                      <div className="w-9 h-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center flex-shrink-0 text-lg">
+                        {division.icon || '🏢'}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-foreground">{division.name}</p>
+                        <p className="text-[10px] text-muted-foreground">{division.memberCount} anggota{division.headUser ? ` · Head: ${division.headUser.name}` : ''}</p>
+                      </div>
+                      {selectedDivisionId === division.id && (
+                        <Check className="w-4 h-4 text-emerald-600 ml-auto flex-shrink-0" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Warning about super admin */}
+              <div className="flex items-start gap-2 p-2.5 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800">
+                <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
+                <p className="text-[10px] text-amber-600 dark:text-amber-400">
+                  User yang dipromosikan akan memiliki akses ke panel sesuai divisi. Super Admin hanya bisa dipegang oleh kholisakm@gmail.com.
+                </p>
+              </div>
+            </div>
+          )}
+          <DialogFooter className="mt-4 gap-2">
+            <Button variant="outline" onClick={() => setPromoteUser(null)} className="rounded-xl h-10 flex-1">
+              Batal
+            </Button>
+            <Button
+              disabled={!selectedDivisionId || promoteLoading}
+              onClick={async () => {
+                if (!promoteUser || !selectedDivisionId) return
+                setPromoteLoading(true)
+                try {
+                  const payload = selectedDivisionId === '__admin__'
+                    ? { userId: promoteUser.id, divisionId: null }
+                    : { userId: promoteUser.id, divisionId: selectedDivisionId }
+
+                  const res = await fetch('/api/admin/users', {
+                    method: 'PATCH',
+                    headers: getAuthHeaders(true),
+                    body: JSON.stringify(payload),
+                  })
+                  const data = await res.json()
+                  if (data.success) {
+                    showToast(data.message || `${promoteUser.name} berhasil dipromosikan`, 'success')
+                    setPromoteUser(null)
+                    fetchAdminUsers()
+                    fetchDivisions()
+                  } else {
+                    showToast(data.error || 'Gagal mempromosikan user', 'error')
+                  }
+                } catch {
+                  showToast('Gagal mempromosikan user', 'error')
+                } finally {
+                  setPromoteLoading(false)
+                }
+              }}
+              className="bg-purple-500 hover:bg-purple-600 text-white rounded-xl h-10 flex-1"
+            >
+              {promoteLoading ? 'Memproses...' : 'Promosikan'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -597,11 +742,21 @@ export function AdminUsers() {
 interface AdminProductItem {
   id: string
   name: string
-  sellerName: string
+  description: string
   price: number
+  discountPrice: number | null
+  images: string[]
+  videoUrl: string | null
+  sellerName: string
   status: string
   sold: number
   isFeatured: boolean
+  categoryId: string
+  categoryName: string
+  stock: number
+  weight: number
+  condition: string
+  tags: string[]
 }
 
 export function AdminProducts() {
@@ -611,6 +766,21 @@ export function AdminProducts() {
   const [adminProducts, setAdminProducts] = useState<AdminProductItem[]>([])
   const [loading, setLoading] = useState(true)
   const [confirmAction, setConfirmAction] = useState<{action: () => void, title: string, message: string} | null>(null)
+  const [editProduct, setEditProduct] = useState<AdminProductItem | null>(null)
+  const [editName, setEditName] = useState("")
+  const [editDescription, setEditDescription] = useState("")
+  const [editPrice, setEditPrice] = useState("")
+  const [editDiscountPrice, setEditDiscountPrice] = useState("")
+  const [editStock, setEditStock] = useState("")
+  const [editWeight, setEditWeight] = useState("")
+  const [editCondition, setEditCondition] = useState("")
+  const [editCategoryId, setEditCategoryId] = useState("")
+  const [editImages, setEditImages] = useState<string[]>([])
+  const [editVideoUrl, setEditVideoUrl] = useState("")
+  const [editTags, setEditTags] = useState("")
+  const [uploadingImage, setUploadingImage] = useState(false)
+  const [uploadingVideo, setUploadingVideo] = useState(false)
+  const [categories, setCategories] = useState<{id: string; name: string}[]>([])
 
   const fetchAdminProducts = useCallback(async () => {
     try {
@@ -621,11 +791,21 @@ export function AdminProducts() {
         const mapped: AdminProductItem[] = (data.data || []).map((p: any) => ({
           id: p.id,
           name: p.name,
+          description: p.description || '',
+          price: Number(p.price),
+          discountPrice: p.discountPrice ? Number(p.discountPrice) : null,
+          images: Array.isArray(p.images) ? p.images : [],
+          videoUrl: p.videoUrl || null,
           sellerName: p.seller?.storeName || 'Unknown',
-          price: p.price,
           status: p.status,
           sold: p.sold,
           isFeatured: p.isFeatured,
+          categoryId: p.categoryId || '',
+          categoryName: p.category?.name || '',
+          stock: p.stock || 0,
+          weight: p.weight || 0,
+          condition: p.condition || 'new',
+          tags: Array.isArray(p.tags) ? p.tags : [],
         }))
         setAdminProducts(mapped)
       }
@@ -639,6 +819,19 @@ export function AdminProducts() {
   useEffect(() => {
     fetchAdminProducts()
   }, [fetchAdminProducts])
+
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const res = await fetch('/api/admin/categories', { headers: getAuthHeaders() })
+        const data = await res.json()
+        if (data.success) {
+          setCategories((data.data || []).map((c: any) => ({ id: c.id, name: c.name })))
+        }
+      } catch {}
+    }
+    fetchCategories()
+  }, [])
 
   const handleStatusChange = async (productId: string, newStatus: string) => {
     try {
@@ -675,6 +868,106 @@ export function AdminProducts() {
       }
     } catch {
       showToast("Gagal menghapus produk", "error")
+    }
+  }
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+    setUploadingImage(true)
+    try {
+      const newImages: string[] = [...editImages]
+      for (const file of Array.from(files)) {
+        const formData = new FormData()
+        formData.append('file', file)
+        formData.append('bucket', 'products')
+        formData.append('folder', 'images')
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          headers: (() => {
+            const h: Record<string, string> = {}
+            if (typeof window !== 'undefined') {
+              const token = localStorage.getItem('authToken') || localStorage.getItem('martup_token')
+              if (token) h['Authorization'] = `Bearer ${token}`
+              const csrfToken = document.cookie.match(/csrf_token=([^;]+)/)?.[1]
+              if (csrfToken) h['x-csrf-token'] = decodeURIComponent(csrfToken)
+            }
+            return h
+          })(),
+          body: formData,
+        })
+        const data = await res.json()
+        if (data.success && data.data?.url) {
+          newImages.push(data.data.url)
+        } else {
+          showToast(`Gagal upload ${file.name}`, 'error')
+        }
+      }
+      setEditImages(newImages)
+      showToast('Gambar berhasil diupload', 'success')
+    } catch {
+      showToast('Gagal upload gambar', 'error')
+    } finally {
+      setUploadingImage(false)
+    }
+  }
+
+  const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingVideo(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('bucket', 'products')
+      formData.append('folder', 'videos')
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        headers: (() => {
+          const h: Record<string, string> = {}
+          if (typeof window !== 'undefined') {
+            const token = localStorage.getItem('authToken') || localStorage.getItem('martup_token')
+            if (token) h['Authorization'] = `Bearer ${token}`
+            const csrfToken = document.cookie.match(/csrf_token=([^;]+)/)?.[1]
+            if (csrfToken) h['x-csrf-token'] = decodeURIComponent(csrfToken)
+          }
+          return h
+        })(),
+        body: formData,
+      })
+      const data = await res.json()
+      if (data.success && data.data?.url) {
+        setEditVideoUrl(data.data.url)
+        showToast('Video berhasil diupload', 'success')
+      } else {
+        showToast(data.error || 'Gagal upload video', 'error')
+      }
+    } catch {
+      showToast('Gagal upload video', 'error')
+    } finally {
+      setUploadingVideo(false)
+    }
+  }
+
+  const handleEditProduct = async (productId: string, updates: Record<string, unknown>) => {
+    try {
+      const res = await fetch('/api/admin/products', {
+        method: 'PUT',
+        headers: getAuthHeaders(true),
+        body: JSON.stringify({ productId, ...updates }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setAdminProducts(prev => prev.map(p => p.id === productId ? { ...p, ...updates, price: Number(updates.price ?? p.price) } : p))
+        showToast("Produk berhasil diupdate", "success")
+        return true
+      } else {
+        showToast(data.error || "Gagal mengupdate produk", "error")
+        return false
+      }
+    } catch {
+      showToast("Gagal mengupdate produk", "error")
+      return false
     }
   }
 
@@ -727,8 +1020,12 @@ export function AdminProducts() {
                 <motion.div key={product.id} custom={i} variants={stagger} initial="initial" animate="animate">
                   <Card className="p-3 border-red-200 dark:border-red-900/50">
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-lg bg-red-50 dark:bg-red-900/30 flex items-center justify-center flex-shrink-0">
-                        <AlertTriangle className="w-5 h-5 text-red-500" />
+                      <div className="w-12 h-12 rounded-lg bg-red-50 dark:bg-red-900/30 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                        {product.images && product.images.length > 0 ? (
+                          <img src={product.images[0]} alt={product.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <AlertTriangle className="w-5 h-5 text-red-500" />
+                        )}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
@@ -741,6 +1038,22 @@ export function AdminProducts() {
                     <div className="flex gap-2 mt-3 pt-2 border-t border-red-100 dark:border-red-900/30">
                       <Button size="sm" className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={() => handleStatusChange(product.id, 'active')}>
                         <Check className="w-3 h-3 mr-0.5" /> Approve
+                      </Button>
+                      <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-blue-500" onClick={() => {
+                        setEditProduct(product)
+                        setEditName(product.name)
+                        setEditDescription(product.description)
+                        setEditPrice(product.price.toString())
+                        setEditDiscountPrice(product.discountPrice ? product.discountPrice.toString() : "")
+                        setEditStock(product.stock.toString())
+                        setEditWeight(product.weight.toString())
+                        setEditCondition(product.condition || 'new')
+                        setEditCategoryId(product.categoryId || '')
+                        setEditImages(product.images || [])
+                        setEditVideoUrl(product.videoUrl || '')
+                        setEditTags((product.tags || []).join(', '))
+                      }}>
+                        <Edit className="w-3 h-3 mr-0.5" /> Edit
                       </Button>
                       <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500" onClick={() => setConfirmAction({
                         action: () => handleDelete(product.id),
@@ -770,8 +1083,12 @@ export function AdminProducts() {
               <motion.div key={product.id} custom={i} variants={stagger} initial="initial" animate="animate">
                 <Card className="p-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
-                      <Box className="w-5 h-5 text-muted-foreground" />
+                    <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center flex-shrink-0 overflow-hidden">
+                      {product.images && product.images.length > 0 ? (
+                        <img src={product.images[0]} alt={product.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <Box className="w-5 h-5 text-muted-foreground" />
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
@@ -789,6 +1106,22 @@ export function AdminProducts() {
                     </div>
                   </div>
                   <div className="flex gap-2 mt-3 pt-2 border-t border-border/50">
+                    <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-blue-500" onClick={() => {
+                      setEditProduct(product)
+                      setEditName(product.name)
+                      setEditDescription(product.description)
+                      setEditPrice(product.price.toString())
+                      setEditDiscountPrice(product.discountPrice ? product.discountPrice.toString() : "")
+                      setEditStock(product.stock.toString())
+                      setEditWeight(product.weight.toString())
+                      setEditCondition(product.condition || 'new')
+                      setEditCategoryId(product.categoryId || '')
+                      setEditImages(product.images || [])
+                      setEditVideoUrl(product.videoUrl || '')
+                      setEditTags((product.tags || []).join(', '))
+                    }}>
+                      <Edit className="w-3 h-3 mr-0.5" /> Edit
+                    </Button>
                     {product.status === "blocked" ? (
                       <Button size="sm" className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={() => handleStatusChange(product.id, 'active')}>
                         <Check className="w-3 h-3 mr-0.5" /> Approve
@@ -816,6 +1149,169 @@ export function AdminProducts() {
           )}
         </div>
       </div>
+      <Dialog open={!!editProduct} onOpenChange={(open) => { if (!open) setEditProduct(null) }}>
+        <DialogContent className="max-w-[420px] max-h-[85vh] overflow-y-auto rounded-2xl p-5">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold">Edit Produk</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 mt-2">
+            {/* Basic Info */}
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-foreground">Nama Produk</label>
+              <Input value={editName} onChange={e => setEditName(e.target.value)} className="rounded-xl" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-foreground">Deskripsi</label>
+              <textarea
+                value={editDescription}
+                onChange={e => setEditDescription(e.target.value)}
+                className="w-full min-h-[80px] rounded-xl border border-input bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 resize-none"
+              />
+            </div>
+
+            {/* Price & Stock Row */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-foreground">Harga (Rp)</label>
+                <Input type="number" value={editPrice} onChange={e => setEditPrice(e.target.value)} className="rounded-xl" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-foreground">Diskon (Rp)</label>
+                <Input type="number" value={editDiscountPrice} onChange={e => setEditDiscountPrice(e.target.value)} placeholder="0" className="rounded-xl" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-foreground">Stok</label>
+                <Input type="number" value={editStock} onChange={e => setEditStock(e.target.value)} className="rounded-xl" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-foreground">Berat (gram)</label>
+                <Input type="number" value={editWeight} onChange={e => setEditWeight(e.target.value)} className="rounded-xl" />
+              </div>
+            </div>
+
+            {/* Category & Condition */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-foreground">Kategori</label>
+                <select
+                  value={editCategoryId}
+                  onChange={e => setEditCategoryId(e.target.value)}
+                  className="w-full h-9 rounded-xl border border-input bg-transparent px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                >
+                  <option value="">Pilih Kategori</option>
+                  {categories.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-foreground">Kondisi</label>
+                <select
+                  value={editCondition}
+                  onChange={e => setEditCondition(e.target.value)}
+                  className="w-full h-9 rounded-xl border border-input bg-transparent px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                >
+                  <option value="new">Baru</option>
+                  <option value="used">Bekas</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Tags */}
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-foreground">Tags (pisah koma)</label>
+              <Input value={editTags} onChange={e => setEditTags(e.target.value)} placeholder="tag1, tag2, tag3" className="rounded-xl" />
+            </div>
+
+            {/* Images */}
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-foreground">Gambar Produk</label>
+              <div className="flex flex-wrap gap-2">
+                {editImages.map((img, idx) => (
+                  <div key={idx} className="relative w-16 h-16 rounded-lg overflow-hidden border border-border">
+                    <img src={img} alt={`Product ${idx+1}`} className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => setEditImages(prev => prev.filter((_, i) => i !== idx))}
+                      className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center text-[10px] hover:bg-red-600"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+                <label className={`w-16 h-16 rounded-lg border-2 border-dashed border-border flex items-center justify-center cursor-pointer hover:bg-muted/50 transition-colors ${uploadingImage ? 'opacity-50 pointer-events-none' : ''}`}>
+                  {uploadingImage ? (
+                    <span className="text-[9px] text-muted-foreground">Uploading...</span>
+                  ) : (
+                    <Upload className="w-4 h-4 text-muted-foreground" />
+                  )}
+                  <input type="file" accept="image/*" multiple onChange={handleImageUpload} className="hidden" />
+                </label>
+              </div>
+              <p className="text-[10px] text-muted-foreground">Klik × untuk menghapus gambar. Klik icon upload untuk menambah.</p>
+            </div>
+
+            {/* Video */}
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-foreground">Video Produk</label>
+              {editVideoUrl && (
+                <div className="flex items-center gap-2 p-2 bg-muted/50 rounded-lg">
+                  <video src={editVideoUrl} className="w-20 h-14 rounded object-cover" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-muted-foreground truncate">{editVideoUrl.split('/').pop()}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setEditVideoUrl('')}
+                    className="w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center text-xs hover:bg-red-600"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+              <label className={`flex items-center justify-center gap-2 h-9 rounded-xl border border-dashed border-border cursor-pointer hover:bg-muted/50 transition-colors text-xs text-muted-foreground ${uploadingVideo ? 'opacity-50 pointer-events-none' : ''}`}>
+                {uploadingVideo ? 'Uploading...' : (
+                  <>
+                    <Upload className="w-3.5 h-3.5" />
+                    Upload Video
+                  </>
+                )}
+                <input type="file" accept="video/mp4,video/webm,video/quicktime" onChange={handleVideoUpload} className="hidden" />
+              </label>
+            </div>
+          </div>
+          <DialogFooter className="mt-4 gap-2">
+            <Button variant="outline" onClick={() => setEditProduct(null)} className="rounded-xl h-10 flex-1">
+              Batal
+            </Button>
+            <Button
+              onClick={async () => {
+                if (!editProduct) return
+                const tagArray = editTags.split(',').map(t => t.trim()).filter(t => t.length > 0)
+                const success = await handleEditProduct(editProduct.id, {
+                  name: editName.trim(),
+                  description: editDescription.trim(),
+                  price: Number(editPrice),
+                  discountPrice: editDiscountPrice ? Number(editDiscountPrice) : null,
+                  stock: Number(editStock),
+                  weight: Number(editWeight),
+                  condition: editCondition,
+                  categoryId: editCategoryId || undefined,
+                  images: editImages,
+                  videoUrl: editVideoUrl || null,
+                  tags: tagArray.length > 0 ? tagArray : undefined,
+                })
+                if (success) setEditProduct(null)
+              }}
+              className="bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-10 flex-1"
+            >
+              Simpan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <ConfirmDialog
         isOpen={!!confirmAction}
         onClose={() => setConfirmAction(null)}
@@ -1731,6 +2227,225 @@ export function AdminComplaints() {
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+// ==================== ADMIN REVIEWS ====================
+interface AdminReviewItem {
+  id: string
+  userId: string
+  productId: string
+  rating: number
+  content: string | null
+  images: unknown[]
+  sellerReply: string | null
+  sellerReplyAt: string | null
+  isHidden: boolean
+  createdAt: string
+  user: { id: string; name: string; avatar: string | null; email: string }
+  product: { id: string; name: string; seller: { id: string; storeName: string } }
+}
+
+export function AdminReviews() {
+  const { showToast } = useAppStore()
+  const [search, setSearch] = useState("")
+  const [statusFilter, setStatusFilter] = useState("all")
+  const [adminReviews, setAdminReviews] = useState<AdminReviewItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [confirmAction, setConfirmAction] = useState<{ action: () => void; title: string; message: string } | null>(null)
+
+  const fetchAdminReviews = useCallback(async () => {
+    try {
+      setLoading(true)
+      const params = new URLSearchParams()
+      if (statusFilter !== "all") params.set("status", statusFilter)
+      params.set("limit", "200")
+      const res = await fetch(`/api/admin/reviews?${params.toString()}`, { headers: getAuthHeaders() })
+      const data = await res.json()
+      if (data.success) {
+        setAdminReviews(data.data || [])
+      } else {
+        showToast(data.error || "Gagal memuat reviews", "error")
+      }
+    } catch {
+      showToast("Gagal memuat reviews", "error")
+    } finally {
+      setLoading(false)
+    }
+  }, [showToast, statusFilter])
+
+  useEffect(() => {
+    fetchAdminReviews()
+  }, [fetchAdminReviews])
+
+  const handleToggleHidden = async (reviewId: string, currentHidden: boolean) => {
+    try {
+      const res = await fetch("/api/admin/reviews", {
+        method: "PUT",
+        headers: getAuthHeaders(true),
+        body: JSON.stringify({ reviewId, isHidden: !currentHidden }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setAdminReviews((prev) =>
+          prev.map((r) => (r.id === reviewId ? { ...r, isHidden: !currentHidden } : r))
+        )
+        showToast(!currentHidden ? "Review disembunyikan" : "Review ditampilkan kembali", "success")
+      } else {
+        showToast(data.error || "Gagal mengubah status review", "error")
+      }
+    } catch {
+      showToast("Gagal mengubah status review", "error")
+    }
+  }
+
+  const handleDelete = async (reviewId: string) => {
+    try {
+      const res = await fetch("/api/admin/reviews", {
+        method: "DELETE",
+        headers: getAuthHeaders(true),
+        body: JSON.stringify({ reviewId }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setAdminReviews((prev) => prev.filter((r) => r.id !== reviewId))
+        showToast("Review dihapus", "info")
+      } else {
+        showToast(data.error || "Gagal menghapus review", "error")
+      }
+    } catch {
+      showToast("Gagal menghapus review", "error")
+    }
+  }
+
+  const filtered = adminReviews.filter((r) => {
+    const matchesSearch =
+      r.user?.name?.toLowerCase().includes(search.toLowerCase()) ||
+      r.product?.name?.toLowerCase().includes(search.toLowerCase()) ||
+      (r.content || "").toLowerCase().includes(search.toLowerCase())
+    return matchesSearch
+  })
+
+  const hiddenCount = adminReviews.filter((r) => r.isHidden).length
+
+  if (loading) return <div className="pb-20"><PageHeader title="Moderasi Review" /><LoadingSpinner message="Memuat reviews..." /></div>
+
+  return (
+    <div className="pb-20">
+      <PageHeader title="Moderasi Review" />
+
+      <div className="px-4 space-y-4">
+        <SearchBar value={search} onChange={setSearch} placeholder="Cari review, user, atau produk..." />
+
+        {/* Status Filter */}
+        <div className="flex gap-2 overflow-x-auto no-scrollbar">
+          {[
+            { key: "all", label: `Semua (${adminReviews.length})` },
+            { key: "visible", label: `Terlihat (${adminReviews.length - hiddenCount})` },
+            { key: "hidden", label: `Tersembunyi (${hiddenCount})` },
+          ].map((filter) => (
+            <motion.button
+              key={filter.key}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setStatusFilter(filter.key)}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors border ${
+                statusFilter === filter.key
+                  ? "bg-blue-600 text-white border-blue-600"
+                  : "bg-card text-foreground border-border hover:bg-muted"
+              }`}
+            >
+              {filter.label}
+            </motion.button>
+          ))}
+        </div>
+
+        {/* Review List */}
+        <div className="space-y-2">
+          {filtered.length === 0 ? (
+            <EmptyState
+              icon={<Star className="w-10 h-10 text-muted-foreground" />}
+              title="Review Tidak Ditemukan"
+              subtitle="Coba kata kunci lain"
+            />
+          ) : (
+            filtered.map((review, i) => (
+              <motion.div key={review.id} custom={i} variants={stagger} initial="initial" animate="animate">
+                <Card className={`p-3 ${review.isHidden ? "border-amber-200 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-900/10" : ""}`}>
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-full bg-amber-500 text-white font-bold flex items-center justify-center flex-shrink-0 text-sm">
+                      {review.user?.name?.charAt(0) || "?"}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-medium text-foreground truncate">{review.user?.name || "Unknown"}</p>
+                        <div className="flex items-center gap-0.5">
+                          {Array.from({ length: 5 }).map((_, idx) => (
+                            <Star
+                              key={idx}
+                              className={`w-3 h-3 ${idx < review.rating ? "text-amber-400 fill-amber-400" : "text-muted-foreground"}`}
+                            />
+                          ))}
+                        </div>
+                        {review.isHidden && (
+                          <Badge variant="outline" className="text-[9px] border-amber-300 text-amber-600">Tersembunyi</Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground truncate">Produk: {review.product?.name || "Unknown"}</p>
+                      <p className="text-xs text-muted-foreground">Toko: {review.product?.seller?.storeName || "Unknown"}</p>
+                      {review.content && (
+                        <p className="text-xs text-foreground mt-1 line-clamp-2">{review.content}</p>
+                      )}
+                      {review.sellerReply && (
+                        <div className="mt-1.5 pl-2 border-l-2 border-emerald-300 dark:border-emerald-700">
+                          <p className="text-[10px] text-emerald-600 font-medium">Balasan Penjual:</p>
+                          <p className="text-xs text-foreground line-clamp-2">{review.sellerReply}</p>
+                        </div>
+                      )}
+                      <p className="text-[10px] text-muted-foreground mt-1">{formatRelativeTime(review.createdAt)}</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 mt-3 pt-2 border-t border-border/50">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className={`h-7 text-[11px] rounded-lg ${review.isHidden ? "text-emerald-600" : "text-amber-600"}`}
+                      onClick={() => handleToggleHidden(review.id, review.isHidden)}
+                    >
+                      {review.isHidden ? (
+                        <><Eye className="w-3 h-3 mr-0.5" /> Tampilkan</>
+                      ) : (
+                        <><Eye className="w-3 h-3 mr-0.5" /> Sembunyikan</>
+                      )}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-[11px] rounded-lg text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                      onClick={() =>
+                        setConfirmAction({
+                          action: () => handleDelete(review.id),
+                          title: "Hapus Review",
+                          message: `Apakah Anda yakin ingin menghapus review dari ${review.user?.name || "Unknown"}? Tindakan ini tidak dapat dibatalkan.`,
+                        })
+                      }
+                    >
+                      <Trash2 className="w-3 h-3 mr-0.5" /> Hapus
+                    </Button>
+                  </div>
+                </Card>
+              </motion.div>
+            ))
+          )}
+        </div>
+      </div>
+      <ConfirmDialog
+        isOpen={!!confirmAction}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={() => confirmAction?.action()}
+        title={confirmAction?.title || ""}
+        message={confirmAction?.message || ""}
+      />
     </div>
   )
 }

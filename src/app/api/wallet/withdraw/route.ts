@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { verifyAuth, checkRateLimit, authErrorResponse } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
 import { logger, logBusinessEvent } from '@/lib/logger'
+import { createWorkItemFromEntity } from '@/lib/workflow'
 
 // ==================== WALLET WITHDRAW ====================
 // SECURITY: Requires authentication + seller verification
@@ -168,6 +169,18 @@ export async function POST(request: NextRequest) {
       userId: authResult.user.id,
       details: { withdrawalId: withdrawal.id, amount, bankName: resolvedBankName },
     })
+
+    // Auto-create work item for Finance division
+    await createWorkItemFromEntity({
+      type: 'withdrawal',
+      title: `Penarikan Dana: ${seller.storeName} - Rp ${amount.toLocaleString('id-ID')}`,
+      description: `Penarikan dana Rp ${amount.toLocaleString('id-ID')} ke ${resolvedBankName} - ${resolvedBankAccount} (${resolvedBankHolder})`,
+      refType: 'withdrawal',
+      refId: withdrawal.id,
+      metadata: { amount, bankName: resolvedBankName, sellerId: seller.id, storeName: seller.storeName },
+      priority: amount >= 1000000 ? 'high' : 'normal',
+      createdBy: authResult.user.id,
+    }).catch(err => logger.warn({ err }, 'Failed to auto-create withdrawal work item'))
 
     return NextResponse.json(serializeDecimal({
       success: true,

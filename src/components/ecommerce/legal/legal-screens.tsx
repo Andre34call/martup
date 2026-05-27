@@ -1,6 +1,6 @@
 'use client'
 
-import { ArrowLeft } from 'lucide-react'
+import { PageHeader } from '@/components/ecommerce/shared'
 
 interface LegalPageProps {
   onBack: () => void
@@ -9,14 +9,7 @@ interface LegalPageProps {
 export function PrivacyPolicyScreen({ onBack }: LegalPageProps) {
   return (
     <div className="min-h-screen bg-background">
-      <div className="sticky top-0 z-40 bg-background/95 backdrop-blur-sm border-b">
-        <div className="flex items-center gap-3 px-4 py-3">
-          <button onClick={onBack} className="p-1 rounded-lg hover:bg-muted">
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <h1 className="text-lg font-bold">Kebijakan Privasi</h1>
-        </div>
-      </div>
+      <PageHeader title="Kebijakan Privasi" onBack={onBack} />
 
       <div className="px-4 py-6 max-w-2xl mx-auto prose prose-sm dark:prose-invert">
         <p className="text-xs text-muted-foreground">Terakhir diperbarui: Maret 2025</p>
@@ -117,14 +110,7 @@ export function PrivacyPolicyScreen({ onBack }: LegalPageProps) {
 export function TermsOfServiceScreen({ onBack }: LegalPageProps) {
   return (
     <div className="min-h-screen bg-background">
-      <div className="sticky top-0 z-40 bg-background/95 backdrop-blur-sm border-b">
-        <div className="flex items-center gap-3 px-4 py-3">
-          <button onClick={onBack} className="p-1 rounded-lg hover:bg-muted">
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <h1 className="text-lg font-bold">Syarat & Ketentuan</h1>
-        </div>
-      </div>
+      <PageHeader title="Syarat & Ketentuan" onBack={onBack} />
 
       <div className="px-4 py-6 max-w-2xl mx-auto prose prose-sm dark:prose-invert">
         <p className="text-xs text-muted-foreground">Terakhir diperbarui: Maret 2025</p>
@@ -223,14 +209,7 @@ export function TermsOfServiceScreen({ onBack }: LegalPageProps) {
 export function RefundPolicyScreen({ onBack }: LegalPageProps) {
   return (
     <div className="min-h-screen bg-background">
-      <div className="sticky top-0 z-40 bg-background/95 backdrop-blur-sm border-b">
-        <div className="flex items-center gap-3 px-4 py-3">
-          <button onClick={onBack} className="p-1 rounded-lg hover:bg-muted">
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <h1 className="text-lg font-bold">Kebijakan Pengembalian Dana</h1>
-        </div>
-      </div>
+      <PageHeader title="Kebijakan Pengembalian" onBack={onBack} />
 
       <div className="px-4 py-6 max-w-2xl mx-auto prose prose-sm dark:prose-invert">
         <p className="text-xs text-muted-foreground">Terakhir diperbarui: Maret 2025</p>
