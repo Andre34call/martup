@@ -188,3 +188,59 @@ Stage Summary:
 - Auto-slug generation when name is changed
 - Seller receives notification when admin edits their product content
 - Both flagged and regular product cards have Edit buttons
+
+---
+Task ID: 8
+Agent: Main Agent
+Task: Add admin product image/video editing + super admin promote users to divisions
+
+Work Log:
+- Added `verifySuperAdmin()` to `/src/lib/auth-middleware.ts` — checks both role='admin' AND email='kholisakm@gmail.com'
+- Updated `/src/app/api/admin/products/route.ts` PUT handler:
+  - Added support for videoUrl, stock, tags fields
+  - Tags validated as array of strings, stored as JSON
+  - VideoUrl stored as nullable string
+  - Stock validated as non-negative integer
+  - Content change notification fields expanded to include all editable fields
+- Updated `/src/app/api/admin/users/route.ts`:
+  - Added PATCH endpoint for super admin user promotion (dedicated route)
+  - PATCH requires verifySuperAdmin — only kholisakm@gmail.com can access
+  - Maps division slug to role automatically (finance→'finance', pr→'pr', etc.)
+  - Sets divisionId on user when promoted to a division
+  - Sends notification to promoted user
+  - Added target user lookup and protection (super admin cannot be modified by others)
+  - PUT handler now requires super admin for role promotions to elevated roles
+  - DELETE handler now protects super admin from deletion
+  - GET response includes `isSuperAdmin` boolean for frontend
+- Updated `/src/components/ecommerce/admin-screens.tsx` AdminProducts:
+  - Expanded AdminProductItem interface with videoUrl, categoryName, stock, weight, condition, tags
+  - Added state for all new edit fields + upload states
+  - Added categories fetch on mount
+  - Added handleImageUpload (multiple files, Supabase storage)
+  - Added handleVideoUpload (single file, Supabase storage)
+  - Expanded edit dialog: images gallery, video upload, category dropdown, condition, stock, weight, discount, tags
+  - Product cards now show image thumbnails instead of generic Box icons
+- Updated `/src/components/ecommerce/admin-screens.tsx` AdminUsers:
+  - Added SUPER_ADMIN_EMAIL constant
+  - Added super admin detection (isSuperAdmin state)
+  - Replaced "Make Admin" button with "Promote" button (super admin only)
+  - Replaced "Remove Admin" button with "Demote" button (super admin only)
+  - Added Promote Dialog with:
+    - User info card
+    - Division selector (radio-style buttons with icons and member counts)
+    - Regular Admin option (no division)
+    - Warning about super admin exclusivity
+    - PATCH /api/admin/users call on confirm
+  - Role badges now show all division colors and 👑 Super Admin for super admin
+- Updated `/src/lib/types.ts` — Added superadmin to ROLE_DISPLAY
+- Updated `/src/app/api/health/route.ts` — Version bumped to 1.3.0-admin-enhance
+- Lint passes, dev server compiles successfully
+- Pushed to GitHub (commit 782d3be)
+
+Stage Summary:
+- Admin can now edit product images (upload/delete), videos (upload/delete), category, condition, weight, stock, discount, tags
+- Super admin (kholisakm@gmail.com) can promote users to division admins via dialog with division selector
+- Regular admins cannot promote users — only super admin has this power
+- Super admin account is protected from modification/deletion by other admins
+- Promoted users receive system notifications
+- Version: 1.3.0-admin-enhance
