@@ -11,7 +11,7 @@ import {
   TrendingUp, Megaphone, ImageIcon, Calendar, BarChart3, MessageSquare,
   Ban, FileText, ArrowUpRight, ArrowDownLeft, Clock, CreditCard, Plus,
   Store, FolderTree, Tag, Wallet,
-  Building2, Upload
+  Building2, Upload, Star, Edit
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -29,6 +29,7 @@ import { ConfirmDialog } from "./confirm-dialog"
 import { LoadingSpinner } from "./loading-spinner"
 
 import { getAuthHeaders } from '@/lib/store/getAuthHeaders'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 
 // ==================== ANIMATION VARIANTS ====================
 const fadeIn = {
@@ -362,6 +363,7 @@ export function AdminDashboard() {
               { label: "Vouchers", icon: Tag, screen: "admin-vouchers" as const, color: "bg-pink-50 text-pink-600 dark:bg-pink-900/30" },
               { label: "Deposits", icon: Wallet, screen: "admin-deposits" as const, color: "bg-lime-50 text-lime-600 dark:bg-lime-900/30" },
               { label: "Campaigns", icon: Megaphone, screen: "admin-campaigns" as const, color: "bg-violet-50 text-violet-600 dark:bg-violet-900/30" },
+              { label: "Reviews", icon: Star, screen: "admin-reviews" as const, color: "bg-amber-50 text-amber-600 dark:bg-amber-900/30" },
               { label: "Settings", icon: Settings, screen: "admin-settings" as const, color: "bg-slate-50 text-slate-600 dark:bg-slate-900/30" },
             ].map((item) => (
               <motion.button
@@ -597,11 +599,15 @@ export function AdminUsers() {
 interface AdminProductItem {
   id: string
   name: string
-  sellerName: string
+  description: string
   price: number
+  discountPrice: number | null
+  images: string[]
+  sellerName: string
   status: string
   sold: number
   isFeatured: boolean
+  categoryId: string
 }
 
 export function AdminProducts() {
@@ -611,6 +617,10 @@ export function AdminProducts() {
   const [adminProducts, setAdminProducts] = useState<AdminProductItem[]>([])
   const [loading, setLoading] = useState(true)
   const [confirmAction, setConfirmAction] = useState<{action: () => void, title: string, message: string} | null>(null)
+  const [editProduct, setEditProduct] = useState<AdminProductItem | null>(null)
+  const [editName, setEditName] = useState("")
+  const [editDescription, setEditDescription] = useState("")
+  const [editPrice, setEditPrice] = useState("")
 
   const fetchAdminProducts = useCallback(async () => {
     try {
@@ -621,11 +631,15 @@ export function AdminProducts() {
         const mapped: AdminProductItem[] = (data.data || []).map((p: any) => ({
           id: p.id,
           name: p.name,
+          description: p.description || '',
+          price: Number(p.price),
+          discountPrice: p.discountPrice ? Number(p.discountPrice) : null,
+          images: Array.isArray(p.images) ? p.images : [],
           sellerName: p.seller?.storeName || 'Unknown',
-          price: p.price,
           status: p.status,
           sold: p.sold,
           isFeatured: p.isFeatured,
+          categoryId: p.categoryId || '',
         }))
         setAdminProducts(mapped)
       }
@@ -675,6 +689,28 @@ export function AdminProducts() {
       }
     } catch {
       showToast("Gagal menghapus produk", "error")
+    }
+  }
+
+  const handleEditProduct = async (productId: string, updates: Record<string, unknown>) => {
+    try {
+      const res = await fetch('/api/admin/products', {
+        method: 'PUT',
+        headers: getAuthHeaders(true),
+        body: JSON.stringify({ productId, ...updates }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setAdminProducts(prev => prev.map(p => p.id === productId ? { ...p, ...updates, price: Number(updates.price ?? p.price) } : p))
+        showToast("Produk berhasil diupdate", "success")
+        return true
+      } else {
+        showToast(data.error || "Gagal mengupdate produk", "error")
+        return false
+      }
+    } catch {
+      showToast("Gagal mengupdate produk", "error")
+      return false
     }
   }
 
@@ -742,6 +778,14 @@ export function AdminProducts() {
                       <Button size="sm" className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={() => handleStatusChange(product.id, 'active')}>
                         <Check className="w-3 h-3 mr-0.5" /> Approve
                       </Button>
+                      <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-blue-500" onClick={() => {
+                        setEditProduct(product)
+                        setEditName(product.name)
+                        setEditDescription(product.description)
+                        setEditPrice(product.price.toString())
+                      }}>
+                        <Edit className="w-3 h-3 mr-0.5" /> Edit
+                      </Button>
                       <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500" onClick={() => setConfirmAction({
                         action: () => handleDelete(product.id),
                         title: 'Hapus Produk',
@@ -789,6 +833,14 @@ export function AdminProducts() {
                     </div>
                   </div>
                   <div className="flex gap-2 mt-3 pt-2 border-t border-border/50">
+                    <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-blue-500" onClick={() => {
+                      setEditProduct(product)
+                      setEditName(product.name)
+                      setEditDescription(product.description)
+                      setEditPrice(product.price.toString())
+                    }}>
+                      <Edit className="w-3 h-3 mr-0.5" /> Edit
+                    </Button>
                     {product.status === "blocked" ? (
                       <Button size="sm" className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={() => handleStatusChange(product.id, 'active')}>
                         <Check className="w-3 h-3 mr-0.5" /> Approve
@@ -816,6 +868,50 @@ export function AdminProducts() {
           )}
         </div>
       </div>
+      <Dialog open={!!editProduct} onOpenChange={(open) => { if (!open) setEditProduct(null) }}>
+        <DialogContent className="max-w-[380px] rounded-2xl p-5">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold">Edit Produk</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 mt-2">
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-foreground">Nama Produk</label>
+              <Input value={editName} onChange={e => setEditName(e.target.value)} className="rounded-xl" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-foreground">Deskripsi</label>
+              <textarea
+                value={editDescription}
+                onChange={e => setEditDescription(e.target.value)}
+                className="w-full min-h-[80px] rounded-xl border border-input bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 resize-none"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-foreground">Harga (Rp)</label>
+              <Input type="number" value={editPrice} onChange={e => setEditPrice(e.target.value)} className="rounded-xl" />
+            </div>
+          </div>
+          <DialogFooter className="mt-4 gap-2">
+            <Button variant="outline" onClick={() => setEditProduct(null)} className="rounded-xl h-10 flex-1">
+              Batal
+            </Button>
+            <Button
+              onClick={async () => {
+                if (!editProduct) return
+                const success = await handleEditProduct(editProduct.id, {
+                  name: editName.trim(),
+                  description: editDescription.trim(),
+                  price: Number(editPrice),
+                })
+                if (success) setEditProduct(null)
+              }}
+              className="bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-10 flex-1"
+            >
+              Simpan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <ConfirmDialog
         isOpen={!!confirmAction}
         onClose={() => setConfirmAction(null)}
@@ -1731,6 +1827,225 @@ export function AdminComplaints() {
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+// ==================== ADMIN REVIEWS ====================
+interface AdminReviewItem {
+  id: string
+  userId: string
+  productId: string
+  rating: number
+  content: string | null
+  images: unknown[]
+  sellerReply: string | null
+  sellerReplyAt: string | null
+  isHidden: boolean
+  createdAt: string
+  user: { id: string; name: string; avatar: string | null; email: string }
+  product: { id: string; name: string; seller: { id: string; storeName: string } }
+}
+
+export function AdminReviews() {
+  const { showToast } = useAppStore()
+  const [search, setSearch] = useState("")
+  const [statusFilter, setStatusFilter] = useState("all")
+  const [adminReviews, setAdminReviews] = useState<AdminReviewItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [confirmAction, setConfirmAction] = useState<{ action: () => void; title: string; message: string } | null>(null)
+
+  const fetchAdminReviews = useCallback(async () => {
+    try {
+      setLoading(true)
+      const params = new URLSearchParams()
+      if (statusFilter !== "all") params.set("status", statusFilter)
+      params.set("limit", "200")
+      const res = await fetch(`/api/admin/reviews?${params.toString()}`, { headers: getAuthHeaders() })
+      const data = await res.json()
+      if (data.success) {
+        setAdminReviews(data.data || [])
+      } else {
+        showToast(data.error || "Gagal memuat reviews", "error")
+      }
+    } catch {
+      showToast("Gagal memuat reviews", "error")
+    } finally {
+      setLoading(false)
+    }
+  }, [showToast, statusFilter])
+
+  useEffect(() => {
+    fetchAdminReviews()
+  }, [fetchAdminReviews])
+
+  const handleToggleHidden = async (reviewId: string, currentHidden: boolean) => {
+    try {
+      const res = await fetch("/api/admin/reviews", {
+        method: "PUT",
+        headers: getAuthHeaders(true),
+        body: JSON.stringify({ reviewId, isHidden: !currentHidden }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setAdminReviews((prev) =>
+          prev.map((r) => (r.id === reviewId ? { ...r, isHidden: !currentHidden } : r))
+        )
+        showToast(!currentHidden ? "Review disembunyikan" : "Review ditampilkan kembali", "success")
+      } else {
+        showToast(data.error || "Gagal mengubah status review", "error")
+      }
+    } catch {
+      showToast("Gagal mengubah status review", "error")
+    }
+  }
+
+  const handleDelete = async (reviewId: string) => {
+    try {
+      const res = await fetch("/api/admin/reviews", {
+        method: "DELETE",
+        headers: getAuthHeaders(true),
+        body: JSON.stringify({ reviewId }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setAdminReviews((prev) => prev.filter((r) => r.id !== reviewId))
+        showToast("Review dihapus", "info")
+      } else {
+        showToast(data.error || "Gagal menghapus review", "error")
+      }
+    } catch {
+      showToast("Gagal menghapus review", "error")
+    }
+  }
+
+  const filtered = adminReviews.filter((r) => {
+    const matchesSearch =
+      r.user?.name?.toLowerCase().includes(search.toLowerCase()) ||
+      r.product?.name?.toLowerCase().includes(search.toLowerCase()) ||
+      (r.content || "").toLowerCase().includes(search.toLowerCase())
+    return matchesSearch
+  })
+
+  const hiddenCount = adminReviews.filter((r) => r.isHidden).length
+
+  if (loading) return <div className="pb-20"><PageHeader title="Moderasi Review" /><LoadingSpinner message="Memuat reviews..." /></div>
+
+  return (
+    <div className="pb-20">
+      <PageHeader title="Moderasi Review" />
+
+      <div className="px-4 space-y-4">
+        <SearchBar value={search} onChange={setSearch} placeholder="Cari review, user, atau produk..." />
+
+        {/* Status Filter */}
+        <div className="flex gap-2 overflow-x-auto no-scrollbar">
+          {[
+            { key: "all", label: `Semua (${adminReviews.length})` },
+            { key: "visible", label: `Terlihat (${adminReviews.length - hiddenCount})` },
+            { key: "hidden", label: `Tersembunyi (${hiddenCount})` },
+          ].map((filter) => (
+            <motion.button
+              key={filter.key}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setStatusFilter(filter.key)}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors border ${
+                statusFilter === filter.key
+                  ? "bg-blue-600 text-white border-blue-600"
+                  : "bg-card text-foreground border-border hover:bg-muted"
+              }`}
+            >
+              {filter.label}
+            </motion.button>
+          ))}
+        </div>
+
+        {/* Review List */}
+        <div className="space-y-2">
+          {filtered.length === 0 ? (
+            <EmptyState
+              icon={<Star className="w-10 h-10 text-muted-foreground" />}
+              title="Review Tidak Ditemukan"
+              subtitle="Coba kata kunci lain"
+            />
+          ) : (
+            filtered.map((review, i) => (
+              <motion.div key={review.id} custom={i} variants={stagger} initial="initial" animate="animate">
+                <Card className={`p-3 ${review.isHidden ? "border-amber-200 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-900/10" : ""}`}>
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-full bg-amber-500 text-white font-bold flex items-center justify-center flex-shrink-0 text-sm">
+                      {review.user?.name?.charAt(0) || "?"}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-medium text-foreground truncate">{review.user?.name || "Unknown"}</p>
+                        <div className="flex items-center gap-0.5">
+                          {Array.from({ length: 5 }).map((_, idx) => (
+                            <Star
+                              key={idx}
+                              className={`w-3 h-3 ${idx < review.rating ? "text-amber-400 fill-amber-400" : "text-muted-foreground"}`}
+                            />
+                          ))}
+                        </div>
+                        {review.isHidden && (
+                          <Badge variant="outline" className="text-[9px] border-amber-300 text-amber-600">Tersembunyi</Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground truncate">Produk: {review.product?.name || "Unknown"}</p>
+                      <p className="text-xs text-muted-foreground">Toko: {review.product?.seller?.storeName || "Unknown"}</p>
+                      {review.content && (
+                        <p className="text-xs text-foreground mt-1 line-clamp-2">{review.content}</p>
+                      )}
+                      {review.sellerReply && (
+                        <div className="mt-1.5 pl-2 border-l-2 border-emerald-300 dark:border-emerald-700">
+                          <p className="text-[10px] text-emerald-600 font-medium">Balasan Penjual:</p>
+                          <p className="text-xs text-foreground line-clamp-2">{review.sellerReply}</p>
+                        </div>
+                      )}
+                      <p className="text-[10px] text-muted-foreground mt-1">{formatRelativeTime(review.createdAt)}</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 mt-3 pt-2 border-t border-border/50">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className={`h-7 text-[11px] rounded-lg ${review.isHidden ? "text-emerald-600" : "text-amber-600"}`}
+                      onClick={() => handleToggleHidden(review.id, review.isHidden)}
+                    >
+                      {review.isHidden ? (
+                        <><Eye className="w-3 h-3 mr-0.5" /> Tampilkan</>
+                      ) : (
+                        <><Eye className="w-3 h-3 mr-0.5" /> Sembunyikan</>
+                      )}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-[11px] rounded-lg text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                      onClick={() =>
+                        setConfirmAction({
+                          action: () => handleDelete(review.id),
+                          title: "Hapus Review",
+                          message: `Apakah Anda yakin ingin menghapus review dari ${review.user?.name || "Unknown"}? Tindakan ini tidak dapat dibatalkan.`,
+                        })
+                      }
+                    >
+                      <Trash2 className="w-3 h-3 mr-0.5" /> Hapus
+                    </Button>
+                  </div>
+                </Card>
+              </motion.div>
+            ))
+          )}
+        </div>
+      </div>
+      <ConfirmDialog
+        isOpen={!!confirmAction}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={() => confirmAction?.action()}
+        title={confirmAction?.title || ""}
+        message={confirmAction?.message || ""}
+      />
     </div>
   )
 }

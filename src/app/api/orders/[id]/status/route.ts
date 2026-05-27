@@ -10,14 +10,16 @@ import { logger } from '@/lib/logger'
 // pending → paid (admin only, or via payment webhook)
 // paid → processing (seller only)
 // paid → shipped (seller only, requires trackingNumber)
+// paid → cancelled (seller or admin)
 // processing → shipped (seller only, requires trackingNumber)
+// processing → cancelled (seller or admin)
 // shipped → delivered (buyer only, triggers escrow release)
 // shipped → cancelled (admin only, triggers refund)
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
   pending: ['cancelled', 'paid'],
   paid: ['processing', 'shipped', 'cancelled'],
-  processing: ['shipped'],
+  processing: ['shipped', 'cancelled'],
   shipped: ['delivered', 'cancelled'],
 }
 
@@ -174,7 +176,8 @@ export async function PUT(
     // Step 7: Authorization checks — who can set which status
     if (status === 'cancelled') {
       // Buyer can cancel their own order if still pending
-      // Admin can cancel for dispute resolution (pending or shipped)
+      // Seller can cancel paid/processing orders if they can't fulfill
+      // Admin can cancel any order for dispute resolution
       if (order.status === 'pending') {
         if (!isBuyer && !isAdmin) {
           return NextResponse.json(
@@ -182,17 +185,17 @@ export async function PUT(
             { status: 403 }
           )
         }
+      } else if (order.status === 'paid' || order.status === 'processing') {
+        if (!isSeller && !isAdmin) {
+          return NextResponse.json(
+            { success: false, error: 'Hanya penjual atau admin yang dapat membatalkan pesanan yang sudah dibayar' },
+            { status: 403 }
+          )
+        }
       } else if (order.status === 'shipped') {
         if (!isAdmin) {
           return NextResponse.json(
             { success: false, error: 'Hanya admin yang dapat membatalkan pesanan yang sudah dikirim' },
-            { status: 403 }
-          )
-        }
-      } else if (order.status === 'paid') {
-        if (!isAdmin) {
-          return NextResponse.json(
-            { success: false, error: 'Hanya admin yang dapat membatalkan pesanan yang sudah dibayar' },
             { status: 403 }
           )
         }

@@ -1,4 +1,103 @@
 ---
+Task ID: 6
+Agent: Fix Agent
+Task: Fix admin product deletion to use soft-delete instead of hard-delete
+
+Work Log:
+- Changed DELETE handler in `/src/app/api/admin/products/route.ts` from hard-delete (`db.product.delete`) to soft-delete (`db.product.update` with `status: 'blocked'`)
+- Added notification creation to inform seller when their product is removed by admin
+- Notification includes product name and reason (melanggar ketentuan platform)
+- Product status 'blocked' already exists in the Prisma schema as a valid status value
+- Lint check passed with zero errors
+
+Stage Summary:
+- Admin product deletion now uses soft-delete (status='blocked') instead of hard-delete
+- Prevents referential integrity issues with orders, reviews, cart items, etc.
+- Sellers receive a system notification when their product is blocked by admin
+
+---
+Task ID: 7
+Agent: Fix Agent
+Task: Fix admin order status update to validate transitions and process escrow/refunds properly
+
+Work Log:
+- Replaced entire PUT handler in `/src/app/api/admin/orders/route.ts` with proper business logic
+- Added status validation (valid statuses: pending, paid, processing, shipped, delivered, cancelled)
+- Added cancelReason validation when status is 'cancelled'
+- Added status transition validation using VALID_TRANSITIONS map
+- Added order lookup with full includes (items, seller, shipping) for transition validation
+- Changed approach: admin PUT now forwards to `/api/orders/[id]/status` internally for consistent business logic
+- This ensures escrow release, refund processing, stock restoration, and notifications are all handled properly
+- Added `Prisma` import from `@prisma/client` for potential use with `Prisma.Decimal`
+- Lint check passed with zero errors
+
+Stage Summary:
+- Admin order status updates now validate transitions (e.g., can't go from pending to delivered)
+- Cancel reason is required when cancelling an order
+- All business logic (escrow, refunds, stock, notifications) delegated to the existing `/api/orders/[id]/status` endpoint
+- Admin auth headers and cookies are forwarded to the internal API call
+- Prevents data inconsistency from bypassing escrow/refund logic
+
+---
+Task ID: 1
+Agent: Seller Cancel Orders Agent
+Task: Make seller able to cancel/reject orders (previously only buyer and admin could cancel)
+
+Work Log:
+- Read current API route `/src/app/api/orders/[id]/status/route.ts` and seller-screens.tsx
+- Updated VALID_TRANSITIONS: added 'cancelled' to processing state transitions (`processing: ['shipped', 'cancelled']`)
+- Updated cancel authorization logic:
+  - `pending` → cancelled: buyer or admin (unchanged)
+  - `paid` or `processing` → cancelled: seller or admin (NEW - was admin-only for paid)
+  - `shipped` → cancelled: admin only (unchanged)
+- Updated comments at top of file to document new seller cancel permissions for paid/processing
+- Added `X` icon import from lucide-react in seller-screens.tsx
+- Added state variables: showCancelDialog, cancelOrderId, cancelReason
+- Added "Batalkan" (Cancel) button for orders with status "paid" or "processing" in SellerOrders component
+- Added cancel order dialog with textarea for cancellation reason (required field)
+- Dialog calls PUT /api/orders/{id}/status with status='cancelled' and cancelReason
+- On success, updates local order status and shows info toast
+- On error, shows error toast and keeps dialog open
+- Lint check passed with zero errors
+
+Stage Summary:
+- Sellers can now cancel paid or processing orders via a "Batalkan" button
+- Cancellation requires a reason (enforced both client-side and server-side)
+- API authorization properly checks isSeller for paid/processing cancellations
+- Existing buyer (pending) and admin (any status) cancel permissions preserved
+- Refund logic (wallet refund + escrow reversal) already handled by existing cancelled order flow
+
+---
+Task ID: 3 & 4
+Agent: main
+Task: Seller can reply to reviews (Task 3) + Admin can moderate reviews (Task 4)
+
+Work Log:
+- Created `/src/app/api/reviews/reply/route.ts` — PUT endpoint for sellers to reply to reviews on their products
+  - Authenticates seller, verifies they own the product being reviewed
+  - Rate limits (10/min), sanitizes reply (max 500 chars)
+  - Creates notification for the reviewer when seller replies
+- Created `/src/app/api/admin/reviews/route.ts` — Admin review moderation endpoints
+  - GET: List all reviews with filters (status=hidden/visible, productId, pagination)
+  - PUT: Hide/unhide a review (toggles isHidden), recalculates product rating excluding hidden reviews
+  - DELETE: Hard-delete a review, recalculates product rating after deletion
+- Updated `/src/app/api/reviews/route.ts` — GET handler now filters out hidden reviews (`isHidden: false`) for public access
+- Updated `/src/components/ecommerce/admin-screens.tsx`
+  - Added `Star` import from lucide-react
+  - Added "Reviews" menu item in admin dashboard quick navigation grid (with Star icon, amber color)
+  - Added full `AdminReviews` component with search, status filter (all/visible/hidden), hide/unhide toggle, delete with confirmation
+- Updated `/src/lib/types.ts` — Added `'admin-reviews'` to ScreenName type
+- Updated `/src/app/page.tsx` — Added `'admin-reviews'` to ADMIN_SCREENS list, added route case, imported AdminReviews component
+- ESLint passes with zero errors
+
+Stage Summary:
+- Seller reply endpoint: PUT /api/reviews/reply with auth, rate limit, seller verification, notification
+- Admin moderation: GET/PUT/DELETE /api/admin/reviews with status filters, hide/unhide (with rating recalc), hard delete (with rating recalc)
+- Public reviews API filters out hidden reviews
+- Admin dashboard has Reviews menu item and full AdminReviews screen
+- All TypeScript types updated for new screen
+
+---
 Task ID: 2
 Agent: main
 Task: Fix database connection + address creation + full app audit
@@ -53,3 +152,39 @@ Stage Summary:
 - Last successful Vercel deployment: commit 2cde622c, May 26 2026 06:56 UTC
 - Current deployed version: 1.0.0 (old, broken CSRF)
 - Latest code version: 1.1.0-csrf-fix (fixed CSRF)
+
+---
+Task ID: 2
+Agent: Edit Product Agent
+Task: Make admin able to edit product content (name, description, price, images) — not just status/isFeatured
+
+Work Log:
+- Updated PUT handler in `/src/app/api/admin/products/route.ts`:
+  - Added content fields to destructured body: name, description, price, discountPrice, images, categoryId, condition, weight
+  - Added product existence check (404 if not found)
+  - Added validation for name (non-empty string), price (valid non-negative number)
+  - Added auto-slug generation from name with productId suffix
+  - Added images validation (array of strings, filters out blob URLs)
+  - Added support for discountPrice, categoryId, condition, weight fields
+  - Added notification to seller when admin edits product content (name, description, price, images)
+  - Notification type: 'system', refType: 'product'
+- Updated `/src/components/ecommerce/admin-screens.tsx`:
+  - Added `Edit` import from lucide-react
+  - Added Dialog component imports (Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter)
+  - Expanded `AdminProductItem` interface with description, discountPrice, images, categoryId fields
+  - Updated `fetchAdminProducts` mapping to include description, discountPrice, images, categoryId with proper type coercion
+  - Added edit dialog state: editProduct, editName, editDescription, editPrice
+  - Added `handleEditProduct` async handler that calls PUT /api/admin/products and updates local state
+  - Added Edit button to both flagged products section and main product list section
+  - Added Edit Product dialog with name, description (textarea), and price (number input) fields
+  - Dialog includes Batal (Cancel) and Simpan (Save) buttons with emerald styling
+  - On successful save, dialog closes automatically
+- ESLint passes with zero errors
+- Dev server shows no compilation errors
+
+Stage Summary:
+- Admin can now edit product name, description, and price via a dialog in the admin products screen
+- API supports additional fields: discountPrice, images, categoryId, condition, weight
+- Auto-slug generation when name is changed
+- Seller receives notification when admin edits their product content
+- Both flagged and regular product cards have Edit buttons
