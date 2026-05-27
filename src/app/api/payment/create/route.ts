@@ -83,7 +83,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (order.paymentStatus !== 'unpaid') {
+    // Allow both 'unpaid' and 'pending' — Midtrans may send a 'pending' notification
+    // when a Snap transaction is created, changing paymentStatus from 'unpaid' to 'pending'.
+    // The user should still be able to re-attempt payment in this state.
+    if (order.paymentStatus !== 'unpaid' && order.paymentStatus !== 'pending') {
       return NextResponse.json(
         { success: false, error: `Order payment status is already: ${order.paymentStatus}` },
         { status: 400 }

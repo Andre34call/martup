@@ -501,7 +501,7 @@ export function CheckoutScreen() {
         }
 
         const orderStatus = isImmediatePayment ? 'paid' as const : 'pending' as const
-        const orderPaymentStatus = isImmediatePayment ? 'paid' : 'pending'
+        const orderPaymentStatus = isImmediatePayment ? 'paid' : 'unpaid'
 
         try {
           const orderHeaders = getAuthHeaders(true)
@@ -595,45 +595,61 @@ export function CheckoutScreen() {
         }, 2500)
 
       } else if (selectedPayment === 'midtrans' || selectedPayment === 'card') {
-        // Midtrans / Card payment: open Snap popup for the first order
-        // (Multi-seller orders each get their own payment flow)
+        // Midtrans / Card payment: open Snap popup for each seller order
         if (selectedVoucher) markVoucherUsed(selectedVoucher.id)
 
         if (createdOrderIds.length > 0) {
           try {
-            // Call payment/create API to get Snap token
-            const paymentRes = await fetch('/api/payment/create', {
-              method: 'POST',
-              headers: getAuthHeaders(true),
-              body: JSON.stringify({ orderId: createdOrderIds[0] }),
-            })
-            const paymentData = await paymentRes.json()
+            let allSuccess = true
+            let anyPending = false
 
-            if (paymentData.success && paymentData.data?.token) {
-              setIsProcessing(false)
+            // Process each order's payment sequentially
+            // (Each seller gets their own Midtrans transaction)
+            for (let i = 0; i < createdOrderIds.length; i++) {
+              const paymentRes = await fetch('/api/payment/create', {
+                method: 'POST',
+                headers: getAuthHeaders(true),
+                body: JSON.stringify({ orderId: createdOrderIds[i] }),
+              })
+              const paymentData = await paymentRes.json()
 
-              // Open Midtrans Snap popup
-              const snapResult = await openSnapPayment(paymentData.data.token)
+              if (paymentData.success && paymentData.data?.token) {
+                // Show progress for multi-seller
+                if (createdOrderIds.length > 1) {
+                  showToast(`Pembayaran ${i + 1} dari ${createdOrderIds.length} toko...`, 'info')
+                }
 
-              if (snapResult.status === 'success') {
-                showToast('Pembayaran berhasil!', 'success')
-                navigate('orders')
-              } else if (snapResult.status === 'pending') {
-                showToast('Pembayaran tertunda. Silakan selesaikan pembayaran Anda.', 'warning')
-                navigate('orders')
-              } else if (snapResult.status === 'closed') {
-                showToast('Pembayaran dibatalkan. Anda bisa membayar nanti dari halaman pesanan.', 'warning')
-                navigate('orders')
+                // Open Midtrans Snap popup
+                const snapResult = await openSnapPayment(paymentData.data.token)
+
+                if (snapResult.status === 'success') {
+                  // Continue to next order
+                } else if (snapResult.status === 'pending') {
+                  anyPending = true
+                  allSuccess = false
+                } else if (snapResult.status === 'closed') {
+                  allSuccess = false
+                  // User closed popup — stop processing remaining orders
+                  showToast('Pembayaran dibatalkan. Anda bisa membayar nanti dari halaman pesanan.', 'warning')
+                  break
+                } else {
+                  allSuccess = false
+                }
               } else {
-                showToast('Pembayaran gagal. Silakan coba lagi.', 'error')
-                navigate('orders')
+                // Snap token creation failed for this order
+                logger.warn({ component: 'checkout', orderId: createdOrderIds[i], err: paymentData.error }, 'Snap token creation failed')
+                allSuccess = false
               }
-            } else {
-              // Snap token creation failed
-              showToast(paymentData.error || 'Gagal membuat transaksi pembayaran. Pesanan Anda tersimpan sebagai "Belum Bayar".', 'error')
-              setIsProcessing(false)
-              navigate('orders')
             }
+
+            setIsProcessing(false)
+
+            if (allSuccess) {
+              showToast('Pembayaran berhasil!', 'success')
+            } else if (anyPending) {
+              showToast('Pembayaran tertunda. Silakan selesaikan pembayaran Anda.', 'warning')
+            }
+            navigate('orders')
           } catch (error) {
             logger.warn({ component: 'checkout', err: error }, 'Midtrans payment failed')
             showToast('Terjadi kesalahan saat memproses pembayaran. Pesanan Anda tersimpan sebagai "Belum Bayar".', 'error')
