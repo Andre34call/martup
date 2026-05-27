@@ -18,6 +18,7 @@ import {
 import type { CartItem, ShippingOption, Address } from "@/lib/types"
 import { logger } from '@/lib/logger'
 import { useState, useMemo, useEffect, useCallback } from "react"
+import { openSnapPayment } from '@/lib/midtrans'
 
 // ==================== CHECKOUT STEP INDICATOR ====================
 const CHECKOUT_STEPS = [
@@ -457,9 +458,13 @@ export function CheckoutScreen() {
     const newOrderNumber = `ORD-${Date.now()}`
     setOrderNumber(newOrderNumber)
 
-    // Simulate payment processing
-    setTimeout(async () => {
-      // Create one order per seller via API
+    try {
+      // ==================== Create orders via API ====================
+      // For wallet payment: order status = 'paid' immediately
+      // For Midtrans/Card/COD: order status = 'pending' (awaiting payment)
+      const isImmediatePayment = selectedPayment === 'wallet'
+      const createdOrderIds: string[] = []
+
       for (const group of groupedBySeller) {
         const sellerShipping = shippingBySeller[group.seller.id]
         const groupSubtotal = group.items.reduce((sum, i) => sum + ((i.product.discountPrice || i.product.price) * i.quantity), 0)
@@ -495,18 +500,11 @@ export function CheckoutScreen() {
           },
         }
 
-        // SECURITY: Determine correct order status based on payment method
-        // - Wallet: 'paid' (immediate deduction)
-        // - Midtrans/Card: 'pending' (awaiting payment confirmation via webhook)
-        // - COD: 'pending' (payment on delivery)
-        const isImmediatePayment = selectedPayment === 'wallet'
         const orderStatus = isImmediatePayment ? 'paid' as const : 'pending' as const
         const orderPaymentStatus = isImmediatePayment ? 'paid' : 'pending'
 
         try {
-          // SECURITY: Include auth headers + CSRF for authenticated order creation
           const orderHeaders = getAuthHeaders(true)
-
           const res = await fetch('/api/orders', {
             method: 'POST',
             headers: orderHeaders,
@@ -515,8 +513,8 @@ export function CheckoutScreen() {
           const data = await res.json()
 
           if (data.success && data.data) {
-            // Add to local store from API response — use server-returned status
             const apiOrder = data.data
+            createdOrderIds.push(apiOrder.id)
             const localOrder = {
               id: apiOrder.id,
               orderNumber: apiOrder.orderNumber,
@@ -558,44 +556,6 @@ export function CheckoutScreen() {
           }
         } catch (error) {
           logger.warn({ component: 'checkout', err: error }, 'Order creation failed')
-          // Fallback: add locally even if API fails — use correct status
-          const order = {
-            id: `o${Date.now()}-${group.seller.id}`,
-            orderNumber: newOrderNumber,
-            userId: currentUser?.id || '',
-            sellerId: group.seller.id,
-            status: orderStatus,
-            subtotal: groupSubtotal,
-            shippingCost: groupShipping,
-            discountAmount: groupDiscount,
-            taxAmount: 0,
-            platformFee,
-            totalAmount: groupTotal,
-            paymentMethod: PAYMENT_METHODS.find(m => m.id === selectedPayment)?.name || selectedPayment,
-            paymentStatus: orderPaymentStatus,
-            items: group.items.map((item) => ({
-              id: `oi${Date.now()}-${item.id}`,
-              productId: item.productId,
-              productName: item.product.name,
-              variantName: item.variant ? `${item.variant.name}: ${item.variant.value}` : undefined,
-              price: item.product.discountPrice || item.product.price,
-              quantity: item.quantity,
-              subtotal: (item.product.discountPrice || item.product.price) * item.quantity,
-              image: item.product.images?.[0]
-            })),
-            shipping: {
-              id: `sh${Date.now()}-${group.seller.id}`,
-              provider: sellerShipping?.provider || 'JNE',
-              service: sellerShipping?.service || 'REG',
-              estimatedDays: sellerShipping?.estimatedDays,
-              status: 'pending'
-            },
-            address: defaultAddress,
-            seller: group.seller,
-            createdAt: new Date().toISOString(),
-            paidAt: isImmediatePayment ? new Date().toISOString() : undefined
-          }
-          addOrder(order)
         }
       }
 
@@ -603,8 +563,10 @@ export function CheckoutScreen() {
       const checkedItemIds = checkedItems.map(i => i.id)
       checkedItemIds.forEach(id => removeItem(id))
 
-      // Deduct wallet balance if paying with MartUp Pay (via API + local)
+      // ==================== Payment processing ====================
+
       if (selectedPayment === 'wallet') {
+        // Wallet payment: deduct immediately
         try {
           const walletHeaders = getAuthHeaders(true)
           await fetch('/api/wallet', {
@@ -621,22 +583,84 @@ export function CheckoutScreen() {
           // Fallback: local deduction if API fails
         }
         deductWallet(Math.max(0, totalAmount), 'Pembayaran Order #' + newOrderNumber)
-      }
 
-      // Mark voucher as used
-      if (selectedVoucher) {
-        markVoucherUsed(selectedVoucher.id)
-      }
+        // Mark voucher as used
+        if (selectedVoucher) markVoucherUsed(selectedVoucher.id)
 
+        setIsProcessing(false)
+        setShowSuccessModal(true)
+        setTimeout(() => {
+          setShowSuccessModal(false)
+          navigate('orders')
+        }, 2500)
+
+      } else if (selectedPayment === 'midtrans' || selectedPayment === 'card') {
+        // Midtrans / Card payment: open Snap popup for the first order
+        // (Multi-seller orders each get their own payment flow)
+        if (selectedVoucher) markVoucherUsed(selectedVoucher.id)
+
+        if (createdOrderIds.length > 0) {
+          try {
+            // Call payment/create API to get Snap token
+            const paymentRes = await fetch('/api/payment/create', {
+              method: 'POST',
+              headers: getAuthHeaders(true),
+              body: JSON.stringify({ orderId: createdOrderIds[0] }),
+            })
+            const paymentData = await paymentRes.json()
+
+            if (paymentData.success && paymentData.data?.token) {
+              setIsProcessing(false)
+
+              // Open Midtrans Snap popup
+              const snapResult = await openSnapPayment(paymentData.data.token)
+
+              if (snapResult.status === 'success') {
+                showToast('Pembayaran berhasil!', 'success')
+                navigate('orders')
+              } else if (snapResult.status === 'pending') {
+                showToast('Pembayaran tertunda. Silakan selesaikan pembayaran Anda.', 'warning')
+                navigate('orders')
+              } else if (snapResult.status === 'closed') {
+                showToast('Pembayaran dibatalkan. Anda bisa membayar nanti dari halaman pesanan.', 'warning')
+                navigate('orders')
+              } else {
+                showToast('Pembayaran gagal. Silakan coba lagi.', 'error')
+                navigate('orders')
+              }
+            } else {
+              // Snap token creation failed
+              showToast(paymentData.error || 'Gagal membuat transaksi pembayaran. Pesanan Anda tersimpan sebagai "Belum Bayar".', 'error')
+              setIsProcessing(false)
+              navigate('orders')
+            }
+          } catch (error) {
+            logger.warn({ component: 'checkout', err: error }, 'Midtrans payment failed')
+            showToast('Terjadi kesalahan saat memproses pembayaran. Pesanan Anda tersimpan sebagai "Belum Bayar".', 'error')
+            setIsProcessing(false)
+            navigate('orders')
+          }
+        } else {
+          // No orders were created via API (all failed)
+          showToast('Gagal membuat pesanan. Silakan coba lagi.', 'error')
+          setIsProcessing(false)
+        }
+
+      } else {
+        // COD or other payment methods — order stays pending
+        if (selectedVoucher) markVoucherUsed(selectedVoucher.id)
+        setIsProcessing(false)
+        setShowSuccessModal(true)
+        setTimeout(() => {
+          setShowSuccessModal(false)
+          navigate('orders')
+        }, 2500)
+      }
+    } catch (error) {
+      logger.warn({ component: 'checkout', err: error }, 'Checkout error')
+      showToast('Terjadi kesalahan saat checkout. Silakan coba lagi.', 'error')
       setIsProcessing(false)
-      setShowSuccessModal(true)
-
-      // Navigate to orders after showing success
-      setTimeout(() => {
-        setShowSuccessModal(false)
-        navigate('orders')
-      }, 2500)
-    }, 1500)
+    }
   }
 
   // Empty state

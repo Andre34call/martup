@@ -181,11 +181,34 @@ function OrderCard({ order, onTap }: { order: Order; onTap: () => void }) {
               size="sm"
               variant={primaryBtn.variant}
               className="h-8 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white"
-              onClick={(e) => {
+              onClick={async (e) => {
                 e.stopPropagation()
                 if (order.status === "pending") {
-                  payForOrder(order.id)
-                  showToast("Pembayaran berhasil diproses!", "success")
+                  const result = await payForOrder(order.id)
+                  if (result?.token) {
+                    // Midtrans payment — open Snap popup
+                    try {
+                      const { openSnapPayment } = await import('@/lib/midtrans')
+                      const snapResult = await openSnapPayment(result.token)
+                      if (snapResult.status === 'success') {
+                        showToast('Pembayaran berhasil!', 'success')
+                      } else if (snapResult.status === 'pending') {
+                        showToast('Pembayaran tertunda. Selesaikan pembayaran Anda.', 'warning')
+                      } else if (snapResult.status === 'closed') {
+                        showToast('Pembayaran dibatalkan. Anda bisa membayar nanti.', 'warning')
+                      } else {
+                        showToast('Pembayaran gagal. Silakan coba lagi.', 'error')
+                      }
+                    } catch {
+                      showToast('Gagal membuka halaman pembayaran.', 'error')
+                    }
+                  } else if (result?.redirectUrl) {
+                    // Fallback: redirect to Midtrans payment page
+                    window.open(result.redirectUrl, '_blank')
+                  } else {
+                    // Wallet payment was processed
+                    showToast("Pembayaran berhasil diproses!", "success")
+                  }
                 } else if (order.status === "shipped") {
                   onTap()
                 } else if (order.status === "delivered") {
@@ -506,7 +529,30 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
             <>
               <Button
                 className="w-full h-12 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold"
-                onClick={() => { payForOrder(order.id); showToast("Pembayaran berhasil diproses!", "success") }}
+                onClick={async () => {
+                  const result = await payForOrder(order.id)
+                  if (result?.token) {
+                    try {
+                      const { openSnapPayment } = await import('@/lib/midtrans')
+                      const snapResult = await openSnapPayment(result.token)
+                      if (snapResult.status === 'success') {
+                        showToast('Pembayaran berhasil!', 'success')
+                      } else if (snapResult.status === 'pending') {
+                        showToast('Pembayaran tertunda. Selesaikan pembayaran Anda.', 'warning')
+                      } else if (snapResult.status === 'closed') {
+                        showToast('Pembayaran dibatalkan. Anda bisa membayar nanti.', 'warning')
+                      } else {
+                        showToast('Pembayaran gagal. Silakan coba lagi.', 'error')
+                      }
+                    } catch {
+                      showToast('Gagal membuka halaman pembayaran.', 'error')
+                    }
+                  } else if (result?.redirectUrl) {
+                    window.open(result.redirectUrl, '_blank')
+                  } else {
+                    showToast("Pembayaran berhasil diproses!", "success")
+                  }
+                }}
               >
                 <CreditCard className="w-4 h-4 mr-2" />
                 Bayar Sekarang

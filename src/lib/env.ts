@@ -14,6 +14,7 @@ const recommendedVars = [
   'GOOGLE_CLIENT_ID',
   'GOOGLE_CLIENT_SECRET',
   'RESEND_API_KEY',
+  'MIDTRANS_SERVER_KEY',
 ] as const
 
 // Validate at module load time — but NOT during Next.js build phase
