@@ -14,6 +14,7 @@ export async function GET(request: NextRequest) {
     'SUPABASE_DIRECT_URL',
     'TOKEN_SECRET',
     'CSRF_SECRET',
+    'ADMIN_SETUP_SECRET',
     'GOOGLE_CLIENT_ID',
     'GOOGLE_CLIENT_SECRET',
     'MIDTRANS_SERVER_KEY',

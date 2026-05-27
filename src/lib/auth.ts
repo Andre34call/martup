@@ -34,15 +34,29 @@ export const authOptions: NextAuthOptions = {
       try {
         // SECURITY: Add internal secret to verify this is from NextAuth callback, not external caller
         const internalSecret = env.NEXTAUTH_SECRET
-        // Build the sync-user URL using VERCEL_URL in production (env.NEXTAUTH_URL may be localhost)
-        let baseUrl = env.NEXTAUTH_URL
-        if (process.env.VERCEL_URL) {
-          baseUrl = `https://${process.env.VERCEL_URL}`
-        } else if (baseUrl === 'http://localhost:3000' && process.env.NODE_ENV === 'production') {
-          // Fallback: if NEXTAUTH_URL is still localhost in production, use VERCEL_URL
-          logger.warn({ component: 'auth' }, 'NEXTAUTH_URL is localhost in production — sync-user may fail')
+        if (!internalSecret) {
+          logger.error({ component: 'auth' }, 'NEXTAUTH_SECRET not set — cannot sync Google OAuth user')
+          return true // Still allow sign-in, /api/auth/me will handle user creation as fallback
         }
-        const response = await fetch(`${baseUrl}/api/auth/sync-user`, {
+
+        // Build the sync-user URL — must be reachable from the server
+        // Priority: VERCEL_URL (auto-set) > NEXTAUTH_URL (manual) > localhost fallback
+        let baseUrl: string
+        if (process.env.VERCEL_URL) {
+          // On Vercel: use the auto-provided VERCEL_URL (always correct)
+          baseUrl = `https://${process.env.VERCEL_URL}`
+        } else if (env.NEXTAUTH_URL && env.NEXTAUTH_URL !== 'http://localhost:3000') {
+          // Custom NEXTAUTH_URL that's not the default localhost
+          baseUrl = env.NEXTAUTH_URL
+        } else {
+          // Local development
+          baseUrl = 'http://localhost:3000'
+        }
+
+        const syncUrl = `${baseUrl}/api/auth/sync-user`
+        logger.info({ component: 'auth', syncUrl, email: user.email }, 'Syncing Google OAuth user')
+
+        const response = await fetch(syncUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -58,12 +72,12 @@ export const authOptions: NextAuthOptions = {
         })
         const data = await response.json()
         if (!data.success) {
-          logger.warn({ component: 'auth', error: data.error }, 'Failed to sync user')
+          logger.warn({ component: 'auth', error: data.error, email: user.email }, 'Failed to sync Google user — /api/auth/me will create user as fallback')
         }
       } catch (error) {
-        logger.warn({ component: 'auth', err: error }, 'Error syncing user')
+        logger.warn({ component: 'auth', err: error, email: user.email }, 'Error syncing Google user — /api/auth/me will create user as fallback')
       }
-      return true
+      return true // Always allow sign-in — /api/auth/me handles fallback user creation
     },
   },
   pages: {

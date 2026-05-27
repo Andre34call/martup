@@ -50,15 +50,53 @@ export async function POST(request: NextRequest) {
     })
 
     if (existingUser) {
-      // If user exists but is NOT verified, allow re-registration (resend verification)
+      // If user exists but is NOT verified, allow re-registration
       if (!existingUser.isVerified) {
-        // Generate new verification token
-        const verificationToken = crypto.randomBytes(32).toString('hex')
-        const verificationExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
+        // Check if mock email provider — auto-verify instead of sending email
+        const emailProvider = (process.env.EMAIL_PROVIDER as string) || 'mock'
+        const isMockEmail = emailProvider === 'mock' || !process.env.RESEND_API_KEY
 
-        // Update password and verification token
+        // Update password
         const saltRounds = 12
         const hashedPassword = await bcrypt.hash(password, saltRounds)
+
+        if (isMockEmail) {
+          // Auto-verify: user can login immediately
+          await db.user.update({
+            where: { id: existingUser.id },
+            data: {
+              name,
+              password: hashedPassword,
+              phone: phone || existingUser.phone,
+              isVerified: true,
+              emailVerificationToken: null,
+              emailVerificationExpiry: null,
+            },
+          })
+
+          logger.info({ component: 'auth', email }, 'Unverified user auto-verified on re-registration')
+
+          // Generate auth token
+          const { generateAuthToken } = await import('@/lib/auth-middleware')
+          const token = generateAuthToken(existingUser.id)
+
+          const fullUser = await db.user.findUnique({
+            where: { id: existingUser.id },
+            include: { seller: true, wallet: true },
+          })
+          const { password: _, ...userWithoutPassword } = fullUser!
+
+          return NextResponse.json({
+            success: true,
+            user: userWithoutPassword,
+            token,
+            message: 'Akun Anda telah aktif! Silakan login.',
+          })
+        }
+
+        // Real email: generate verification token and send email
+        const verificationToken = crypto.randomBytes(32).toString('hex')
+        const verificationExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000)
 
         await db.user.update({
           where: { id: existingUser.id },
@@ -71,8 +109,7 @@ export async function POST(request: NextRequest) {
           },
         })
 
-        // Send verification email
-        const baseUrl = process.env.NEXTAUTH_URL || 'https://martup-seven.vercel.app'
+        const baseUrl = process.env.NEXTAUTH_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
         const verificationUrl = `${baseUrl}/api/auth/verify-email?token=${verificationToken}`
         const template = emailVerificationTemplate(name, verificationUrl)
         const emailResult = await sendEmail({
@@ -88,7 +125,7 @@ export async function POST(request: NextRequest) {
           requiresVerification: true,
           email,
           message: 'Email verifikasi telah dikirim ulang. Silakan cek email Anda.',
-          devVerifyUrl: emailResult.devUrl, // For mock provider
+          devVerifyUrl: emailResult.devUrl,
         })
       }
 
@@ -106,7 +143,14 @@ export async function POST(request: NextRequest) {
     const verificationToken = crypto.randomBytes(32).toString('hex')
     const verificationExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
 
-    // Create user - ALWAYS as buyer (NEVER admin), with verification token
+    // Check if email provider is mock (no real email sending)
+    // When mock, auto-verify users so they can login immediately
+    const emailProvider = (process.env.EMAIL_PROVIDER as string) || 'mock'
+    const isMockEmail = emailProvider === 'mock' || !process.env.RESEND_API_KEY
+    const shouldAutoVerify = isMockEmail
+
+    // Create user - ALWAYS as buyer (NEVER admin)
+    // If email provider is mock, auto-verify so user can login immediately
     const user = await db.user.create({
       data: {
         email,
@@ -114,9 +158,9 @@ export async function POST(request: NextRequest) {
         phone: phone || null,
         password: hashedPassword,
         role: 'buyer',
-        isVerified: false,
-        emailVerificationToken: verificationToken,
-        emailVerificationExpiry: verificationExpiry,
+        isVerified: shouldAutoVerify, // Auto-verify when no real email provider
+        emailVerificationToken: shouldAutoVerify ? null : verificationToken,
+        emailVerificationExpiry: shouldAutoVerify ? null : verificationExpiry,
         wallet: {
           create: {
             balance: 0,
@@ -126,8 +170,45 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    // Send verification email
-    const baseUrl = process.env.NEXTAUTH_URL || 'https://martup-seven.vercel.app'
+    // Create welcome notification
+    await db.notification.create({
+      data: {
+        userId: user.id,
+        title: 'Selamat Datang di MartUp! 🎉',
+        content: shouldAutoVerify
+          ? 'Terima kasih telah bergabung. Mulai belanja atau jual produk sekarang!'
+          : 'Terima kasih telah bergabung. Verifikasi email Anda untuk mulai belanja!',
+        type: 'system',
+        isRead: false,
+      },
+    })
+
+    if (shouldAutoVerify) {
+      // Auto-verified: no email sent, user can login immediately
+      logger.info({ component: 'auth', email, provider: emailProvider }, 'User auto-verified (mock email provider)')
+
+      // Generate auth token so user is automatically logged in
+      const { generateAuthToken } = await import('@/lib/auth-middleware')
+      const token = generateAuthToken(user.id)
+
+      // Fetch full user data for response
+      const fullUser = await db.user.findUnique({
+        where: { id: user.id },
+        include: { seller: true, wallet: true },
+      })
+
+      const { password: _, ...userWithoutPassword } = fullUser!
+
+      return NextResponse.json({
+        success: true,
+        user: userWithoutPassword,
+        token,
+        message: 'Registrasi berhasil! Akun Anda telah aktif.',
+      })
+    }
+
+    // Real email provider: send verification email
+    const baseUrl = process.env.NEXTAUTH_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
     const verificationUrl = `${baseUrl}/api/auth/verify-email?token=${verificationToken}`
     const template = emailVerificationTemplate(name, verificationUrl)
     const emailResult = await sendEmail({
@@ -137,17 +218,6 @@ export async function POST(request: NextRequest) {
     })
 
     logger.info({ component: 'auth', email, emailResult }, 'Verification email sent')
-
-    // Create welcome notification (they'll see it after verifying)
-    await db.notification.create({
-      data: {
-        userId: user.id,
-        title: 'Selamat Datang di MartUp! 🎉',
-        content: 'Terima kasih telah bergabung. Verifikasi email Anda untuk mulai belanja!',
-        type: 'system',
-        isRead: false,
-      },
-    })
 
     // Return success WITHOUT token — user must verify email first
     return NextResponse.json({

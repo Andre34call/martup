@@ -163,18 +163,32 @@ export async function POST(request: NextRequest) {
       message: 'Login berhasil',
     })
   } catch (error: any) {
-    logger.error({ err: error }, 'Login error')
+    logger.error({ err: error, code: error?.code }, 'Login error')
     
     // Provide more specific error messages for common issues
-    const errorMessage = error?.code === 'P1001' 
-      ? 'Database tidak dapat diakses. Pastikan env vars DATABASE_URL sudah dikonfigurasi di Vercel.'
-      : error?.code === 'P1002'
-      ? 'Database connection timeout. Coba lagi dalam beberapa detik.'
-      : 'Terjadi kesalahan server. Coba lagi nanti.'
+    let errorMessage: string
+    let statusCode = 500
+    
+    if (error?.code === 'P1001') {
+      errorMessage = 'Database tidak dapat diakses. Pastikan SUPABASE_DATABASE_URL sudah dikonfigurasi di Vercel Dashboard → Settings → Environment Variables.'
+      statusCode = 503
+    } else if (error?.code === 'P1002') {
+      errorMessage = 'Database connection timeout. Coba lagi dalam beberapa detik.'
+      statusCode = 503
+    } else if (error?.code === 'ENOTFOUND') {
+      errorMessage = 'Database host tidak ditemukan. Pastikan SUPABASE_DATABASE_URL benar.'
+      statusCode = 503
+    } else {
+      errorMessage = 'Terjadi kesalahan server. Coba lagi nanti.'
+    }
     
     return NextResponse.json(
-      { success: false, error: errorMessage, ...(process.env.NODE_ENV === 'development' ? { debug: error?.message, code: error?.code } : {}) },
-      { status: 500 }
+      { 
+        success: false, 
+        error: errorMessage, 
+        ...(process.env.NODE_ENV === 'development' ? { debug: error?.message, code: error?.code } : {}) 
+      },
+      { status: statusCode }
     )
   }
 }

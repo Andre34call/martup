@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
@@ -7,7 +7,7 @@ import { logger } from '@/lib/logger'
 // GET /api/auth/me - Get current authenticated user from NextAuth session
 // This is called client-side after Google OAuth to get user data
 // If the user doesn't exist in DB yet (sync-user failed), create them here
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
 
@@ -59,6 +59,8 @@ export async function GET() {
           isRead: false,
         },
       })
+
+      logger.info({ component: 'auth', email: session.user.email }, 'User created via /api/auth/me fallback')
     }
 
     // Check if user is blocked
@@ -76,10 +78,16 @@ export async function GET() {
       success: true,
       user: userWithoutPassword,
     })
-  } catch (error) {
-    logger.error({ err: error }, 'Get current user error')
+  } catch (error: any) {
+    logger.error({ err: error, code: error?.code }, 'Get current user error')
+    
+    // Provide specific error for database connection issues
+    const errorMessage = error?.code === 'P1001' || error?.code === 'P1002'
+      ? 'Database tidak dapat diakses. Pastikan SUPABASE_DATABASE_URL sudah dikonfigurasi.'
+      : 'Internal server error'
+    
     return NextResponse.json(
-      { success: false, error: 'Internal server error' },
+      { success: false, error: errorMessage },
       { status: 500 }
     )
   }

@@ -187,7 +187,7 @@ export async function middleware(request: NextRequest) {
 
   // ===== Admin Route Protection =====
   if (pathname.startsWith('/api/admin/')) {
-    const isSetupRoute = pathname === '/api/admin/setup'
+    const isSetupRoute = pathname === '/api/admin/setup' || pathname === '/api/admin/init'
     const hasAuth = request.headers.get('authorization') ||
       request.headers.get('cookie')?.includes('next-auth.session-token')
 
