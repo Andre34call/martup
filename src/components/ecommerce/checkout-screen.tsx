@@ -303,7 +303,7 @@ export function CheckoutScreen() {
     try {
       const res = await fetch('/api/shipping/calculate', {
         method: 'POST',
-        headers: getAuthHeaders(),
+        headers: getAuthHeaders(true),
         body: JSON.stringify({
           originCity: originCity || 'Jakarta', // Use seller's store city, fallback to Jakarta
           destinationCity,

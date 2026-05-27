@@ -1037,7 +1037,6 @@ export function AddressScreen() {
         showToast("Alamat berhasil diperbarui!", "success")
       } else {
         await addAddress({
-          id: `a${Date.now()}`,
           label: formLabel,
           recipient: formRecipient,
           phone: formPhone,

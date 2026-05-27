@@ -45,18 +45,18 @@ function checkProxyRateLimit(key: string, maxRequests: number, windowMs: number)
   return { allowed: true, remaining: maxRequests - entry.count, resetAt: entry.expiresAt }
 }
 
-// Cleanup expired rate limit entries periodically
-if (typeof globalThis !== 'undefined') {
-  const cleanup = () => {
-    const now = Date.now()
-    for (const [key, entry] of rateLimitStore.entries()) {
-      if (now > entry.expiresAt) rateLimitStore.delete(key)
-    }
+// Lazy cleanup: remove expired rate limit entries on each request
+function cleanupRateLimitStore() {
+  const now = Date.now()
+  for (const [key, entry] of rateLimitStore.entries()) {
+    if (now > entry.expiresAt) rateLimitStore.delete(key)
   }
-  setInterval(cleanup, 5 * 60 * 1000)
 }
 
 export async function proxy(request: NextRequest) {
+  // Lazy cleanup on each request instead of unreliable setInterval in Edge
+  cleanupRateLimitStore()
+
   const { pathname } = request.nextUrl
 
   // Generate a simple request ID (Edge-compatible)

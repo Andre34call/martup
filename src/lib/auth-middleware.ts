@@ -172,7 +172,8 @@ export async function verifyAuth(request: NextRequest): Promise<AuthResult | Aut
   }
 
   // Method 2: Check HMAC-signed bearer token (for email/password login)
-  const bearerToken = request.headers.get('authorization')?.replace('Bearer ', '')
+  const authHeader = request.headers.get('authorization')
+  const bearerToken = authHeader?.replace(/^bearer\s+/i, '')
   if (bearerToken) {
     const userId = verifyAuthToken(bearerToken)
     if (userId) {

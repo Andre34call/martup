@@ -5,7 +5,7 @@ import { env } from '@/lib/env'
 // Double-submit cookie pattern for CSRF protection
 // Uses Web Crypto API (Edge Runtime compatible)
 // Works by:
-// 1. Setting a CSRF token as a cookie (SameSite=Strict, NOT httpOnly — JS must read it)
+// 1. Setting a CSRF token as a cookie (SameSite=Lax, NOT httpOnly — JS must read it)
 // 2. Requiring the same token in a custom header (X-CSRF-Token) for mutating requests
 // 3. Since browsers don't send custom headers in cross-origin requests, this prevents CSRF
 // 4. The cookie is NOT httpOnly because the double-submit pattern requires JS to read it

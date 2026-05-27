@@ -1,7 +1,7 @@
 'use client'
 
 import { AnimatePresence, motion } from 'framer-motion'
-import { Check, X, Info } from 'lucide-react'
+import { Check, X, Info, AlertTriangle } from 'lucide-react'
 import { useAppStore } from '@/lib/store'
 import { BottomNav, AdminBottomNav, SellerBottomNav } from '@/components/ecommerce/shared'
 import { ErrorBoundary } from '@/components/error-boundary'
@@ -89,11 +89,13 @@ function GlobalToast() {
           <div className={`flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-lg border ${
             toast.type === 'success' ? 'bg-emerald-600 text-white border-emerald-500' :
             toast.type === 'error' ? 'bg-red-600 text-white border-red-500' :
+            toast.type === 'warning' ? 'bg-amber-500 text-white border-amber-400' :
             'bg-card text-foreground border-border'
           }`}>
             {toast.type === 'success' && <Check className="w-5 h-5 flex-shrink-0" />}
             {toast.type === 'error' && <X className="w-5 h-5 flex-shrink-0" />}
             {toast.type === 'info' && <Info className="w-5 h-5 flex-shrink-0" />}
+            {toast.type === 'warning' && <AlertTriangle className="w-5 h-5 flex-shrink-0" />}
             <span className="text-sm font-medium flex-1">{toast.message}</span>
             <button onClick={hideToast} className="ml-2 opacity-70 hover:opacity-100">
               <X className="w-4 h-4" />

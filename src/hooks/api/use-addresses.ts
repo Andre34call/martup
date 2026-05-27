@@ -5,13 +5,19 @@ import { apiClient } from '@/lib/api-client'
 import type { Address } from '@/lib/types'
 
 // ==================== Types ====================
+// Backend returns: { success: boolean, data: Address | Address[] }
 
 interface AddressesResponse {
-  addresses: Address[]
+  success: boolean
+  data: Address[]
+}
+
+interface AddressResponse {
+  success: boolean
+  data: Address
 }
 
 interface AddAddressData {
-  userId: string
   label: string
   recipient: string
   phone: string
@@ -38,7 +44,10 @@ export const addressKeys = {
 export function useAddresses(userId: string | null) {
   return useQuery({
     queryKey: addressKeys.detail(userId || ''),
-    queryFn: () => apiClient.get<AddressesResponse>('/api/addresses', { userId: userId || undefined }),
+    queryFn: async () => {
+      const res = await apiClient.get<AddressesResponse>('/api/addresses', { userId: userId || undefined })
+      return res.data
+    },
     enabled: !!userId,
   })
 }
@@ -47,10 +56,12 @@ export function useAddAddress() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (data: AddAddressData) =>
-      apiClient.post<{ address: Address }>('/api/addresses', data),
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: addressKeys.detail(variables.userId) })
+    mutationFn: async (data: AddAddressData) => {
+      const res = await apiClient.post<AddressResponse>('/api/addresses', data)
+      return res.data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: addressKeys.all })
     },
   })
 }
@@ -59,8 +70,10 @@ export function useUpdateAddress() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: ({ id, ...data }: UpdateAddressData) =>
-      apiClient.put<{ address: Address }>(`/api/addresses/${id}`, data),
+    mutationFn: async ({ id, ...data }: UpdateAddressData) => {
+      const res = await apiClient.put<AddressResponse>(`/api/addresses/${id}`, data)
+      return res.data
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: addressKeys.all })
     },
@@ -71,8 +84,9 @@ export function useDeleteAddress() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (id: string) =>
-      apiClient.del<{ success: boolean }>(`/api/addresses/${id}`),
+    mutationFn: async (id: string) => {
+      await apiClient.del<{ success: boolean }>(`/api/addresses/${id}`)
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: addressKeys.all })
     },

@@ -38,8 +38,8 @@ export interface UISlice {
   isLoading: boolean
   showSplash: boolean
   setShowSplash: (v: boolean) => void
-  toast: { message: string; type: 'success' | 'error' | 'info' } | null
-  showToast: (message: string, type?: 'success' | 'error' | 'info') => void
+  toast: { message: string; type: 'success' | 'error' | 'info' | 'warning' } | null
+  showToast: (message: string, type?: 'success' | 'error' | 'info' | 'warning') => void
   hideToast: () => void
 }
 
@@ -83,10 +83,10 @@ export interface OrderSlice {
 export interface AddressSlice {
   addresses: Address[]
   selectedAddressId: string | null
-  addAddress: (address: Address) => void
-  updateAddress: (address: Address) => void
-  deleteAddress: (id: string) => void
-  setDefaultAddress: (id: string) => void
+  addAddress: (address: Omit<Address, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>
+  updateAddress: (address: Address) => Promise<void>
+  deleteAddress: (id: string) => Promise<void>
+  setDefaultAddress: (id: string) => Promise<void>
   fetchAddresses: (userId: string) => Promise<void>
 }
 

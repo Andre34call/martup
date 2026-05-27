@@ -75,9 +75,10 @@ export async function PUT(
     // Validate phone format if provided (Indonesian phone)
     if (phone) {
       const sanitizedPhone = sanitizeInput(phone)
-      if (sanitizedPhone && !/^(\+62|62|0)[0-9]{8,13}$/.test(sanitizedPhone.replace(/[\s-]/g, ''))) {
+      const phoneDigits = sanitizedPhone.replace(/[^\d+]/g, '')
+      if (sanitizedPhone && !/^(0\d{9,14}|\+62\d{9,14})$/.test(phoneDigits)) {
         return NextResponse.json(
-          { success: false, error: 'Format nomor telepon tidak valid' },
+          { success: false, error: 'Format nomor telepon tidak valid (gunakan 08xx atau +628xx, 10-15 digit)' },
           { status: 400 }
         )
       }
