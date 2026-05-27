@@ -3,6 +3,21 @@ import { logger } from '@/lib/logger'
 import { env } from '@/lib/env'
 import GoogleProvider from 'next-auth/providers/google'
 
+// ==================== NEXTAUTH_URL AUTO-FIX ====================
+// NextAuth v4 reads NEXTAUTH_URL from process.env for OAuth callbacks.
+// On Vercel, if NEXTAUTH_URL is not set (or set to localhost), 
+// we must override it with VERCEL_URL so callbacks work correctly.
+// This runs at module load time, before NextAuth initializes.
+if (process.env.VERCEL) {
+  const correctUrl = `https://${process.env.VERCEL_URL}`
+  const currentUrl = process.env.NEXTAUTH_URL
+  
+  if (!currentUrl || currentUrl.includes('localhost') || currentUrl.includes('127.0.0.1')) {
+    process.env.NEXTAUTH_URL = correctUrl
+    console.log(`[AUTH FIX] NEXTAUTH_URL auto-corrected: ${currentUrl || '(not set)'} → ${correctUrl}`)
+  }
+}
+
 export const authOptions: NextAuthOptions = {
   providers: [
     GoogleProvider({
