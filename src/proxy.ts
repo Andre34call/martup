@@ -130,26 +130,24 @@ export async function proxy(request: NextRequest) {
     response.headers.set('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload')
   }
 
-  // ===== CSRF Protection (API routes only) =====
+  // ===== CSRF Protection =====
+  // Always issue/refresh CSRF token on non-API GET requests (page loads).
+  // This ensures the client always has a fresh token for subsequent mutating requests.
   if (!pathname.startsWith('/api/')) {
     if (request.method === 'GET') {
-      const existingCsrfCookie = request.cookies.get('csrf-token')
-      if (!existingCsrfCookie) {
-        const { response: updatedResponse } = await issueCsrfToken(response)
-        return updatedResponse
-      }
-    }
-    return response
-  }
-
-  // For API GET requests: issue a new CSRF token if one doesn't exist
-  if (request.method === 'GET') {
-    const existingCsrfCookie = request.cookies.get('csrf-token')
-    if (!existingCsrfCookie) {
       const { response: updatedResponse } = await issueCsrfToken(response)
       return updatedResponse
     }
     return response
+  }
+
+  // For API GET requests: always refresh the CSRF cookie to keep it fresh.
+  // Previously only issued if missing, but this caused issues when the token expired
+  // but the cookie was still present (stale token). Always refreshing ensures
+  // the client always has a valid token for subsequent mutating requests.
+  if (request.method === 'GET') {
+    const { response: updatedResponse } = await issueCsrfToken(response)
+    return updatedResponse
   }
 
   // For API mutating requests (POST, PUT, DELETE, PATCH): validate CSRF
@@ -166,7 +164,7 @@ export async function proxy(request: NextRequest) {
     }))
 
     const errorResponse = NextResponse.json(
-      { success: false, error: 'CSRF validation failed. Please refresh and try again.' },
+      { success: false, error: 'Validasi CSRF gagal. Silakan refresh halaman dan coba lagi.' },
       { status: 403 }
     )
     const { response: securedResponse } = await issueCsrfToken(errorResponse)

@@ -30,6 +30,7 @@ const CSRF_EXEMPT_PATHS = new Set([
   '/api/health-check',          // Diagnostic endpoint
   '/api/health',                // Health check
   '/api/ping',                  // Health check
+  '/api/csrf-token',            // CSRF token issuance (must be exempt — it PROVIDES the token)
 ])
 
 /**
@@ -102,6 +103,11 @@ function requiresCsrfCheck(request: NextRequest): boolean {
 /**
  * Validate CSRF token from request.
  * Checks the X-CSRF-Token header against the csrf-token cookie.
+ *
+ * FIX: Next.js URL-encodes cookie values when setting them (e.g., '=' → '%3D').
+ * When the client reads from document.cookie, it may get the URL-encoded value.
+ * But request.cookies.get() URL-decodes the value. This causes a mismatch.
+ * Solution: Also URL-decode the header token before comparison as a safety net.
  */
 export async function validateCsrfRequest(request: NextRequest): Promise<{ valid: boolean; reason?: string }> {
   if (!requiresCsrfCheck(request)) {
@@ -109,7 +115,7 @@ export async function validateCsrfRequest(request: NextRequest): Promise<{ valid
   }
 
   const cookieToken = request.cookies.get(CSRF_COOKIE_NAME)?.value
-  const headerToken = request.headers.get(CSRF_HEADER_NAME)
+  let headerToken = request.headers.get(CSRF_HEADER_NAME)
 
   if (!cookieToken) {
     return { valid: false, reason: 'Missing CSRF cookie' }
@@ -117,6 +123,18 @@ export async function validateCsrfRequest(request: NextRequest): Promise<{ valid
 
   if (!headerToken) {
     return { valid: false, reason: 'Missing CSRF header' }
+  }
+
+  // Safety net: URL-decode the header token in case the client sent a URL-encoded value.
+  // This handles the case where document.cookie returns URL-encoded values
+  // and the client didn't (or couldn't) decode them before sending as header.
+  try {
+    const decoded = decodeURIComponent(headerToken)
+    if (decoded !== headerToken) {
+      headerToken = decoded
+    }
+  } catch {
+    // If decoding fails, use the raw value
   }
 
   // Both tokens must be valid independently

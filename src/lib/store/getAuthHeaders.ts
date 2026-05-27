@@ -12,7 +12,7 @@ export function getAuthHeaders(includeCsrf: boolean = false): Record<string, str
     }
     // Add CSRF token for mutating requests (POST, PUT, DELETE, PATCH)
     if (includeCsrf) {
-      const csrfToken = getCsrfToken()
+      const csrfToken = getCsrfToken() // Already URL-decoded by getCsrfToken()
       if (csrfToken) {
         headers['x-csrf-token'] = csrfToken
       }

@@ -3,28 +3,45 @@ import { logger } from '@/lib/logger'
 import type { AddressSlice, AppStore } from './types'
 import type { Address } from '../types'
 import { getAuthHeaders } from './getAuthHeaders'
-import { getCsrfToken } from '@/lib/csrf-client'
+import { ensureCsrfToken, fetchFreshCsrfToken } from '@/lib/csrf-client'
 
 /**
- * Fetch with CSRF retry — if the first request fails with 403 CSRF error,
- * wait for the fresh CSRF cookie from the error response and retry once.
+ * Fetch with CSRF retry — ensures a CSRF token is available before making
+ * the request, and retries with a fresh token if CSRF validation fails.
  */
 async function fetchWithCsrfRetry(url: string, options: RequestInit): Promise<Response> {
+  const isMutating = ['POST', 'PUT', 'DELETE', 'PATCH'].includes(
+    (options.method || 'GET').toUpperCase()
+  )
+
+  // For mutating requests, ensure we have a CSRF token before making the request
+  if (isMutating) {
+    const csrfToken = await ensureCsrfToken()
+    if (csrfToken) {
+      const existingHeaders = options.headers as Record<string, string> || {}
+      options = {
+        ...options,
+        headers: {
+          ...existingHeaders,
+          'x-csrf-token': csrfToken,
+        },
+      }
+    }
+  }
+
   const response = await fetch(url, options)
 
   // If CSRF validation failed, the server returns 403 with a fresh CSRF cookie
-  if (response.status === 403) {
+  if (response.status === 403 && isMutating) {
     const data = await response.clone().json().catch(() => null)
-    if (data?.error?.includes('CSRF')) {
-      // Wait for the new CSRF cookie to be available
-      await new Promise(resolve => setTimeout(resolve, 200))
-
-      // Re-read the fresh CSRF token and retry
-      const freshCsrfToken = getCsrfToken()
-      if (freshCsrfToken) {
+    if (data?.error?.includes('CSRF') || data?.error?.includes('csrf')) {
+      // Fetch a fresh CSRF token from the dedicated endpoint
+      const freshToken = await fetchFreshCsrfToken()
+      if (freshToken) {
+        const existingHeaders = options.headers as Record<string, string> || {}
         const newHeaders = {
-          ...options.headers as Record<string, string>,
-          'x-csrf-token': freshCsrfToken,
+          ...existingHeaders,
+          'x-csrf-token': freshToken,
         }
         return fetch(url, { ...options, headers: newHeaders })
       }
