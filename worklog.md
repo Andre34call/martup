@@ -244,3 +244,47 @@ Stage Summary:
 - Super admin account is protected from modification/deletion by other admins
 - Promoted users receive system notifications
 - Version: 1.3.0-admin-enhance
+
+---
+Task ID: 9
+Agent: Main Agent
+Task: Build Division Workflow System with auto-routing
+
+Work Log:
+- Created WorkItem Prisma model with: type, title, description, status, priority, divisionId, assigneeId, refType, refId, metadata, resolution, timestamps
+- Added Division.workItems and User.workAssignments relations
+- Ran prisma db push successfully
+- Created /src/lib/workflow.ts with:
+  - WORK_TYPE_TO_DIVISION mapping (complaint→cs, withdrawal→finance, deposit→finance, product_report→tech, etc.)
+  - WORK_TYPE_DISPLAY, WORK_PRIORITY_DISPLAY, WORK_STATUS_DISPLAY display configs
+  - VALID_STATUS_TRANSITIONS state machine
+  - createWorkItemFromEntity() helper for auto-creating work items from other API routes
+- Created /src/app/api/admin/work-items/route.ts with full CRUD:
+  - GET: List with filters (divisionId, status, type, priority, assigneeId), pagination, counts
+  - POST: Create with auto-routing to division based on type, assignee notification
+  - PATCH: Update with status transition validation, resolvedAt tracking
+  - DELETE: Admin-only deletion
+- Created /src/components/ecommerce/admin-workflow-screen.tsx (978 lines):
+  - Overview: Division cards with pending work counts, summary stats
+  - Division Queue: Filtered work items per division with status tabs
+  - Work Item Detail: Full detail with context-sensitive action buttons
+  - Create Work Item dialog with auto-routing based on type
+- Integrated auto-routing into existing APIs:
+  - /api/wallet/withdraw → creates Finance division work item on withdrawal request
+  - /api/wallet/deposit → creates Finance division work item on deposit request
+  - /api/admin/products/[id]/approve → creates Tech division work item when product blocked
+  - /api/admin/complaints → creates CS division work item when complaint opened/processing
+- Fixed product approve API: added verifyAdmin() auth check (was missing!)
+- Added admin-workflow screen to page.tsx routing
+- Added Workflow menu item in admin dashboard
+- Added WorkItem types and display configs to types.ts
+- Added 'admin-workflow' to ScreenName type
+- Lint passes, dev server compiles successfully
+- Pushed to GitHub (commit 934ab6f)
+
+Stage Summary:
+- Division workflow system fully operational with auto-routing
+- 8 work types mapped to 6 divisions automatically
+- Status transitions enforced (open→in_progress→resolved/closed/escalated)
+- 4 existing API routes now auto-create work items
+- Product approve API now has proper auth (was a security bug)
