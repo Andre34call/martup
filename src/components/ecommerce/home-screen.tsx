@@ -203,6 +203,11 @@ export function HomeScreen() {
                     src={homeBanners[currentBanner].image}
                     alt={homeBanners[currentBanner].title}
                     className="w-full h-full object-cover"
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement
+                      target.style.display = 'none'
+                    }}
+                    loading="lazy"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
                   <div className="absolute bottom-4 left-4 right-4">
@@ -311,19 +316,27 @@ export function HomeScreen() {
               >
                 {/* Image */}
                 <div className="relative aspect-square overflow-hidden">
-                  {product.images && product.images.length > 0 ? (
+                  {product.images && product.images.length > 0 && !product.images[0].startsWith('blob:') ? (
                     <img
                       src={product.images[0]}
                       alt={product.name}
                       className="w-full h-full object-cover"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement
+                        target.style.display = 'none'
+                        const fallback = target.nextElementSibling as HTMLDivElement
+                        if (fallback) fallback.style.display = 'flex'
+                      }}
+                      loading="lazy"
                     />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-orange-100 dark:bg-orange-900/30">
-                      <span className="text-xl font-bold text-orange-500">
-                        {product.name.charAt(0)}
-                      </span>
-                    </div>
-                  )}
+                  ) : null}
+                  <div
+                    className={`w-full h-full flex items-center justify-center bg-orange-100 dark:bg-orange-900/30 ${product.images && product.images.length > 0 && !product.images[0]?.startsWith('blob:') ? 'hidden' : ''}`}
+                  >
+                    <span className="text-xl font-bold text-orange-500">
+                      {product.name.charAt(0)}
+                    </span>
+                  </div>
                   {/* Discount badge */}
                   {product.discountPrice && (
                     <div className="absolute top-1 left-1 bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md">

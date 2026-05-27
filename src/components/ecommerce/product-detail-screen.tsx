@@ -98,6 +98,11 @@ function ImageGallery({ images, videoUrl, isFlashSale }: { images: string[]; vid
                   src={mediaItems[activeIndex].url}
                   alt={`Product image ${activeIndex + 1}`}
                   className="w-full h-full object-cover"
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement
+                    target.style.display = 'none'
+                  }}
+                  loading="lazy"
                 />
               )
             ) : (
