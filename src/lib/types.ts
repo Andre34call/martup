@@ -380,6 +380,7 @@ export const ROLE_DISPLAY: Record<string, { label: string; color: string; icon: 
   buyer: { label: 'Buyer', color: 'emerald', icon: '🛒' },
   seller: { label: 'Seller', color: 'orange', icon: '🏪' },
   admin: { label: 'Admin', color: 'purple', icon: '👑' },
+  superadmin: { label: 'Super Admin', color: 'purple', icon: '👑' },
   finance: { label: 'Finance', color: 'emerald', icon: '💰' },
   pr: { label: 'PR & Komunikasi', color: 'blue', icon: '📢' },
   tech: { label: 'Tech & Bug', color: 'purple', icon: '🐛' },

@@ -1,9 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
+import { verifyAdmin, verifySuperAdmin, authErrorResponse } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
 
 import { logger } from '@/lib/logger'
+
+// Super admin email — the only account that can promote users to admin/division roles
+const SUPER_ADMIN_EMAIL = 'kholisakm@gmail.com'
+
+// Division role mapping — which role corresponds to which division slug
+const DIVISION_SLUG_ROLE_MAP: Record<string, string> = {
+  finance: 'finance',
+  pr: 'pr',
+  tech: 'tech',
+  cs: 'cs',
+  marketing: 'marketing',
+  operations: 'operations',
+  legal: 'legal',
+  hr: 'hr',
+}
+
 // GET /api/admin/users - Fetch all users with seller info, order count, total spent
 export async function GET(request: NextRequest) {
   const authResult = await verifyAdmin(request)
@@ -61,7 +77,11 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    return NextResponse.json(serializeDecimal({ success: true, data: mapped }))
+    return NextResponse.json(serializeDecimal({
+      success: true,
+      data: mapped,
+      isSuperAdmin: authResult.user.email === SUPER_ADMIN_EMAIL,
+    }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     logger.error({ err: error }, 'Admin users GET error')
@@ -73,6 +93,7 @@ export async function GET(request: NextRequest) {
 }
 
 // PUT /api/admin/users - Update user (verify, block, unblock, change role)
+// Role changes (promote to admin/division) require super admin
 export async function PUT(request: NextRequest) {
   const authResult = await verifyAdmin(request)
   if (!authResult.success) return authErrorResponse(authResult)
@@ -85,6 +106,26 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: 'userId is required' },
         { status: 400 }
+      )
+    }
+
+    // Look up target user to check if they are super admin
+    const targetUser = await db.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, role: true },
+    })
+    if (!targetUser) {
+      return NextResponse.json(
+        { success: false, error: 'User tidak ditemukan' },
+        { status: 404 }
+      )
+    }
+
+    // Protect super admin from being modified by anyone
+    if (targetUser.email === SUPER_ADMIN_EMAIL && authResult.user.email !== SUPER_ADMIN_EMAIL) {
+      return NextResponse.json(
+        { success: false, error: 'Super Admin tidak dapat diubah oleh admin lain' },
+        { status: 403 }
       )
     }
 
@@ -112,6 +153,25 @@ export async function PUT(request: NextRequest) {
           { status: 400 }
         )
       }
+
+      // SECURITY: Only super admin can promote to admin or division roles
+      const elevatedRoles = ['admin', 'finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr']
+      const targetCurrentRole = targetUser.role
+      const isPromotingToElevated = elevatedRoles.includes(roleValue) && !elevatedRoles.includes(targetCurrentRole)
+
+      if (isPromotingToElevated && authResult.user.email !== SUPER_ADMIN_EMAIL) {
+        return NextResponse.json(
+          { success: false, error: 'Hanya Super Admin yang dapat mempromosikan user ke role admin atau divisi' },
+          { status: 403 }
+        )
+      }
+
+      // SECURITY: Nobody can promote to super admin (role='admin' + super admin email)
+      if (roleValue === 'admin' && targetUser.email !== SUPER_ADMIN_EMAIL) {
+        // Allow super admin to promote to admin role, but this is NOT super admin
+        // Super admin is identified by email, not just role
+      }
+
       // Prevent admin from removing their own admin role
       if (roleValue !== 'admin' && userId === authResult.user.id) {
         return NextResponse.json(
@@ -159,6 +219,135 @@ export async function PUT(request: NextRequest) {
   }
 }
 
+// PATCH /api/admin/users/promote - Super admin promotes user to division admin
+// This is the dedicated endpoint for promoting users to division-based roles
+export async function PATCH(request: NextRequest) {
+  const authResult = await verifySuperAdmin(request)
+  if (!authResult.success) return authErrorResponse(authResult)
+
+  try {
+    const body = await request.json()
+    const { userId, divisionId } = body
+
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: 'userId is required' },
+        { status: 400 }
+      )
+    }
+
+    // Look up target user
+    const targetUser = await db.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, role: true, name: true },
+    })
+    if (!targetUser) {
+      return NextResponse.json(
+        { success: false, error: 'User tidak ditemukan' },
+        { status: 404 }
+      )
+    }
+
+    // Cannot promote super admin
+    if (targetUser.email === SUPER_ADMIN_EMAIL) {
+      return NextResponse.json(
+        { success: false, error: 'Super Admin tidak dapat diubah' },
+        { status: 403 }
+      )
+    }
+
+    let newRole = ''
+    let newDivisionId: string | null = divisionId || null
+
+    if (divisionId) {
+      // Look up the division to determine the role
+      const division = await db.division.findUnique({
+        where: { id: divisionId },
+        select: { id: true, slug: true, name: true },
+      })
+      if (!division) {
+        return NextResponse.json(
+          { success: false, error: 'Divisi tidak ditemukan' },
+          { status: 404 }
+        )
+      }
+
+      // Map division slug to role
+      newRole = DIVISION_SLUG_ROLE_MAP[division.slug] || division.slug
+      newDivisionId = division.id
+    } else {
+      // No division specified — promote to regular admin
+      newRole = 'admin'
+      newDivisionId = null
+    }
+
+    // Validate the role
+    const validRoles = ['admin', 'finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr']
+    if (!validRoles.includes(newRole)) {
+      return NextResponse.json(
+        { success: false, error: `Role "${newRole}" tidak valid untuk promosi` },
+        { status: 400 }
+      )
+    }
+
+    const updateData: Record<string, unknown> = {
+      role: newRole,
+      divisionId: newDivisionId,
+      isVerified: true, // Auto-verify promoted users
+    }
+
+    const user = await db.user.update({
+      where: { id: userId },
+      data: updateData,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        role: true,
+        isVerified: true,
+        isActive: true,
+        avatar: true,
+        divisionId: true,
+        loyaltyPoints: true,
+        coins: true,
+        referralCode: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    })
+
+    // Create notification for the promoted user
+    const divisionName = newDivisionId
+      ? (await db.division.findUnique({ where: { id: newDivisionId }, select: { name: true } }))?.name || newRole
+      : 'Admin'
+
+    await db.notification.create({
+      data: {
+        userId: userId,
+        title: 'Anda Dipromosikan',
+        content: `Selamat! Anda telah dipromosikan menjadi ${divisionName}. Silakan login kembali untuk mengakses panel baru Anda.`,
+        type: 'system',
+      },
+    })
+
+    logger.info({ promotedUserId: userId, newRole, divisionId: newDivisionId, promotedBy: authResult.user.id }, 'User promoted by super admin')
+
+    return NextResponse.json(serializeDecimal({
+      success: true,
+      data: user,
+      message: `${targetUser.name} telah dipromosikan ke ${divisionName}`,
+    }))
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Internal server error'
+    logger.error({ err: error }, 'Admin users PATCH (promote) error')
+    return NextResponse.json(
+      { success: false, error: message },
+      { status: 500 }
+    )
+  }
+}
+
 // DELETE /api/admin/users - Soft delete user (set isActive = false)
 export async function DELETE(request: NextRequest) {
   const authResult = await verifyAdmin(request)
@@ -184,6 +373,18 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: 'userId is required' },
         { status: 400 }
+      )
+    }
+
+    // Protect super admin from deletion
+    const targetUser = await db.user.findUnique({
+      where: { id: userId },
+      select: { email: true },
+    })
+    if (targetUser?.email === SUPER_ADMIN_EMAIL) {
+      return NextResponse.json(
+        { success: false, error: 'Super Admin tidak dapat dihapus' },
+        { status: 403 }
       )
     }
 

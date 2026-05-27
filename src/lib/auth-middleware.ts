@@ -207,6 +207,25 @@ export async function verifyAdmin(request: NextRequest): Promise<AuthResult | Au
 }
 
 /**
+ * Verify that the request comes from a super admin user.
+ * Super admin is the primary admin identified by email (kholisakm@gmail.com).
+ * Only super admin can promote users to division admins or remove admin roles.
+ */
+export async function verifySuperAdmin(request: NextRequest): Promise<AuthResult | AuthError> {
+  const authResult = await verifyAuth(request)
+
+  if (!authResult.success) return authResult
+
+  // Super admin must have role 'admin' AND specific email
+  const SUPER_ADMIN_EMAIL = 'kholisakm@gmail.com'
+  if (authResult.user.role !== 'admin' || authResult.user.email !== SUPER_ADMIN_EMAIL) {
+    return { success: false, error: 'Forbidden - Super Admin access required', status: 403 }
+  }
+
+  return authResult
+}
+
+/**
  * Verify that the request comes from an admin or staff user.
  */
 export async function verifyStaff(request: NextRequest): Promise<AuthResult | AuthError> {

@@ -101,7 +101,7 @@ export async function PUT(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { productId, status, isFeatured, name, description, price, discountPrice, images, categoryId, condition, weight } = body
+    const { productId, status, isFeatured, name, description, price, discountPrice, images, videoUrl, categoryId, condition, weight, stock, tags } = body
 
     if (!productId) {
       return NextResponse.json(
@@ -155,6 +155,17 @@ export async function PUT(request: NextRequest) {
     if (categoryId !== undefined) updateData.categoryId = categoryId
     if (condition !== undefined) updateData.condition = condition
     if (weight !== undefined) updateData.weight = Number(weight) || existing.weight
+    if (stock !== undefined) {
+      const stockNum = Number(stock)
+      if (!isNaN(stockNum) && stockNum >= 0) updateData.stock = stockNum
+    }
+    if (videoUrl !== undefined) updateData.videoUrl = videoUrl || null
+    if (tags !== undefined) {
+      const validTags = Array.isArray(tags)
+        ? tags.filter((t: string) => typeof t === 'string' && t.trim().length > 0)
+        : null
+      updateData.tags = validTags ? JSON.stringify(validTags) : existing.tags
+    }
 
     const product = await db.product.update({
       where: { id: productId },
@@ -162,7 +173,7 @@ export async function PUT(request: NextRequest) {
     })
 
     // Create notification to seller about product edit if content was changed
-    const contentFields = ['name', 'description', 'price', 'images']
+    const contentFields = ['name', 'description', 'price', 'images', 'videoUrl', 'categoryId', 'condition', 'weight', 'stock', 'tags']
     const hasContentChange = contentFields.some(f => body[f] !== undefined)
     if (hasContentChange && existing.sellerId) {
       const seller = await db.seller.findUnique({
