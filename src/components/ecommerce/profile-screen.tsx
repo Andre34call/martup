@@ -65,19 +65,31 @@ function MenuItem({
 
 // ==================== PROFILE SCREEN ====================
 export function ProfileScreen() {
-  const { currentUser, userRole, switchRole, orders, navigate, logout, showToast, avatarUrl, updateAvatar, walletBalance, walletCoins, vouchers } = useAppStore()
+  const { currentUser, userRole, switchRole, orders, navigate, logout, showToast, avatarUrl, uploadAvatar, walletBalance, walletCoins, vouchers } = useAppStore()
   const avatarInputRef = useRef<HTMLInputElement>(null)
 
-  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
     if (!file.type.startsWith("image/")) {
       showToast("File harus berupa gambar", "error")
       return
     }
-    const url = URL.createObjectURL(file)
-    updateAvatar(url)
-    showToast("Foto profil berhasil diperbarui!", "success")
+    if (file.size > 5 * 1024 * 1024) {
+      showToast("Ukuran foto maksimal 5MB", "error")
+      return
+    }
+    setIsUploadingAvatar(true)
+    try {
+      await uploadAvatar(file)
+      showToast("Foto profil berhasil diperbarui!", "success")
+    } catch {
+      showToast("Gagal mengunggah foto profil", "error")
+    } finally {
+      setIsUploadingAvatar(false)
+    }
     e.target.value = ""
   }
   const { theme, setTheme } = useTheme()
@@ -140,10 +152,15 @@ export function ProfileScreen() {
                 />
                 <motion.button
                   whileTap={{ scale: 0.95 }}
-                  onClick={() => avatarInputRef.current?.click()}
+                  onClick={() => !isUploadingAvatar && avatarInputRef.current?.click()}
                   className="relative group"
+                  disabled={isUploadingAvatar}
                 >
-                  {avatarUrl ? (
+                  {isUploadingAvatar ? (
+                    <div className="w-16 h-16 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-md">
+                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    </div>
+                  ) : avatarUrl ? (
                     <div className="w-16 h-16 rounded-full overflow-hidden shadow-md ring-2 ring-emerald-500/30">
                       <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
                     </div>
@@ -152,9 +169,11 @@ export function ProfileScreen() {
                       {userName.charAt(0).toUpperCase()}
                     </div>
                   )}
-                  <div className="absolute bottom-0 right-0 w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center shadow-sm border-2 border-white dark:border-card">
-                    <Camera className="w-2.5 h-2.5 text-white" />
-                  </div>
+                  {!isUploadingAvatar && (
+                    <div className="absolute bottom-0 right-0 w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center shadow-sm border-2 border-white dark:border-card">
+                      <Camera className="w-2.5 h-2.5 text-white" />
+                    </div>
+                  )}
                 </motion.button>
                 <div className="absolute -bottom-1 -right-1">
                   <RoleBadge role={userRole} size="sm" />

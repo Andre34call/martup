@@ -31,7 +31,7 @@ const stagger = {
 
 // ==================== SETTINGS SCREEN ====================
 export function SettingsScreen() {
-  const { currentUser, showToast, logout, avatarUrl, updateAvatar, updateProfile, settings, updateSettings, deleteAccount, navigate } = useAppStore()
+  const { currentUser, showToast, logout, avatarUrl, uploadAvatar, updateProfile, settings, updateSettings, deleteAccount, navigate } = useAppStore()
   const [editField, setEditField] = useState<string | null>(null)
   const [editValue, setEditValue] = useState("")
   const [showPasswordDialog, setShowPasswordDialog] = useState(false)
@@ -197,7 +197,9 @@ export function SettingsScreen() {
     setEditValue("")
   }
 
-  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
     if (!file.type.startsWith("image/")) {
@@ -208,9 +210,15 @@ export function SettingsScreen() {
       showToast("Ukuran foto maksimal 5MB", "error")
       return
     }
-    const url = URL.createObjectURL(file)
-    updateAvatar(url)
-    showToast("Foto profil berhasil diperbarui!", "success")
+    setIsUploadingAvatar(true)
+    try {
+      await uploadAvatar(file)
+      showToast("Foto profil berhasil diperbarui!", "success")
+    } catch {
+      showToast("Gagal mengunggah foto profil", "error")
+    } finally {
+      setIsUploadingAvatar(false)
+    }
     e.target.value = ""
   }
 
@@ -286,10 +294,15 @@ export function SettingsScreen() {
               />
               <motion.button
                 whileTap={{ scale: 0.95 }}
-                onClick={() => avatarInputRef.current?.click()}
+                onClick={() => !isUploadingAvatar && avatarInputRef.current?.click()}
                 className="relative group"
+                disabled={isUploadingAvatar}
               >
-                {avatarUrl ? (
+                {isUploadingAvatar ? (
+                  <div className="w-20 h-20 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-md">
+                    <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  </div>
+                ) : avatarUrl ? (
                   <div className="w-20 h-20 rounded-full overflow-hidden shadow-md ring-2 ring-emerald-500/30">
                     <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
                   </div>
@@ -298,9 +311,11 @@ export function SettingsScreen() {
                     {(currentUser?.name || "A").charAt(0).toUpperCase()}
                   </div>
                 )}
-                <div className="absolute bottom-0 right-0 w-7 h-7 bg-emerald-500 rounded-full flex items-center justify-center shadow-sm border-2 border-white dark:border-card group-hover:scale-110 transition-transform">
-                  <Camera className="w-3.5 h-3.5 text-white" />
-                </div>
+                {!isUploadingAvatar && (
+                  <div className="absolute bottom-0 right-0 w-7 h-7 bg-emerald-500 rounded-full flex items-center justify-center shadow-sm border-2 border-white dark:border-card group-hover:scale-110 transition-transform">
+                    <Camera className="w-3.5 h-3.5 text-white" />
+                  </div>
+                )}
               </motion.button>
             </div>
 
