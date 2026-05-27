@@ -41,6 +41,7 @@ export function SettingsScreen() {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false)
   const [showNewPassword, setShowNewPassword] = useState(false)
   const [isChangingPassword, setIsChangingPassword] = useState(false)
+  const [avatarError, setAvatarError] = useState(false)
   const avatarInputRef = useRef<HTMLInputElement>(null)
 
   // 2FA state
@@ -302,9 +303,14 @@ export function SettingsScreen() {
                   <div className="w-20 h-20 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-md">
                     <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   </div>
-                ) : avatarUrl ? (
+                ) : avatarUrl && !avatarError ? (
                   <div className="w-20 h-20 rounded-full overflow-hidden shadow-md ring-2 ring-emerald-500/30">
-                    <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                    <img
+                      src={avatarUrl}
+                      alt="Avatar"
+                      className="w-full h-full object-cover"
+                      onError={() => setAvatarError(true)}
+                    />
                   </div>
                 ) : (
                   <div className="w-20 h-20 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 text-white font-bold flex items-center justify-center text-2xl shadow-md">

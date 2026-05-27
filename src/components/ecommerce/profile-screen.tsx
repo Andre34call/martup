@@ -67,8 +67,12 @@ function MenuItem({
 export function ProfileScreen() {
   const { currentUser, userRole, switchRole, orders, navigate, logout, showToast, avatarUrl, uploadAvatar, walletBalance, walletCoins, vouchers } = useAppStore()
   const avatarInputRef = useRef<HTMLInputElement>(null)
+  const [avatarError, setAvatarError] = useState(false)
 
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
+
+  // Reset avatar error when URL changes
+  useEffect(() => { setAvatarError(false) }, [avatarUrl])
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -160,9 +164,14 @@ export function ProfileScreen() {
                     <div className="w-16 h-16 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-md">
                       <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                     </div>
-                  ) : avatarUrl ? (
+                  ) : avatarUrl && !avatarError ? (
                     <div className="w-16 h-16 rounded-full overflow-hidden shadow-md ring-2 ring-emerald-500/30">
-                      <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                      <img
+                        src={avatarUrl}
+                        alt="Avatar"
+                        className="w-full h-full object-cover"
+                        onError={() => setAvatarError(true)}
+                      />
                     </div>
                   ) : (
                     <div className="w-16 h-16 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 text-white font-bold flex items-center justify-center text-xl shadow-md">

@@ -4,14 +4,13 @@ import { db } from '@/lib/db'
 
 import { logger } from '@/lib/logger'
 /**
- * Setup Supabase Storage bucket for product uploads.
- * Creates the "products" bucket with public read access and upload policies.
- * Called once during app initialization.
+ * Setup Supabase Storage buckets for the application.
+ * Creates all required buckets (products, avatars, banners) with public read access and upload policies.
+ * Called during app initialization.
  *
  * SECURITY: Accepts requests from any authenticated user (not just admin).
- * This is safe because the operation is idempotent — it only creates the bucket
- * if it doesn't already exist (ON CONFLICT DO NOTHING).
- * Admin verification is still attempted first for audit logging purposes.
+ * This is safe because the operation is idempotent — it only creates buckets
+ * if they don't already exist (ON CONFLICT DO NOTHING).
  */
 export async function POST(request: NextRequest) {
   try {
@@ -28,37 +27,55 @@ export async function POST(request: NextRequest) {
 
     // Use Prisma's raw query instead of pg Pool to avoid dependency issues
     try {
-      // Create the products bucket if it doesn't exist
+      // Create all required buckets if they don't exist
       await db.$executeRawUnsafe(`
         INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-        VALUES ('products', 'products', true, 31457280, NULL)
+        VALUES
+          ('products', 'products', true, 31457280, NULL),
+          ('avatars', 'avatars', true, 10485760, NULL),
+          ('banners', 'banners', true, 10485760, NULL)
         ON CONFLICT (id) DO NOTHING
       `)
 
-      // Create RLS policies for the products bucket
-      // Drop existing policies first to avoid conflicts
-      const policies = [
+      // Create RLS policies for all buckets
+      // Each bucket gets: public read, upload, update, delete policies
+      const bucketIds = ['products', 'avatars', 'banners']
+
+      for (const bucketId of bucketIds) {
+        const policies = [
+          `DROP POLICY IF EXISTS "${bucketId}_public_read" ON storage.objects`,
+          `DROP POLICY IF EXISTS "${bucketId}_public_upload" ON storage.objects`,
+          `DROP POLICY IF EXISTS "${bucketId}_public_update" ON storage.objects`,
+          `DROP POLICY IF EXISTS "${bucketId}_public_delete" ON storage.objects`,
+          `CREATE POLICY "${bucketId}_public_read" ON storage.objects
+           FOR SELECT USING (bucket_id = '${bucketId}')`,
+          `CREATE POLICY "${bucketId}_public_upload" ON storage.objects
+           FOR INSERT WITH CHECK (bucket_id = '${bucketId}')`,
+          `CREATE POLICY "${bucketId}_public_update" ON storage.objects
+           FOR UPDATE USING (bucket_id = '${bucketId}')`,
+          `CREATE POLICY "${bucketId}_public_delete" ON storage.objects
+           FOR DELETE USING (bucket_id = '${bucketId}')`,
+        ]
+
+        for (const sql of policies) {
+          await db.$executeRawUnsafe(sql)
+        }
+      }
+
+      // Also clean up any legacy policies that use generic names
+      const legacyPolicies = [
         'DROP POLICY IF EXISTS "Public read access" ON storage.objects',
         'DROP POLICY IF EXISTS "Allow public upload" ON storage.objects',
         'DROP POLICY IF EXISTS "Allow public update" ON storage.objects',
         'DROP POLICY IF EXISTS "Allow public delete" ON storage.objects',
-        `CREATE POLICY "Public read access" ON storage.objects
-         FOR SELECT USING (bucket_id = 'products')`,
-        `CREATE POLICY "Allow public upload" ON storage.objects
-         FOR INSERT WITH CHECK (bucket_id = 'products')`,
-        `CREATE POLICY "Allow public update" ON storage.objects
-         FOR UPDATE USING (bucket_id = 'products')`,
-        `CREATE POLICY "Allow public delete" ON storage.objects
-         FOR DELETE USING (bucket_id = 'products')`,
       ]
-
-      for (const sql of policies) {
-        await db.$executeRawUnsafe(sql)
+      for (const sql of legacyPolicies) {
+        try { await db.$executeRawUnsafe(sql) } catch { /* ignore */ }
       }
 
       return NextResponse.json({
         success: true,
-        message: 'Storage bucket "products" created with public access policies',
+        message: 'Storage buckets (products, avatars, banners) created with public access policies',
       })
     } catch (dbError: unknown) {
       const errorMsg = dbError instanceof Error ? dbError.message : 'Unknown error'

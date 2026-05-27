@@ -39,12 +39,15 @@ function ChatRoomItem({ room, onTap }: { room: ChatRoom; onTap: () => void }) {
             src={room.seller.storeAvatar}
             alt={room.seller.storeName}
             className="w-12 h-12 rounded-full object-cover"
+            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; if (e.target.nextElementSibling) (e.target.nextElementSibling as HTMLElement).style.display = 'flex' }}
           />
-        ) : (
-          <div className={`w-12 h-12 rounded-full ${colors[colorIndex]} text-white font-bold flex items-center justify-center`}>
-            {room.seller.storeName.charAt(0)}
-          </div>
-        )}
+        ) : null}
+        <div
+          className={`w-12 h-12 rounded-full ${colors[colorIndex]} text-white font-bold items-center justify-center`}
+          style={{ display: room.seller.storeAvatar ? 'none' : 'flex' }}
+        >
+          {room.seller.storeName.charAt(0)}
+        </div>
         {room.unreadCount > 0 && (
           <span className="absolute -top-0.5 -right-0.5 w-5 h-5 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold border-2 border-background">
             {room.unreadCount > 9 ? "9+" : room.unreadCount}
