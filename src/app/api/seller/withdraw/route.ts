@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
 import { Prisma } from '@prisma/client'
+import { validateBody, sellerWithdrawSchema } from '@/lib/validations'
 
 import { logger } from '@/lib/logger'
 
@@ -67,7 +68,17 @@ export async function POST(request: NextRequest) {
 
     // Step 4: Parse and validate request body
     const body = await request.json()
-    const { amount, bankAccount, bankName, bankHolder } = body
+
+    // Zod validation
+    const validation = validateBody(sellerWithdrawSchema, body)
+    if (!validation.success) {
+      return NextResponse.json(
+        { success: false, error: validation.error },
+        { status: 400 }
+      )
+    }
+    const { amount } = validation.data
+    const { bankAccount, bankName, bankHolder } = validation.data
 
     // Resolve bank details: use provided values or fall back to seller's stored details
     const resolvedBankAccount = bankAccount || seller.bankAccount
@@ -85,14 +96,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate amount
-    if (!amount || typeof amount !== 'number' || amount <= 0) {
-      return NextResponse.json(
-        { success: false, error: 'Amount must be a positive number' },
-        { status: 400 }
-      )
-    }
-
+    // Validate amount (minimum check — actual min comes from platform settings)
     const minWithdrawal = await getMinWithdrawal()
     if (amount < minWithdrawal) {
       return NextResponse.json(

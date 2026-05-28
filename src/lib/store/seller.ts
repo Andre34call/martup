@@ -2,7 +2,11 @@ import type { StateCreator } from 'zustand'
 import { logger } from '@/lib/logger'
 import type { SellerSlice, AppStore } from './types'
 import type { WithdrawRequest, WithdrawStatus, SellerStats } from '../types'
-import { getAuthHeaders } from './getAuthHeaders'
+import { apiClient } from '@/lib/api-client'
+
+// API response types
+type SellerStatsResponse = { success?: boolean; data?: any; [key: string]: any }
+type WithdrawHistoryResponse = { data?: any; [key: string]: any }
 
 export const createSellerSlice: StateCreator<AppStore, [], [], SellerSlice> = (set, get) => ({
   sellerBalance: {
@@ -39,11 +43,7 @@ export const createSellerSlice: StateCreator<AppStore, [], [], SellerSlice> = (s
         body.bankHolder = bankAccount.accountHolder
       }
 
-      const res = await fetch('/api/seller/withdraw', {
-        method: 'POST',
-        headers: getAuthHeaders(true),
-        body: JSON.stringify(body),
-      })
+      const res = await apiClient.rawPost('/api/seller/withdraw', body)
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
         throw new Error(err.error || 'Failed to request withdrawal')
@@ -105,9 +105,7 @@ export const createSellerSlice: StateCreator<AppStore, [], [], SellerSlice> = (s
     const sellerId = get().seller?.id
     if (!sellerId) return
     try {
-      const res = await fetch(`/api/seller/stats?sellerId=${sellerId}`)
-      if (!res.ok) throw new Error('Failed to fetch seller stats')
-      const data = await res.json()
+      const data = await apiClient.get<SellerStatsResponse>('/api/seller/stats', { sellerId })
       if (data.success && data.data) {
         const update: Partial<SellerSlice> = { sellerStats: data.data as SellerStats }
         if (typeof data.data.commissionRate === 'number') {
@@ -121,15 +119,7 @@ export const createSellerSlice: StateCreator<AppStore, [], [], SellerSlice> = (s
   },
   fetchWithdrawHistory: async (sellerId) => {
     try {
-      const res = await fetch(`/api/seller/withdraw?sellerId=${encodeURIComponent(sellerId)}`, {
-        method: 'GET',
-        headers: getAuthHeaders(),
-      })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error(err.error || 'Failed to fetch withdraw history')
-      }
-      const data = await res.json()
+      const data = await apiClient.get<WithdrawHistoryResponse>('/api/seller/withdraw', { sellerId })
       const serverWithdrawals: WithdrawRequest[] = data.data?.withdrawals || data.data || []
       set({ withdrawRequests: serverWithdrawals })
     } catch (error) {

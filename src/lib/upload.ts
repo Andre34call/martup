@@ -10,8 +10,7 @@ export interface UploadResult {
 function getUploadAuthHeaders(): Record<string, string> {
   const headers: Record<string, string> = {}
   if (typeof window !== 'undefined') {
-    // Check both token storage keys for compatibility (same as getAuthHeaders)
-    const token = localStorage.getItem('authToken') || localStorage.getItem('martup_token')
+    const token = localStorage.getItem('authToken')
     if (token) {
       headers['Authorization'] = `Bearer ${token}`
     }

@@ -1,7 +1,10 @@
 import type { StateCreator } from 'zustand'
 import type { OrderSlice, AppStore } from './types'
 import type { Order, OrderStatus } from '../types'
-import { getAuthHeaders } from './getAuthHeaders'
+import { apiClient } from '@/lib/api-client'
+
+// Type alias for API response (avoids TSX generic parsing issues)
+type OrdersResponse = { success: boolean; data?: any[]; error?: string }
 
 /**
  * Helper: take a snapshot of the current orders array for rollback.
@@ -161,12 +164,7 @@ export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set
         }
       }
 
-      const res = await fetch(`/api/orders/${orderId}/status`, {
-        method: 'PUT',
-        headers: getAuthHeaders(true),
-        body: JSON.stringify(body),
-      })
-
+      const res = await apiClient.rawPut(`/api/orders/${orderId}/status`, body)
       const data = await res.json()
 
       if (!res.ok || !data.success) {
@@ -236,26 +234,18 @@ export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set
       if (paymentMethod === 'wallet') {
         // Wallet payment: deduct via wallet API, then mark order as paid
         try {
-          await fetch('/api/wallet', {
-            method: 'POST',
-            headers: getAuthHeaders(true),
-            body: JSON.stringify({
-              userId: order.userId,
-              amount: -Math.max(0, order.totalAmount),
-              type: 'debit',
-              description: `Pembayaran Order #${order.orderNumber}`,
-            }),
+          await apiClient.rawPost('/api/wallet', {
+            userId: order.userId,
+            amount: -Math.max(0, order.totalAmount),
+            type: 'debit',
+            description: `Pembayaran Order #${order.orderNumber}`,
           })
         } catch {
           // Wallet deduction API may be deprecated; continue to status update
         }
 
         // Update order status to paid via the status API
-        const statusRes = await fetch(`/api/orders/${orderId}/status`, {
-          method: 'PUT',
-          headers: getAuthHeaders(true),
-          body: JSON.stringify({ status: 'paid' }),
-        })
+        const statusRes = await apiClient.rawPut(`/api/orders/${orderId}/status`, { status: 'paid' })
 
         if (!statusRes.ok) {
           // If marking as paid fails (e.g., non-admin), rollback
@@ -277,12 +267,7 @@ export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set
       }
 
       // Midtrans / card / other payment: create payment token
-      const res = await fetch('/api/payment/create', {
-        method: 'POST',
-        headers: getAuthHeaders(true),
-        body: JSON.stringify({ orderId }),
-      })
-
+      const res = await apiClient.rawPost('/api/payment/create', { orderId })
       const data = await res.json()
 
       if (!res.ok || !data.success) {
@@ -350,15 +335,10 @@ export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set
 
     // API call
     try {
-      const res = await fetch(`/api/orders/${orderId}/status`, {
-        method: 'PUT',
-        headers: getAuthHeaders(true),
-        body: JSON.stringify({
-          status: 'cancelled',
-          cancelReason: 'Dibatalkan oleh pembeli',
-        }),
+      const res = await apiClient.rawPut(`/api/orders/${orderId}/status`, {
+        status: 'cancelled',
+        cancelReason: 'Dibatalkan oleh pembeli',
       })
-
       const data = await res.json()
 
       if (!res.ok || !data.success) {
@@ -395,15 +375,10 @@ export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set
 
     // API call: use the status endpoint with shipped + trackingNumber
     try {
-      const res = await fetch(`/api/orders/${orderId}/status`, {
-        method: 'PUT',
-        headers: getAuthHeaders(true),
-        body: JSON.stringify({
-          status: 'shipped',
-          trackingNumber,
-        }),
+      const res = await apiClient.rawPut(`/api/orders/${orderId}/status`, {
+        status: 'shipped',
+        trackingNumber,
       })
-
       const data = await res.json()
 
       if (!res.ok || !data.success) {
@@ -429,14 +404,9 @@ export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set
   // Fetch orders from the server and replace local state
   fetchOrders: async (userId) => {
     try {
-      const res = await fetch(`/api/orders?userId=${encodeURIComponent(userId)}`, {
-        method: 'GET',
-        headers: getAuthHeaders(),
-      })
+      const data = await apiClient.get<OrdersResponse>('/api/orders', { userId })
 
-      const data = await res.json()
-
-      if (res.ok && data.success && Array.isArray(data.data)) {
+      if (data.success && Array.isArray(data.data)) {
         const serverOrders = data.data.map((raw: Record<string, unknown>) => mapServerOrder(raw))
         set({
           orders: serverOrders,

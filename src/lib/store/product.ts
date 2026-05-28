@@ -2,6 +2,11 @@ import type { StateCreator } from 'zustand'
 import { logger } from '@/lib/logger'
 import type { ProductSlice, AppStore } from './types'
 import type { Product } from '../types'
+import { apiClient } from '@/lib/api-client'
+
+// API response types
+type ProductsApiResponse = { data?: any[]; products?: any[]; [key: string]: any }
+type CategoriesApiResponse = { data?: any[]; categories?: any[]; [key: string]: any }
 
 export const createProductSlice: StateCreator<AppStore, [], [], ProductSlice> = (set, get) => ({
   products: [],
@@ -17,9 +22,7 @@ export const createProductSlice: StateCreator<AppStore, [], [], ProductSlice> = 
   categories: [],
   fetchProducts: async () => {
     try {
-      const res = await fetch('/api/products?limit=100')
-      if (!res.ok) throw new Error('Failed to fetch products')
-      const data = await res.json()
+      const data = await apiClient.get<ProductsApiResponse>('/api/products', { limit: '100' })
 
       const products: Product[] = (data.data || data.products || []).map((p: any) => ({
         id: p.id,
@@ -101,9 +104,7 @@ export const createProductSlice: StateCreator<AppStore, [], [], ProductSlice> = 
   },
   fetchCategories: async () => {
     try {
-      const res = await fetch('/api/categories')
-      if (!res.ok) throw new Error('Failed to fetch categories')
-      const data = await res.json()
+      const data = await apiClient.get<CategoriesApiResponse>('/api/categories')
 
       const mapCategory = (c: any): any => ({
         id: c.id,

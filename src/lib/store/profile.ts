@@ -1,7 +1,10 @@
 import type { StateCreator } from 'zustand'
 import { logger } from '@/lib/logger'
 import type { ProfileSlice, AppStore } from './types'
-import { getAuthHeaders } from './getAuthHeaders'
+import { apiClient } from '@/lib/api-client'
+
+// API response types
+type AvatarUploadResponse = { data?: any; [key: string]: any }
 
 export const createProfileSlice: StateCreator<AppStore, [], [], ProfileSlice> = (set) => ({
   avatarUrl: null,
@@ -16,20 +19,8 @@ export const createProfileSlice: StateCreator<AppStore, [], [], ProfileSlice> = 
       const formData = new FormData()
       formData.append('file', file)
 
-      // For FormData uploads, we need auth + CSRF but NOT Content-Type
-      // (browser sets Content-Type automatically with boundary for multipart/form-data)
-      const uploadHeaders = getAuthHeaders(true)
-      delete uploadHeaders['Content-Type']
-      const res = await fetch('/api/user/avatar', {
-        method: 'POST',
-        headers: uploadHeaders,
-        body: formData,
-      })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error(err.error || 'Failed to upload avatar')
-      }
-      const data = await res.json()
+      // apiClient.upload handles auth + CSRF + Content-Type (omits Content-Type for FormData)
+      const data = await apiClient.upload<AvatarUploadResponse>('/api/user/avatar', formData)
       const avatarUrl: string = data.data?.avatar ?? data.data
       set((state) => ({
         avatarUrl,
@@ -44,14 +35,8 @@ export const createProfileSlice: StateCreator<AppStore, [], [], ProfileSlice> = 
   },
   removeAvatar: async () => {
     try {
-      const res = await fetch('/api/user/avatar', {
-        method: 'DELETE',
-        headers: getAuthHeaders(true),
-      })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error(err.error || 'Failed to remove avatar')
-      }
+      // apiClient.del auto-adds auth + CSRF and throws on non-ok responses
+      await apiClient.del('/api/user/avatar')
       set((state) => ({
         avatarUrl: null,
         currentUser: state.currentUser

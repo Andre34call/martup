@@ -2,8 +2,11 @@ import type { StateCreator } from 'zustand'
 import { logger } from '@/lib/logger'
 import type { ChatSlice, AppStore } from './types'
 import type { ChatRoom, ChatMessage } from '../types'
-import { getAuthHeaders } from './getAuthHeaders'
+import { apiClient } from '@/lib/api-client'
 import { io, Socket } from 'socket.io-client'
+
+type ChatRoomsResponse = { success: boolean; data?: Array<Record<string, unknown>> }
+type ChatMessagesResponse = { success: boolean; data?: Array<Record<string, unknown>> }
 
 // Module-level socket reference so it persists across zustand calls
 let socket: Socket | null = null
@@ -38,11 +41,7 @@ export const createChatSlice: StateCreator<AppStore, [], [], ChatSlice> = (set, 
     }
 
     // Also call REST API as fallback / for persistence
-    fetch('/api/chat/messages', {
-      method: 'PUT',
-      headers: getAuthHeaders(true),
-      body: JSON.stringify({ roomId }),
-    }).catch(() => {})
+    apiClient.rawPut('/api/chat/messages', { roomId }).catch(() => {})
 
     return set((state) => {
       const roomMessages = state.chatMessages[roomId]
@@ -69,9 +68,7 @@ export const createChatSlice: StateCreator<AppStore, [], [], ChatSlice> = (set, 
 
   fetchChatRooms: async () => {
     try {
-      const res = await fetch('/api/chat/rooms', { headers: getAuthHeaders() })
-      if (!res.ok) throw new Error('Failed to fetch chat rooms')
-      const data = await res.json()
+      const data = await apiClient.get<ChatRoomsResponse>('/api/chat/rooms')
       if (data.success && data.data) {
         const rooms: ChatRoom[] = (data.data as Array<Record<string, unknown>>).map((r: Record<string, unknown>) => {
           const otherUser = r.otherUser as Record<string, unknown> | undefined
@@ -119,9 +116,7 @@ export const createChatSlice: StateCreator<AppStore, [], [], ChatSlice> = (set, 
 
   fetchChatMessages: async (roomId) => {
     try {
-      const res = await fetch(`/api/chat/messages?roomId=${roomId}`, { headers: getAuthHeaders() })
-      if (!res.ok) throw new Error('Failed to fetch chat messages')
-      const data = await res.json()
+      const data = await apiClient.get<ChatMessagesResponse>('/api/chat/messages', { roomId })
       if (data.success && data.data) {
         const messages: ChatMessage[] = (data.data as Array<Record<string, unknown>>).map((m: Record<string, unknown>) => ({
           id: m.id as string,
@@ -166,11 +161,7 @@ export const createChatSlice: StateCreator<AppStore, [], [], ChatSlice> = (set, 
 
     // REST API as fallback / for persistence
     try {
-      const res = await fetch('/api/chat/messages', {
-        method: 'POST',
-        headers: getAuthHeaders(true),
-        body: JSON.stringify({ roomId, content, type }),
-      })
+      const res = await apiClient.rawPost('/api/chat/messages', { roomId, content, type })
       if (!res.ok) throw new Error('Failed to send message')
       const data = await res.json()
       // Replace temp message with real one from server
@@ -201,11 +192,7 @@ export const createChatSlice: StateCreator<AppStore, [], [], ChatSlice> = (set, 
 
   createChatRoom: async (sellerId, productId) => {
     try {
-      const res = await fetch('/api/chat/rooms', {
-        method: 'POST',
-        headers: getAuthHeaders(true),
-        body: JSON.stringify({ sellerId, productId }),
-      })
+      const res = await apiClient.rawPost('/api/chat/rooms', { sellerId, productId })
       if (!res.ok) throw new Error('Failed to create chat room')
       const data = await res.json()
       if (data.success && data.data) {

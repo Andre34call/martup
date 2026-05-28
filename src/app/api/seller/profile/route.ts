@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middleware'
 import { logger } from '@/lib/logger'
 import { serializeDecimal } from '@/lib/decimal-utils'
+import { validateBody, sellerProfileUpdateSchema } from '@/lib/validations'
 
 // Known Indonesian banks for validation
 const KNOWN_INDONESIAN_BANKS = [
@@ -159,6 +160,16 @@ export async function PUT(request: NextRequest) {
 
     // Parse request body
     const body = await request.json()
+
+    // Zod validation
+    const validation = validateBody(sellerProfileUpdateSchema, body)
+    if (!validation.success) {
+      return NextResponse.json(
+        { success: false, error: validation.error },
+        { status: 400 }
+      )
+    }
+    const validatedData = validation.data
     const {
       storeName,
       storeDesc,
@@ -170,7 +181,7 @@ export async function PUT(request: NextRequest) {
       bankName,
       bankHolder,
       autoReply,
-    } = body
+    } = validatedData
 
     // Build update data object
     const updateData: Record<string, unknown> = {}

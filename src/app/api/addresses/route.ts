@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middleware'
+import { validateBody, createAddressSchema, updateAddressSchema, deleteAddressSchema } from '@/lib/validations'
 
 import { logger } from '@/lib/logger'
 // ==================== VALIDATION HELPERS ====================
@@ -134,13 +135,30 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const body: AddressBody = await request.json()
+    const body = await request.json()
 
-    // Validate all required fields
-    const validationError = validateCreateFields(body)
-    if (validationError) {
+    // Zod validation
+    const validation = validateBody(createAddressSchema, body)
+    if (!validation.success) {
       return NextResponse.json(
-        { success: false, error: validationError },
+        { success: false, error: validation.error },
+        { status: 400 }
+      )
+    }
+    const validatedData = validation.data
+
+    // Validate phone format (domain-specific check beyond Zod)
+    if (!validateIndonesianPhone(validatedData.phone)) {
+      return NextResponse.json(
+        { success: false, error: 'Phone number must be a valid Indonesian number (starts with 0 or +62, 10-15 digits)' },
+        { status: 400 }
+      )
+    }
+
+    // Validate postal code format (domain-specific check beyond Zod)
+    if (!validatePostalCode(validatedData.postalCode)) {
+      return NextResponse.json(
+        { success: false, error: 'Postal code must be exactly 5 digits' },
         { status: 400 }
       )
     }
@@ -177,13 +195,13 @@ export async function POST(request: NextRequest) {
       const newAddress = await tx.address.create({
         data: {
           userId,
-          label: body.label!.trim(),
-          recipient: body.recipient!.trim(),
-          phone: body.phone!.trim(),
-          address: body.address!.trim(),
-          city: body.city!.trim(),
-          province: body.province!.trim(),
-          postalCode: body.postalCode!.trim(),
+          label: validatedData.label.trim(),
+          recipient: validatedData.recipient.trim(),
+          phone: validatedData.phone.trim(),
+          address: validatedData.address.trim(),
+          city: validatedData.city.trim(),
+          province: validatedData.province.trim(),
+          postalCode: validatedData.postalCode.trim(),
           isDefault: shouldForceDefault || isDefault,
         },
       })
@@ -213,15 +231,17 @@ export async function PUT(request: NextRequest) {
     const authResult = await verifyAuth(request)
     if (!authResult.success) return authErrorResponse(authResult)
 
-    const body: AddressBody & { addressId: string } = await request.json()
-    const { addressId, label, recipient, phone, address, city, province, postalCode, isDefault } = body
+    const body = await request.json()
 
-    if (!addressId) {
+    // Zod validation
+    const validation = validateBody(updateAddressSchema, body)
+    if (!validation.success) {
       return NextResponse.json(
-        { success: false, error: 'addressId is required' },
+        { success: false, error: validation.error },
         { status: 400 }
       )
     }
+    const { addressId, label, recipient, phone, address, city, province, postalCode, isDefault } = validation.data
 
     // Verify address belongs to auth user
     const existingAddress = await db.address.findUnique({
@@ -242,39 +262,7 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    // Validate provided fields
-    if (label !== undefined && typeof label === 'string' && label.length > 50) {
-      return NextResponse.json(
-        { success: false, error: 'Label must be at most 50 characters' },
-        { status: 400 }
-      )
-    }
-    if (recipient !== undefined && typeof recipient === 'string' && recipient.length > 100) {
-      return NextResponse.json(
-        { success: false, error: 'Recipient must be at most 100 characters' },
-        { status: 400 }
-      )
-    }
-    if (address !== undefined && typeof address === 'string' && address.length > 500) {
-      return NextResponse.json(
-        { success: false, error: 'Address must be at most 500 characters' },
-        { status: 400 }
-      )
-    }
-    if (city !== undefined && typeof city === 'string' && city.length > 100) {
-      return NextResponse.json(
-        { success: false, error: 'City must be at most 100 characters' },
-        { status: 400 }
-      )
-    }
-    if (province !== undefined && typeof province === 'string' && province.length > 100) {
-      return NextResponse.json(
-        { success: false, error: 'Province must be at most 100 characters' },
-        { status: 400 }
-      )
-    }
-
-    // Phone format validation if provided
+    // Phone format validation (domain-specific check beyond Zod)
     if (phone !== undefined && phone !== null && phone !== '') {
       if (!validateIndonesianPhone(phone)) {
         return NextResponse.json(
@@ -345,15 +333,17 @@ export async function DELETE(request: NextRequest) {
     const authResult = await verifyAuth(request)
     if (!authResult.success) return authErrorResponse(authResult)
 
-    const body: { addressId?: string } = await request.json()
-    const { addressId } = body
+    const body = await request.json()
 
-    if (!addressId) {
+    // Zod validation
+    const validation = validateBody(deleteAddressSchema, body)
+    if (!validation.success) {
       return NextResponse.json(
-        { success: false, error: 'addressId is required' },
+        { success: false, error: validation.error },
         { status: 400 }
       )
     }
+    const { addressId } = validation.data
 
     // Verify address belongs to auth user
     const existingAddress = await db.address.findUnique({

@@ -48,6 +48,8 @@ export interface Seller {
   responseTime?: number
   storeAddress?: string
   storeCity?: string
+  storeProvince?: string
+  storePostalCode?: string
   bankName?: string
   bankAccount?: string
   bankHolder?: string

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAuth, checkRateLimit } from '@/lib/auth-middleware'
+import { validateBody, sellerRegisterSchema } from '@/lib/validations'
 
 import { logger } from '@/lib/logger'
 // POST /api/seller/register - Register user as seller
@@ -25,6 +26,16 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
+
+    // Zod validation
+    const validation = validateBody(sellerRegisterSchema, body)
+    if (!validation.success) {
+      return NextResponse.json(
+        { success: false, error: validation.error },
+        { status: 400 }
+      )
+    }
+    const validatedData = validation.data
     const {
       userId,
       storeName,
@@ -35,21 +46,7 @@ export async function POST(request: NextRequest) {
       bankAccount,
       bankName,
       bankHolder,
-    } = body
-
-    // Validate required fields
-    if (!userId) {
-      return NextResponse.json(
-        { success: false, error: 'userId is required' },
-        { status: 400 }
-      )
-    }
-    if (!storeName || storeName.trim().length === 0) {
-      return NextResponse.json(
-        { success: false, error: 'storeName is required' },
-        { status: 400 }
-      )
-    }
+    } = validatedData
 
     // SECURITY: Users can only register themselves as seller
     if (userId !== authResult.user.id) {

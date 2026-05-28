@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
+import { validateBody, paymentCreateSchema } from '@/lib/validations'
 
 import { logger } from '@/lib/logger'
 // ==================== Midtrans Configuration ====================
@@ -42,14 +43,16 @@ export async function POST(request: NextRequest) {
 
     // Step 3: Parse and validate request body
     const body = await request.json()
-    const { orderId } = body
 
-    if (!orderId) {
+    // Zod validation
+    const validation = validateBody(paymentCreateSchema, body)
+    if (!validation.success) {
       return NextResponse.json(
-        { success: false, error: 'orderId is required' },
+        { success: false, error: validation.error },
         { status: 400 }
       )
     }
+    const { orderId } = validation.data
 
     // Step 4: Find the order with items and user details
     const order = await db.order.findUnique({

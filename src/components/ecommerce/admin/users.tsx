@@ -16,12 +16,13 @@ import { LoadingSpinner } from "../loading-spinner"
 import { apiClient } from '@/lib/api-client'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Input } from "@/components/ui/input"
-import { ELEVATED_ROLES } from '@/lib/types'
+import { ELEVATED_ROLES, type UserRole } from '@/lib/types'
 import { DIVISION_ROLES } from '@/lib/auth-middleware'
 
-// SECURITY: No more hardcoded email — use the centralized SUPER_ADMIN_EMAIL from env
-// This matches the backend env.SUPER_ADMIN_EMAIL which reads from environment variable
-const SUPER_ADMIN_EMAIL = process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAIL || 'kholisakm@gmail.com'
+// SECURITY: Super Admin email from env var only — no hardcoded fallback.
+// Must set NEXT_PUBLIC_SUPER_ADMIN_EMAIL in Vercel/production for UI badges & client-side checks.
+// Server-side authorization uses env.SUPER_ADMIN_EMAIL independently.
+const SUPER_ADMIN_EMAIL = process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAIL || ''
 
 export function AdminUsers() {
   const { showToast, adminUsers, updateAdminUser, deleteAdminUser, fetchAdminUsers, currentUser, divisions, fetchDivisions } = useAppStore()
@@ -206,7 +207,7 @@ export function AdminUsers() {
                       </Button>
                     )}
                     {/* Promote to Division/Admin - Manager and Super Admin can promote non-elevated users */}
-                    {canPromote && !ELEVATED_ROLES.includes(user.role) && user.email !== SUPER_ADMIN_EMAIL && (
+                    {canPromote && !ELEVATED_ROLES.includes(user.role as UserRole) && user.email !== SUPER_ADMIN_EMAIL && (
                       <Button size="sm" className="h-7 text-[11px] rounded-lg bg-purple-500 hover:bg-purple-600 text-white" onClick={() => {
                         setPromoteUser({ id: user.id, name: user.name, email: user.email, role: user.role })
                         setSelectedDivisionId('')
@@ -215,7 +216,7 @@ export function AdminUsers() {
                       </Button>
                     )}
                     {/* Demote / Remove from Division — Manager can demote division admins, Super Admin can demote anyone */}
-                    {((isSuperAdmin && ELEVATED_ROLES.includes(user.role)) || (isUserManager && DIVISION_ROLES.includes(user.role))) && user.email !== SUPER_ADMIN_EMAIL && (
+                    {((isSuperAdmin && ELEVATED_ROLES.includes(user.role as UserRole)) || (isUserManager && (DIVISION_ROLES as readonly string[]).includes(user.role))) && user.email !== SUPER_ADMIN_EMAIL && (
                       <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-purple-600 hover:text-purple-700 hover:bg-purple-50 dark:hover:bg-purple-900/20" onClick={() => setConfirmAction({
                         action: () => { handleUpdateUser(user.id, { role: 'buyer', divisionId: null }).then(() => showToast(`${user.name} telah dikembalikan menjadi buyer`, "info")) },
                         title: 'Kembalikan ke Buyer',

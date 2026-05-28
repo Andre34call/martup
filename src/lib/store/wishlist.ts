@@ -1,7 +1,12 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { getAuthHeaders } from './getAuthHeaders'
+import { apiClient } from '@/lib/api-client'
 import { logger } from '@/lib/logger'
+
+interface WishlistSyncResponse {
+  success: boolean
+  data?: Array<Record<string, unknown>>
+}
 
 interface WishlistState {
   wishlistIds: string[]
@@ -27,11 +32,7 @@ export const useWishlistStore = create<WishlistState>()(
 
         // Call API to persist — check response success, not just network errors
         if (isCurrentlyWishlisted) {
-          fetch('/api/wishlist', {
-            method: 'DELETE',
-            headers: getAuthHeaders(true),
-            body: JSON.stringify({ productId }),
-          })
+          apiClient.rawDelete('/api/wishlist', { productId })
             .then((res) => res.json())
             .then((data) => {
               if (!data.success) {
@@ -46,11 +47,7 @@ export const useWishlistStore = create<WishlistState>()(
               logger.warn({ component: 'wishlist', productId, err: error }, 'Remove from wishlist network error')
             })
         } else {
-          fetch('/api/wishlist', {
-            method: 'POST',
-            headers: getAuthHeaders(true),
-            body: JSON.stringify({ productId }),
-          })
+          apiClient.rawPost('/api/wishlist', { productId })
             .then((res) => res.json())
             .then((data) => {
               if (!data.success) {
@@ -71,9 +68,7 @@ export const useWishlistStore = create<WishlistState>()(
 
       syncWishlistFromServer: async (userId) => {
         try {
-          const res = await fetch(`/api/wishlist?userId=${userId}`, { headers: getAuthHeaders() })
-          if (!res.ok) throw new Error('Failed to fetch wishlist')
-          const data = await res.json()
+          const data = await apiClient.get<WishlistSyncResponse>('/api/wishlist', { userId })
           if (data.success && data.data) {
             const ids = (data.data as Array<Record<string, unknown>>).map((item: Record<string, unknown>) => {
               const product = item.product as Record<string, unknown> | undefined

@@ -5,8 +5,7 @@ import { getCsrfToken } from '@/lib/csrf-client'
 export function getAuthHeaders(includeCsrf: boolean = false): Record<string, string> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (typeof window !== 'undefined') {
-    // Check both token storage keys for compatibility
-    const token = localStorage.getItem('authToken') || localStorage.getItem('martup_token')
+    const token = localStorage.getItem('authToken')
     if (token) {
       headers['Authorization'] = `Bearer ${token}`
     }

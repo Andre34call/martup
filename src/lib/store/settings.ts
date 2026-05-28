@@ -1,7 +1,10 @@
 import type { StateCreator } from 'zustand'
 import type { SettingsSlice, AppStore } from './types'
-import { getAuthHeaders } from './getAuthHeaders'
+import { apiClient } from '@/lib/api-client'
 import { logger } from '@/lib/logger'
+
+// API response types
+type UserSettingsResponse = { data?: any; [key: string]: any }
 
 export const createSettingsSlice: StateCreator<AppStore, [], [], SettingsSlice> = (set, get) => ({
   settings: {
@@ -14,9 +17,7 @@ export const createSettingsSlice: StateCreator<AppStore, [], [], SettingsSlice> 
 
   fetchSettings: async () => {
     try {
-      const res = await fetch('/api/user/settings', { headers: getAuthHeaders() })
-      if (!res.ok) throw new Error('Failed to fetch user settings')
-      const json = await res.json()
+      const json = await apiClient.get<UserSettingsResponse>('/api/user/settings')
       const data = json.data || json
       set({
         settings: {
@@ -42,11 +43,7 @@ export const createSettingsSlice: StateCreator<AppStore, [], [], SettingsSlice> 
     const currentState = get().settings
     const merged = { ...currentState, ...settings }
 
-    fetch('/api/user/settings', {
-      method: 'PUT',
-      headers: getAuthHeaders(true),
-      body: JSON.stringify(merged),
-    }).catch((error) => {
+    apiClient.put('/api/user/settings', merged).catch((error) => {
       logger.warn({ component: 'settings', err: error }, 'Failed to persist user settings to server')
       // Revert on failure by re-applying previous state
       set((state) => ({

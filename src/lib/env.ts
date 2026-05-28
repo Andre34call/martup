@@ -58,10 +58,9 @@ export const env = {
   CSRF_SECRET: process.env.CSRF_SECRET || process.env.NEXTAUTH_SECRET || '',
   CRON_SECRET: process.env.CRON_SECRET || '',
   ADMIN_SETUP_SECRET: process.env.ADMIN_SETUP_SECRET || process.env.NEXTAUTH_SECRET || '',
-  // SECURITY: Super Admin email — MUST be set via env var for production.
-  // The hardcoded fallback exists ONLY for initial setup / existing deployments
-  // that haven't configured the env var yet. REMOVE after setting SUPER_ADMIN_EMAIL in Vercel.
-  SUPER_ADMIN_EMAIL: process.env.SUPER_ADMIN_EMAIL || 'kholisakm@gmail.com',
+  // SECURITY: Super Admin email — MUST be set via SUPER_ADMIN_EMAIL env var.
+  // No hardcoded fallback — if not set, super admin checks will not match any user.
+  SUPER_ADMIN_EMAIL: process.env.SUPER_ADMIN_EMAIL || '',
   SMS_PROVIDER: process.env.SMS_PROVIDER || 'mock',
   MIDTRANS_SERVER_KEY: process.env.MIDTRANS_SERVER_KEY || '',
   MIDTRANS_IS_PRODUCTION: process.env.MIDTRANS_IS_PRODUCTION === 'true',

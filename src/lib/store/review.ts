@@ -2,22 +2,21 @@ import type { StateCreator } from 'zustand'
 import { logger } from '@/lib/logger'
 import type { ReviewSlice, AppStore } from './types'
 import type { Review } from '../types'
-import { getAuthHeaders } from './getAuthHeaders'
+import { apiClient } from '@/lib/api-client'
+
+// API response types
+type ProductReviewsResponse = { success?: boolean; data?: any[]; [key: string]: any }
 
 export const createReviewSlice: StateCreator<AppStore, [], [], ReviewSlice> = (set, get) => ({
   reviews: [],
   reviewedOrderIds: [],
   addReview: (review, orderId) => {
-    // Call the API to persist the review
-    fetch('/api/reviews', {
-      method: 'POST',
-      headers: getAuthHeaders(true),
-      body: JSON.stringify({
-        productId: review.productId,
-        rating: review.rating,
-        content: review.content,
-        images: review.images,
-      }),
+    // Call the API to persist the review (fire-and-forget)
+    apiClient.post('/api/reviews', {
+      productId: review.productId,
+      rating: review.rating,
+      content: review.content,
+      images: review.images,
     }).catch((error) => {
       logger.warn({ component: 'review', err: error }, 'Create review API error')
     })
@@ -85,9 +84,7 @@ export const createReviewSlice: StateCreator<AppStore, [], [], ReviewSlice> = (s
   }),
   fetchProductReviews: async (productId) => {
     try {
-      const res = await fetch(`/api/reviews?productId=${productId}`)
-      if (!res.ok) throw new Error('Failed to fetch product reviews')
-      const data = await res.json()
+      const data = await apiClient.get<ProductReviewsResponse>('/api/reviews', { productId })
       if (data.success && data.data) {
         const reviews: Review[] = (data.data as Array<Record<string, unknown>>).map((r: Record<string, unknown>) => {
           const user = r.user as Record<string, unknown> | undefined

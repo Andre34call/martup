@@ -12,12 +12,23 @@ import { PageHeader } from "@/components/ecommerce/shared"
 import { signIn } from "next-auth/react"
 import { useState, useEffect, useCallback } from "react"
 import { useSearchParams } from "next/navigation"
-import type { User } from "@/lib/types"
+import type { User, UserRole } from "@/lib/types"
 import { logger } from '@/lib/logger'
+import { apiClient, ApiClientError } from '@/lib/api-client'
+import { loginSchema } from '@/lib/validations'
+
+// ==================== TYPE ALIASES ====================
+type LoginResponse = { success: boolean; requiresVerification?: boolean; requires2FA?: boolean; email?: string; phone?: string; userId?: string; message?: string; token?: string; user?: { id: string; email: string; phone?: string; name: string; avatar?: string; role?: string; isVerified?: boolean; loyaltyPoints?: number; coins?: number; twoFactorEnabled?: boolean }; devOtp?: string; error?: string }
+type RegisterResponse = { success: boolean; requiresVerification?: boolean; message?: string; token?: string; user?: { id: string; email: string; phone?: string; name: string; avatar?: string; role?: string; isVerified?: boolean; loyaltyPoints?: number; coins?: number; twoFactorEnabled?: boolean }; devVerifyUrl?: string; error?: string }
+type ResendVerificationResponse = { success: boolean; alreadyVerified?: boolean; message?: string; devVerifyUrl?: string; error?: string }
+type OtpSendResponse = { success: boolean; message?: string; devOtp?: string; error?: string }
+type OtpVerifyResponse = { success: boolean; token?: string; user?: { id: string; email?: string; phone?: string; name: string; avatar?: string; role?: string; loyaltyPoints?: number; coins?: number; twoFactorEnabled?: boolean }; error?: string }
+type ForgotPasswordResponse = { success: boolean; message?: string; error?: string }
+type ResetPasswordResponse = { success: boolean; message?: string; error?: string }
 
 // ==================== VALIDATION HELPERS ====================
 function isValidEmail(email: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+  return loginSchema.shape.email.safeParse(email).success
 }
 function isValidPhone(phone: string): boolean {
   return /^(0|\+62|62)\d{9,12}$/.test(phone.replace(/[\s-]/g, ''))
@@ -318,12 +329,9 @@ export function LoginScreen() {
       }
 
       // Email + password login
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: emailOrPhone, password }),
-      })
-      const data = await res.json()
+      // Use rawPost to read response body even on 403 (requiresVerification)
+      const res = await apiClient.rawPost('/api/auth/login', { email: emailOrPhone, password })
+      const data: LoginResponse = await res.json()
 
       // Email verification check — if email not verified, redirect to verification screen
       if (!data.success && data.requiresVerification) {
@@ -347,7 +355,6 @@ export function LoginScreen() {
         // Store auth token
         if (data.token) {
           localStorage.setItem('authToken', data.token)
-          localStorage.setItem('martup_token', data.token)
         }
         const user: User = {
           id: data.user.id,
@@ -355,7 +362,7 @@ export function LoginScreen() {
           phone: data.user.phone || undefined,
           name: data.user.name,
           avatar: data.user.avatar || undefined,
-          role: data.user.role || 'buyer',
+          role: (data.user.role || 'buyer') as UserRole,
           isVerified: data.user.isVerified || false,
           loyaltyPoints: data.user.loyaltyPoints || 0,
           coins: data.user.coins || 0,
@@ -625,14 +632,9 @@ export function RegisterScreen() {
     setIsLoading(true)
 
     try {
-      const res = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, phone, password }),
-      })
-      const data = await res.json()
+      const data = await apiClient.post<RegisterResponse>('/api/auth/register', { name, email, phone, password })
 
-      if (data.success && data.requiresVerification) {
+      if (data.requiresVerification) {
         // Email verification required — redirect to verification screen
         useAppStore.setState({ pendingVerificationEmail: email })
         navigate('email-verification')
@@ -642,11 +644,10 @@ export function RegisterScreen() {
         if (data.devVerifyUrl) {
           console.log('[DEV] Verification URL:', data.devVerifyUrl)
         }
-      } else if (data.success && data.user) {
+      } else if (data.user) {
         // Fallback: auto-login (e.g., Google OAuth users)
         if (data.token) {
           localStorage.setItem('authToken', data.token)
-          localStorage.setItem('martup_token', data.token)
         }
         const user: User = {
           id: data.user.id,
@@ -654,7 +655,7 @@ export function RegisterScreen() {
           phone: data.user.phone || undefined,
           name: data.user.name,
           avatar: data.user.avatar || undefined,
-          role: data.user.role || 'buyer',
+          role: (data.user.role || 'buyer') as UserRole,
           isVerified: data.user.isVerified || false,
           loyaltyPoints: data.user.loyaltyPoints || 0,
           coins: data.user.coins || 0,
@@ -668,11 +669,15 @@ export function RegisterScreen() {
         connectSocket()
         showToast("Registrasi berhasil! 🎉", "success")
       } else {
-        showToast(data.error || 'Registrasi gagal. Coba lagi.', "error")
+        showToast('Registrasi gagal. Coba lagi.', "error")
       }
     } catch (error) {
-      logger.warn({ component: 'auth', err: error }, 'Register failed')
-      showToast('Terjadi kesalahan koneksi. Coba lagi nanti.', "error")
+      if (error instanceof ApiClientError) {
+        showToast(error.message, "error")
+      } else {
+        logger.warn({ component: 'auth', err: error }, 'Register failed')
+        showToast('Terjadi kesalahan koneksi. Coba lagi nanti.', "error")
+      }
     }
 
     setIsLoading(false)
@@ -895,28 +900,25 @@ export function EmailVerificationScreen() {
     setIsResending(true)
 
     try {
-      const res = await fetch('/api/auth/resend-verification', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: pendingEmail }),
-      })
-      const data = await res.json()
+      const data = await apiClient.post<ResendVerificationResponse>('/api/auth/resend-verification', { email: pendingEmail })
 
       if (data.alreadyVerified) {
         setManualVerified(true)
         showToast('Email sudah terverifikasi! Silakan login.', 'success')
-      } else if (data.success) {
+      } else {
         setCountdown(60)
         showToast('Link verifikasi telah dikirim ulang!', 'success')
         // In dev mode, log the URL
         if (data.devVerifyUrl) {
           console.log('[DEV] Verification URL:', data.devVerifyUrl)
         }
-      } else {
-        showToast(data.error || 'Gagal mengirim ulang verifikasi.', 'error')
       }
     } catch (error) {
-      showToast('Terjadi kesalahan koneksi. Coba lagi.', 'error')
+      if (error instanceof ApiClientError) {
+        showToast(error.message, 'error')
+      } else {
+        showToast('Terjadi kesalahan koneksi. Coba lagi.', 'error')
+      }
     }
 
     setIsResending(false)
@@ -1091,28 +1093,23 @@ export function OTPScreen() {
     try {
       const formattedPhone = phone.startsWith('+') ? phone : phone.startsWith('0') ? '+62' + phone.substring(1) : '+62' + phone
 
-      const res = await fetch('/api/auth/otp/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: formattedPhone }),
-      })
-      const data = await res.json()
+      const data = await apiClient.post<OtpSendResponse>('/api/auth/otp/send', { phone: formattedPhone })
 
-      if (data.success) {
-        setStep('otp')
-        setCountdown(60)
-        // In dev mode, show the OTP for testing
-        if (data.devOtp) {
-          setDevOtp(data.devOtp)
-          setOtp(data.devOtp) // Auto-fill in dev mode
-        }
-        showToast(data.message || 'Kode OTP telah dikirim', 'success')
-      } else {
-        showToast(data.error || 'Gagal mengirim OTP. Coba lagi.', 'error')
+      setStep('otp')
+      setCountdown(60)
+      // In dev mode, show the OTP for testing
+      if (data.devOtp) {
+        setDevOtp(data.devOtp)
+        setOtp(data.devOtp) // Auto-fill in dev mode
       }
+      showToast(data.message || 'Kode OTP telah dikirim', 'success')
     } catch (error) {
-      logger.warn({ component: 'auth', err: error }, 'OTP send failed')
-      showToast('Terjadi kesalahan koneksi. Coba lagi nanti.', 'error')
+      if (error instanceof ApiClientError) {
+        showToast(error.message, 'error')
+      } else {
+        logger.warn({ component: 'auth', err: error }, 'OTP send failed')
+        showToast('Terjadi kesalahan koneksi. Coba lagi nanti.', 'error')
+      }
     }
 
     setIsSending(false)
@@ -1129,16 +1126,10 @@ export function OTPScreen() {
     try {
       const formattedPhone = phone.startsWith('+') ? phone : phone.startsWith('0') ? '+62' + phone.substring(1) : '+62' + phone
 
-      const res = await fetch('/api/auth/otp/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: formattedPhone, otpCode: otp }),
-      })
-      const data = await res.json()
-      if (data.success && data.user) {
+      const data = await apiClient.post<OtpVerifyResponse>('/api/auth/otp/verify', { phone: formattedPhone, otpCode: otp })
+      if (data.user) {
         if (data.token) {
           localStorage.setItem('authToken', data.token)
-          localStorage.setItem('martup_token', data.token)
         }
         const user: User = {
           id: data.user.id,
@@ -1146,7 +1137,7 @@ export function OTPScreen() {
           phone: data.user.phone || formattedPhone,
           name: data.user.name,
           avatar: data.user.avatar || undefined,
-          role: data.user.role || 'buyer',
+          role: (data.user.role || 'buyer') as UserRole,
           isVerified: true,
           loyaltyPoints: data.user.loyaltyPoints || 0,
           coins: data.user.coins || 0,
@@ -1161,11 +1152,15 @@ export function OTPScreen() {
         connectSocket()
         showToast('Login berhasil! 🎉', 'success')
       } else {
-        showToast(data.error || 'Verifikasi OTP gagal. Coba lagi.', 'error')
+        showToast('Verifikasi OTP gagal. Coba lagi.', 'error')
       }
     } catch (error) {
-      logger.warn({ component: 'auth', err: error }, 'OTP verification failed')
-      showToast('Terjadi kesalahan koneksi. Coba lagi nanti.', 'error')
+      if (error instanceof ApiClientError) {
+        showToast(error.message, 'error')
+      } else {
+        logger.warn({ component: 'auth', err: error }, 'OTP verification failed')
+        showToast('Terjadi kesalahan koneksi. Coba lagi nanti.', 'error')
+      }
     }
 
     setIsVerifying(false)
@@ -1347,21 +1342,16 @@ export function ForgotPasswordScreen() {
     setIsLoading(true)
 
     try {
-      const res = await fetch('/api/auth/forgot-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
-      })
-      const data = await res.json()
+      const data = await apiClient.post<ForgotPasswordResponse>('/api/auth/forgot-password', { email })
 
-      if (data.success) {
-        setIsSent(true)
-        showToast(data.message || 'Link reset password telah dikirim ke email Anda', 'success')
+      setIsSent(true)
+      showToast(data.message || 'Link reset password telah dikirim ke email Anda', 'success')
+    } catch (error) {
+      if (error instanceof ApiClientError) {
+        showToast(error.message, 'error')
       } else {
-        showToast(data.error || 'Gagal mengirim link reset password', 'error')
+        showToast('Terjadi kesalahan koneksi. Coba lagi nanti.', 'error')
       }
-    } catch {
-      showToast('Terjadi kesalahan koneksi. Coba lagi nanti.', 'error')
     }
 
     setIsLoading(false)
@@ -1533,24 +1523,19 @@ export function ResetPasswordScreen() {
 
     setIsLoading(true)
     try {
-      const res = await fetch('/api/auth/reset-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: resetToken, password }),
-      })
-      const data = await res.json()
+      const data = await apiClient.post<ResetPasswordResponse>('/api/auth/reset-password', { token: resetToken, password })
 
-      if (data.success) {
-        setIsSuccess(true)
-        showToast(data.message || 'Password berhasil direset!', 'success')
-        // Clear the token from store AND sessionStorage
-        useAppStore.setState({ resetPasswordToken: '' })
-        try { sessionStorage.removeItem('martup_reset_token') } catch { /* ignore */ }
+      setIsSuccess(true)
+      showToast(data.message || 'Password berhasil direset!', 'success')
+      // Clear the token from store AND sessionStorage
+      useAppStore.setState({ resetPasswordToken: '' })
+      try { sessionStorage.removeItem('martup_reset_token') } catch { /* ignore */ }
+    } catch (error) {
+      if (error instanceof ApiClientError) {
+        showToast(error.message, 'error')
       } else {
-        showToast(data.error || 'Gagal mereset password', 'error')
+        showToast('Terjadi kesalahan koneksi. Coba lagi nanti.', 'error')
       }
-    } catch {
-      showToast('Terjadi kesalahan koneksi. Coba lagi nanti.', 'error')
     }
     setIsLoading(false)
   }

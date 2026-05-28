@@ -1,6 +1,17 @@
 import type { StateCreator } from 'zustand'
 import type { WalletSlice, AppStore } from './types'
-import { getAuthHeaders } from './getAuthHeaders'
+import { apiClient } from '@/lib/api-client'
+
+interface WalletBalanceResponse {
+  success: boolean
+  data?: { balance: number; holdBalance: number; coins: number; mutations?: Array<Record<string, unknown>> }
+  error?: string
+}
+
+interface WalletMutationsResponse {
+  items?: Array<Record<string, unknown>>
+  mutations?: Array<Record<string, unknown>>
+}
 
 export const createWalletSlice: StateCreator<AppStore, [], [], WalletSlice> = (set, get) => ({
   walletBalance: 0,
@@ -11,12 +22,7 @@ export const createWalletSlice: StateCreator<AppStore, [], [], WalletSlice> = (s
 
   topUpWallet: async (amount, method = 'bank_transfer') => {
     try {
-      const res = await fetch('/api/wallet/topup', {
-        method: 'POST',
-        headers: getAuthHeaders(true),
-        body: JSON.stringify({ amount, method }),
-      })
-
+      const res = await apiClient.rawPost('/api/wallet/topup', { amount, method })
       const data = await res.json()
 
       if (!res.ok || !data.success) {
@@ -54,12 +60,7 @@ export const createWalletSlice: StateCreator<AppStore, [], [], WalletSlice> = (s
         body.bankHolder = bankDetails.bankHolder
       }
 
-      const res = await fetch('/api/wallet/withdraw', {
-        method: 'POST',
-        headers: getAuthHeaders(true),
-        body: JSON.stringify(body),
-      })
-
+      const res = await apiClient.rawPost('/api/wallet/withdraw', body)
       const data = await res.json()
 
       if (!res.ok || !data.success) {
@@ -111,25 +112,20 @@ export const createWalletSlice: StateCreator<AppStore, [], [], WalletSlice> = (s
 
   fetchWalletBalance: async (userId) => {
     try {
-      const res = await fetch(`/api/wallet?userId=${encodeURIComponent(userId)}`, {
-        headers: getAuthHeaders(),
-      })
-
-      const data = await res.json()
-
-      if (!res.ok || !data.success) {
+      const result = await apiClient.get<WalletBalanceResponse>('/api/wallet', { userId })
+      if (!result.success) {
         // Wallet not found is ok — may not exist yet
         return
       }
 
-      const wallet = data.data
+      const wallet = result.data
       set({
-        walletBalance: Number(wallet.balance) || 0,
-        walletHoldBalance: Number(wallet.holdBalance) || 0,
-        walletCoins: Number(wallet.coins) || 0,
+        walletBalance: Number(wallet?.balance) || 0,
+        walletHoldBalance: Number(wallet?.holdBalance) || 0,
+        walletCoins: Number(wallet?.coins) || 0,
         isWalletLoaded: true,
         // Include mutations if returned by the wallet endpoint
-        ...(wallet.mutations ? {
+        ...(wallet?.mutations ? {
           walletMutations: wallet.mutations.map((m: Record<string, unknown>) => ({
             id: String(m.id),
             type: m.type as 'credit' | 'debit',
@@ -148,21 +144,14 @@ export const createWalletSlice: StateCreator<AppStore, [], [], WalletSlice> = (s
 
   fetchWalletMutations: async (userId) => {
     try {
-      const res = await fetch(`/api/wallet/mutations?userId=${encodeURIComponent(userId)}`, {
-        headers: getAuthHeaders(),
-      })
-
-      const data = await res.json()
-
-      if (!res.ok) {
-        return
-      }
+      const result = await apiClient.get<WalletMutationsResponse>('/api/wallet/mutations', { userId })
 
       // The mutations endpoint returns { items, total, page, limit, totalPages }
-      const mutations = data.items || data.mutations || data
+      // Fallback: result itself might be an array if API returns raw array
+      const mutations = result.items || result.mutations || result
       if (Array.isArray(mutations)) {
         set({
-          walletMutations: mutations.map((m: Record<string, unknown>) => ({
+          walletMutations: (mutations as Array<Record<string, unknown>>).map((m: Record<string, unknown>) => ({
             id: String(m.id),
             type: m.type as 'credit' | 'debit',
             amount: Number(m.amount),

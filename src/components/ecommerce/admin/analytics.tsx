@@ -4,8 +4,8 @@ import { motion } from "framer-motion"
 import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   AreaChart, Area,
-  DollarSign, TrendingUp, BarChart3, CreditCard
 } from "recharts"
+import { DollarSign, TrendingUp, BarChart3, CreditCard } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { useAppStore } from "@/lib/store"
 import { formatPrice } from "@/lib/utils"

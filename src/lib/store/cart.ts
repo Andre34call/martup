@@ -2,9 +2,12 @@ import { create } from 'zustand'
 import { logger } from '@/lib/logger'
 import { persist } from 'zustand/middleware'
 import type { CartItem, Product, ProductVariant } from '../types'
-import { getAuthHeaders } from './getAuthHeaders'
+import { apiClient } from '@/lib/api-client'
 
 // ==================== TYPES ====================
+
+// Type alias for API response (avoids TSX generic parsing issues)
+type CartSyncResponse = { success: boolean; data?: any[]; error?: string }
 
 interface CartState {
   items: CartItem[]
@@ -95,11 +98,7 @@ export const useCartStore = create<CartState>()(
         // If authenticated, sync with server
         if (isUserAuthenticated()) {
           const previousItems = existing ? get().items : optimisticUpdate.items
-          fetch('/api/cart', {
-            method: 'POST',
-            headers: getAuthHeaders(true),
-            body: JSON.stringify({ productId: product.id, variantId: variantId || null, quantity }),
-          })
+          apiClient.rawPost('/api/cart', { productId: product.id, variantId: variantId || null, quantity })
             .then((res) => res.json())
             .then((data) => {
               if (data.success && data.data) {
@@ -136,11 +135,7 @@ export const useCartStore = create<CartState>()(
 
         // If authenticated, sync with server
         if (isUserAuthenticated() && removedItem) {
-          fetch('/api/cart', {
-            method: 'DELETE',
-            headers: getAuthHeaders(true),
-            body: JSON.stringify({ cartItemId: id }),
-          })
+          apiClient.rawDelete('/api/cart', { cartItemId: id })
             .then((res) => res.json())
             .then((data) => {
               if (!data.success) {
@@ -171,11 +166,7 @@ export const useCartStore = create<CartState>()(
 
         // If authenticated, sync with server
         if (isUserAuthenticated() && targetItem) {
-          fetch('/api/cart', {
-            method: 'PUT',
-            headers: getAuthHeaders(true),
-            body: JSON.stringify({ cartItemId: id, quantity }),
-          })
+          apiClient.rawPut('/api/cart', { cartItemId: id, quantity })
             .then((res) => res.json())
             .then((data) => {
               if (data.success && data.data) {
@@ -215,11 +206,7 @@ export const useCartStore = create<CartState>()(
         // If authenticated, sync with server
         if (isUserAuthenticated() && targetItem) {
           const newChecked = !targetItem.isChecked
-          fetch('/api/cart', {
-            method: 'PUT',
-            headers: getAuthHeaders(true),
-            body: JSON.stringify({ cartItemId: id, isChecked: newChecked }),
-          })
+          apiClient.rawPut('/api/cart', { cartItemId: id, isChecked: newChecked })
             .then((res) => res.json())
             .then((data) => {
               if (!data.success) {
@@ -248,11 +235,7 @@ export const useCartStore = create<CartState>()(
         // If authenticated, sync all items with server
         if (isUserAuthenticated()) {
           const updates = previousItems.map((item) =>
-            fetch('/api/cart', {
-              method: 'PUT',
-              headers: getAuthHeaders(true),
-              body: JSON.stringify({ cartItemId: item.id, isChecked: checked }),
-            })
+            apiClient.rawPut('/api/cart', { cartItemId: item.id, isChecked: checked })
               .then((res) => res.json())
               .then((data) => ({ itemId: item.id, success: data.success }))
               .catch(() => ({ itemId: item.id, success: false }))
@@ -284,10 +267,7 @@ export const useCartStore = create<CartState>()(
 
         // If authenticated, clear on server
         if (isUserAuthenticated()) {
-          fetch('/api/cart?clear=true', {
-            method: 'POST',
-            headers: getAuthHeaders(true),
-          })
+          apiClient.rawPost('/api/cart?clear=true', undefined)
             .then((res) => res.json())
             .then((data) => {
               if (!data.success) {
@@ -334,10 +314,7 @@ export const useCartStore = create<CartState>()(
       syncFromServer: async (userId: string) => {
         set({ isSyncing: true })
         try {
-          const res = await fetch(`/api/cart?userId=${userId}`, {
-            headers: getAuthHeaders(),
-          })
-          const data = await res.json()
+          const data = await apiClient.get<CartSyncResponse>('/api/cart', { userId })
           if (data.success && Array.isArray(data.data)) {
             const serverItems = data.data.map((raw: Record<string, unknown>) => mapServerCartItem(raw))
             set({ items: serverItems, isSyncing: false })
@@ -370,11 +347,7 @@ export const useCartStore = create<CartState>()(
             quantity: item.quantity,
           }))
 
-          const res = await fetch('/api/cart?merge=true', {
-            method: 'POST',
-            headers: getAuthHeaders(true),
-            body: JSON.stringify({ items: mergeItems }),
-          })
+          const res = await apiClient.rawPost('/api/cart?merge=true', { items: mergeItems })
           const data = await res.json()
 
           if (data.success) {

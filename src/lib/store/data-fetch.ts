@@ -3,9 +3,13 @@ import { logger } from '@/lib/logger'
 import type { DataFetchSlice, AppStore } from './types'
 import type { UserRole } from '../types'
 import { ELEVATED_ROLES } from '../types'
-import { getAuthHeaders } from './getAuthHeaders'
+import { apiClient } from '@/lib/api-client'
 import { mapUser, mapSeller, mapWalletMutation, mapOrder, mapNotification, mapAddress, mapReview, mapBanner } from '../mappers'
 import { useWishlistStore } from './wishlist'
+
+// API response types
+type UserDataApiResponse = { data?: any; [key: string]: any }
+type BannersApiResponse = { success?: boolean; data?: any[]; [key: string]: any }
 
 export const createDataFetchSlice: StateCreator<AppStore, [], [], DataFetchSlice> = (set, get) => ({
   isDataLoaded: false,
@@ -13,9 +17,7 @@ export const createDataFetchSlice: StateCreator<AppStore, [], [], DataFetchSlice
 
   fetchUserData: async (userId: string) => {
     try {
-      const res = await fetch(`/api/user-data?userId=${userId}`, { headers: getAuthHeaders() })
-      if (!res.ok) throw new Error('Failed to fetch user data')
-      const raw = await res.json()
+      const raw = await apiClient.get<UserDataApiResponse>('/api/user-data', { userId })
       const data = raw.data || raw  // Unwrap { success, data } response
 
       const state = get()
@@ -115,9 +117,7 @@ export const createDataFetchSlice: StateCreator<AppStore, [], [], DataFetchSlice
 
   fetchHomeBanners: async () => {
     try {
-      const res = await fetch('/api/banners?position=home_top')
-      if (!res.ok) throw new Error('Failed to fetch banners')
-      const data = await res.json()
+      const data = await apiClient.get<BannersApiResponse>('/api/banners', { position: 'home_top' })
       if (data.success && data.data) {
         set({
           homeBanners: data.data.map(mapBanner)

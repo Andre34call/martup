@@ -42,7 +42,7 @@ export const twoFactorDisableSchema = z.object({
 // ==================== Admin ====================
 export const adminUpdateUserSchema = z.object({
   userId: z.string().min(1, 'User ID wajib diisi'),
-  updates: z.record(z.unknown()),
+  updates: z.record(z.string(), z.unknown()),
 })
 
 export const adminDeleteUserSchema = z.object({
@@ -88,6 +88,117 @@ export const adminDepositActionSchema = z.object({
   depositId: z.string().min(1, 'Deposit ID wajib diisi'),
   status: z.enum(['success', 'failed']),
   adminNote: z.string().max(500).optional(),
+})
+
+// ==================== Wallet ====================
+export const walletDebitSchema = z.object({
+  orderId: z.string().min(1, 'orderId wajib diisi'),
+  amount: z.number().positive('Jumlah debit harus lebih dari 0'),
+  description: z.string().optional(),
+})
+
+// ==================== Payment ====================
+export const paymentCreateSchema = z.object({
+  orderId: z.string().min(1, 'orderId wajib diisi'),
+})
+
+// ==================== Orders ====================
+export const createOrderSchema = z.object({
+  userId: z.string().min(1, 'userId wajib diisi'),
+  sellerId: z.string().min(1, 'sellerId wajib diisi'),
+  items: z.array(z.object({
+    productId: z.string().min(1),
+    quantity: z.number().int().positive(),
+    price: z.number().min(0).optional(),
+    subtotal: z.number().min(0).optional(),
+    productName: z.string().optional(),
+    variantId: z.string().nullable().optional(),
+    variantName: z.string().nullable().optional(),
+    image: z.string().nullable().optional(),
+  })).min(1, 'Items tidak boleh kosong'),
+  addressId: z.string().min(1, 'addressId wajib diisi'),
+  subtotal: z.number().min(0).optional(),
+  shippingCost: z.number().min(0).optional(),
+  discountAmount: z.number().min(0).optional(),
+  taxAmount: z.number().min(0).optional(),
+  platformFee: z.number().min(0).optional(),
+  totalAmount: z.number().min(0).optional(),
+  paymentMethod: z.string().optional(),
+  note: z.string().optional(),
+  shipping: z.object({
+    provider: z.string().optional(),
+    service: z.string().optional(),
+    estimatedDays: z.string().nullable().optional(),
+  }).optional(),
+  voucherCode: z.string().optional(),
+})
+
+export const updateOrderSchema = z.object({
+  orderId: z.string().min(1, 'orderId wajib diisi'),
+  status: z.string().optional(),
+  paymentStatus: z.string().optional(),
+  trackingNumber: z.string().optional(),
+})
+
+// ==================== Addresses ====================
+export const createAddressSchema = z.object({
+  label: z.string().min(1, 'Label wajib diisi').max(50, 'Label maksimal 50 karakter'),
+  recipient: z.string().min(1, 'Recipient wajib diisi').max(100, 'Recipient maksimal 100 karakter'),
+  phone: z.string().min(1, 'Phone wajib diisi'),
+  address: z.string().min(1, 'Address wajib diisi').max(500, 'Address maksimal 500 karakter'),
+  city: z.string().min(1, 'City wajib diisi').max(100, 'City maksimal 100 karakter'),
+  province: z.string().min(1, 'Province wajib diisi').max(100, 'Province maksimal 100 karakter'),
+  postalCode: z.string().min(1, 'Postal code wajib diisi'),
+  isDefault: z.boolean().optional(),
+})
+
+export const updateAddressSchema = z.object({
+  addressId: z.string().min(1, 'addressId wajib diisi'),
+  label: z.string().min(1).max(50).optional(),
+  recipient: z.string().min(1).max(100).optional(),
+  phone: z.string().optional(),
+  address: z.string().min(1).max(500).optional(),
+  city: z.string().min(1).max(100).optional(),
+  province: z.string().min(1).max(100).optional(),
+  postalCode: z.string().optional(),
+  isDefault: z.boolean().optional(),
+})
+
+export const deleteAddressSchema = z.object({
+  addressId: z.string().min(1, 'addressId wajib diisi'),
+})
+
+// ==================== Seller ====================
+export const sellerRegisterSchema = z.object({
+  userId: z.string().min(1, 'userId wajib diisi'),
+  storeName: z.string().min(1, 'Nama toko wajib diisi').max(100, 'Nama toko maksimal 100 karakter'),
+  storeDesc: z.string().max(500).optional(),
+  storeAddress: z.string().max(500).optional(),
+  storeAvatar: z.string().optional(),
+  storeBanner: z.string().optional(),
+  bankAccount: z.string().optional(),
+  bankName: z.string().optional(),
+  bankHolder: z.string().optional(),
+})
+
+export const sellerProfileUpdateSchema = z.object({
+  storeName: z.string().min(1, 'Nama toko tidak boleh kosong').max(100).optional(),
+  storeDesc: z.string().max(1000).optional(),
+  storeAddress: z.string().max(500).optional(),
+  storeCity: z.string().max(100).optional(),
+  storeProvince: z.string().max(100).optional(),
+  storePostalCode: z.string().max(10).optional(),
+  bankAccount: z.string().optional(),
+  bankName: z.string().optional(),
+  bankHolder: z.string().optional(),
+  autoReply: z.string().max(500).optional(),
+})
+
+export const sellerWithdrawSchema = z.object({
+  amount: z.number().positive('Amount must be a positive number'),
+  bankAccount: z.string().optional(),
+  bankName: z.string().optional(),
+  bankHolder: z.string().optional(),
 })
 
 // Helper to validate request body with Zod

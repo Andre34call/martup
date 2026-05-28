@@ -2,7 +2,17 @@ import type { StateCreator } from 'zustand'
 import { logger } from '@/lib/logger'
 import type { AdminSlice, AppStore } from './types'
 import type { AdminStats, WithdrawStatus, Order } from '../types'
-import { getAuthHeaders } from './getAuthHeaders'
+import { apiClient } from '@/lib/api-client'
+
+// Type aliases for API responses
+type DivisionsResponse = { success: boolean; divisions: any[] }
+type AdminUsersResponse = { success: boolean; data?: any[]; users?: any[] }
+type AdminOrdersResponse = { success: boolean; data: Order[] }
+type AdminStatsResponse = { success: boolean; data: AdminStats }
+type AdminWithdrawalsResponse = { success: boolean; data: any[] }
+type AdminBannersResponse = { success: boolean; data: any[] }
+type AdminComplaintsResponse = { success: boolean; data: any[] }
+type PlatformSettingsResponse = { success: boolean; data: Record<string, number | boolean | string> }
 
 export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set, get) => ({
   adminUsers: [],
@@ -32,9 +42,7 @@ export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set
   divisions: [],
   fetchDivisions: async () => {
     try {
-      const res = await fetch('/api/admin/divisions', { headers: getAuthHeaders() })
-      if (!res.ok) throw new Error('Failed to fetch divisions')
-      const data = await res.json()
+      const data = await apiClient.get<DivisionsResponse>('/api/admin/divisions')
       if (data.success) {
         set({ divisions: data.divisions })
       }
@@ -44,9 +52,7 @@ export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set
   },
   fetchAdminUsers: async () => {
     try {
-      const res = await fetch('/api/admin/users', { headers: getAuthHeaders() })
-      if (!res.ok) throw new Error('Failed to fetch admin users')
-      const data = await res.json()
+      const data = await apiClient.get<AdminUsersResponse>('/api/admin/users')
       if (data.success) {
         const users = data.data || data.users || []
         set({
@@ -71,12 +77,7 @@ export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set
   },
   assignUserToDivision: async (userId, divisionId) => {
     try {
-      const res = await fetch('/api/admin/users', {
-        method: 'PATCH',
-        headers: getAuthHeaders(true),
-        body: JSON.stringify({ userId, updates: { divisionId } }),
-      })
-      if (!res.ok) throw new Error('Failed to assign user to division')
+      await apiClient.patch('/api/admin/users', { userId, updates: { divisionId } })
       // Refresh divisions to update member counts
       get().fetchDivisions()
       get().fetchAdminUsers()
@@ -86,12 +87,7 @@ export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set
   },
   updateDivision: async (divisionId, updates) => {
     try {
-      const res = await fetch('/api/admin/divisions', {
-        method: 'PATCH',
-        headers: getAuthHeaders(true),
-        body: JSON.stringify({ divisionId, updates }),
-      })
-      if (!res.ok) throw new Error('Failed to update division')
+      await apiClient.patch('/api/admin/divisions', { divisionId, updates })
       // Refresh divisions
       get().fetchDivisions()
     } catch (error) {
@@ -103,9 +99,7 @@ export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set
   adminOrders: [],
   fetchAdminOrders: async () => {
     try {
-      const res = await fetch('/api/admin/orders', { headers: getAuthHeaders() })
-      if (!res.ok) throw new Error('Failed to fetch admin orders')
-      const data = await res.json()
+      const data = await apiClient.get<AdminOrdersResponse>('/api/admin/orders')
       if (data.success && data.data) {
         set({ adminOrders: data.data as Order[] })
       }
@@ -115,9 +109,7 @@ export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set
   },
   fetchAdminStats: async () => {
     try {
-      const res = await fetch('/api/admin/stats', { headers: getAuthHeaders() })
-      if (!res.ok) throw new Error('Failed to fetch admin stats')
-      const data = await res.json()
+      const data = await apiClient.get<AdminStatsResponse>('/api/admin/stats')
       if (data.success && data.data) {
         set({ adminStats: data.data as AdminStats })
       }
@@ -127,9 +119,7 @@ export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set
   },
   fetchAdminWithdrawals: async () => {
     try {
-      const res = await fetch('/api/admin/withdrawals', { headers: getAuthHeaders() })
-      if (!res.ok) throw new Error('Failed to fetch admin withdrawals')
-      const data = await res.json()
+      const data = await apiClient.get<AdminWithdrawalsResponse>('/api/admin/withdrawals')
       if (data.success && data.data) {
         // Map withdrawals to store's WithdrawRequest format
         const withdrawals = data.data.map((w: any) => ({
@@ -160,9 +150,7 @@ export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set
   },
   fetchAdminBanners: async () => {
     try {
-      const res = await fetch('/api/admin/banners', { headers: getAuthHeaders() })
-      if (!res.ok) throw new Error('Failed to fetch admin banners')
-      const data = await res.json()
+      const data = await apiClient.get<AdminBannersResponse>('/api/admin/banners')
       if (data.success && data.data) {
         set({
           adminBanners: data.data.map((b: any) => ({
@@ -184,9 +172,7 @@ export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set
   },
   fetchAdminComplaints: async () => {
     try {
-      const res = await fetch('/api/admin/complaints', { headers: getAuthHeaders() })
-      if (!res.ok) throw new Error('Failed to fetch admin complaints')
-      const data = await res.json()
+      const data = await apiClient.get<AdminComplaintsResponse>('/api/admin/complaints')
       if (data.success && data.data) {
         set({
           adminComplaints: data.data.map((c: any) => ({
@@ -212,9 +198,7 @@ export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set
   platformSettings: null,
   fetchPlatformSettings: async () => {
     try {
-      const res = await fetch('/api/admin/settings', { headers: getAuthHeaders() })
-      if (!res.ok) throw new Error('Failed to fetch platform settings')
-      const data = await res.json()
+      const data = await apiClient.get<PlatformSettingsResponse>('/api/admin/settings')
       if (data.success && data.data) {
         set({ platformSettings: data.data as Record<string, number | boolean | string> })
       }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
+import { validateBody, createOrderSchema, updateOrderSchema } from '@/lib/validations'
 
 import { logger } from '@/lib/logger'
 // Helper to safely parse JSON fields
@@ -131,14 +132,16 @@ export async function PUT(request: NextRequest) {
     if (!authResult.success) return authErrorResponse(authResult)
 
     const body = await request.json()
-    const { orderId, status, paymentStatus, trackingNumber } = body
 
-    if (!orderId) {
+    // Zod validation
+    const validation = validateBody(updateOrderSchema, body)
+    if (!validation.success) {
       return NextResponse.json(
-        { success: false, error: 'orderId is required' },
+        { success: false, error: validation.error },
         { status: 400 }
       )
     }
+    const { orderId, status, paymentStatus, trackingNumber } = validation.data
 
     // Find the order
     const existingOrder = await db.order.findUnique({
@@ -322,6 +325,16 @@ export async function POST(request: NextRequest) {
     if (!authResult.success) return authErrorResponse(authResult)
 
     const body = await request.json()
+
+    // Zod validation
+    const validation = validateBody(createOrderSchema, body)
+    if (!validation.success) {
+      return NextResponse.json(
+        { success: false, error: validation.error },
+        { status: 400 }
+      )
+    }
+    const validatedData = validation.data
     const {
       userId,
       sellerId,
@@ -336,33 +349,7 @@ export async function POST(request: NextRequest) {
       paymentMethod,
       note,
       shipping,
-    } = body
-
-    // Validate required fields
-    if (!userId) {
-      return NextResponse.json(
-        { success: false, error: 'userId is required' },
-        { status: 400 }
-      )
-    }
-    if (!sellerId) {
-      return NextResponse.json(
-        { success: false, error: 'sellerId is required' },
-        { status: 400 }
-      )
-    }
-    if (!items || !Array.isArray(items) || items.length === 0) {
-      return NextResponse.json(
-        { success: false, error: 'items array is required and must not be empty' },
-        { status: 400 }
-      )
-    }
-    if (!addressId) {
-      return NextResponse.json(
-        { success: false, error: 'addressId is required' },
-        { status: 400 }
-      )
-    }
+    } = validatedData
 
     // SECURITY: Users can only create orders for themselves
     if (userId !== authResult.user.id) {
@@ -432,20 +419,20 @@ export async function POST(request: NextRequest) {
             create: items.map((item: {
               productId: string
               variantId?: string | null
-              productName: string
+              productName?: string
               variantName?: string | null
-              price: number
+              price?: number
               quantity: number
-              subtotal: number
+              subtotal?: number
               image?: string | null
             }) => ({
               productId: item.productId,
               variantId: item.variantId || null,
-              productName: item.productName,
+              productName: item.productName || '',
               variantName: item.variantName || null,
-              price: item.price,
+              price: item.price ?? 0,
               quantity: item.quantity,
-              subtotal: item.subtotal,
+              subtotal: item.subtotal ?? 0,
               image: item.image || null,
             })),
           },

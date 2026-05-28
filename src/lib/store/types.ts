@@ -263,7 +263,7 @@ export interface DataFetchSlice {
   isDataLoaded: boolean
   fetchUserData: (userId: string) => Promise<void>
   fetchHomeBanners: () => Promise<void>
-  homeBanners: Array<{ id: string; title: string; image: string; link: string; position: string }>
+  homeBanners: Array<{ id: string; title: string; image: string; link?: string; position: string }>
 }
 
 // ==================== COMBINED STORE TYPE ====================

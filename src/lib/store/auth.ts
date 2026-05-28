@@ -3,9 +3,12 @@ import { logger } from '@/lib/logger'
 import { signOut } from 'next-auth/react'
 import type { AuthSlice, AppStore } from './types'
 import type { UserRole, Seller } from '../types'
-import { getAuthHeaders } from './getAuthHeaders'
+import { apiClient } from '@/lib/api-client'
 import { useCartStore } from './cart'
 import { mapSeller } from '../mappers'
+
+// API response types
+type UserDataApiResponse = { data?: any; [key: string]: any }
 
 export const createAuthSlice: StateCreator<AppStore, [], [], AuthSlice> = (set, get) => ({
   isAuthenticated: false,
@@ -86,12 +89,8 @@ export const createAuthSlice: StateCreator<AppStore, [], [], AuthSlice> = (set, 
       const storeName = state.currentUser.name ? `${state.currentUser.name}'s Store` : 'My Store'
 
       try {
-        // Try to register as seller
-        const registerRes = await fetch('/api/seller/register', {
-          method: 'POST',
-          headers: getAuthHeaders(true),
-          body: JSON.stringify({ userId, storeName }),
-        })
+        // Try to register as seller — rawPost to check data.success and status code
+        const registerRes = await apiClient.rawPost('/api/seller/register', { userId, storeName })
         const registerData = await registerRes.json()
 
         if (registerData.success && registerData.data) {
@@ -101,8 +100,7 @@ export const createAuthSlice: StateCreator<AppStore, [], [], AuthSlice> = (set, 
         } else if (registerRes.status === 409) {
           // Already a seller — fetch existing seller data
           try {
-            const userDataRes = await fetch(`/api/user-data?userId=${userId}`, { headers: getAuthHeaders() })
-            const userDataRaw = await userDataRes.json()
+            const userDataRaw = await apiClient.get<UserDataApiResponse>('/api/user-data', { userId })
             const userData = userDataRaw.data || userDataRaw
 
             if (userData.seller) {
@@ -153,10 +151,7 @@ export const createAuthSlice: StateCreator<AppStore, [], [], AuthSlice> = (set, 
     // Attempt to delete the account from the server
     if (userId) {
       try {
-        await fetch('/api/user/delete', {
-          method: 'DELETE',
-          headers: getAuthHeaders(true),
-        })
+        await apiClient.del('/api/user/delete')
       } catch (err) {
         logger.warn({ component: 'auth', err }, 'Failed to delete account from server')
         // Continue with local cleanup even if server delete fails

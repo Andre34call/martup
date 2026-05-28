@@ -37,7 +37,7 @@ export function useDataSync() {
     // Determine effective auth from useAppStore + localStorage fallback
     // This handles the case where Zustand hasn't hydrated yet but the user
     // has a valid auth token in localStorage (from a previous session)
-    const hasLocalAuthToken = !!(localStorage.getItem('authToken') || localStorage.getItem('martup_token'))
+    const hasLocalAuthToken = !!localStorage.getItem('authToken')
     const effectiveUserId = appStoreUserId
     const effectiveIsAuthenticated = appStoreIsAuthenticated || (hasLocalAuthToken && !!appStoreUserId)
 

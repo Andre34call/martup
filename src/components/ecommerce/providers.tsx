@@ -4,11 +4,29 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { SessionProvider } from "next-auth/react"
 import { useState, useEffect, useRef } from "react"
 import { useSession } from "next-auth/react"
-import { useAppStore, getAuthHeaders } from "@/lib/store"
+import { useAppStore } from "@/lib/store"
+import type { UserRole } from "@/lib/types"
 import { setSentryUser, clearSentryUser } from "@/lib/sentry"
 import { logger } from '@/lib/logger'
 import { useDataSync } from '@/lib/use-data-sync'
 import { ApiProvider } from '@/hooks/api/provider'
+import { apiClient } from '@/lib/api-client'
+
+interface AuthMeResponse {
+  success: boolean
+  user: {
+    id: string
+    email: string
+    name: string
+    phone?: string
+    avatar?: string
+    role?: string
+    isVerified?: boolean
+    loyaltyPoints?: number
+    coins?: number
+    referralCode?: string
+  }
+}
 
 function ZustandHydration({ children }: { children: React.ReactNode }) {
   const hydrated = useRef(false)
@@ -43,8 +61,8 @@ function DataFetcher({ children }: { children: React.ReactNode }) {
       fetchProducts()
       fetchCategories()
       // Setup Supabase Storage bucket (idempotent - safe to call multiple times)
-      // Include auth headers so the setup route can verify the user
-      fetch('/api/setup/storage', { method: 'POST', headers: getAuthHeaders(true) })
+      // apiClient.rawPost adds auth headers + CSRF automatically (replacing getAuthHeaders(true))
+      apiClient.rawPost('/api/setup/storage', undefined)
         .then(res => res.json())
         .then(data => {
           if (data.success) {
@@ -61,9 +79,9 @@ function DataFetcher({ children }: { children: React.ReactNode }) {
   // Only calls login() to set useAppStore auth state; data sync is handled by useDataSync
   useEffect(() => {
     if (status === 'authenticated' && session?.user && !isAuthenticated) {
-      fetch('/api/auth/me')
-        .then(res => res.json())
-        .then(data => {
+      ;(async () => {
+        try {
+          const data = await apiClient.get<AuthMeResponse>('/api/auth/me')
           if (data.success && data.user) {
             login({
               id: data.user.id,
@@ -71,7 +89,7 @@ function DataFetcher({ children }: { children: React.ReactNode }) {
               name: data.user.name,
               phone: data.user.phone || undefined,
               avatar: data.user.avatar || undefined,
-              role: data.user.role || 'buyer',
+              role: (data.user.role || 'buyer') as UserRole,
               isVerified: data.user.isVerified || false,
               loyaltyPoints: data.user.loyaltyPoints || 0,
               coins: data.user.coins || 0,
@@ -88,10 +106,10 @@ function DataFetcher({ children }: { children: React.ReactNode }) {
             // Connect WebSocket (data sync is handled by useDataSync)
             connectSocket()
           }
-        })
-        .catch(err => {
+        } catch (err) {
           logger.warn({ component: 'providers', err: err }, 'Failed to fetch user data')
-        })
+        }
+      })()
     }
   }, [status, session, isAuthenticated, login, connectSocket])
 

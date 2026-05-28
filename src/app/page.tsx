@@ -6,7 +6,7 @@ import { useAppStore } from '@/lib/store'
 import { useEffect } from 'react'
 import { BottomNav, AdminBottomNav, SellerBottomNav } from '@/components/ecommerce/shared'
 import { ErrorBoundary } from '@/components/error-boundary'
-import { ELEVATED_ROLES } from '@/lib/types'
+import { ELEVATED_ROLES, type UserRole } from '@/lib/types'
 
 // Auth screens
 import { SplashScreen, OnboardingScreen, LoginScreen, RegisterScreen, OTPScreen, ForgotPasswordScreen, ResetPasswordScreen, EmailVerificationScreen } from '@/components/ecommerce/auth-screens'
@@ -119,7 +119,7 @@ function ScreenRenderer() {
   // Security: If currentScreen is an admin screen but user is not actually an admin/manager, redirect to home
   // Use useEffect to avoid calling navigate during render
   const isAdminScreen = ADMIN_SCREENS.includes(currentScreen)
-  const isActualAdmin = ELEVATED_ROLES.includes(currentUser?.role || '')
+  const isActualAdmin = ELEVATED_ROLES.includes((currentUser?.role || '') as UserRole)
 
   // Redirect non-admin users away from admin screens
   // SECURITY: Use useEffect to avoid calling navigate during render
@@ -260,7 +260,7 @@ export default function Home() {
 
       // Check if user is already authenticated — check BOTH Zustand state and localStorage
       // Zustand may not have hydrated yet on page load, so also check localStorage
-      const hasAuthToken = !!(localStorage.getItem('authToken') || localStorage.getItem('martup_token'))
+      const hasAuthToken = !!localStorage.getItem('authToken')
       if (isAuthenticated || hasAuthToken) {
         // User is authenticated — ignore the reset token
         // They can use "Ubah Password" in settings if needed

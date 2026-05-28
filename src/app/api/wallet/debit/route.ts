@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { verifyAuth, checkRateLimit, authErrorResponse } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
 import { logger, logBusinessEvent } from '@/lib/logger'
+import { validateBody, walletDebitSchema } from '@/lib/validations'
 
 // ==================== WALLET DEBIT (Payment) ====================
 // Deducts balance from the user's wallet for order payment.
@@ -26,27 +27,16 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { amount, orderId, description } = body as {
-      amount?: number
-      orderId?: string
-      description?: string
-    }
 
-    // Validate amount
-    if (!amount || typeof amount !== 'number' || amount <= 0) {
+    // Zod validation
+    const validation = validateBody(walletDebitSchema, body)
+    if (!validation.success) {
       return NextResponse.json(
-        { success: false, error: 'Jumlah debit harus lebih dari 0' },
+        { success: false, error: validation.error },
         { status: 400 }
       )
     }
-
-    // Validate orderId
-    if (!orderId) {
-      return NextResponse.json(
-        { success: false, error: 'orderId wajib diisi untuk pembayaran pesanan' },
-        { status: 400 }
-      )
-    }
+    const { amount, orderId, description } = validation.data
 
     // Find the user's wallet
     const wallet = await db.wallet.findUnique({

@@ -1,7 +1,12 @@
 import type { StateCreator } from 'zustand'
 import type { NotificationSlice, AppStore } from './types'
-import { getAuthHeaders } from './getAuthHeaders'
+import { apiClient } from '@/lib/api-client'
 import { logger } from '@/lib/logger'
+
+interface NotificationsResponse {
+  success: boolean
+  data?: Array<Record<string, unknown>>
+}
 
 export const createNotificationSlice: StateCreator<AppStore, [], [], NotificationSlice> = (set, get) => ({
   notifications: [],
@@ -10,11 +15,7 @@ export const createNotificationSlice: StateCreator<AppStore, [], [], Notificatio
     const notification = state.notifications.find(n => n.id === id)
     if (!notification || notification.isRead) return state
     // Also update on server
-    fetch('/api/notifications', {
-      method: 'PUT',
-      headers: getAuthHeaders(true),
-      body: JSON.stringify({ notificationId: id }),
-    }).catch(() => {})
+    apiClient.rawPut('/api/notifications', { notificationId: id }).catch(() => {})
     return {
       notifications: state.notifications.map(n => n.id === id ? { ...n, isRead: true } : n),
       unreadNotificationCount: Math.max(0, state.unreadNotificationCount - 1)
@@ -23,11 +24,7 @@ export const createNotificationSlice: StateCreator<AppStore, [], [], Notificatio
   markAllNotificationsRead: () => set((state) => {
     const userId = get().currentUser?.id
     if (userId) {
-      fetch('/api/notifications', {
-        method: 'PUT',
-        headers: getAuthHeaders(true),
-        body: JSON.stringify({ markAll: true, userId }),
-      }).catch(() => {})
+      apiClient.rawPut('/api/notifications', { markAll: true, userId }).catch(() => {})
     }
     return {
       notifications: state.notifications.map(n => ({ ...n, isRead: true })),
@@ -36,11 +33,7 @@ export const createNotificationSlice: StateCreator<AppStore, [], [], Notificatio
   }),
   fetchNotifications: async (userId: string) => {
     try {
-      const res = await fetch(`/api/notifications?userId=${encodeURIComponent(userId)}`, {
-        headers: getAuthHeaders(),
-      })
-      if (!res.ok) throw new Error('Failed to fetch notifications')
-      const data = await res.json()
+      const data = await apiClient.get<NotificationsResponse>('/api/notifications', { userId })
       if (data.success && data.data) {
         const notifications = data.data.map((n: any) => ({
           id: n.id,

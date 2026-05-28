@@ -3,7 +3,7 @@
  * Handles base URL, Authorization headers, CSRF protection with retry, JSON parsing, and error responses.
  *
  * Key features:
- * - Checks both `authToken` and `martup_token` localStorage keys for auth
+ * - Checks `authToken` localStorage key for auth
  * - Automatic CSRF token injection for mutating requests (POST, PUT, DELETE, PATCH)
  * - CSRF retry: if a 403 CSRF error occurs, fetches a fresh token and retries once
  * - Consistent error handling with ApiClientError
@@ -27,11 +27,10 @@ class ApiClientError extends Error {
 
 /**
  * Get auth token from localStorage.
- * Checks both `authToken` and `martup_token` for compatibility with the dual-token login flow.
  */
 function getToken(): string | null {
   if (typeof window === 'undefined') return null
-  return localStorage.getItem('authToken') || localStorage.getItem('martup_token')
+  return localStorage.getItem('authToken')
 }
 
 function buildUrl(path: string, params?: Record<string, string | undefined>): string {
@@ -234,15 +233,6 @@ export const apiClient = {
       method: 'DELETE',
       headers: getHeaders(true),
       body: body !== undefined ? JSON.stringify(body) : undefined,
-    })
-  },
-
-  rawPatch: async (url: string, body: unknown): Promise<Response> => {
-    const fullUrl = buildUrl(url)
-    return fetchWithCsrfRetry(fullUrl, {
-      method: 'PATCH',
-      headers: getHeaders(true),
-      body: JSON.stringify(body),
     })
   },
 }

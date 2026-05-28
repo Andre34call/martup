@@ -16,13 +16,17 @@ import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { useAppStore, getAuthHeaders } from "@/lib/store"
+import { useAppStore } from "@/lib/store"
+import { apiClient, ApiClientError } from '@/lib/api-client'
 import { formatPrice, formatRelativeTime } from "@/lib/utils"
 import { fadeIn, stagger } from '@/lib/animations'
 import { PageHeader, SectionHeader, StatusBadge, SearchBar, EmptyState, WalletBalanceCard } from "./shared"
 import type { Order } from "@/lib/types"
 import { useState, useRef, useEffect } from "react"
 import { AnimatePresence } from "framer-motion"
+
+// Type aliases for apiClient generics (avoids TSX parsing ambiguity)
+type AuthMeResponse = { user?: { id: string } }
 
 // ==================== (mock data removed — all data from store) ====================
 
@@ -406,11 +410,7 @@ export function SellerProducts() {
                     </Button>
                     <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20" onClick={async () => {
                       try {
-                        const res = await fetch('/api/seller/products', {
-                          method: 'DELETE',
-                          headers: getAuthHeaders(true),
-                          body: JSON.stringify({ productId: product.id }),
-                        })
+                        const res = await apiClient.rawDelete('/api/seller/products', { productId: product.id })
                         const data = await res.json()
                         if (data.success) {
                           removeProduct(product.id)
@@ -533,11 +533,7 @@ export function SellerOrders() {
                       {order.status === "paid" && (
                         <Button size="sm" className="h-8 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={async () => {
                           try {
-                            const res = await fetch(`/api/orders/${order.id}/status`, {
-                              method: 'PUT',
-                              headers: getAuthHeaders(true),
-                              body: JSON.stringify({ status: 'processing' }),
-                            })
+                            const res = await apiClient.rawPut(`/api/orders/${order.id}/status`, { status: 'processing' })
                             const data = await res.json()
                             if (!res.ok || !data.success) {
                               throw new Error(data.error || 'Gagal mengubah status')
@@ -545,7 +541,7 @@ export function SellerOrders() {
                             updateOrderStatus(order.id, 'processing')
                             showToast("Pesanan sedang diproses", "success")
                           } catch (err: unknown) {
-                            const message = err instanceof Error ? err.message : 'Gagal mengubah status pesanan'
+                            const message = err instanceof ApiClientError ? err.message : err instanceof Error ? err.message : 'Gagal mengubah status pesanan'
                             showToast(message, "error")
                           }
                         }}>
@@ -610,11 +606,7 @@ export function SellerOrders() {
                 }
                 if (trackingOrderId) {
                   try {
-                    const res = await fetch(`/api/orders/${trackingOrderId}/status`, {
-                      method: 'PUT',
-                      headers: getAuthHeaders(true),
-                      body: JSON.stringify({ status: 'shipped', trackingNumber: trackingNumber.trim() }),
-                    })
+                    const res = await apiClient.rawPut(`/api/orders/${trackingOrderId}/status`, { status: 'shipped', trackingNumber: trackingNumber.trim() })
                     const data = await res.json()
                     if (!res.ok || !data.success) {
                       throw new Error(data.error || 'Gagal mengubah status')
@@ -623,7 +615,7 @@ export function SellerOrders() {
                     updateOrderStatus(trackingOrderId, 'shipped')
                     showToast("Pesanan sedang dikirim", "success")
                   } catch (err: unknown) {
-                    const message = err instanceof Error ? err.message : 'Gagal mengubah status pesanan'
+                    const message = err instanceof ApiClientError ? err.message : err instanceof Error ? err.message : 'Gagal mengubah status pesanan'
                     showToast(message, "error")
                     return // Don't close dialog on error
                   }
@@ -668,11 +660,7 @@ export function SellerOrders() {
                 }
                 if (cancelOrderId) {
                   try {
-                    const res = await fetch(`/api/orders/${cancelOrderId}/status`, {
-                      method: 'PUT',
-                      headers: getAuthHeaders(true),
-                      body: JSON.stringify({ status: 'cancelled', cancelReason: cancelReason.trim() }),
-                    })
+                    const res = await apiClient.rawPut(`/api/orders/${cancelOrderId}/status`, { status: 'cancelled', cancelReason: cancelReason.trim() })
                     const data = await res.json()
                     if (!res.ok || !data.success) {
                       throw new Error(data.error || 'Gagal membatalkan pesanan')
@@ -680,7 +668,7 @@ export function SellerOrders() {
                     updateOrderStatus(cancelOrderId, 'cancelled')
                     showToast("Pesanan dibatalkan", "info")
                   } catch (err: unknown) {
-                    const message = err instanceof Error ? err.message : 'Gagal membatalkan pesanan'
+                    const message = err instanceof ApiClientError ? err.message : err instanceof Error ? err.message : 'Gagal membatalkan pesanan'
                     showToast(message, "error")
                     return
                   }
@@ -1201,9 +1189,9 @@ export function SellerSettings() {
   const [storeName, setStoreName] = useState(seller?.storeName || "My Store")
   const [storeDesc, setStoreDesc] = useState(seller?.storeDesc || "")
   const [storeAddress, setStoreAddress] = useState(seller?.storeAddress || "")
-  const [storeCity, setStoreCity] = useState((seller as any)?.storeCity || "")
-  const [storeProvince, setStoreProvince] = useState((seller as any)?.storeProvince || "")
-  const [storePostalCode, setStorePostalCode] = useState((seller as any)?.storePostalCode || "")
+  const [storeCity, setStoreCity] = useState(seller?.storeCity || "")
+  const [storeProvince, setStoreProvince] = useState(seller?.storeProvince || "")
+  const [storePostalCode, setStorePostalCode] = useState(seller?.storePostalCode || "")
   const [autoReplyMsg, setAutoReplyMsg] = useState(seller?.autoReply || "Terima kasih sudah menghubungi kami. Kami akan membalas pesan Anda secepatnya.")
   const [bankAccount, setBankAccount] = useState(seller?.bankAccount || "")
   const [bankName, setBankName] = useState(seller?.bankName || "")
@@ -1214,21 +1202,17 @@ export function SellerSettings() {
   const handleSave = async () => {
     setIsSaving(true)
     try {
-      const res = await fetch('/api/seller/profile', {
-        method: 'PUT',
-        headers: getAuthHeaders(true),
-        body: JSON.stringify({
-          storeName,
-          storeDesc,
-          storeAddress,
-          storeCity,
-          storeProvince,
-          storePostalCode,
-          autoReply: autoReplyMsg,
-          bankAccount,
-          bankName,
-          bankHolder,
-        }),
+      const res = await apiClient.rawPut('/api/seller/profile', {
+        storeName,
+        storeDesc,
+        storeAddress,
+        storeCity,
+        storeProvince,
+        storePostalCode,
+        autoReply: autoReplyMsg,
+        bankAccount,
+        bankName,
+        bankHolder,
       })
       const data = await res.json()
       if (!res.ok || !data.success) {
@@ -1236,7 +1220,7 @@ export function SellerSettings() {
       }
       showToast("Pengaturan berhasil disimpan!", "success")
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Gagal menyimpan pengaturan'
+      const message = err instanceof ApiClientError ? err.message : err instanceof Error ? err.message : 'Gagal menyimpan pengaturan'
       showToast(message, "error")
     } finally {
       setIsSaving(false)
@@ -1245,14 +1229,9 @@ export function SellerSettings() {
 
   const handleDeleteAccount = async () => {
     try {
-      const res = await fetch('/api/auth/me', { headers: getAuthHeaders() })
-      const data = await res.json()
+      const data = await apiClient.get<AuthMeResponse>('/api/auth/me')
       if (data?.user?.id) {
-        await fetch(`/api/admin/users`, {
-          method: 'DELETE',
-          headers: getAuthHeaders(true),
-          body: JSON.stringify({ userId: data.user.id }),
-        })
+        await apiClient.rawDelete('/api/admin/users', { userId: data.user.id })
       }
     } catch {
       // Best effort server-side cleanup

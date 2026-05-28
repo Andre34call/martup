@@ -152,7 +152,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const updateData: Record<string, unknown> = {}
-    if (code !== undefined) updateData.code = code.toUpperCase()
+    if (code !== undefined) updateData.code = String(code).toUpperCase()
     if (name !== undefined) updateData.name = name
     if (description !== undefined) updateData.description = description
     if (type !== undefined) updateData.type = type
@@ -165,12 +165,12 @@ export async function PUT(request: NextRequest) {
       updateData.usageLimit = usageLimit ? parseInt(String(usageLimit), 10) : null
     if (perUserLimit !== undefined)
       updateData.perUserLimit = parseInt(String(perUserLimit), 10)
-    if (validFrom !== undefined) updateData.validFrom = new Date(validFrom)
-    if (validUntil !== undefined) updateData.validUntil = new Date(validUntil)
+    if (validFrom !== undefined) updateData.validFrom = new Date(String(validFrom))
+    if (validUntil !== undefined) updateData.validUntil = new Date(String(validUntil))
     if (isActive !== undefined) updateData.isActive = isActive
 
     const voucher = await db.voucher.update({
-      where: { id: voucherId },
+      where: { id: String(voucherId) },
       data: updateData,
     })
 
@@ -202,10 +202,11 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Delete related usages first
-    await db.voucherUsage.deleteMany({ where: { voucherId } })
+    const voucherIdStr = String(voucherId)
+    await db.voucherUsage.deleteMany({ where: { voucherId: voucherIdStr } })
 
     const voucher = await db.voucher.delete({
-      where: { id: voucherId },
+      where: { id: voucherIdStr },
     })
 
     return NextResponse.json(serializeDecimal({ success: true, data: voucher }))

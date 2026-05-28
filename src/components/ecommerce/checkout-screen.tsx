@@ -9,7 +9,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { useAppStore, useCartStore, getAuthHeaders } from "@/lib/store"
+import { useAppStore, useCartStore } from "@/lib/store"
 import { formatPrice } from "@/lib/utils"
 import { DEFAULT_SHIPPING_OPTIONS } from "@/lib/constants"
 import {
@@ -19,6 +19,14 @@ import type { CartItem, ShippingOption, Address } from "@/lib/types"
 import { logger } from '@/lib/logger'
 import { useState, useMemo, useEffect, useCallback } from "react"
 import { openSnapPayment } from '@/lib/midtrans'
+import { apiClient } from '@/lib/api-client'
+
+// ==================== API RESPONSE TYPES ====================
+type ShippingResponse = { success: boolean; data?: { rates?: ShippingOption[] }; error?: string }
+type VoucherValidateResponse = { success: boolean; data?: { valid: boolean; message?: string; discountAmount: number }; error?: string }
+type OrderCreateResponse = { success: boolean; data?: { id: string; orderNumber: string }; error?: string }
+type WalletDebitResponse = { success: boolean; error?: string }
+type PaymentCreateResponse = { success: boolean; data?: { token: string }; error?: string }
 
 // ==================== CHECKOUT STEP INDICATOR ====================
 const CHECKOUT_STEPS = [
@@ -301,18 +309,14 @@ export function CheckoutScreen() {
   const fetchShippingRates = useCallback(async (sellerId: string, destinationCity: string, weightGrams: number, originCity?: string) => {
     setIsLoadingRates(prev => ({ ...prev, [sellerId]: true }))
     try {
-      const res = await fetch('/api/shipping/calculate', {
-        method: 'POST',
-        headers: getAuthHeaders(true),
-        body: JSON.stringify({
-          originCity: originCity || 'Jakarta', // Use seller's store city, fallback to Jakarta
-          destinationCity,
-          weight: weightGrams,
-        }),
+      const res = await apiClient.rawPost('/api/shipping/calculate', {
+        originCity: originCity || 'Jakarta', // Use seller's store city, fallback to Jakarta
+        destinationCity,
+        weight: weightGrams,
       })
-      const data = await res.json()
-      if (data.success && data.data?.rates?.length > 0) {
-        setShippingRatesBySeller(prev => ({ ...prev, [sellerId]: data.data.rates }))
+      const data: ShippingResponse = await res.json()
+      if (data.success && data.data?.rates && data.data.rates.length > 0) {
+        setShippingRatesBySeller(prev => ({ ...prev, [sellerId]: data.data!.rates } as Record<string, ShippingOption[]>))
       } else {
         // Fallback to default options
         setShippingRatesBySeller(prev => ({ ...prev, [sellerId]: DEFAULT_SHIPPING_OPTIONS }))
@@ -429,16 +433,12 @@ export function CheckoutScreen() {
     let validatedVoucherDiscount = voucherDiscount
     if (selectedVoucher) {
       try {
-        const validateRes = await fetch('/api/vouchers/validate', {
-          method: 'POST',
-          headers: getAuthHeaders(true),
-          body: JSON.stringify({
-            code: selectedVoucher.code,
-            userId: currentUser?.id,
-            cartSubtotal: subtotal,
-          }),
+        const validateRes = await apiClient.rawPost('/api/vouchers/validate', {
+          code: selectedVoucher.code,
+          userId: currentUser?.id,
+          cartSubtotal: subtotal,
         })
-        const validateData = await validateRes.json()
+        const validateData: VoucherValidateResponse = await validateRes.json()
         if (validateData.success && validateData.data) {
           if (!validateData.data.valid) {
             showToast(validateData.data.message || "Voucher tidak valid", "error")
@@ -504,13 +504,8 @@ export function CheckoutScreen() {
         const orderPaymentStatus = isImmediatePayment ? 'paid' : 'unpaid'
 
         try {
-          const orderHeaders = getAuthHeaders(true)
-          const res = await fetch('/api/orders', {
-            method: 'POST',
-            headers: orderHeaders,
-            body: JSON.stringify(orderPayload),
-          })
-          const data = await res.json()
+          const res = await apiClient.rawPost('/api/orders', orderPayload)
+          const data: OrderCreateResponse = await res.json()
 
           if (data.success && data.data) {
             const apiOrder = data.data
@@ -574,16 +569,12 @@ export function CheckoutScreen() {
         let walletPaymentSuccess = true
         for (const order of createdOrders) {
           try {
-            const walletRes = await fetch('/api/wallet/debit', {
-              method: 'POST',
-              headers: getAuthHeaders(true),
-              body: JSON.stringify({
-                orderId: order.id,
-                amount: order.totalAmount,
-                description: `Pembayaran pesanan via MartUp Pay`,
-              }),
+            const walletRes = await apiClient.rawPost('/api/wallet/debit', {
+              orderId: order.id,
+              amount: order.totalAmount,
+              description: `Pembayaran pesanan via MartUp Pay`,
             })
-            const walletData = await walletRes.json()
+            const walletData: WalletDebitResponse = await walletRes.json()
             if (!walletData.success) {
               walletPaymentSuccess = false
               showToast(walletData.error || 'Pembayaran wallet gagal', 'error')
@@ -621,12 +612,8 @@ export function CheckoutScreen() {
             // Process each order's payment sequentially
             // (Each seller gets their own Midtrans transaction)
             for (let i = 0; i < createdOrders.length; i++) {
-              const paymentRes = await fetch('/api/payment/create', {
-                method: 'POST',
-                headers: getAuthHeaders(true),
-                body: JSON.stringify({ orderId: createdOrders[i].id }),
-              })
-              const paymentData = await paymentRes.json()
+              const paymentRes = await apiClient.rawPost('/api/payment/create', { orderId: createdOrders[i].id })
+              const paymentData: PaymentCreateResponse = await paymentRes.json()
 
               if (paymentData.success && paymentData.data?.token) {
                 // Show progress for multi-seller
