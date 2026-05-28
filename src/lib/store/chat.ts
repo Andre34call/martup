@@ -11,6 +11,16 @@ type ChatMessagesResponse = { success: boolean; data?: Array<Record<string, unkn
 // Module-level socket reference so it persists across zustand calls
 let socket: Socket | null = null
 
+// WebSocket URL for chat — configurable per environment.
+// In sandbox: Caddy gateway proxies /?XTransformPort=3004 to chat mini-service.
+// On Vercel:  set NEXT_PUBLIC_CHAT_WS_URL to your WebSocket service URL, or leave empty to disable WS.
+const WS_URL = typeof window !== 'undefined'
+  ? (process.env.NEXT_PUBLIC_CHAT_WS_URL || '')
+  : ''
+
+// Detect if WebSocket chat is available in this environment
+const isWsAvailable = typeof window !== 'undefined' && WS_URL !== ''
+
 export const createChatSlice: StateCreator<AppStore, [], [], ChatSlice> = (set, get) => ({
   chatRooms: [],
   chatMessages: {},
@@ -250,13 +260,19 @@ export const createChatSlice: StateCreator<AppStore, [], [], ChatSlice> = (set, 
     const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null
     if (!token) return
 
+    // If no WebSocket URL configured, skip WebSocket entirely (REST-only chat)
+    if (!isWsAvailable) {
+      logger.info({ component: 'chat' }, 'WebSocket not configured — chat running in REST-only mode')
+      return
+    }
+
     // Disconnect any existing socket first
     if (socket) {
       socket.disconnect()
       socket = null
     }
 
-    socket = io('/?XTransformPort=3004', {
+    socket = io(WS_URL, {
       transports: ['websocket', 'polling'],
       autoConnect: false,
     })
