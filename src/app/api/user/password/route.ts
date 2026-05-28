@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middleware'
 import bcrypt from 'bcryptjs'
 import { logger } from '@/lib/logger'
+import { validateBody, updatePasswordSchema } from '@/lib/validations'
 
 // ==================== POST /api/user/password ====================
 // Change the authenticated user's password with full validation
@@ -24,35 +25,14 @@ export async function POST(request: NextRequest) {
 
     // Step 3: Parse and validate request body
     const body = await request.json()
-    const { currentPassword, newPassword, confirmPassword } = body
-
-    // All fields required
-    if (!currentPassword || !newPassword || !confirmPassword) {
+    const validation = validateBody(updatePasswordSchema, body)
+    if (!validation.success) {
       return NextResponse.json(
-        { success: false, error: 'Semua field harus diisi' },
+        { success: false, error: validation.error },
         { status: 400 }
       )
     }
-
-    // New password minimum length and complexity (same as registration)
-    if (newPassword.length < 8) {
-      return NextResponse.json(
-        { success: false, error: 'Password baru minimal 8 karakter' },
-        { status: 400 }
-      )
-    }
-    if (!/[a-zA-Z]/.test(newPassword)) {
-      return NextResponse.json(
-        { success: false, error: 'Password baru harus mengandung huruf' },
-        { status: 400 }
-      )
-    }
-    if (!/\d/.test(newPassword)) {
-      return NextResponse.json(
-        { success: false, error: 'Password baru harus mengandung angka' },
-        { status: 400 }
-      )
-    }
+    const { currentPassword, newPassword, confirmPassword } = validation.data
 
     // New password must match confirmation
     if (newPassword !== confirmPassword) {

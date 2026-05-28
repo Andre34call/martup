@@ -5,6 +5,7 @@ import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
 
 import { logger } from '@/lib/logger'
+import { validateBody, loginSchema } from '@/lib/validations'
 
 // OTP configuration for 2FA login
 const OTP_LENGTH = 6
@@ -38,22 +39,14 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { email, password } = body
-
-    if (!email || !password) {
+    const validation = validateBody(loginSchema, body)
+    if (!validation.success) {
       return NextResponse.json(
-        { success: false, error: 'Email dan password wajib diisi' },
+        { success: false, error: validation.error },
         { status: 400 }
       )
     }
-
-    // SECURITY: Validate email format
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return NextResponse.json(
-        { success: false, error: 'Format email tidak valid' },
-        { status: 400 }
-      )
-    }
+    const { email, password } = validation.data
 
     // Find user by email
     const user = await db.user.findUnique({

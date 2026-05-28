@@ -8,6 +8,7 @@ import { useAppStore, getAuthHeaders } from "@/lib/store"
 import { setSentryUser, clearSentryUser } from "@/lib/sentry"
 import { logger } from '@/lib/logger'
 import { useDataSync } from '@/lib/use-data-sync'
+import { ApiProvider } from '@/hooks/api/provider'
 
 function ZustandHydration({ children }: { children: React.ReactNode }) {
   const hydrated = useRef(false)
@@ -126,13 +127,15 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <SessionProvider>
-        <ZustandHydration>
-          <DataFetcher>
-            <DataSyncWrapper>{children}</DataSyncWrapper>
-          </DataFetcher>
-        </ZustandHydration>
-      </SessionProvider>
+      <ApiProvider>
+        <SessionProvider>
+          <ZustandHydration>
+            <DataFetcher>
+              <DataSyncWrapper>{children}</DataSyncWrapper>
+            </DataFetcher>
+          </ZustandHydration>
+        </SessionProvider>
+      </ApiProvider>
     </QueryClientProvider>
   )
 }

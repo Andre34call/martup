@@ -5,6 +5,7 @@ import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
 import { sendEmail, emailVerificationTemplate } from '@/lib/email'
 import { logger } from '@/lib/logger'
+import { validateBody, registerSchema } from '@/lib/validations'
 
 // POST /api/auth/register - Register a new user with email and password
 // Now requires email verification before login
@@ -20,29 +21,14 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { name, email, phone, password } = body
-
-    // Validate required fields
-    if (!name || name.length < 3) {
+    const validation = validateBody(registerSchema, body)
+    if (!validation.success) {
       return NextResponse.json(
-        { success: false, error: 'Nama minimal 3 karakter' },
+        { success: false, error: validation.error },
         { status: 400 }
       )
     }
-
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return NextResponse.json(
-        { success: false, error: 'Format email tidak valid' },
-        { status: 400 }
-      )
-    }
-
-    if (!password || password.length < 8 || !/[a-zA-Z]/.test(password) || !/\d/.test(password)) {
-      return NextResponse.json(
-        { success: false, error: 'Password minimal 8 karakter, harus mengandung huruf dan angka' },
-        { status: 400 }
-      )
-    }
+    const { name, email, phone, password } = validation.data
 
     // Check if email already exists
     const existingUser = await db.user.findUnique({

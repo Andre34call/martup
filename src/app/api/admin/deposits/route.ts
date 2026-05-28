@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
 import { logger, logBusinessEvent } from '@/lib/logger'
+import { validateBody, adminDepositActionSchema } from '@/lib/validations'
 
 // GET /api/admin/deposits - List all deposits with user info, support ?status=pending filter
 export async function GET(request: NextRequest) {
@@ -70,21 +71,14 @@ export async function PUT(request: NextRequest) {
     if (!authResult.success) return authErrorResponse(authResult)
 
     const body = await request.json()
-    const { depositId, status, adminNote } = body
-
-    if (!depositId || !status) {
+    const validation = validateBody(adminDepositActionSchema, body)
+    if (!validation.success) {
       return NextResponse.json(
-        { success: false, error: 'depositId and status are required' },
+        { success: false, error: validation.error },
         { status: 400 }
       )
     }
-
-    if (!['success', 'failed'].includes(status)) {
-      return NextResponse.json(
-        { success: false, error: 'status must be "success" or "failed"' },
-        { status: 400 }
-      )
-    }
+    const { depositId, status, adminNote } = validation.data
 
     // Fetch the deposit to verify it exists and is currently pending
     const deposit = await db.deposit.findUnique({

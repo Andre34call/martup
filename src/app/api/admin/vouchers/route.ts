@@ -4,6 +4,7 @@ import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
 
 import { logger } from '@/lib/logger'
+import { validateBody, adminVoucherCreateSchema } from '@/lib/validations'
 // GET /api/admin/vouchers - List all vouchers with usage stats
 export async function GET(request: NextRequest) {
   try {
@@ -61,10 +62,16 @@ export async function POST(request: NextRequest) {
     if (!authResult.success) return authErrorResponse(authResult)
 
     const body = await request.json()
+    const validation = validateBody(adminVoucherCreateSchema, body)
+    if (!validation.success) {
+      return NextResponse.json(
+        { success: false, error: validation.error },
+        { status: 400 }
+      )
+    }
     const {
       code,
       name,
-      description,
       type,
       value,
       minPurchase,
@@ -74,24 +81,8 @@ export async function POST(request: NextRequest) {
       validFrom,
       validUntil,
       isActive,
-    } = body
-
-    if (!code || !name || !type || value === undefined || !validFrom || !validUntil) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'code, name, type, value, validFrom, validUntil are required',
-        },
-        { status: 400 }
-      )
-    }
-
-    if (!['percentage', 'fixed'].includes(type)) {
-      return NextResponse.json(
-        { success: false, error: 'type must be "percentage" or "fixed"' },
-        { status: 400 }
-      )
-    }
+    } = validation.data
+    const description = (body as Record<string, unknown>).description as string | null | undefined
 
     // Check code uniqueness
     const existing = await db.voucher.findUnique({ where: { code } })
@@ -151,7 +142,7 @@ export async function PUT(request: NextRequest) {
       validFrom,
       validUntil,
       isActive,
-    } = body
+    } = body as Record<string, unknown>
 
     if (!voucherId) {
       return NextResponse.json(
@@ -201,7 +192,7 @@ export async function DELETE(request: NextRequest) {
     if (!authResult.success) return authErrorResponse(authResult)
 
     const body = await request.json()
-    const { voucherId } = body
+    const { voucherId } = body as Record<string, unknown>
 
     if (!voucherId) {
       return NextResponse.json(

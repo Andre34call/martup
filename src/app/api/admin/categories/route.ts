@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 
 import { logger } from '@/lib/logger'
+import { validateBody, adminCategoryCreateSchema, adminCategoryUpdateSchema, adminCategoryDeleteSchema } from '@/lib/validations'
 function slugify(name: string): string {
   return name
     .toLowerCase()
@@ -71,14 +72,15 @@ export async function POST(request: NextRequest) {
     if (!authResult.success) return authErrorResponse(authResult)
 
     const body = await request.json()
-    const { name, slug, icon, image, parentId, sortOrder, isActive } = body
-
-    if (!name) {
+    const validation = validateBody(adminCategoryCreateSchema, body)
+    if (!validation.success) {
       return NextResponse.json(
-        { success: false, error: 'name is required' },
+        { success: false, error: validation.error },
         { status: 400 }
       )
     }
+    const { name, icon, parentId, sortOrder, isActive } = validation.data
+    const slug = (body as Record<string, unknown>).slug as string | undefined
 
     const categorySlug = slug || slugify(name)
 
@@ -92,6 +94,8 @@ export async function POST(request: NextRequest) {
         { status: 409 }
       )
     }
+
+    const image = (body as Record<string, unknown>).image as string | null | undefined
 
     const category = await db.category.create({
       data: {
@@ -123,14 +127,16 @@ export async function PUT(request: NextRequest) {
     if (!authResult.success) return authErrorResponse(authResult)
 
     const body = await request.json()
-    const { categoryId, name, slug, icon, image, parentId, sortOrder, isActive } = body
-
-    if (!categoryId) {
+    const validation = validateBody(adminCategoryUpdateSchema, body)
+    if (!validation.success) {
       return NextResponse.json(
-        { success: false, error: 'categoryId is required' },
+        { success: false, error: validation.error },
         { status: 400 }
       )
     }
+    const { categoryId, name, icon, parentId, sortOrder, isActive } = validation.data
+    const slug = (body as Record<string, unknown>).slug as string | undefined
+    const image = (body as Record<string, unknown>).image as string | null | undefined
 
     const updateData: Record<string, unknown> = {}
     if (name !== undefined) {
@@ -167,14 +173,14 @@ export async function DELETE(request: NextRequest) {
     if (!authResult.success) return authErrorResponse(authResult)
 
     const body = await request.json()
-    const { categoryId } = body
-
-    if (!categoryId) {
+    const validation = validateBody(adminCategoryDeleteSchema, body)
+    if (!validation.success) {
       return NextResponse.json(
-        { success: false, error: 'categoryId is required' },
+        { success: false, error: validation.error },
         { status: 400 }
       )
     }
+    const { categoryId } = validation.data
 
     const category = await db.category.update({
       where: { id: categoryId },

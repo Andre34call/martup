@@ -2,21 +2,17 @@ import type { StateCreator } from 'zustand'
 import { logger } from '@/lib/logger'
 import { signOut } from 'next-auth/react'
 import type { AuthSlice, AppStore } from './types'
-import type { Seller, UserRole, User } from '../types'
+import type { UserRole, Seller } from '../types'
 import { getAuthHeaders } from './getAuthHeaders'
-
-// We need a reference to the cart store for logout - import it lazily
-let _useCartStore: any = null
-export function setCartStoreRef(cartStore: any) {
-  _useCartStore = cartStore
-}
+import { useCartStore } from './cart'
+import { mapSeller } from '../mappers'
 
 export const createAuthSlice: StateCreator<AppStore, [], [], AuthSlice> = (set, get) => ({
   isAuthenticated: false,
   currentUser: null,
   userRole: 'buyer' as UserRole,
 
-  login: (user: User) => {
+  login: (user) => {
     // Clear any stale reset token on login (both Zustand and sessionStorage)
     try { if (typeof window !== 'undefined') sessionStorage.removeItem('martup_reset_token') } catch { /* ignore */ }
     set({
@@ -77,9 +73,7 @@ export const createAuthSlice: StateCreator<AppStore, [], [], AuthSlice> = (set, 
       homeBanners: [],
     })
     // Clear cart store
-    if (_useCartStore) {
-      _useCartStore.getState().clearCart()
-    }
+    useCartStore.getState().clearCart()
   },
 
   switchRole: async (role: UserRole) => {
@@ -102,26 +96,7 @@ export const createAuthSlice: StateCreator<AppStore, [], [], AuthSlice> = (set, 
 
         if (registerData.success && registerData.data) {
           // New seller registered successfully
-          const sellerData = registerData.data
-          const seller: Seller = {
-            id: sellerData.id,
-            userId: sellerData.userId,
-            storeName: sellerData.storeName,
-            storeSlug: sellerData.storeSlug,
-            storeDesc: sellerData.storeDesc || undefined,
-            storeAvatar: sellerData.storeAvatar || undefined,
-            storeBanner: sellerData.storeBanner || undefined,
-            isVerified: sellerData.isVerified || false,
-            isPremium: sellerData.isPremium || false,
-            rating: sellerData.rating || 0,
-            totalSales: sellerData.totalSales || 0,
-            totalProducts: sellerData.totalProducts || 0,
-            responseTime: sellerData.responseTime || undefined,
-            bankName: sellerData.bankName || undefined,
-            bankAccount: sellerData.bankAccount || undefined,
-            bankHolder: sellerData.bankHolder || undefined,
-            autoReply: sellerData.autoReply || undefined,
-          }
+          const seller = mapSeller(registerData.data)
           set({ seller })
         } else if (registerRes.status === 409) {
           // Already a seller — fetch existing seller data
@@ -131,33 +106,14 @@ export const createAuthSlice: StateCreator<AppStore, [], [], AuthSlice> = (set, 
             const userData = userDataRaw.data || userDataRaw
 
             if (userData.seller) {
-              const s = userData.seller
-              const seller: Seller = {
-                id: s.id,
-                userId: s.userId,
-                storeName: s.storeName,
-                storeSlug: s.storeSlug,
-                storeDesc: s.storeDesc || undefined,
-                storeAvatar: s.storeAvatar || undefined,
-                storeBanner: s.storeBanner || undefined,
-                isVerified: s.isVerified,
-                isPremium: s.isPremium,
-                rating: s.rating,
-                totalSales: s.totalSales,
-                totalProducts: s.totalProducts,
-                responseTime: s.responseTime || undefined,
-                bankName: s.bankName || undefined,
-                bankAccount: s.bankAccount || undefined,
-                bankHolder: s.bankHolder || undefined,
-                autoReply: s.autoReply || undefined,
-              }
+              const seller = mapSeller(userData.seller)
               set({ seller })
 
               // Also update seller balance from wallet
-              if (s.wallet) {
-                const walletBal = s.wallet.balance || 0
-                const walletHold = s.wallet.holdBalance || 0
-                const walletPending = s.wallet.pendingBalance || 0
+              if (userData.seller.wallet) {
+                const walletBal = userData.seller.wallet.balance || 0
+                const walletHold = userData.seller.wallet.holdBalance || 0
+                const walletPending = userData.seller.wallet.pendingBalance || 0
                 set({
                   sellerBalance: {
                     availableBalance: walletBal,
@@ -252,8 +208,6 @@ export const createAuthSlice: StateCreator<AppStore, [], [], AuthSlice> = (set, 
       homeBanners: [],
     })
     // Clear cart store
-    if (_useCartStore) {
-      _useCartStore.getState().clearCart()
-    }
+    useCartStore.getState().clearCart()
   },
 })

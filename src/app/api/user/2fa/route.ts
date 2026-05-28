@@ -5,6 +5,7 @@ import crypto from 'crypto'
 import bcrypt from 'bcryptjs'
 import { logger } from '@/lib/logger'
 import { sendOTP } from '@/lib/sms-gateway'
+import { validateBody, twoFactorActionSchema, twoFactorDisableSchema } from '@/lib/validations'
 
 // OTP configuration for 2FA
 const OTP_LENGTH = 6
@@ -59,14 +60,14 @@ export async function POST(request: NextRequest) {
     if (!authResult.success) return authErrorResponse(authResult)
 
     const body = await request.json()
-    const { action, otpCode } = body
-
-    if (!action || !['send-otp', 'enable'].includes(action)) {
+    const validation = validateBody(twoFactorActionSchema, body)
+    if (!validation.success) {
       return NextResponse.json(
-        { success: false, error: 'Action harus "send-otp" atau "enable"' },
+        { success: false, error: validation.error },
         { status: 400 }
       )
     }
+    const { action, otpCode } = validation.data
 
     const user = await db.user.findUnique({
       where: { id: authResult.user.id },
@@ -234,14 +235,14 @@ export async function DELETE(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { password } = body
-
-    if (!password || typeof password !== 'string') {
+    const validation = validateBody(twoFactorDisableSchema, body)
+    if (!validation.success) {
       return NextResponse.json(
-        { success: false, error: 'Password saat ini wajib diisi' },
+        { success: false, error: validation.error },
         { status: 400 }
       )
     }
+    const { password } = validation.data
 
     const user = await db.user.findUnique({
       where: { id: authResult.user.id },

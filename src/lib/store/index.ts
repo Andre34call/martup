@@ -4,7 +4,7 @@ import type { AppStore } from './types'
 
 // Slice creators
 import { createNavigationSlice } from './navigation'
-import { createAuthSlice, setCartStoreRef } from './auth'
+import { createAuthSlice } from './auth'
 import { createSelectionSlice } from './selection'
 import { createUISlice } from './ui'
 import { createNotificationSlice } from './notification'
@@ -21,7 +21,7 @@ import { createProductSlice } from './product'
 import { createReviewSlice } from './review'
 import { createAdminSlice } from './admin'
 import { createSettingsSlice } from './settings'
-import { createDataFetchSlice, setWishlistStoreRef } from './data-fetch'
+import { createDataFetchSlice } from './data-fetch'
 
 // Separate stores
 import { useCartStore } from './cart'
@@ -73,6 +73,4 @@ export const useAppStore = create<AppStore>()(
   )
 )
 
-// Wire up cross-store references (cart store used by logout, wishlist store used by fetchUserData)
-setCartStoreRef(useCartStore)
-setWishlistStoreRef(useWishlistStore)
+// Cross-store references are now handled via direct imports in each slice file
