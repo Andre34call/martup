@@ -95,6 +95,11 @@ export async function POST(request: NextRequest) {
       if (process.env.NODE_ENV === 'development') {
         response.debugUserFound = false
       }
+      // Include debugHint when x-login-debug header is present
+      const debugHeaderNotFound = request.headers.get('x-login-debug')
+      if (debugHeaderNotFound) {
+        response.debugHint = 'user_not_found'
+      }
       return NextResponse.json(response, { status: 401 })
     }
 
