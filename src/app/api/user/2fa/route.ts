@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Internal server error'
+    // Error logged above — generic message returned to client
     logger.error({ err: error }, '2FA GET error')
     return NextResponse.json(
       { success: false, error: 'Terjadi kesalahan server. Coba lagi nanti.' },
@@ -208,7 +208,7 @@ export async function POST(request: NextRequest) {
     // Should not reach here
     return NextResponse.json({ success: false, error: 'Invalid action' }, { status: 400 })
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Internal server error'
+    // Error logged above — generic message returned to client
     logger.error({ err: error }, '2FA POST error')
     return NextResponse.json(
       { success: false, error: 'Terjadi kesalahan server. Coba lagi nanti.' },
@@ -292,7 +292,7 @@ export async function DELETE(request: NextRequest) {
       data: { twoFactorEnabled: false },
     })
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Internal server error'
+    // Error logged above — generic message returned to client
     logger.error({ err: error }, '2FA DELETE error')
     return NextResponse.json(
       { success: false, error: 'Terjadi kesalahan server. Coba lagi nanti.' },

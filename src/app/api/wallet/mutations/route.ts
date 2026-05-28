@@ -63,13 +63,12 @@ export async function GET(request: NextRequest) {
       totalPages: Math.ceil(total / limit),
     })
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error'
-    if (message === 'Unauthorized') {
+    if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
     logger.error({ err: error }, 'GET /api/wallet/mutations error')
     return NextResponse.json(
-      { error: 'Failed to fetch wallet mutations' },
+      { error: 'Terjadi kesalahan server' },
       { status: 500 }
     )
   }

@@ -85,10 +85,10 @@ export async function GET(request: NextRequest) {
       },
     }))
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Internal server error'
+    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'Admin products GET error')
     return NextResponse.json(
-      { success: false, error: message },
+      { success: false, error: 'Terjadi kesalahan server' },
       { status: 500 }
     )
   }
@@ -196,10 +196,10 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json(serializeDecimal({ success: true, data: product }))
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Internal server error'
+    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'Admin products PUT error')
     return NextResponse.json(
-      { success: false, error: message },
+      { success: false, error: 'Terjadi kesalahan server' },
       { status: 500 }
     )
   }
@@ -249,10 +249,10 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json(serializeDecimal({ success: true, data: product }))
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Internal server error'
+    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'Admin products DELETE error')
     return NextResponse.json(
-      { success: false, error: message },
+      { success: false, error: 'Terjadi kesalahan server' },
       { status: 500 }
     )
   }

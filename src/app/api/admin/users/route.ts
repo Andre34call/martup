@@ -90,10 +90,10 @@ export async function GET(request: NextRequest) {
       isManager: isUserSuperAdmin || isUserManager, // Super admin can also do manager things
     }))
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Internal server error'
+    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'Admin users GET error')
     return NextResponse.json(
-      { success: false, error: message },
+      { success: false, error: 'Terjadi kesalahan server' },
       { status: 500 }
     )
   }
@@ -252,10 +252,10 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json(serializeDecimal({ success: true, data: user }))
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Internal server error'
+    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'Admin users PUT error')
     return NextResponse.json(
-      { success: false, error: message },
+      { success: false, error: 'Terjadi kesalahan server' },
       { status: 500 }
     )
   }
@@ -405,10 +405,10 @@ export async function PATCH(request: NextRequest) {
       message: `${targetUser.name} telah dipromosikan ke ${divisionName}`,
     }))
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Internal server error'
+    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'Admin users PATCH (promote) error')
     return NextResponse.json(
-      { success: false, error: message },
+      { success: false, error: 'Terjadi kesalahan server' },
       { status: 500 }
     )
   }
@@ -486,10 +486,10 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json(serializeDecimal({ success: true, data: user }))
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Internal server error'
+    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'Admin users DELETE error')
     return NextResponse.json(
-      { success: false, error: message },
+      { success: false, error: 'Terjadi kesalahan server' },
       { status: 500 }
     )
   }

@@ -100,10 +100,10 @@ export async function POST(request: NextRequest) {
       message: 'Password berhasil diubah',
     })
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Terjadi kesalahan server. Coba lagi nanti.'
+    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'Password change error')
     return NextResponse.json(
-      { success: false, error: message },
+      { success: false, error: 'Terjadi kesalahan server' },
       { status: 500 }
     )
   }

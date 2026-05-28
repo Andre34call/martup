@@ -183,21 +183,21 @@ export async function POST(request: NextRequest) {
     if (error instanceof Error) {
       if (error.message === 'Wallet not found for this seller') {
         return NextResponse.json(
-          { success: false, error: error.message },
+          { success: false, error: 'Wallet tidak ditemukan' },
           { status: 404 }
         )
       }
       if (error.message.startsWith('Insufficient balance')) {
         return NextResponse.json(
-          { success: false, error: error.message },
+          { success: false, error: 'Saldo tidak mencukupi' },
           { status: 400 }
         )
       }
     }
-    const message = error instanceof Error ? error.message : 'Internal server error'
+    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'Seller Withdraw POST error')
     return NextResponse.json(
-      { success: false, error: message },
+      { success: false, error: 'Terjadi kesalahan server' },
       { status: 500 }
     )
   }
@@ -306,10 +306,10 @@ export async function GET(request: NextRequest) {
       })
     )
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Internal server error'
+    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'Seller Withdraw GET error')
     return NextResponse.json(
-      { success: false, error: message },
+      { success: false, error: 'Terjadi kesalahan server' },
       { status: 500 }
     )
   }

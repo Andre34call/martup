@@ -178,10 +178,10 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Internal server error'
+    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'Cron auto-complete-stuck GET error')
     return NextResponse.json(
-      { success: false, error: message },
+      { success: false, error: 'Terjadi kesalahan server' },
       { status: 500 }
     )
   }
@@ -224,10 +224,10 @@ export async function POST(request: NextRequest) {
       },
     })
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Internal server error'
+    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'Cron auto-complete-stuck POST error')
     return NextResponse.json(
-      { success: false, error: message },
+      { success: false, error: 'Terjadi kesalahan server' },
       { status: 500 }
     )
   }

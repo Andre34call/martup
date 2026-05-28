@@ -148,7 +148,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     logger.error({ err: error }, 'Sync user error')
     return NextResponse.json(
-      { success: false, error: error.message || 'Internal server error' },
+      { success: false, error: 'Terjadi kesalahan server' },
       { status: 500 }
     )
   }

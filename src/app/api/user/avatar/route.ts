@@ -210,10 +210,10 @@ export async function POST(request: NextRequest) {
       data: { avatar: publicUrl },
     })
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Internal server error'
+    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'Avatar POST error')
     return NextResponse.json(
-      { success: false, error: message },
+      { success: false, error: 'Terjadi kesalahan server' },
       { status: 500 }
     )
   }
@@ -267,10 +267,10 @@ export async function DELETE(request: NextRequest) {
       message: 'Avatar removed',
     })
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Internal server error'
+    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'Avatar DELETE error')
     return NextResponse.json(
-      { success: false, error: message },
+      { success: false, error: 'Terjadi kesalahan server' },
       { status: 500 }
     )
   }

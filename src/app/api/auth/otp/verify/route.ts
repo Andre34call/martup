@@ -157,7 +157,7 @@ export async function POST(request: NextRequest) {
       message: 'Verifikasi OTP berhasil!',
     })
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Internal server error'
+    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'OTP verify error')
     return NextResponse.json(
       { success: false, error: 'Terjadi kesalahan server. Coba lagi nanti.' },

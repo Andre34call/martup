@@ -122,7 +122,7 @@ export async function POST(request: NextRequest) {
       ...(isDev ? { devOtp: otpCode } : {}),
     })
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Internal server error'
+    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'OTP send error')
     return NextResponse.json(
       { success: false, error: 'Terjadi kesalahan server. Coba lagi nanti.' },

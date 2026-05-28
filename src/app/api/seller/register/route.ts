@@ -155,10 +155,10 @@ export async function POST(request: NextRequest) {
       data: sellerWithUser,
     }, { status: 201 })
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Internal server error'
+    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'Seller Register POST error')
     return NextResponse.json(
-      { success: false, error: message },
+      { success: false, error: 'Terjadi kesalahan server' },
       { status: 500 }
     )
   }

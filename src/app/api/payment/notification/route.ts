@@ -375,10 +375,10 @@ export async function POST(request: NextRequest) {
     // Always return 200 to acknowledge receipt to Midtrans
     return NextResponse.json({ success: true, message: 'Notification processed' })
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Internal server error'
+    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'Payment Notification POST error')
     // Still return 200 so Midtrans doesn't keep retrying
     // But log the error for investigation
-    return NextResponse.json({ success: false, error: message })
+    return NextResponse.json({ success: false, error: 'Terjadi kesalahan server' })
   }
 }

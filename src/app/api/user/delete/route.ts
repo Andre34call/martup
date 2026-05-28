@@ -17,102 +17,110 @@ export async function DELETE(request: NextRequest) {
 
     const userId = authResult.user.id
 
-    // Delete in order of dependencies (child records first)
-    // 1. Delete chat messages
-    await db.chatMessage.deleteMany({ where: { senderId: userId } })
+    // Wrap all deletions in a single transaction for atomicity
+    await db.$transaction(async (tx) => {
+      // 1. Delete chat messages
+      await tx.chatMessage.deleteMany({ where: { senderId: userId } })
 
-    // 2. Delete chat participants
-    await db.chatParticipant.deleteMany({ where: { userId } })
+      // 2. Delete chat participants
+      await tx.chatParticipant.deleteMany({ where: { userId } })
 
-    // 3. Delete notifications
-    await db.notification.deleteMany({ where: { userId } })
+      // 3. Delete notifications
+      await tx.notification.deleteMany({ where: { userId } })
 
-    // 4. Delete addresses
-    await db.address.deleteMany({ where: { userId } })
+      // 4. Delete addresses
+      await tx.address.deleteMany({ where: { userId } })
 
-    // 5. Delete reviews
-    await db.review.deleteMany({ where: { userId } })
+      // 5. Delete reviews
+      await tx.review.deleteMany({ where: { userId } })
 
-    // 6. Delete wishlist items
-    await db.wishlist.deleteMany({ where: { userId } })
+      // 6. Delete wishlist items
+      await tx.wishlist.deleteMany({ where: { userId } })
 
-    // 7. Delete cart items
-    await db.cartItem.deleteMany({ where: { userId } })
+      // 7. Delete cart items
+      await tx.cartItem.deleteMany({ where: { userId } })
 
-    // 8. Delete transactions
-    await db.transaction.deleteMany({ where: { userId } })
+      // 8. Delete transactions
+      await tx.transaction.deleteMany({ where: { userId } })
 
-    // 9. Delete deposits
-    await db.deposit.deleteMany({ where: { userId } })
+      // 9. Delete deposits
+      await tx.deposit.deleteMany({ where: { userId } })
 
-    // 10. Delete referrals
-    await db.referral.deleteMany({ where: { referrerId: userId } })
+      // 10. Delete referrals
+      await tx.referral.deleteMany({ where: { referrerId: userId } })
 
-    // 10b. Clear work item assignments (don't delete the work items, just unassign)
-    await db.workItem.updateMany({ where: { assigneeId: userId }, data: { assigneeId: null } })
+      // 10b. Clear work item assignments (don't delete the work items, just unassign)
+      await tx.workItem.updateMany({ where: { assigneeId: userId }, data: { assigneeId: null } })
 
-    // 10c. Clear division head if user is a division head
-    await db.division.updateMany({ where: { headUserId: userId }, data: { headUserId: null } })
+      // 10c. Clear division head if user is a division head
+      await tx.division.updateMany({ where: { headUserId: userId }, data: { headUserId: null } })
 
-    // 11. Delete order items (via orders)
-    const userOrders = await db.order.findMany({
-      where: { userId },
-      select: { id: true },
+      // 11. Delete order items (via orders)
+      const userOrders = await tx.order.findMany({
+        where: { userId },
+        select: { id: true },
+      })
+      if (userOrders.length > 0) {
+        const orderIds = userOrders.map(o => o.id)
+        await tx.voucherUsage.deleteMany({ where: { orderId: { in: orderIds } } })
+        await tx.complaint.deleteMany({ where: { orderId: { in: orderIds } } })
+        await tx.orderItem.deleteMany({ where: { orderId: { in: orderIds } } })
+        await tx.shipping.deleteMany({ where: { orderId: { in: orderIds } } })
+        await tx.order.deleteMany({ where: { id: { in: orderIds } } })
+      }
+
+      // 12. Delete wallet mutations and wallet
+      await tx.walletMutation.deleteMany({ where: { wallet: { userId } } })
+      await tx.wallet.deleteMany({ where: { userId } })
+
+      // 13. Delete seller-related data if user is a seller
+      const seller = await tx.seller.findUnique({ where: { userId } })
+      if (seller) {
+        // Delete seller's products, orders, etc.
+        const sellerProducts = await tx.product.findMany({
+          where: { sellerId: seller.id },
+          select: { id: true },
+        })
+        if (sellerProducts.length > 0) {
+          const productIds = sellerProducts.map(p => p.id)
+          await tx.review.deleteMany({ where: { productId: { in: productIds } } })
+          await tx.productVariant.deleteMany({ where: { productId: { in: productIds } } })
+          await tx.wishlist.deleteMany({ where: { productId: { in: productIds } } })
+          await tx.cartItem.deleteMany({ where: { productId: { in: productIds } } })
+          await tx.product.deleteMany({ where: { id: { in: productIds } } })
+        }
+
+        // Delete seller orders
+        const sellerOrders = await tx.order.findMany({
+          where: { sellerId: seller.id },
+          select: { id: true },
+        })
+        if (sellerOrders.length > 0) {
+          const sellerOrderIds = sellerOrders.map(o => o.id)
+          await tx.orderItem.deleteMany({ where: { orderId: { in: sellerOrderIds } } })
+          await tx.shipping.deleteMany({ where: { orderId: { in: sellerOrderIds } } })
+          await tx.voucherUsage.deleteMany({ where: { orderId: { in: sellerOrderIds } } })
+          await tx.complaint.deleteMany({ where: { orderId: { in: sellerOrderIds } } })
+          await tx.order.deleteMany({ where: { id: { in: sellerOrderIds } } })
+        }
+
+        // Delete seller wallet
+        await tx.walletMutation.deleteMany({ where: { wallet: { sellerId: seller.id } } })
+        await tx.wallet.deleteMany({ where: { sellerId: seller.id } })
+
+        // Delete seller
+        await tx.seller.delete({ where: { userId } })
+      }
+
+      // 14. Delete followed stores
+      await tx.followedStore.deleteMany({ where: { userId } })
+
+      // 15. Delete user settings
+      await tx.userSetting.deleteMany({ where: { userId } })
+
+      // 16. Finally, delete the user
+      await tx.user.delete({ where: { id: userId } })
     })
-    if (userOrders.length > 0) {
-      const orderIds = userOrders.map(o => o.id)
-      await db.voucherUsage.deleteMany({ where: { orderId: { in: orderIds } } })
-      await db.complaint.deleteMany({ where: { orderId: { in: orderIds } } })
-      await db.orderItem.deleteMany({ where: { orderId: { in: orderIds } } })
-      await db.shipping.deleteMany({ where: { orderId: { in: orderIds } } })
-      await db.order.deleteMany({ where: { id: { in: orderIds } } })
-    }
-
-    // 12. Delete wallet mutations and wallet
-    await db.walletMutation.deleteMany({ where: { wallet: { userId } } })
-    await db.wallet.deleteMany({ where: { userId } })
-
-    // 13. Delete seller-related data if user is a seller
-    const seller = await db.seller.findUnique({ where: { userId } })
-    if (seller) {
-      // Delete seller's products, orders, etc.
-      const sellerProducts = await db.product.findMany({
-        where: { sellerId: seller.id },
-        select: { id: true },
-      })
-      if (sellerProducts.length > 0) {
-        const productIds = sellerProducts.map(p => p.id)
-        await db.review.deleteMany({ where: { productId: { in: productIds } } })
-        await db.productVariant.deleteMany({ where: { productId: { in: productIds } } })
-        await db.wishlist.deleteMany({ where: { productId: { in: productIds } } })
-        await db.product.deleteMany({ where: { id: { in: productIds } } })
-      }
-
-      // Delete seller orders
-      const sellerOrders = await db.order.findMany({
-        where: { sellerId: seller.id },
-        select: { id: true },
-      })
-      if (sellerOrders.length > 0) {
-        const sellerOrderIds = sellerOrders.map(o => o.id)
-        await db.orderItem.deleteMany({ where: { orderId: { in: sellerOrderIds } } })
-        await db.shipping.deleteMany({ where: { orderId: { in: sellerOrderIds } } })
-        await db.order.deleteMany({ where: { id: { in: sellerOrderIds } } })
-      }
-
-      // Delete seller wallet
-      await db.walletMutation.deleteMany({ where: { wallet: { sellerId: seller.id } } })
-      await db.wallet.deleteMany({ where: { sellerId: seller.id } })
-
-      // Delete seller
-      await db.seller.delete({ where: { userId } })
-    }
-
-    // 14. Delete user settings
-    await db.userSetting.deleteMany({ where: { userId } })
-
-    // 15. Finally, delete the user
-    await db.user.delete({ where: { id: userId } })
 
     logger.info({ component: 'auth', userId }, 'User account deleted successfully')
 

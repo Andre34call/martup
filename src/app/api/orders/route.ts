@@ -27,6 +27,8 @@ export async function GET(request: NextRequest) {
     const userId = searchParams.get('userId')
     const status = searchParams.get('status')
     const sellerId = searchParams.get('sellerId')
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10))
+    const limit = Math.min(50, Math.max(1, parseInt(searchParams.get('limit') || '20', 10)))
 
     if (!userId) {
       return NextResponse.json(
@@ -66,9 +68,12 @@ export async function GET(request: NextRequest) {
       where.sellerId = sellerId
     }
 
-    const orders = await db.order.findMany({
-      where,
-      include: {
+    const skip = (page - 1) * limit
+
+    const [orders, total] = await Promise.all([
+      db.order.findMany({
+        where,
+        include: {
         items: {
           include: {
             product: {
@@ -94,7 +99,11 @@ export async function GET(request: NextRequest) {
         },
       },
       orderBy: { createdAt: 'desc' },
-    })
+      skip,
+      take: limit,
+      }),
+      db.order.count({ where }),
+    ])
 
     // Parse JSON fields in order items (product images)
     const parsedOrders = orders.map((order) => ({
@@ -113,12 +122,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(serializeDecimal({
       success: true,
       data: parsedOrders,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
     }))
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Internal server error'
+    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'Orders GET error')
     return NextResponse.json(
-      { success: false, error: message },
+      { success: false, error: 'Terjadi kesalahan server' },
       { status: 500 }
     )
   }
@@ -308,10 +321,10 @@ export async function PUT(request: NextRequest) {
       data: parsedOrder,
     }))
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Internal server error'
+    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'Orders PUT error')
     return NextResponse.json(
-      { success: false, error: message },
+      { success: false, error: 'Terjadi kesalahan server' },
       { status: 500 }
     )
   }
@@ -549,10 +562,10 @@ export async function POST(request: NextRequest) {
       data: parsedOrder,
     }), { status: 201 })
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Internal server error'
+    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'Orders POST error')
     return NextResponse.json(
-      { success: false, error: message },
+      { success: false, error: 'Terjadi kesalahan server' },
       { status: 500 }
     )
   }

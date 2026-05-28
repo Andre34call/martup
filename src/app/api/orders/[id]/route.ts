@@ -1,18 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getCurrentUser } from '@/lib/auth-helpers'
+import { verifyAuth } from '@/lib/auth-middleware'
+import { serializeDecimal } from '@/lib/decimal-utils'
 
 import { logger } from '@/lib/logger'
+// Helper to safely parse JSON fields
+function parseJsonField(value: string | null | undefined): unknown[] {
+  if (!value) return []
+  try {
+    const parsed = JSON.parse(value)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
 // GET /api/orders/[id] — Get single order detail
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getCurrentUser()
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // SECURITY: Unified auth using verifyAuth (supports both session and bearer token)
+    const authResult = await verifyAuth(request)
+    if (!authResult.success) {
+      return NextResponse.json({ error: authResult.error }, { status: authResult.status })
     }
+    const user = authResult.user
 
     const { id } = await params
 
@@ -60,7 +74,11 @@ export async function GET(
     }
 
     // Only buyer or seller can view the order
-    if (order.userId !== user.id && order.sellerId !== (await db.seller.findUnique({ where: { userId: user.id } }))?.id) {
+    const isBuyer = order.userId === user.id
+    const seller = await db.seller.findUnique({ where: { userId: user.id } })
+    const isSeller = seller !== null && order.sellerId === seller.id
+
+    if (!isBuyer && !isSeller) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
@@ -69,18 +87,20 @@ export async function GET(
       ...order,
       items: order.items.map((item) => ({
         ...item,
-        product: {
-          ...item.product,
-          images: JSON.parse(item.product.images) as string[],
-        },
+        product: item.product
+          ? {
+              ...item.product,
+              images: parseJsonField(item.product.images),
+            }
+          : item.product,
       })),
     }
 
-    return NextResponse.json(responseOrder)
+    return NextResponse.json(serializeDecimal(responseOrder))
   } catch (error) {
     logger.error({ err: error }, 'GET /api/orders/[id] error')
     return NextResponse.json(
-      { error: 'Failed to fetch order' },
+      { error: 'Gagal mengambil detail pesanan' },
       { status: 500 }
     )
   }
@@ -92,10 +112,12 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getCurrentUser()
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // SECURITY: Unified auth using verifyAuth (supports both session and bearer token)
+    const authResult = await verifyAuth(request)
+    if (!authResult.success) {
+      return NextResponse.json({ error: authResult.error }, { status: authResult.status })
     }
+    const user = authResult.user
 
     const { id } = await params
     const body = await request.json()
@@ -234,7 +256,7 @@ export async function PUT(
           },
         })
 
-        // Credit seller wallet (subtotal - commission)
+        // Credit seller wallet (subtotal - commission) — use atomic increment to prevent race conditions
         const commissionRate = Number(order.seller.commissionRate)
         const commission = Number(order.subtotal) * commissionRate
         const sellerEarnings = Number(order.subtotal) - commission
@@ -255,11 +277,10 @@ export async function PUT(
           })
         }
 
-        const newBalance = Number(sellerWallet.balance) + sellerEarnings
-
-        await tx.wallet.update({
+        // SECURITY: Use atomic increment instead of read-then-write to prevent race conditions
+        const updatedWallet = await tx.wallet.update({
           where: { id: sellerWallet.id },
-          data: { balance: newBalance },
+          data: { balance: { increment: sellerEarnings } },
         })
 
         // Record wallet mutation
@@ -268,7 +289,7 @@ export async function PUT(
             walletId: sellerWallet.id,
             type: 'credit',
             amount: sellerEarnings,
-            balance: newBalance,
+            balance: Number(updatedWallet.balance),
             description: `Earnings from order ${order.orderNumber}`,
             refType: 'order',
             refId: order.id,
@@ -303,7 +324,7 @@ export async function PUT(
   } catch (error) {
     logger.error({ err: error }, 'PUT /api/orders/[id]/status error')
     return NextResponse.json(
-      { error: 'Failed to update order status' },
+      { error: 'Gagal mengubah status pesanan' },
       { status: 500 }
     )
   }

@@ -57,9 +57,9 @@ export async function GET(request: NextRequest) {
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     }))
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Internal server error'
+    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'Admin reviews GET error')
-    return NextResponse.json({ success: false, error: message }, { status: 500 })
+    return NextResponse.json({ success: false, error: 'Terjadi kesalahan server' }, { status: 500 })
   }
 }
 
@@ -102,9 +102,9 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json(serializeDecimal({ success: true, data: updatedReview }))
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Internal server error'
+    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'Admin reviews PUT error')
-    return NextResponse.json({ success: false, error: message }, { status: 500 })
+    return NextResponse.json({ success: false, error: 'Terjadi kesalahan server' }, { status: 500 })
   }
 }
 
@@ -148,8 +148,8 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true, data: { deleted: true, reviewId } })
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Internal server error'
+    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'Admin reviews DELETE error')
-    return NextResponse.json({ success: false, error: message }, { status: 500 })
+    return NextResponse.json({ success: false, error: 'Terjadi kesalahan server' }, { status: 500 })
   }
 }

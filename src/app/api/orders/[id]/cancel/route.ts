@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAuth } from '@/lib/auth-helpers'
+import { verifyAuth } from '@/lib/auth-middleware'
 
 import { logger } from '@/lib/logger'
 // POST /api/orders/[id]/cancel — Cancel order
@@ -9,7 +9,13 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await requireAuth()
+    // SECURITY: Unified auth using verifyAuth (supports both session and bearer token)
+    const authResult = await verifyAuth(request)
+    if (!authResult.success) {
+      return NextResponse.json({ error: authResult.error }, { status: authResult.status })
+    }
+    const user = authResult.user
+
     const { id } = await params
 
     const body = await request.json()
@@ -84,17 +90,17 @@ export async function POST(
         data: { totalSales: { decrement: totalItemsCount } },
       })
 
-      // If paid with wallet, refund buyer wallet
+      // If paid with wallet, refund buyer wallet — use atomic increment
       if (order.paymentStatus === 'paid' && order.paymentMethod === 'wallet') {
         const buyerWallet = await tx.wallet.findUnique({
           where: { userId: user.id },
         })
 
         if (buyerWallet) {
-          const newBalance = Number(buyerWallet.balance) + Number(order.totalAmount)
-          await tx.wallet.update({
+          // SECURITY: Use atomic increment instead of read-then-write
+          const updatedWallet = await tx.wallet.update({
             where: { id: buyerWallet.id },
-            data: { balance: newBalance },
+            data: { balance: { increment: Number(order.totalAmount) } },
           })
 
           // Record wallet mutation
@@ -103,7 +109,7 @@ export async function POST(
               walletId: buyerWallet.id,
               type: 'credit',
               amount: order.totalAmount,
-              balance: newBalance,
+              balance: Number(updatedWallet.balance),
               description: `Refund for cancelled order ${order.orderNumber}`,
               refType: 'refund',
               refId: order.id,
@@ -132,13 +138,9 @@ export async function POST(
 
     return NextResponse.json(updated)
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error'
-    if (message === 'Unauthorized') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
     logger.error({ err: error }, 'POST /api/orders/[id]/cancel error')
     return NextResponse.json(
-      { error: 'Failed to cancel order' },
+      { error: 'Gagal membatalkan pesanan' },
       { status: 500 }
     )
   }

@@ -151,11 +151,11 @@ export async function proxy(request: NextRequest) {
   }
 
   // For API mutating requests (POST, PUT, DELETE, PATCH): validate CSRF
-  // SECURITY: Currently in MONITORING mode — log warnings but don't block.
-  // Set CSRF_ENFORCE=true in env to switch to enforcement mode.
-  // Once monitoring shows no false positives, switch to enforcement.
+  // SECURITY: CSRF is enforced by default. Set CSRF_ENFORCE=false to switch to monitoring mode.
   const csrfResult = await validateCsrfRequest(request)
   if (!csrfResult.valid) {
+    const isEnforce = process.env.CSRF_ENFORCE !== 'false' // Enforce by default
+
     console.warn(JSON.stringify({
       component: 'security',
       event: 'CSRF_VALIDATION_FAILED',
@@ -163,10 +163,11 @@ export async function proxy(request: NextRequest) {
       path: pathname,
       reason: csrfResult.reason,
       method: request.method,
+      enforced: isEnforce,
       timestamp: new Date().toISOString(),
     }))
 
-    if (process.env.CSRF_ENFORCE === 'true') {
+    if (isEnforce) {
       // ENFORCEMENT MODE: Block the request
       const errorResponse = NextResponse.json(
         { success: false, error: 'Validasi keamanan gagal. Silakan refresh halaman dan coba lagi.' },
@@ -175,7 +176,7 @@ export async function proxy(request: NextRequest) {
       const { response: securedResponse } = await issueCsrfToken(errorResponse)
       return securedResponse
     }
-    // MONITORING MODE: Log but allow the request through
+    // MONITORING MODE: Log but allow the request through (only if CSRF_ENFORCE=false)
   }
 
   // ===== Admin Route Protection =====

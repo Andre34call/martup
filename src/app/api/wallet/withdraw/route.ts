@@ -188,10 +188,10 @@ export async function POST(request: NextRequest) {
       message: 'Permintaan penarikan dana dibuat. Menunggu persetujuan admin (1x24 jam).',
     }), { status: 201 })
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Internal server error'
+    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'POST /api/wallet/withdraw error')
     return NextResponse.json(
-      { success: false, error: message },
+      { success: false, error: 'Terjadi kesalahan server' },
       { status: 500 }
     )
   }

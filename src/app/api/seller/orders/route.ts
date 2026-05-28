@@ -1,12 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireSeller } from '@/lib/auth-helpers'
+import { verifyAuth } from '@/lib/auth-middleware'
 
 import { logger } from '@/lib/logger'
+// Helper to safely parse JSON fields
+function parseJsonField(value: string | null | undefined): unknown[] {
+  if (!value) return []
+  try {
+    const parsed = JSON.parse(value)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
 // GET /api/seller/orders — List orders for the current seller
 export async function GET(request: NextRequest) {
   try {
-    const { seller } = await requireSeller()
+    // SECURITY: Unified auth using verifyAuth (supports both session and bearer token)
+    const authResult = await verifyAuth(request)
+    if (!authResult.success) {
+      return NextResponse.json({ error: authResult.error }, { status: authResult.status })
+    }
+
+    // Verify seller account
+    const seller = await db.seller.findUnique({
+      where: { userId: authResult.user.id },
+    })
+    if (!seller) {
+      return NextResponse.json({ error: 'Seller account required' }, { status: 403 })
+    }
+
     const { searchParams } = request.nextUrl
 
     const status = searchParams.get('status')
@@ -63,36 +87,31 @@ export async function GET(request: NextRequest) {
       db.order.count({ where }),
     ])
 
-    // Parse product images
-    const items = orders.map((order) => ({
+    // Parse product images safely
+    const parsedOrders = orders.map((order) => ({
       ...order,
       items: order.items.map((item) => ({
         ...item,
-        product: {
-          ...item.product,
-          images: JSON.parse(item.product.images) as string[],
-        },
+        product: item.product
+          ? {
+              ...item.product,
+              images: parseJsonField(item.product.images),
+            }
+          : item.product,
       })),
     }))
 
     return NextResponse.json({
-      items,
+      items: parsedOrders,
       total,
       page,
       limit,
       totalPages: Math.ceil(total / limit),
     })
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error'
-    if (message === 'Unauthorized') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-    if (message === 'Seller account required') {
-      return NextResponse.json({ error: 'Seller account required' }, { status: 403 })
-    }
     logger.error({ err: error }, 'GET /api/seller/orders error')
     return NextResponse.json(
-      { error: 'Failed to fetch seller orders' },
+      { error: 'Gagal mengambil data pesanan seller' },
       { status: 500 }
     )
   }

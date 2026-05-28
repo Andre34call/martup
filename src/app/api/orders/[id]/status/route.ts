@@ -580,10 +580,10 @@ export async function PUT(
         )
       }
     }
-    const message = error instanceof Error ? error.message : 'Terjadi kesalahan server'
+    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'PUT /api/orders/[id]/status error')
     return NextResponse.json(
-      { success: false, error: message },
+      { success: false, error: 'Terjadi kesalahan server' },
       { status: 500 }
     )
   }

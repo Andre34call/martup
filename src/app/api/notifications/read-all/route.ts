@@ -1,17 +1,21 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-
+import { verifyAuth } from '@/lib/auth-middleware'
 import { logger } from '@/lib/logger'
-export async function PUT(request: Request) {
-  try {
-    const { userId } = await request.json()
 
-    if (!userId) {
+export async function PUT(request: NextRequest) {
+  try {
+    // SECURITY: Require authentication
+    const authResult = await verifyAuth(request)
+    if (!authResult.success) {
       return NextResponse.json(
-        { error: 'UserId wajib diisi' },
-        { status: 400 }
+        { error: 'Unauthorized' },
+        { status: 401 }
       )
     }
+
+    // SECURITY: Use authenticated user's ID, not request body
+    const userId = authResult.user.id
 
     await db.notification.updateMany({
       where: { userId, isRead: false },

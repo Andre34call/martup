@@ -10,6 +10,7 @@ const requiredVars = [
 const recommendedVars = [
   'TOKEN_SECRET',
   'CSRF_SECRET',
+  'CSRF_ENFORCE',
   'CRON_SECRET',
   'ADMIN_SETUP_SECRET',
   'SUPER_ADMIN_EMAIL',

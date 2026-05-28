@@ -35,7 +35,7 @@ export async function GET() {
   } catch (error) {
     checks.database = {
       status: 'error',
-      error: error instanceof Error ? error.message : 'Unknown database error',
+      error: 'Database connection failed',
     }
     logger.error({ error }, 'Health check: Database connection failed')
   }

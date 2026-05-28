@@ -88,8 +88,8 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({ success: true, data: updatedReview })
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Internal server error'
+    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'Reviews reply PUT error')
-    return NextResponse.json({ success: false, error: message }, { status: 500 })
+    return NextResponse.json({ success: false, error: 'Terjadi kesalahan server' }, { status: 500 })
   }
 }
