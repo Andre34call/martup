@@ -105,13 +105,19 @@ export function ProfileScreen() {
     ? new Date().toLocaleDateString('id-ID', { month: 'short', year: 'numeric' })
     : DEFAULT_USER_VALUES.memberSince
 
+  // Defensive: ensure wallet values are numbers (guard against hydration/persist issues)
+  const safeWalletBalance = typeof walletBalance === 'number' ? walletBalance : 0
+  const safeWalletCoins = typeof walletCoins === 'number' ? walletCoins : 0
+  const safeVouchers = Array.isArray(vouchers) ? vouchers : []
+  const safeOrders = Array.isArray(orders) ? orders : []
+
   // Count orders by status
   const orderCounts = useMemo(() => ({
-    pending: orders.filter((o) => o.status === "pending").length,
-    processing: orders.filter((o) => ["paid", "processing"].includes(o.status)).length,
-    shipped: orders.filter((o) => o.status === "shipped").length,
-    delivered: orders.filter((o) => o.status === "delivered").length,
-  }), [orders])
+    pending: safeOrders.filter((o) => o.status === "pending").length,
+    processing: safeOrders.filter((o) => ["paid", "processing"].includes(o.status)).length,
+    shipped: safeOrders.filter((o) => o.status === "shipped").length,
+    delivered: safeOrders.filter((o) => o.status === "delivered").length,
+  }), [safeOrders])
 
   const handleDarkModeToggle = (checked: boolean) => {
     setTheme(checked ? 'dark' : 'light')
@@ -215,7 +221,7 @@ export function ProfileScreen() {
               onClick={() => navigate("wallet")}
               className="bg-card rounded-xl border border-border/50 p-3 text-center"
             >
-              <p className="text-sm font-bold text-emerald-600">{formatPrice(walletBalance)}</p>
+              <p className="text-sm font-bold text-emerald-600">{formatPrice(safeWalletBalance)}</p>
               <p className="text-[10px] text-muted-foreground mt-0.5">Saldo</p>
             </motion.button>
             <motion.button
@@ -223,7 +229,7 @@ export function ProfileScreen() {
               onClick={() => navigate("wallet")}
               className="bg-card rounded-xl border border-border/50 p-3 text-center"
             >
-              <p className="text-sm font-bold text-amber-500">{walletCoins.toLocaleString()}</p>
+              <p className="text-sm font-bold text-amber-500">{safeWalletCoins.toLocaleString()}</p>
               <p className="text-[10px] text-muted-foreground mt-0.5">Koin</p>
             </motion.button>
             <motion.button
@@ -231,7 +237,7 @@ export function ProfileScreen() {
               onClick={() => navigate("voucher")}
               className="bg-card rounded-xl border border-border/50 p-3 text-center"
             >
-              <p className="text-sm font-bold text-orange-500">{vouchers.filter(v => v.isActive).length}</p>
+              <p className="text-sm font-bold text-orange-500">{safeVouchers.filter(v => v.isActive).length}</p>
               <p className="text-[10px] text-muted-foreground mt-0.5">Kupon</p>
             </motion.button>
           </div>
@@ -327,7 +333,7 @@ export function ProfileScreen() {
             <MenuItem
               icon={<Ticket className="w-4 h-4" />}
               label="Voucher Saya"
-              badge={vouchers.filter(v => v.isActive).length}
+              badge={safeVouchers.filter(v => v.isActive).length}
               onClick={() => navigate("voucher")}
             />
             <MenuItem

@@ -60,7 +60,7 @@ export function BottomNav() {
     navigate(screenMap[navItems[idx].key] || "home")
   }
 
-  const handleRoleSwitch = (role: "buyer" | "seller" | "admin") => {
+  const handleRoleSwitch = (role: "buyer" | "seller" | "admin" | "manager") => {
     switchRole(role)
     setShowRoleMenu(false)
   }
@@ -69,12 +69,14 @@ export function BottomNav() {
     buyer: "bg-emerald-500",
     seller: "bg-orange-500",
     admin: "bg-purple-500",
+    manager: "bg-violet-500",
   }
 
   const roleLabels: Record<string, string> = {
     buyer: "Buyer",
     seller: "Seller",
     admin: "Admin",
+    manager: "Manager",
   }
 
   return (
@@ -998,9 +1000,10 @@ export function AvatarWithName({
             className={`${s.avatar} rounded-full object-cover`}
             onError={(e) => {
               // Hide broken image and show fallback initial instead
-              (e.target as HTMLImageElement).style.display = 'none'
-              if (e.target.nextElementSibling) {
-                (e.target.nextElementSibling as HTMLElement).style.display = 'flex'
+              const img = e.currentTarget as HTMLImageElement
+              img.style.display = 'none'
+              if (img.nextElementSibling) {
+                (img.nextElementSibling as HTMLElement).style.display = 'flex'
               }
             }}
           />
@@ -1417,7 +1420,7 @@ export function StoreCard({
     >
       <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center flex-shrink-0 overflow-hidden">
         {storeAvatar ? (
-          <img src={storeAvatar} alt={storeName} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; if (e.target.nextElementSibling) (e.target.nextElementSibling as HTMLElement).style.display = 'flex' }} />
+          <img src={storeAvatar} alt={storeName} className="w-full h-full object-cover" onError={(e) => { const img = e.currentTarget as HTMLImageElement; img.style.display = 'none'; if (img.nextElementSibling) (img.nextElementSibling as HTMLElement).style.display = 'flex' }} />
         ) : null}
         <div className="w-full h-full items-center justify-center" style={{ display: storeAvatar ? 'none' : 'flex' }}>
           <Store className="w-6 h-6 text-muted-foreground" />
@@ -1460,12 +1463,14 @@ export function AdminBottomNav() {
     buyer: "bg-emerald-500",
     seller: "bg-orange-500",
     admin: "bg-purple-500",
+    manager: "bg-violet-500",
   }
 
   const roleLabels: Record<string, string> = {
     buyer: "Buyer",
     seller: "Seller",
     admin: "Admin",
+    manager: "Manager",
   }
 
   useEffect(() => {
@@ -1478,7 +1483,7 @@ export function AdminBottomNav() {
     return () => document.removeEventListener("mousedown", handleClickOutside)
   }, [])
 
-  const handleRoleSwitch = (role: "buyer" | "seller" | "admin") => {
+  const handleRoleSwitch = (role: "buyer" | "seller" | "admin" | "manager") => {
     switchRole(role)
     setShowRoleMenu(false)
   }
@@ -1563,12 +1568,14 @@ export function SellerBottomNav() {
     buyer: "bg-emerald-500",
     seller: "bg-orange-500",
     admin: "bg-purple-500",
+    manager: "bg-violet-500",
   }
 
   const roleLabels: Record<string, string> = {
     buyer: "Buyer",
     seller: "Seller",
     admin: "Admin",
+    manager: "Manager",
   }
 
   useEffect(() => {
@@ -1581,7 +1588,7 @@ export function SellerBottomNav() {
     return () => document.removeEventListener("mousedown", handleClickOutside)
   }, [])
 
-  const handleRoleSwitch = (role: "buyer" | "seller" | "admin") => {
+  const handleRoleSwitch = (role: "buyer" | "seller" | "admin" | "manager") => {
     switchRole(role)
     setShowRoleMenu(false)
   }

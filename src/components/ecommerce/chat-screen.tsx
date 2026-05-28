@@ -39,7 +39,7 @@ function ChatRoomItem({ room, onTap }: { room: ChatRoom; onTap: () => void }) {
             src={room.seller.storeAvatar}
             alt={room.seller.storeName}
             className="w-12 h-12 rounded-full object-cover"
-            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; if (e.target.nextElementSibling) (e.target.nextElementSibling as HTMLElement).style.display = 'flex' }}
+            onError={(e) => { const img = e.currentTarget as HTMLImageElement; img.style.display = 'none'; if (img.nextElementSibling) (img.nextElementSibling as HTMLElement).style.display = 'flex' }}
           />
         ) : null}
         <div

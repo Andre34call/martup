@@ -400,7 +400,7 @@ export function SellerAddProductScreen() {
           categoryId: category,
           variants: productVariants,
           ...(tags.length > 0 ? { tags } : {}),
-          ...(productVideo ? { videoUrl: productVideo.url.startsWith('blob:') ? null : productVideo.url } : {}),
+          ...(productVideo ? { videoUrl: productVideo.url.startsWith('blob:') ? undefined : productVideo.url } : {}),
         })
       } else {
         // Create new product via API
@@ -461,7 +461,7 @@ export function SellerAddProductScreen() {
           seller: sellerInfo,
           category: selectedCategoryObj ? { id: selectedCategoryObj.id, name: selectedCategoryObj.name, slug: selectedCategoryObj.slug } : { id: category, name: category, slug: category },
           ...(tags.length > 0 ? { tags } : {}),
-          ...(productVideo ? { videoUrl: productVideo.url.startsWith('blob:') ? null : productVideo.url } : {}),
+          ...(productVideo ? { videoUrl: productVideo.url.startsWith('blob:') ? undefined : productVideo.url } : {}),
         }
         addProduct(newProduct)
       }
@@ -519,7 +519,7 @@ export function SellerAddProductScreen() {
       seller: sellerInfo,
       category: selectedCategoryObj ? { id: selectedCategoryObj.id, name: selectedCategoryObj.name, slug: selectedCategoryObj.slug } : (editingProduct?.category || { id: category || '', name: category || '', slug: category || '' }),
       ...(tags.length > 0 ? { tags } : {}),
-      ...(productVideo ? { videoUrl: productVideo.url.startsWith('blob:') ? null : productVideo.url } : {}),
+      ...(productVideo ? { videoUrl: productVideo.url.startsWith('blob:') ? undefined : productVideo.url } : {}),
     }
 
     if (editingProduct) {
