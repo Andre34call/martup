@@ -3,7 +3,7 @@ import { z } from 'zod'
 // ==================== Auth ====================
 export const loginSchema = z.object({
   email: z.string().trim().email('Email tidak valid'),
-  password: z.string().min(8, 'Password minimal 8 karakter'),
+  password: z.string().min(6, 'Password minimal 6 karakter'),
 })
 
 export const registerSchema = z.object({

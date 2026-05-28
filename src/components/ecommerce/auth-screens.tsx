@@ -306,8 +306,8 @@ export function LoginScreen() {
 
   const passwordError = touchedPassword && !password
     ? "Password wajib diisi"
-    : touchedPassword && password.length < 8
-    ? "Password minimal 8 karakter"
+    : touchedPassword && password.length < 6
+    ? "Password minimal 6 karakter"
     : ""
 
   const isFormValid = emailOrPhone && password && !emailOrPhoneError && !passwordError
@@ -323,7 +323,7 @@ export function LoginScreen() {
     // Re-validate after trimming (fix stale state race condition)
     const hasInput = trimmedInput && password
     const inputIsValid = isValidEmailOrPhone(trimmedInput)
-    const passwordValid = password.length >= 8
+    const passwordValid = password.length >= 6
     if (!hasInput || !inputIsValid || !passwordValid) return
 
     setIsLoading(true)

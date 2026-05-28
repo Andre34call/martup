@@ -2,9 +2,8 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { validateCsrfRequest, issueCsrfToken } from '@/lib/csrf'
 
-// ==================== NEXT.JS PROXY (formerly middleware) ====================
-// Next.js 16 renames "middleware" to "proxy".
-// This proxy runs before all routes to add:
+// ==================== NEXT.JS MIDDLEWARE ====================
+// This middleware runs before all routes to add:
 // 1. Security headers (CSP with nonce, HSTS, etc.)
 // 2. CSRF protection (double-submit cookie)
 // 3. Rate limiting (in-memory for Edge, Redis for production)
@@ -28,7 +27,7 @@ const RATE_LIMITS: { pattern: RegExp; maxRequests: number; windowMs: number }[] 
   { pattern: /\/api\//, maxRequests: 60, windowMs: 60_000 }, // default
 ]
 
-function checkProxyRateLimit(key: string, maxRequests: number, windowMs: number): { allowed: boolean; remaining: number; resetAt: number } {
+function checkMiddlewareRateLimit(key: string, maxRequests: number, windowMs: number): { allowed: boolean; remaining: number; resetAt: number } {
   const now = Date.now()
   const entry = rateLimitStore.get(key)
 
@@ -53,7 +52,7 @@ function cleanupRateLimitStore() {
   }
 }
 
-export async function proxy(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   // Lazy cleanup on each request instead of unreliable setInterval in Edge
   cleanupRateLimitStore()
 
@@ -79,7 +78,7 @@ export async function proxy(request: NextRequest) {
     const rateLimitConfig = RATE_LIMITS.find(rl => rl.pattern.test(pathname))
     if (rateLimitConfig) {
       const rateLimitKey = `${rateLimitConfig.pattern.source}:${clientIp}`
-      const result = checkProxyRateLimit(rateLimitKey, rateLimitConfig.maxRequests, rateLimitConfig.windowMs)
+      const result = checkMiddlewareRateLimit(rateLimitKey, rateLimitConfig.maxRequests, rateLimitConfig.windowMs)
 
       if (!result.allowed) {
         const errorResponse = NextResponse.json(
@@ -195,6 +194,9 @@ export async function proxy(request: NextRequest) {
 
   return response
 }
+
+// Alias for forward compatibility
+export { middleware as proxy }
 
 function generateRequestId(): string {
   const bytes = new Uint8Array(16)
