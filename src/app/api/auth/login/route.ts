@@ -86,14 +86,13 @@ export async function POST(request: NextRequest) {
     // User not found
     if (!user) {
       logger.info({ email }, 'Login failed: user not found')
-      // Don't reveal whether email exists or not for security
-      const response: Record<string, unknown> = {
+      return NextResponse.json({
         success: false,
         error: 'Email atau password salah',
-        // TEMP: Always include debugHint for login debugging (remove after fix)
-        debugHint: 'user_not_found',
-      }
-      return NextResponse.json(response, { status: 401 })
+        // TEMP: diagnostic fields for login debugging (remove after fix)
+        _diag: 'user_not_found',
+        _ts: Date.now(),
+      }, { status: 401 })
     }
 
     logger.info({ email, userId: user.id, hasPassword: !!user.password, isActive: user.isActive, isVerified: user.isVerified }, 'Login: user found')
@@ -162,16 +161,14 @@ export async function POST(request: NextRequest) {
         { email, userId: user.id, hashPrefix, isBcryptHash },
         'Login failed: incorrect password'
       )
-      const response: Record<string, unknown> = {
+      return NextResponse.json({
         success: false,
         error: 'Email atau password salah',
-        // TEMP: Always include debugHint for login debugging (remove after fix)
-        debugHint: isBcryptHash
-          ? 'bcrypt_compare_failed'
-          : 'stored_password_not_bcrypt_hash',
-        hashPrefix,
-      }
-      return NextResponse.json(response, { status: 401 })
+        // TEMP: diagnostic fields for login debugging (remove after fix)
+        _diag: isBcryptHash ? 'bcrypt_mismatch' : 'not_bcrypt_hash',
+        _hashPrefix: hashPrefix,
+        _ts: Date.now(),
+      }, { status: 401 })
     }
 
     // Check if email is verified
