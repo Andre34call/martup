@@ -86,13 +86,11 @@ export async function POST(request: NextRequest) {
     // User not found
     if (!user) {
       logger.info({ email }, 'Login failed: user not found')
-      return NextResponse.json({
-        success: false,
-        error: 'Email atau password salah',
-        // TEMP: diagnostic fields for login debugging (remove after fix)
-        _diag: 'user_not_found',
-        _ts: Date.now(),
-      }, { status: 401 })
+      // Don't reveal whether email exists or not for security
+      return NextResponse.json(
+        { success: false, error: 'Email atau password salah' },
+        { status: 401 }
+      )
     }
 
     logger.info({ email, userId: user.id, hasPassword: !!user.password, isActive: user.isActive, isVerified: user.isVerified }, 'Login: user found')
@@ -115,7 +113,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verify password
+    // Verify password with bcrypt
     let isPasswordValid = false
     const isBcryptHash = isValidBcryptHash(user.password)
     const hashPrefix = user.password.substring(0, 4)
@@ -130,7 +128,6 @@ export async function POST(request: NextRequest) {
     // FALLBACK: If bcrypt.compare fails AND the stored hash doesn't look like a valid bcrypt hash,
     // try a plain-text comparison (for legacy accounts where password was stored unhashed).
     // If it matches, re-hash and update the database so future logins use bcrypt.
-    let plainTextFixed = false
     if (!isPasswordValid && !isBcryptHash) {
       if (user.password === password) {
         logger.info({ email, userId: user.id, hashPrefix }, 'Login: detected plain-text password, re-hashing')
@@ -142,7 +139,6 @@ export async function POST(request: NextRequest) {
             data: { password: hashedPassword },
           })
           isPasswordValid = true
-          plainTextFixed = true
           logger.info({ email, userId: user.id }, 'Login: plain-text password re-hashed successfully')
         } catch (fixError) {
           logger.error({ email, userId: user.id, err: fixError }, 'Login: failed to re-hash plain-text password')
@@ -156,37 +152,28 @@ export async function POST(request: NextRequest) {
     }
 
     if (!isPasswordValid) {
-      // Log detailed failure info (hash prefix is safe to log for diagnostics)
       logger.info(
         { email, userId: user.id, hashPrefix, isBcryptHash },
         'Login failed: incorrect password'
       )
-      return NextResponse.json({
-        success: false,
-        error: 'Email atau password salah',
-        // TEMP: diagnostic fields for login debugging (remove after fix)
-        _diag: isBcryptHash ? 'bcrypt_mismatch' : 'not_bcrypt_hash',
-        _hashPrefix: hashPrefix,
-        _ts: Date.now(),
-      }, { status: 401 })
+      return NextResponse.json(
+        { success: false, error: 'Email atau password salah' },
+        { status: 401 }
+      )
     }
 
     // Check if email is verified
     if (!user.isVerified) {
       logger.info({ email, userId: user.id }, 'Login failed: email not verified')
-      const response: Record<string, unknown> = {
-        success: false,
-        error: 'Email belum diverifikasi. Silakan cek email Anda untuk link verifikasi.',
-        requiresVerification: true,
-        email: user.email,
-      }
-      // In development, include debug info
-      if (process.env.NODE_ENV === 'development') {
-        response.debugUserFound = true
-        response.debugPasswordMatch = true
-        response.debugIsVerified = false
-      }
-      return NextResponse.json(response, { status: 403 })
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Email belum diverifikasi. Silakan cek email Anda untuk link verifikasi.',
+          requiresVerification: true,
+          email: user.email,
+        },
+        { status: 403 }
+      )
     }
 
     // Check if user has 2FA enabled
