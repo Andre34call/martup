@@ -28,10 +28,30 @@ async function recalculateProductRating(productId: string) {
   await db.product.update({
     where: { id: productId },
     data: {
-      rating: stats._avg.rating ?? 0,
+      rating: stats._avg.rating ? Math.round(stats._avg.rating * 10) / 10 : 0,
       reviewCount: stats._count.id,
     },
   })
+}
+
+// Recalculate the seller's average rating from their products' ratings
+async function recalculateSellerRating(sellerId: string) {
+  const products = await db.product.findMany({
+    where: { sellerId, rating: { gt: 0 } },
+    select: { rating: true },
+  })
+  if (products.length > 0) {
+    const avgRating = products.reduce((sum, p) => sum + p.rating, 0) / products.length
+    await db.seller.update({
+      where: { id: sellerId },
+      data: { rating: Math.round(avgRating * 10) / 10 },
+    })
+  } else {
+    await db.seller.update({
+      where: { id: sellerId },
+      data: { rating: 0 },
+    })
+  }
 }
 
 // ==================== GET /api/reviews ====================
@@ -224,13 +244,19 @@ export async function POST(request: NextRequest) {
       await tx.product.update({
         where: { id: productId },
         data: {
-          rating: stats._avg.rating ?? 0,
+          rating: stats._avg.rating ? Math.round(stats._avg.rating * 10) / 10 : 0,
           reviewCount: stats._count.id,
         },
       })
 
       return newReview
     })
+
+    // Recalculate seller rating from their products' ratings (outside transaction to avoid deadlock)
+    const updatedProduct = await db.product.findUnique({ where: { id: productId }, select: { sellerId: true } })
+    if (updatedProduct) {
+      await recalculateSellerRating(updatedProduct.sellerId)
+    }
 
     // Parse images for response
     const parsedReview = {
@@ -349,13 +375,19 @@ export async function PUT(request: NextRequest) {
       await tx.product.update({
         where: { id: existingReview.productId },
         data: {
-          rating: stats._avg.rating ?? 0,
+          rating: stats._avg.rating ? Math.round(stats._avg.rating * 10) / 10 : 0,
           reviewCount: stats._count.id,
         },
       })
 
       return review
     })
+
+    // Recalculate seller rating from their products' ratings (outside transaction to avoid deadlock)
+    const updatedProduct = await db.product.findUnique({ where: { id: existingReview.productId }, select: { sellerId: true } })
+    if (updatedProduct) {
+      await recalculateSellerRating(updatedProduct.sellerId)
+    }
 
     // Parse images for response
     const parsedReview = {
@@ -437,11 +469,17 @@ export async function DELETE(request: NextRequest) {
       await tx.product.update({
         where: { id: productId },
         data: {
-          rating: stats._avg.rating ?? 0,
+          rating: stats._avg.rating ? Math.round(stats._avg.rating * 10) / 10 : 0,
           reviewCount: stats._count.id,
         },
       })
     })
+
+    // Recalculate seller rating from their products' ratings (outside transaction to avoid deadlock)
+    const updatedProduct = await db.product.findUnique({ where: { id: productId }, select: { sellerId: true } })
+    if (updatedProduct) {
+      await recalculateSellerRating(updatedProduct.sellerId)
+    }
 
     return NextResponse.json({
       success: true,

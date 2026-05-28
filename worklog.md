@@ -1030,3 +1030,77 @@ Stage Summary:
 - Live URL: https://martup-seven.vercel.app
 - Chat feature runs in REST-only mode on Vercel (WebSocket disabled, can be enabled later with a WebSocket service)
 - All core functionality verified working: auth, DB, API, security headers
+
+---
+Task ID: 3-api-seed-fix
+Agent: code
+Task: Fix API seed route to use honest/real default values instead of inflated fake stats
+
+Work Log:
+- Read worklog.md and src/app/api/seed/route.ts to understand current state
+- **Part 1: Reset seller data stats to 0**
+  - Gadget Pro Store: rating 4.9→0, totalSales 15000→0, totalProducts 6→0
+  - Fashion Hub: rating 4.7→0, totalSales 8000→0, totalProducts 2→0
+  - Beauty Corner: rating 4.5→0, totalSales 3000→0, totalProducts 2→0
+  - Home Living ID: rating 4.8→0, totalSales 12000→0, totalProducts 2→0
+  - Sport Zone: rating 4.6→0, totalSales 6000→0, totalProducts 2→0
+- **Part 2: Reset product data stats to 0** (all 14 products)
+  - sold: reset from various inflated numbers (1200, 890, 450, 380, 2100, 620, 3500, 1200, 8900, 5600, 2300, 620, 850, 1800) → all 0
+  - rating: reset from various values (4.5-4.9) → all 0
+  - reviewCount: reset from various inflated numbers (450-4100) → all 0
+- **Part 3: Fix wallet balance calculation**
+  - Line 60: `balance: sd.totalSales * 5000, holdBalance: 1500000` → `balance: 500000, holdBalance: 0`
+  - Line 82: `balance: sd.totalSales * 5000, holdBalance: 1500000` → `balance: 500000, holdBalance: 0`
+  - Fixed starting balance: 500000 Rupiah (500k), no hold balance
+- **Part 4: Added post-seed recalculation code**
+  - Recalculate product sold from OrderItems (groupBy productId, sum quantity, exclude cancelled orders)
+  - Recalculate product rating & reviewCount from Reviews (groupBy productId, avg rating, count)
+  - Recalculate seller totalProducts from actual active products (groupBy sellerId, count)
+  - Recalculate seller totalSales from actual non-cancelled orders (groupBy sellerId, count)
+  - Recalculate seller rating from their products' average rating (findMany with include products where rating > 0)
+- Did NOT change product names, descriptions, images, prices, stock, variants, seed order, or auth logic
+- Lint passes ✅
+- Dev server compiles successfully ✅
+
+Stage Summary:
+- All 5 sellers' fake stats reset to 0 (rating, totalSales, totalProducts)
+- All 14 products' fake stats reset to 0 (sold, rating, reviewCount)
+- Wallet balance changed from computed `totalSales * 5000` to fixed 500000; holdBalance from 1500000 to 0
+- Post-seed recalculation ensures stats are derived from real data (orders, reviews, products)
+- Zero breaking changes to non-stats data — lint passes, dev server OK
+
+---
+Task ID: 2-seed-fix
+Agent: code
+Task: Fix Prisma seed file to use honest/real default values instead of inflated fake stats
+
+Work Log:
+- Read worklog.md and prisma/seed.ts (660 lines) to understand current state
+- **Part 1: Reset seller stats to 0**
+  - Gadget Pro Store (s1): rating 4.9→0, totalSales 15000→0, totalProducts 6→0
+  - Fashion Hub (s2): rating 4.7→0, totalSales 8000→0, totalProducts 4→0
+  - Beauty Corner (s3): rating 4.5→0, totalSales 3000→0, totalProducts 2→0
+- **Part 2: Reset product stats to 0** (all 12 products p1–p12)
+  - sold: reset from inflated numbers (450–15000) → all 0
+  - rating: reset from inflated values (4.5–4.9) → all 0
+  - reviewCount: reset from inflated numbers (680–25000) → all 0
+- **Part 3: Fix wallet balances**
+  - w1: balance 1500000→500000, holdBalance 200000→0
+  - w2: balance 5500000→500000, holdBalance 500000→0
+  - w3: balance 3200000→500000, holdBalance 300000→0
+  - All wallets now start with 500000 (500k) and 0 hold balance
+- **Part 4: Added post-seed recalculation step** at end of main(), before success log
+  - Recalculate product sold from OrderItems (groupBy productId, sum quantity, exclude cancelled orders)
+  - Recalculate product rating & reviewCount from Reviews (groupBy productId, avg rating, count)
+  - Recalculate seller totalProducts from actual active products (groupBy sellerId, count)
+  - Recalculate seller totalSales from actual non-cancelled orders (groupBy sellerId, count)
+  - Recalculate seller rating from their products' average rating (findMany with include products where rating > 0)
+- Did NOT change product names, descriptions, images, prices, stock, variants, seed order, or table cleanup logic
+- Lint passes ✅
+
+Stage Summary:
+- All 3 sellers' fake stats reset to 0 (rating, totalSales, totalProducts)
+- All 12 products' fake stats reset to 0 (sold, rating, reviewCount)
+- Wallet balance changed from varied inflated amounts to fixed 500000; holdBalance from varied amounts to 0
+- Post-seed recalculation ensures stats are derived from real data (orders, reviews, products)
+- Zero breaking changes to non-stats data — lint passes ✅

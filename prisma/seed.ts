@@ -124,9 +124,9 @@ async function main() {
         storeAddress: 'Jl. Mangga Dua Raya No. 88, Jakarta Utara',
         isVerified: true,
         isPremium: true,
-        rating: 4.9,
-        totalSales: 15000,
-        totalProducts: 6,
+        rating: 0,
+        totalSales: 0,
+        totalProducts: 0,
         responseTime: 5,
         bankAccount: '1234567890',
         bankName: 'BCA',
@@ -147,9 +147,9 @@ async function main() {
         storeAddress: 'Jl. Tanah Abang Blok A No. 12, Jakarta Pusat',
         isVerified: true,
         isPremium: false,
-        rating: 4.7,
-        totalSales: 8000,
-        totalProducts: 4,
+        rating: 0,
+        totalSales: 0,
+        totalProducts: 0,
         responseTime: 15,
         bankAccount: '0987654321',
         bankName: 'Mandiri',
@@ -169,9 +169,9 @@ async function main() {
         storeAddress: 'Jl. Kemang Raya No. 45, Jakarta Selatan',
         isVerified: false,
         isPremium: false,
-        rating: 4.5,
-        totalSales: 3000,
-        totalProducts: 2,
+        rating: 0,
+        totalSales: 0,
+        totalProducts: 0,
         responseTime: 30,
         bankAccount: '1122334455',
         bankName: 'BNI',
@@ -216,8 +216,8 @@ async function main() {
           'https://images.unsplash.com/photo-1695048133142-1a20484d2569?w=800&auto=format&fit=crop',
           'https://images.unsplash.com/photo-1592750475338-74b7b21085ab?w=800&auto=format&fit=crop',
         ]),
-        stock: 50, sold: 1200, minOrder: 1, weight: 221, condition: 'new', status: 'active',
-        rating: 4.9, reviewCount: 3520, isFeatured: true, isFlashSale: false,
+        stock: 50, sold: 0, minOrder: 1, weight: 221, condition: 'new', status: 'active',
+        rating: 0, reviewCount: 0, isFeatured: true, isFlashSale: false,
         tags: JSON.stringify(['iphone', 'apple', 'smartphone']),
         variants: {
           create: [
@@ -238,8 +238,8 @@ async function main() {
           'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=800&auto=format&fit=crop',
           'https://images.unsplash.com/photo-1611186871348-b1ce696e52c9?w=800&auto=format&fit=crop',
         ]),
-        stock: 25, sold: 850, minOrder: 1, weight: 1280, condition: 'new', status: 'active',
-        rating: 4.8, reviewCount: 2100, isFeatured: true, isFlashSale: true,
+        stock: 25, sold: 0, minOrder: 1, weight: 1280, condition: 'new', status: 'active',
+        rating: 0, reviewCount: 0, isFeatured: true, isFlashSale: true,
         flashSaleEnd: new Date('2027-12-31T23:59:59'),
         tags: JSON.stringify(['macbook', 'laptop', 'apple']),
       }
@@ -253,8 +253,8 @@ async function main() {
         images: JSON.stringify([
           'https://images.unsplash.com/photo-1606220588913-b3aacb4d2f46?w=800&auto=format&fit=crop',
         ]),
-        stock: 100, sold: 3200, minOrder: 1, weight: 56, condition: 'new', status: 'active',
-        rating: 4.7, reviewCount: 5800, isFeatured: true, isFlashSale: true,
+        stock: 100, sold: 0, minOrder: 1, weight: 56, condition: 'new', status: 'active',
+        rating: 0, reviewCount: 0, isFeatured: true, isFlashSale: true,
         flashSaleEnd: new Date('2027-12-31T23:59:59'),
         tags: JSON.stringify(['airpods', 'earbuds', 'apple']),
       }
@@ -268,8 +268,8 @@ async function main() {
         images: JSON.stringify([
           'https://images.unsplash.com/photo-1610945265064-0e34e5519bbf?w=800&auto=format&fit=crop',
         ]),
-        stock: 40, sold: 2100, minOrder: 1, weight: 232, condition: 'new', status: 'active',
-        rating: 4.8, reviewCount: 4100, isFeatured: false, isFlashSale: false,
+        stock: 40, sold: 0, minOrder: 1, weight: 232, condition: 'new', status: 'active',
+        rating: 0, reviewCount: 0, isFeatured: false, isFlashSale: false,
         tags: JSON.stringify(['samsung', 'galaxy', 'smartphone']),
         variants: {
           create: [
@@ -290,8 +290,8 @@ async function main() {
         images: JSON.stringify([
           'https://images.unsplash.com/photo-1546868871-af0de0ae72be?w=800&auto=format&fit=crop',
         ]),
-        stock: 30, sold: 1500, minOrder: 1, weight: 52, condition: 'new', status: 'active',
-        rating: 4.6, reviewCount: 2800, isFeatured: false, isFlashSale: true,
+        stock: 30, sold: 0, minOrder: 1, weight: 52, condition: 'new', status: 'active',
+        rating: 0, reviewCount: 0, isFeatured: false, isFlashSale: true,
         flashSaleEnd: new Date('2027-12-31T23:59:59'),
         tags: JSON.stringify(['smartwatch', 'samsung', 'wearable']),
       }
@@ -305,8 +305,8 @@ async function main() {
         images: JSON.stringify([
           'https://images.unsplash.com/photo-1583863788434-e58a36330cf0?w=800&auto=format&fit=crop',
         ]),
-        stock: 200, sold: 8900, minOrder: 1, weight: 200, condition: 'new', status: 'active',
-        rating: 4.8, reviewCount: 12000, isFeatured: false, isFlashSale: false,
+        stock: 200, sold: 0, minOrder: 1, weight: 200, condition: 'new', status: 'active',
+        rating: 0, reviewCount: 0, isFeatured: false, isFlashSale: false,
         tags: JSON.stringify(['charger', 'anker', 'elektronik']),
       }
     }),
@@ -322,8 +322,8 @@ async function main() {
           'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=800&auto=format&fit=crop',
           'https://images.unsplash.com/photo-1598033129183-c4f50c736c10?w=800&auto=format&fit=crop',
         ]),
-        stock: 150, sold: 5200, minOrder: 1, weight: 300, condition: 'new', status: 'active',
-        rating: 4.6, reviewCount: 8200, isFeatured: true, isFlashSale: false,
+        stock: 150, sold: 0, minOrder: 1, weight: 300, condition: 'new', status: 'active',
+        rating: 0, reviewCount: 0, isFeatured: true, isFlashSale: false,
         tags: JSON.stringify(['kemeja', 'flannel', 'pakaian']),
         variants: {
           create: [
@@ -344,8 +344,8 @@ async function main() {
           'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800&auto=format&fit=crop',
           'https://images.unsplash.com/photo-1600269452121-4f2416e55c28?w=800&auto=format&fit=crop',
         ]),
-        stock: 30, sold: 850, minOrder: 1, weight: 800, condition: 'new', status: 'active',
-        rating: 4.7, reviewCount: 1200, isFeatured: false, isFlashSale: true,
+        stock: 30, sold: 0, minOrder: 1, weight: 800, condition: 'new', status: 'active',
+        rating: 0, reviewCount: 0, isFeatured: false, isFlashSale: true,
         flashSaleEnd: new Date('2027-12-31T23:59:59'),
         tags: JSON.stringify(['nike', 'sepatu', 'sneakers']),
         variants: {
@@ -367,8 +367,8 @@ async function main() {
         images: JSON.stringify([
           'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=800&auto=format&fit=crop',
         ]),
-        stock: 500, sold: 15000, minOrder: 1, weight: 200, condition: 'new', status: 'active',
-        rating: 4.5, reviewCount: 25000, isFeatured: false, isFlashSale: true,
+        stock: 500, sold: 0, minOrder: 1, weight: 200, condition: 'new', status: 'active',
+        rating: 0, reviewCount: 0, isFeatured: false, isFlashSale: true,
         flashSaleEnd: new Date('2027-12-31T23:59:59'),
         tags: JSON.stringify(['kaos', 'oversize', 'cotton']),
         variants: {
@@ -390,8 +390,8 @@ async function main() {
         images: JSON.stringify([
           'https://images.unsplash.com/photo-1608231387042-66d1773070a5?w=800&auto=format&fit=crop',
         ]),
-        stock: 20, sold: 450, minOrder: 1, weight: 700, condition: 'new', status: 'active',
-        rating: 4.8, reviewCount: 680, isFeatured: true, isFlashSale: false,
+        stock: 20, sold: 0, minOrder: 1, weight: 700, condition: 'new', status: 'active',
+        rating: 0, reviewCount: 0, isFeatured: true, isFlashSale: false,
         tags: JSON.stringify(['adidas', 'running', 'sepatu']),
         variants: {
           create: [
@@ -413,8 +413,8 @@ async function main() {
         images: JSON.stringify([
           'https://images.unsplash.com/photo-1586495777744-4413f21062fa?w=800&auto=format&fit=crop',
         ]),
-        stock: 300, sold: 12000, minOrder: 1, weight: 30, condition: 'new', status: 'active',
-        rating: 4.6, reviewCount: 18500, isFeatured: false, isFlashSale: false,
+        stock: 300, sold: 0, minOrder: 1, weight: 30, condition: 'new', status: 'active',
+        rating: 0, reviewCount: 0, isFeatured: false, isFlashSale: false,
         tags: JSON.stringify(['lipstik', 'makeup', 'kecantikan']),
         variants: {
           create: [
@@ -435,8 +435,8 @@ async function main() {
           'https://images.unsplash.com/photo-1556228578-0d85b1a4d571?w=800&auto=format&fit=crop',
           'https://images.unsplash.com/photo-1570194065650-d99fb4cb867c?w=800&auto=format&fit=crop',
         ]),
-        stock: 300, sold: 5600, minOrder: 1, weight: 500, condition: 'new', status: 'active',
-        rating: 4.7, reviewCount: 4100, isFeatured: true, isFlashSale: true,
+        stock: 300, sold: 0, minOrder: 1, weight: 500, condition: 'new', status: 'active',
+        rating: 0, reviewCount: 0, isFeatured: true, isFlashSale: true,
         flashSaleEnd: new Date('2027-12-31T23:59:59'),
         tags: JSON.stringify(['skincare', 'kecantikan', 'glowing', 'set']),
         variants: {
@@ -468,13 +468,13 @@ async function main() {
   console.log('💰 Creating wallets...')
   const wallets = await Promise.all([
     prisma.wallet.create({
-      data: { id: 'w1', userId: 'u1', balance: 1500000, holdBalance: 200000 },
+      data: { id: 'w1', userId: 'u1', balance: 500000, holdBalance: 0 },
     }),
     prisma.wallet.create({
-      data: { id: 'w2', userId: 'u2', sellerId: 's1', balance: 5500000, holdBalance: 500000 },
+      data: { id: 'w2', userId: 'u2', sellerId: 's1', balance: 500000, holdBalance: 0 },
     }),
     prisma.wallet.create({
-      data: { id: 'w3', userId: 'u3', sellerId: 's2', balance: 3200000, holdBalance: 300000 },
+      data: { id: 'w3', userId: 'u3', sellerId: 's2', balance: 500000, holdBalance: 0 },
     }),
   ])
 
@@ -637,6 +637,93 @@ async function main() {
     prisma.review.create({ data: { id: 'r1', userId: 'u1', productId: 'p3', rating: 5, content: 'Suara sangat jernih, ANC mantap! Worth every penny 🔥', images: null } }),
     prisma.review.create({ data: { id: 'r2', userId: 'u1', productId: 'p7', rating: 4, content: 'Bahan tebal dan nyaman, cuma size chart agak besar sedikit', images: null } }),
   ])
+
+  // ==================== RECALCULATE REAL STATS ====================
+  console.log('📊 Recalculating stats from actual data...')
+  
+  // Recalculate product sold count from OrderItems
+  const productSales = await prisma.orderItem.groupBy({
+    by: ['productId'],
+    _sum: { quantity: true },
+    where: { order: { status: { notIn: ['cancelled'] } } },
+  })
+  for (const ps of productSales) {
+    if (ps.productId && ps._sum.quantity) {
+      await prisma.product.update({
+        where: { id: ps.productId },
+        data: { sold: ps._sum.quantity },
+      })
+    }
+  }
+  
+  // Recalculate product rating & reviewCount from Reviews
+  const productReviews = await prisma.review.groupBy({
+    by: ['productId'],
+    _avg: { rating: true },
+    _count: { id: true },
+  })
+  for (const pr of productReviews) {
+    if (pr.productId) {
+      await prisma.product.update({
+        where: { id: pr.productId },
+        data: {
+          rating: pr._avg.rating ? Math.round(pr._avg.rating * 10) / 10 : 0,
+          reviewCount: pr._count.id,
+        },
+      })
+    }
+  }
+  
+  // Recalculate seller totalProducts from actual products
+  const sellerProducts = await prisma.product.groupBy({
+    by: ['sellerId'],
+    _count: { id: true },
+    where: { status: 'active' },
+  })
+  for (const sp of sellerProducts) {
+    if (sp.sellerId) {
+      await prisma.seller.update({
+        where: { id: sp.sellerId },
+        data: { totalProducts: sp._count.id },
+      })
+    }
+  }
+  
+  // Recalculate seller totalSales from actual delivered/paid orders
+  const sellerOrders = await prisma.order.groupBy({
+    by: ['sellerId'],
+    _count: { id: true },
+    where: { status: { notIn: ['cancelled'] } },
+  })
+  for (const so of sellerOrders) {
+    if (so.sellerId) {
+      await prisma.seller.update({
+        where: { id: so.sellerId },
+        data: { totalSales: so._count.id },
+      })
+    }
+  }
+  
+  // Recalculate seller rating from their products' average rating
+  const allSellersForRating = await prisma.seller.findMany({
+    include: {
+      products: {
+        where: { rating: { gt: 0 } },
+        select: { rating: true },
+      },
+    },
+  })
+  for (const seller of allSellersForRating) {
+    if (seller.products.length > 0) {
+      const avgRating = seller.products.reduce((sum, p) => sum + p.rating, 0) / seller.products.length
+      await prisma.seller.update({
+        where: { id: seller.id },
+        data: { rating: Math.round(avgRating * 10) / 10 },
+      })
+    }
+  }
+  
+  console.log('✅ Stats recalculated from real data!')
 
   console.log('\n✅ Seed completed successfully!')
   console.log(`  👤 ${users.length} users`)

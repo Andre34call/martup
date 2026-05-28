@@ -18,11 +18,11 @@ export async function POST(request: NextRequest) {
     // 1. Create demo seller users
     const sellerUsers: Array<{ userId: string; sellerId: string; storeName: string }> = []
     const sellerData = [
-      { email: 'gadgetpro@martup.demo', name: 'Gadget Pro Store', storeName: 'Gadget Pro Store', storeSlug: 'gadget-pro', storeDesc: 'Toko gadget terpercaya sejak 2020. Jual HP, laptop, dan aksesoris terbaru.', isVerified: true, isPremium: true, rating: 4.9, totalSales: 15000, totalProducts: 6 },
-      { email: 'fashionhub@martup.demo', name: 'Fashion Hub', storeName: 'Fashion Hub', storeSlug: 'fashion-hub', storeDesc: 'Fashion terkini untuk pria dan wanita. Kualitas premium, harga terjangkau.', isVerified: true, isPremium: false, rating: 4.7, totalSales: 8000, totalProducts: 2 },
-      { email: 'beautycorner@martup.demo', name: 'Beauty Corner', storeName: 'Beauty Corner', storeSlug: 'beauty-corner', storeDesc: 'Kecantikan alami dan modern. Skincare, makeup, dan perawatan kulit.', isVerified: false, isPremium: false, rating: 4.5, totalSales: 3000, totalProducts: 2 },
-      { email: 'homeliving@martup.demo', name: 'Home Living ID', storeName: 'Home Living ID', storeSlug: 'home-living', storeDesc: 'Peralatan rumah tangga dan dekorasi. Buat rumahmu makin nyaman!', isVerified: true, isPremium: true, rating: 4.8, totalSales: 12000, totalProducts: 2 },
-      { email: 'sportzone@martup.demo', name: 'Sport Zone', storeName: 'Sport Zone', storeSlug: 'sport-zone', storeDesc: 'Peralatan olahraga dan fitness. Stay active, stay healthy!', isVerified: true, isPremium: false, rating: 4.6, totalSales: 6000, totalProducts: 2 },
+      { email: 'gadgetpro@martup.demo', name: 'Gadget Pro Store', storeName: 'Gadget Pro Store', storeSlug: 'gadget-pro', storeDesc: 'Toko gadget terpercaya sejak 2020. Jual HP, laptop, dan aksesoris terbaru.', isVerified: true, isPremium: true, rating: 0, totalSales: 0, totalProducts: 0 },
+      { email: 'fashionhub@martup.demo', name: 'Fashion Hub', storeName: 'Fashion Hub', storeSlug: 'fashion-hub', storeDesc: 'Fashion terkini untuk pria dan wanita. Kualitas premium, harga terjangkau.', isVerified: true, isPremium: false, rating: 0, totalSales: 0, totalProducts: 0 },
+      { email: 'beautycorner@martup.demo', name: 'Beauty Corner', storeName: 'Beauty Corner', storeSlug: 'beauty-corner', storeDesc: 'Kecantikan alami dan modern. Skincare, makeup, dan perawatan kulit.', isVerified: false, isPremium: false, rating: 0, totalSales: 0, totalProducts: 0 },
+      { email: 'homeliving@martup.demo', name: 'Home Living ID', storeName: 'Home Living ID', storeSlug: 'home-living', storeDesc: 'Peralatan rumah tangga dan dekorasi. Buat rumahmu makin nyaman!', isVerified: true, isPremium: true, rating: 0, totalSales: 0, totalProducts: 0 },
+      { email: 'sportzone@martup.demo', name: 'Sport Zone', storeName: 'Sport Zone', storeSlug: 'sport-zone', storeDesc: 'Peralatan olahraga dan fitness. Stay active, stay healthy!', isVerified: true, isPremium: false, rating: 0, totalSales: 0, totalProducts: 0 },
     ]
 
     for (const sd of sellerData) {
@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
         await db.wallet.upsert({
           where: { sellerId: seller.id },
           update: {},
-          create: { userId: existingUser.id, sellerId: seller.id, balance: sd.totalSales * 5000, holdBalance: 1500000 },
+          create: { userId: existingUser.id, sellerId: seller.id, balance: 500000, holdBalance: 0 },
         })
         // Update user role
         await db.user.update({ where: { id: existingUser.id }, data: { role: 'seller', isVerified: sd.isVerified } })
@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
           name: sd.name,
           role: 'seller',
           isVerified: sd.isVerified,
-          wallet: { create: { balance: sd.totalSales * 5000, holdBalance: 1500000 } },
+          wallet: { create: { balance: 500000, holdBalance: 0 } },
           seller: {
             create: {
               storeName: sd.storeName,
@@ -140,8 +140,8 @@ export async function POST(request: NextRequest) {
     const productsData = [
       {
         name: 'iPhone 15 Pro Max 256GB', slug: 'iphone-15-pro-max', description: 'iPhone 15 Pro Max dengan chip A17 Pro, kamera 48MP, dan desain titanium. Performa terbaik untuk pengguna premium.',
-        price: 21999000, stock: 50, sold: 1200, weight: 221, condition: 'new', status: 'active',
-        rating: 4.9, reviewCount: 3520, isFeatured: true, isFlashSale: false,
+        price: 21999000, stock: 50, sold: 0, weight: 221, condition: 'new', status: 'active',
+        rating: 0, reviewCount: 0, isFeatured: true, isFlashSale: false,
         images: JSON.stringify(['https://images.unsplash.com/photo-1695048133142-1a20484d2569?w=800&auto=format&fit=crop', 'https://images.unsplash.com/photo-1592750475338-74b7b21085ab?w=800&auto=format&fit=crop']),
         tags: JSON.stringify(['iphone', 'apple', 'smartphone', 'premium']),
         sellerName: 'Gadget Pro Store', categorySlug: 'handphone',
@@ -154,8 +154,8 @@ export async function POST(request: NextRequest) {
       },
       {
         name: 'Samsung Galaxy S24 Ultra', slug: 'samsung-galaxy-s24-ultra', description: 'Samsung Galaxy S24 Ultra dengan Galaxy AI, S Pen, dan kamera 200MP. Smartphone paling canggih dari Samsung.',
-        price: 19999000, discountPrice: 17999000, stock: 35, sold: 890, weight: 232, condition: 'new', status: 'active',
-        rating: 4.8, reviewCount: 2150, isFeatured: true, isFlashSale: true, flashSaleEnd: new Date('2025-12-31T23:59:59Z'),
+        price: 19999000, discountPrice: 17999000, stock: 35, sold: 0, weight: 232, condition: 'new', status: 'active',
+        rating: 0, reviewCount: 0, isFeatured: true, isFlashSale: true, flashSaleEnd: new Date('2025-12-31T23:59:59Z'),
         images: JSON.stringify(['https://images.unsplash.com/photo-1610945415295-d9bbf067e59c?w=800&auto=format&fit=crop', 'https://images.unsplash.com/photo-1556656793-08538906a9f8?w=800&auto=format&fit=crop']),
         tags: JSON.stringify(['samsung', 'galaxy', 'android', 'premium']),
         sellerName: 'Gadget Pro Store', categorySlug: 'handphone',
@@ -166,8 +166,8 @@ export async function POST(request: NextRequest) {
       },
       {
         name: 'MacBook Pro M3 14 inch', slug: 'macbook-pro-m3', description: 'MacBook Pro dengan chip M3, layar Liquid Retina XDR, dan performa luar biasa untuk profesional.',
-        price: 27999000, discountPrice: 25999000, stock: 20, sold: 450, weight: 1550, condition: 'new', status: 'active',
-        rating: 4.9, reviewCount: 780, isFeatured: true, isFlashSale: false,
+        price: 27999000, discountPrice: 25999000, stock: 20, sold: 0, weight: 1550, condition: 'new', status: 'active',
+        rating: 0, reviewCount: 0, isFeatured: true, isFlashSale: false,
         images: JSON.stringify(['https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=800&auto=format&fit=crop', 'https://images.unsplash.com/photo-1541807084-5c52b6b3adef?w=800&auto=format&fit=crop']),
         tags: JSON.stringify(['macbook', 'apple', 'laptop', 'premium']),
         sellerName: 'Gadget Pro Store', categorySlug: 'laptop',
@@ -178,16 +178,16 @@ export async function POST(request: NextRequest) {
       },
       {
         name: 'PS5 Slim Digital Edition', slug: 'ps5-slim-digital', description: 'PlayStation 5 Slim Digital Edition - Konsol gaming next-gen dengan SSD super cepat dan DualSense controller.',
-        price: 6499000, discountPrice: 5799000, stock: 25, sold: 380, weight: 3200, condition: 'new', status: 'active',
-        rating: 4.9, reviewCount: 890, isFeatured: true, isFlashSale: true, flashSaleEnd: new Date('2025-12-31T23:59:59Z'),
+        price: 6499000, discountPrice: 5799000, stock: 25, sold: 0, weight: 3200, condition: 'new', status: 'active',
+        rating: 0, reviewCount: 0, isFeatured: true, isFlashSale: true, flashSaleEnd: new Date('2025-12-31T23:59:59Z'),
         images: JSON.stringify(['https://images.unsplash.com/photo-1606144042614-b2417e99c4e3?w=800&auto=format&fit=crop', 'https://images.unsplash.com/photo-1607853202273-797f1c22a38e?w=800&auto=format&fit=crop']),
         sellerName: 'Gadget Pro Store', categorySlug: 'gaming',
         variants: [],
       },
       {
         name: 'AirPods Pro 2nd Gen', slug: 'airpods-pro-2', description: 'AirPods Pro 2nd Gen dengan Active Noise Cancellation, Adaptive Transparency, dan Personalized Spatial Audio.',
-        price: 3799000, discountPrice: 3299000, stock: 100, sold: 2100, weight: 56, condition: 'new', status: 'active',
-        rating: 4.8, reviewCount: 1560, isFeatured: false, isFlashSale: false,
+        price: 3799000, discountPrice: 3299000, stock: 100, sold: 0, weight: 56, condition: 'new', status: 'active',
+        rating: 0, reviewCount: 0, isFeatured: false, isFlashSale: false,
         images: JSON.stringify(['https://images.unsplash.com/photo-1606220588913-b3aacb4d2f46?w=800&auto=format&fit=crop']),
         tags: JSON.stringify(['airpods', 'apple', 'earbuds']),
         sellerName: 'Gadget Pro Store', categorySlug: 'elektronik',
@@ -195,16 +195,16 @@ export async function POST(request: NextRequest) {
       },
       {
         name: 'iPad Air M2', slug: 'ipad-air-m2', description: 'iPad Air M2 dengan chip M2, layar 11-inch Liquid Retina, dan Apple Pencil support.',
-        price: 10999000, discountPrice: 9999000, stock: 30, sold: 620, weight: 462, condition: 'new', status: 'active',
-        rating: 4.7, reviewCount: 890, isFeatured: true, isFlashSale: false,
+        price: 10999000, discountPrice: 9999000, stock: 30, sold: 0, weight: 462, condition: 'new', status: 'active',
+        rating: 0, reviewCount: 0, isFeatured: true, isFlashSale: false,
         images: JSON.stringify(['https://images.unsplash.com/photo-1544244015-0df4b3ffc6b0?w=800&auto=format&fit=crop']),
         sellerName: 'Gadget Pro Store', categorySlug: 'elektronik',
         variants: [],
       },
       {
         name: 'Kemeja Flannel Premium Cotton', slug: 'kemeja-flannel-premium', description: 'Kemeja flannel premium dengan bahan cotton 100% nyaman dipakai sehari-hari. Available dalam berbagai warna.',
-        price: 189000, discountPrice: 149000, stock: 200, sold: 3500, weight: 250, condition: 'new', status: 'active',
-        rating: 4.6, reviewCount: 890, isFeatured: false, isFlashSale: false,
+        price: 189000, discountPrice: 149000, stock: 200, sold: 0, weight: 250, condition: 'new', status: 'active',
+        rating: 0, reviewCount: 0, isFeatured: false, isFlashSale: false,
         images: JSON.stringify(['https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=800&auto=format&fit=crop', 'https://images.unsplash.com/photo-1602810318383-e386cc2a3ccf?w=800&auto=format&fit=crop']),
         sellerName: 'Fashion Hub', categorySlug: 'fashion-pria',
         variants: [
@@ -215,8 +215,8 @@ export async function POST(request: NextRequest) {
       },
       {
         name: 'Gaun Midi Elegant - Party Wear', slug: 'gaun-midi-elegant', description: 'Gaun midi elegan untuk pesta dan acara formal. Bahan premium dengan detail payet yang mewah.',
-        price: 459000, discountPrice: 359000, stock: 80, sold: 1200, weight: 300, condition: 'new', status: 'active',
-        rating: 4.7, reviewCount: 650, isFeatured: true, isFlashSale: false,
+        price: 459000, discountPrice: 359000, stock: 80, sold: 0, weight: 300, condition: 'new', status: 'active',
+        rating: 0, reviewCount: 0, isFeatured: true, isFlashSale: false,
         images: JSON.stringify(['https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=800&auto=format&fit=crop', 'https://images.unsplash.com/photo-1566174053879-31528523f8ae?w=800&auto=format&fit=crop']),
         sellerName: 'Fashion Hub', categorySlug: 'fashion-wanita',
         variants: [
@@ -227,8 +227,8 @@ export async function POST(request: NextRequest) {
       },
       {
         name: 'Lipstik Matte Velvet Long Lasting', slug: 'lipstik-matte-velvet', description: 'Lipstik matte velvet formula terbaru, tahan lama hingga 12 jam. Warna pigmented dan nyaman di bibir.',
-        price: 75000, discountPrice: 55000, stock: 500, sold: 8900, weight: 30, condition: 'new', status: 'active',
-        rating: 4.5, reviewCount: 3200, isFeatured: false, isFlashSale: true, flashSaleEnd: new Date('2025-12-31T23:59:59Z'),
+        price: 75000, discountPrice: 55000, stock: 500, sold: 0, weight: 30, condition: 'new', status: 'active',
+        rating: 0, reviewCount: 0, isFeatured: false, isFlashSale: true, flashSaleEnd: new Date('2025-12-31T23:59:59Z'),
         images: JSON.stringify(['https://images.unsplash.com/photo-1586495777744-4413f21062fa?w=800&auto=format&fit=crop', 'https://images.unsplash.com/photo-1631214524020-7e18db9a8f92?w=800&auto=format&fit=crop']),
         sellerName: 'Beauty Corner', categorySlug: 'kecantikan',
         variants: [
@@ -239,8 +239,8 @@ export async function POST(request: NextRequest) {
       },
       {
         name: 'Skincare Set Glowing Package', slug: 'skincare-set-glowing', description: 'Paket skincare lengkap untuk kulit glowing: Cleanser, Toner, Serum, Moisturizer, Sunscreen.',
-        price: 350000, discountPrice: 245000, stock: 300, sold: 5600, weight: 500, condition: 'new', status: 'active',
-        rating: 4.7, reviewCount: 4100, isFeatured: true, isFlashSale: true, flashSaleEnd: new Date('2025-12-31T23:59:59Z'),
+        price: 350000, discountPrice: 245000, stock: 300, sold: 0, weight: 500, condition: 'new', status: 'active',
+        rating: 0, reviewCount: 0, isFeatured: true, isFlashSale: true, flashSaleEnd: new Date('2025-12-31T23:59:59Z'),
         images: JSON.stringify(['https://images.unsplash.com/photo-1556228578-0d85b1a4d571?w=800&auto=format&fit=crop', 'https://images.unsplash.com/photo-1570194065650-d99fb4cb867c?w=800&auto=format&fit=crop']),
         sellerName: 'Beauty Corner', categorySlug: 'kecantikan',
         variants: [
@@ -251,24 +251,24 @@ export async function POST(request: NextRequest) {
       },
       {
         name: 'Diffuser Aromatherapy Minimalis', slug: 'diffuser-aromatherapy', description: 'Diffuser aromatherapy dengan desain minimalis modern. Kapasitas 300ml dengan LED 7 warna.',
-        price: 189000, discountPrice: 149000, stock: 120, sold: 2300, weight: 450, condition: 'new', status: 'active',
-        rating: 4.6, reviewCount: 1560, isFeatured: true, isFlashSale: false,
+        price: 189000, discountPrice: 149000, stock: 120, sold: 0, weight: 450, condition: 'new', status: 'active',
+        rating: 0, reviewCount: 0, isFeatured: true, isFlashSale: false,
         images: JSON.stringify(['https://images.unsplash.com/photo-1602928321679-560bb453f190?w=800&auto=format&fit=crop', 'https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?w=800&auto=format&fit=crop']),
         sellerName: 'Home Living ID', categorySlug: 'rumah-tangga',
         variants: [],
       },
       {
         name: 'Smart LED TV 43 inch 4K UHD', slug: 'smart-led-tv-43', description: 'Smart LED TV 43 inch 4K UHD dengan Android TV built-in. Dolby Audio dan HDMI x3.',
-        price: 3299000, discountPrice: 2899000, stock: 40, sold: 620, weight: 6500, condition: 'new', status: 'active',
-        rating: 4.6, reviewCount: 450, isFeatured: true, isFlashSale: false,
+        price: 3299000, discountPrice: 2899000, stock: 40, sold: 0, weight: 6500, condition: 'new', status: 'active',
+        rating: 0, reviewCount: 0, isFeatured: true, isFlashSale: false,
         images: JSON.stringify(['https://images.unsplash.com/photo-1593359677879-a4bb92f829d1?w=800&auto=format&fit=crop', 'https://images.unsplash.com/photo-1461151304267-38535e780c79?w=800&auto=format&fit=crop']),
         sellerName: 'Home Living ID', categorySlug: 'elektronik',
         variants: [],
       },
       {
         name: 'Sneakers Nike Air Max 90', slug: 'nike-air-max-90', description: 'Nike Air Max 90 - Classic sneaker dengan teknologi Air Max untuk kenyamanan maksimal.',
-        price: 1299000, discountPrice: 999000, stock: 30, sold: 850, weight: 800, condition: 'new', status: 'active',
-        rating: 4.7, reviewCount: 1200, isFeatured: true, isFlashSale: true, flashSaleEnd: new Date('2025-12-31T23:59:59Z'),
+        price: 1299000, discountPrice: 999000, stock: 30, sold: 0, weight: 800, condition: 'new', status: 'active',
+        rating: 0, reviewCount: 0, isFeatured: true, isFlashSale: true, flashSaleEnd: new Date('2025-12-31T23:59:59Z'),
         images: JSON.stringify(['https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800&auto=format&fit=crop', 'https://images.unsplash.com/photo-1600269452121-4f2416e55c28?w=800&auto=format&fit=crop']),
         sellerName: 'Sport Zone', categorySlug: 'sepatu',
         variants: [
@@ -280,8 +280,8 @@ export async function POST(request: NextRequest) {
       },
       {
         name: 'Yoga Mat Premium Anti Slip', slug: 'yoga-mat-premium', description: 'Yoga mat premium 8mm anti slip dengan bahan TPE eco-friendly. Nyaman dan aman untuk olahraga.',
-        price: 250000, discountPrice: 189000, stock: 200, sold: 1800, weight: 1200, condition: 'new', status: 'active',
-        rating: 4.8, reviewCount: 920, isFeatured: false, isFlashSale: false,
+        price: 250000, discountPrice: 189000, stock: 200, sold: 0, weight: 1200, condition: 'new', status: 'active',
+        rating: 0, reviewCount: 0, isFeatured: false, isFlashSale: false,
         images: JSON.stringify(['https://images.unsplash.com/photo-1601925260368-ae2f83cf8b7f?w=800&auto=format&fit=crop', 'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?w=800&auto=format&fit=crop']),
         sellerName: 'Sport Zone', categorySlug: 'olahraga',
         variants: [
@@ -338,6 +338,89 @@ export async function POST(request: NextRequest) {
       if (existing) continue
       await db.voucher.create({ data: vd })
       vouchersCreated++
+    }
+
+    // ==================== RECALCULATE REAL STATS ====================
+    // Recalculate product sold from OrderItems
+    const productSales = await db.orderItem.groupBy({
+      by: ['productId'],
+      _sum: { quantity: true },
+      where: { order: { status: { notIn: ['cancelled'] } } },
+    })
+    for (const ps of productSales) {
+      if (ps.productId && ps._sum.quantity) {
+        await db.product.update({
+          where: { id: ps.productId },
+          data: { sold: ps._sum.quantity },
+        })
+      }
+    }
+    
+    // Recalculate product rating & reviewCount from Reviews
+    const productReviews = await db.review.groupBy({
+      by: ['productId'],
+      _avg: { rating: true },
+      _count: { id: true },
+    })
+    for (const pr of productReviews) {
+      if (pr.productId) {
+        await db.product.update({
+          where: { id: pr.productId },
+          data: {
+            rating: pr._avg.rating ? Math.round(pr._avg.rating * 10) / 10 : 0,
+            reviewCount: pr._count.id,
+          },
+        })
+      }
+    }
+    
+    // Recalculate seller totalProducts from actual products
+    const sellerProductCounts = await db.product.groupBy({
+      by: ['sellerId'],
+      _count: { id: true },
+      where: { status: 'active' },
+    })
+    for (const sp of sellerProductCounts) {
+      if (sp.sellerId) {
+        await db.seller.update({
+          where: { id: sp.sellerId },
+          data: { totalProducts: sp._count.id },
+        })
+      }
+    }
+    
+    // Recalculate seller totalSales from actual non-cancelled orders
+    const sellerOrderCounts = await db.order.groupBy({
+      by: ['sellerId'],
+      _count: { id: true },
+      where: { status: { notIn: ['cancelled'] } },
+    })
+    for (const so of sellerOrderCounts) {
+      if (so.sellerId) {
+        await db.seller.update({
+          where: { id: so.sellerId },
+          data: { totalSales: so._count.id },
+        })
+      }
+    }
+    
+    // Recalculate seller rating from their products' average rating
+    const allSellers = await db.seller.findMany({
+      include: {
+        products: {
+          where: { rating: { gt: 0 } },
+          select: { rating: true },
+        },
+      },
+    })
+    for (const seller of allSellers) {
+      if (seller.products.length > 0) {
+        const avgRating = seller.products.reduce((sum, p) => sum + p.rating, 0) / seller.products.length
+        await db.seller.update({
+          where: { id: seller.id },
+          data: { rating: Math.round(avgRating * 10) / 10 },
+        })
+      }
     }
 
     return NextResponse.json({
