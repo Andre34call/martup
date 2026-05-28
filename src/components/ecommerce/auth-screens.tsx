@@ -479,6 +479,7 @@ export function LoginScreen() {
         {/* Forgot password */}
         <div className="flex justify-end">
           <button
+            type="button"
             onClick={() => navigate("forgot-password")}
             className="text-sm text-emerald-600 hover:text-emerald-700 font-medium transition-colors"
           >
