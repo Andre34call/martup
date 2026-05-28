@@ -1104,3 +1104,32 @@ Stage Summary:
 - Wallet balance changed from varied inflated amounts to fixed 500000; holdBalance from varied amounts to 0
 - Post-seed recalculation ensures stats are derived from real data (orders, reviews, products)
 - Zero breaking changes to non-stats data — lint passes ✅
+
+---
+Task ID: mock-data-elimination
+Agent: main
+Task: Eliminate all fake/inflated mock data and replace with real database-computed stats
+
+Work Log:
+- Analyzed entire codebase for fake/inflated data sources
+- Found 2 seed files with fake stats: prisma/seed.ts and src/app/api/seed/route.ts
+- Found seller rating was never recalculated from reviews (structural gap)
+- Fixed prisma/seed.ts: reset all 12 products' sold/rating/reviewCount to 0, 3 sellers' totalSales/rating/totalProducts to 0
+- Fixed src/app/api/seed/route.ts: same resets for 14 products and 5 sellers
+- Fixed wallet balances: changed from sd.totalSales * 5000 to fixed 500000, holdBalance from 1500000 to 0
+- Added post-seed recalculation step to both seed files (computes stats from actual orders/reviews)
+- Fixed duplicate variable name in seed.ts (sellers → allSellersForRating)
+- Added recalculateSellerRating() to src/app/api/reviews/route.ts
+- Added seller rating recalculation to review POST, PUT, DELETE handlers
+- Created /api/admin/recalculate-stats endpoint for live stat recalculation
+- Re-seeded Supabase database with honest data
+- Pushed to GitHub, Vercel auto-deploy succeeded
+- Verified live site: all stats now computed from real data
+
+Stage Summary:
+- All fake stats eliminated from both seed files
+- Product sold/rating/reviewCount: seeded as 0, computed from real orders/reviews
+- Seller totalSales/rating/totalProducts: seeded as 0, computed from real orders/products
+- Seller ratings now auto-update when reviews are created/updated/deleted
+- Admin recalculate-stats endpoint available for manual stat fixes
+- Live site verified: real data showing (e.g., sold=1 for products in real orders, sold=0 for those without)
