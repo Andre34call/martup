@@ -90,15 +90,8 @@ export async function POST(request: NextRequest) {
       const response: Record<string, unknown> = {
         success: false,
         error: 'Email atau password salah',
-      }
-      // In development, include debug info
-      if (process.env.NODE_ENV === 'development') {
-        response.debugUserFound = false
-      }
-      // Include debugHint when x-login-debug header is present
-      const debugHeaderNotFound = request.headers.get('x-login-debug')
-      if (debugHeaderNotFound) {
-        response.debugHint = 'user_not_found'
+        // TEMP: Always include debugHint for login debugging (remove after fix)
+        debugHint: 'user_not_found',
       }
       return NextResponse.json(response, { status: 401 })
     }
@@ -172,18 +165,11 @@ export async function POST(request: NextRequest) {
       const response: Record<string, unknown> = {
         success: false,
         error: 'Email atau password salah',
-      }
-      // In development, include debug info
-      if (process.env.NODE_ENV === 'development') {
-        response.debugUserFound = true
-        response.debugPasswordMatch = false
-      }
-      // Include debugHint when x-login-debug header is present
-      const debugHeader = request.headers.get('x-login-debug')
-      if (debugHeader) {
-        response.debugHint = isBcryptHash
+        // TEMP: Always include debugHint for login debugging (remove after fix)
+        debugHint: isBcryptHash
           ? 'bcrypt_compare_failed'
-          : 'stored_password_not_bcrypt_hash'
+          : 'stored_password_not_bcrypt_hash',
+        hashPrefix,
       }
       return NextResponse.json(response, { status: 401 })
     }
