@@ -7,6 +7,11 @@ import crypto from 'crypto'
 import { logger } from '@/lib/logger'
 import { validateBody, loginSchema } from '@/lib/validations'
 
+// Helper: check if a string looks like a valid bcrypt hash
+function isValidBcryptHash(hash: string): boolean {
+  return /^\$2[aby]\$\d{2}\$/.test(hash)
+}
+
 // OTP configuration for 2FA login
 const OTP_LENGTH = 6
 const OTP_EXPIRY_MINUTES = 5
@@ -114,9 +119,51 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify password
-    const isPasswordValid = await bcrypt.compare(password, user.password)
+    let isPasswordValid = false
+    const isBcryptHash = isValidBcryptHash(user.password)
+    const hashPrefix = user.password.substring(0, 4)
+
+    try {
+      isPasswordValid = await bcrypt.compare(password, user.password)
+    } catch (compareError) {
+      logger.warn({ email, userId: user.id, hashPrefix, err: compareError }, 'Login: bcrypt.compare threw an error — hash may be corrupted')
+      isPasswordValid = false
+    }
+
+    // FALLBACK: If bcrypt.compare fails AND the stored hash doesn't look like a valid bcrypt hash,
+    // try a plain-text comparison (for legacy accounts where password was stored unhashed).
+    // If it matches, re-hash and update the database so future logins use bcrypt.
+    let plainTextFixed = false
+    if (!isPasswordValid && !isBcryptHash) {
+      if (user.password === password) {
+        logger.info({ email, userId: user.id, hashPrefix }, 'Login: detected plain-text password, re-hashing')
+        try {
+          const saltRounds = 12
+          const hashedPassword = await bcrypt.hash(password, saltRounds)
+          await db.user.update({
+            where: { id: user.id },
+            data: { password: hashedPassword },
+          })
+          isPasswordValid = true
+          plainTextFixed = true
+          logger.info({ email, userId: user.id }, 'Login: plain-text password re-hashed successfully')
+        } catch (fixError) {
+          logger.error({ email, userId: user.id, err: fixError }, 'Login: failed to re-hash plain-text password')
+        }
+      } else {
+        logger.info(
+          { email, userId: user.id, hashPrefix, isBcryptHash },
+          'Login failed: incorrect password (stored hash is not valid bcrypt format)'
+        )
+      }
+    }
+
     if (!isPasswordValid) {
-      logger.info({ email, userId: user.id }, 'Login failed: incorrect password')
+      // Log detailed failure info (hash prefix is safe to log for diagnostics)
+      logger.info(
+        { email, userId: user.id, hashPrefix, isBcryptHash },
+        'Login failed: incorrect password'
+      )
       const response: Record<string, unknown> = {
         success: false,
         error: 'Email atau password salah',
@@ -125,6 +172,13 @@ export async function POST(request: NextRequest) {
       if (process.env.NODE_ENV === 'development') {
         response.debugUserFound = true
         response.debugPasswordMatch = false
+      }
+      // Include debugHint when x-login-debug header is present
+      const debugHeader = request.headers.get('x-login-debug')
+      if (debugHeader) {
+        response.debugHint = isBcryptHash
+          ? 'bcrypt_compare_failed'
+          : 'stored_password_not_bcrypt_hash'
       }
       return NextResponse.json(response, { status: 401 })
     }

@@ -1264,3 +1264,40 @@ Stage Summary:
 - Debug logging added to login API for future diagnostics
 - Dev-mode debug fields (debugUserFound, debugPasswordMatch, debugIsVerified) added
 - Auto-migration: legacy mixed-case emails are auto-normalized on first login
+
+---
+Task ID: 1
+Agent: code
+Task: Fix login bug — add diagnostic endpoint + plain-text password fallback
+
+Work Log:
+- Read existing source files: login/route.ts, auth-middleware.ts, validations.ts, db.ts, logger.ts, env.ts, rate-limit.ts, register/route.ts, forgot-password/route.ts, reset-password/route.ts
+- Created `/src/app/api/auth/login-diagnostic/route.ts` — new diagnostic endpoint:
+  - Accepts POST with `{ email, password }`
+  - Protected by TOKEN_SECRET: requires `Authorization: Bearer <secret>` OR `x-login-debug: <secret>` header
+  - Rate limited: 3 requests per minute per IP
+  - Returns diagnostic info: userFound, hasPassword, passwordHashValid, passwordHashPrefix (first 4 chars), passwordMatch, isVerified, isActive, fixApplied
+  - Auto-fix: if stored password is NOT a valid bcrypt hash AND plain-text matches, re-hashes with bcrypt and updates DB, returns fixApplied: true
+  - Uses `isValidBcryptHash()` helper to check $2a$/$2b$/$2y$ prefix pattern
+  - Uses `bcrypt.compare` with try/catch to handle corrupted hashes gracefully
+- Modified `/src/app/api/auth/login/route.ts`:
+  - Added `isValidBcryptHash()` helper function
+  - Password verification now wrapped in try/catch (bcrypt.compare can throw on corrupted hashes)
+  - Added hash prefix and isBcryptHash logging for all password failures
+  - Added FALLBACK: if bcrypt.compare fails AND hash doesn't look like valid bcrypt, compare raw password directly; if match, re-hash with bcrypt and update DB
+  - Added `plainTextFixed` flag (unused variable kept for potential future use)
+  - Added `debugHint` field in 401 response when `x-login-debug` header is present (values: 'bcrypt_compare_failed' or 'stored_password_not_bcrypt_hash')
+  - Enhanced logging: hash prefix, isBcryptHash, and specific messages for plain-text detection and re-hashing
+- Verified forgot-password/route.ts and reset-password/route.ts:
+  - forgot-password: correctly generates reset token with 1-hour expiry, sends email, prevents enumeration
+  - reset-password: correctly validates token/expiry, hashes new password with bcrypt.genSalt(12), clears reset token
+  - Both routes are working correctly — no changes needed
+- Lint passes ✅
+- TypeScript type check passes ✅
+
+Stage Summary:
+- New diagnostic endpoint: `/api/auth/login-diagnostic` (TOKEN_SECRET-protected, rate-limited, with auto-fix)
+- Login route enhanced with plain-text password fallback + bcrypt re-hashing on match
+- Debug hint available via x-login-debug header for troubleshooting
+- Detailed server-side logging for password failures (hash prefix, isBcryptHash)
+- Forgot-password and reset-password routes verified OK — no changes needed
