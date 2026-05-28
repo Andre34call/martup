@@ -30,7 +30,7 @@ class ApiClientError extends Error {
  */
 function getToken(): string | null {
   if (typeof window === 'undefined') return null
-  return localStorage.getItem('authToken')
+  return localStorage.getItem('authToken') || localStorage.getItem('martup_token')
 }
 
 function buildUrl(path: string, params?: Record<string, string | undefined>): string {

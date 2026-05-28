@@ -313,16 +313,26 @@ export function LoginScreen() {
   const isFormValid = emailOrPhone && password && !emailOrPhoneError && !passwordError
 
   const handleLogin = async () => {
+    // Mark fields as touched to show validation errors
     setTouchedEmailOrPhone(true)
     setTouchedPassword(true)
-    if (!isFormValid) return
+
+    // Trim whitespace from email to avoid hidden-char login failures
+    const trimmedInput = emailOrPhone.trim()
+
+    // Re-validate after trimming (fix stale state race condition)
+    const hasInput = trimmedInput && password
+    const inputIsValid = isValidEmailOrPhone(trimmedInput)
+    const passwordValid = password.length >= 8
+    if (!hasInput || !inputIsValid || !passwordValid) return
+
     setIsLoading(true)
 
     try {
       // If input is a phone number, redirect to OTP flow with the phone number
-      if (isValidPhone(emailOrPhone)) {
+      if (isValidPhone(trimmedInput)) {
         // Navigate to OTP screen - the phone number will be passed via store
-        useAppStore.setState({ otpPhoneNumber: emailOrPhone })
+        useAppStore.setState({ otpPhoneNumber: trimmedInput })
         navigate('otp')
         setIsLoading(false)
         return
@@ -330,12 +340,12 @@ export function LoginScreen() {
 
       // Email + password login
       // Use rawPost to read response body even on 403 (requiresVerification)
-      const res = await apiClient.rawPost('/api/auth/login', { email: emailOrPhone, password })
+      const res = await apiClient.rawPost('/api/auth/login', { email: trimmedInput, password })
       const data: LoginResponse = await res.json()
 
       // Email verification check — if email not verified, redirect to verification screen
       if (!data.success && data.requiresVerification) {
-        useAppStore.setState({ pendingVerificationEmail: data.email || emailOrPhone })
+        useAppStore.setState({ pendingVerificationEmail: data.email || trimmedInput })
         navigate('email-verification')
         showToast(data.error || 'Email belum diverifikasi', 'error')
         setIsLoading(false)
@@ -352,9 +362,10 @@ export function LoginScreen() {
       }
 
       if (data.success && data.user) {
-        // Store auth token
+        // Store auth token — also store as martup_token for backward compat
         if (data.token) {
           localStorage.setItem('authToken', data.token)
+          localStorage.setItem('martup_token', data.token)
         }
         const user: User = {
           id: data.user.id,
@@ -376,11 +387,16 @@ export function LoginScreen() {
         useWishlistStore.getState().syncWishlistFromServer(data.user.id)
         connectSocket()
       } else {
+        // Show the server error message (e.g., "Email atau password salah")
         showToast(data.error || 'Login gagal. Periksa email dan password Anda.', 'error')
       }
     } catch (error) {
       logger.warn({ component: 'auth', err: error }, 'Login failed')
-      showToast('Terjadi kesalahan koneksi. Coba lagi nanti.', 'error')
+      if (error instanceof ApiClientError) {
+        showToast(error.message, 'error')
+      } else {
+        showToast('Terjadi kesalahan koneksi. Coba lagi nanti.', 'error')
+      }
     }
 
     setIsLoading(false)
