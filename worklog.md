@@ -1331,3 +1331,42 @@ Stage Summary:
   2. Plain-text password fallback with auto-re-hashing
   3. bcrypt.compare error handling for corrupted hashes
   4. Enhanced server-side logging with hash prefix info
+
+---
+Task ID: sticky-login
+Agent: main
+Task: Implement Sticky Login with httpOnly session cookies - logout when browser closes
+
+Work Log:
+- Created `src/lib/session-cookie.ts` - helper for setting/clearing session cookies
+  - `martup_session` (httpOnly, no maxAge) = session cookie with HMAC token
+  - `martup_auth` (non-httpOnly, no maxAge) = flag cookie for client-side detection
+  - Both are session cookies → cleared when browser closes
+- Updated `src/app/api/auth/login/route.ts` - set session cookies on successful login
+- Updated `src/app/api/auth/register/route.ts` - set session cookies on auto-verified registration
+- Updated `src/app/api/auth/otp/verify/route.ts` - set session cookies on OTP verification
+- Updated `src/lib/auth-middleware.ts` - `verifyAuth()` now checks 3 methods:
+  1. NextAuth session (Google OAuth)
+  2. Session cookie `martup_session` (primary for email/password)
+  3. Authorization header (fallback for API clients)
+- Created `src/app/api/auth/logout/route.ts` - clears both session cookies
+- Updated `src/lib/auth.ts` - NextAuth session cookie now has no maxAge (session cookie)
+- Updated `src/components/ecommerce/auth-screens.tsx` - removed localStorage.setItem, use setAuthFlagCookie()
+- Updated `src/components/ecommerce/providers.tsx` - DataFetcher checks hasAuthFlagCookie() instead of localStorage
+- Updated `src/lib/store/auth.ts` - logout calls /api/auth/logout to clear server cookies
+- Updated `src/lib/api-client.ts` - getToken() now secondary fallback, cookie is primary
+- Updated `src/lib/use-data-sync.ts` - uses hasAuthFlagCookie() instead of localStorage
+- Updated `src/lib/store/cart.ts` - isUserAuthenticated() uses cookie flag
+- Updated `src/lib/store/chat.ts` - connectSocket() uses cookie flag + localStorage fallback
+- Updated `src/app/page.tsx` - auth check uses cookie flag
+- Updated `src/lib/store/getAuthHeaders.ts` - comments updated for cookie-based auth
+- Updated `src/lib/upload.ts` - comments updated for cookie-based auth
+- Created `src/app/api/auth/login-diagnostic/route.ts` - diagnostic endpoint for debugging login failures
+
+Stage Summary:
+- Sticky login fully implemented with httpOnly session cookies
+- Behavior: refresh = still logged in, close tab = still logged in, close browser = logged out
+- All client-side localStorage auth checks replaced with cookie flag checks
+- Server-side verifyAuth() accepts session cookie as primary method
+- Login bug investigation ongoing - diagnostic endpoint added
+- Pushed to GitHub, auto-deploying to Vercel at https://martup-seven.vercel.app
