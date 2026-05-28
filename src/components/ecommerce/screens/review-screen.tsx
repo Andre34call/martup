@@ -3,6 +3,7 @@
 import { motion, AnimatePresence } from "framer-motion"
 import { useAppStore } from "@/lib/store"
 import { formatPrice } from "@/lib/utils"
+import { fadeIn, stagger } from '@/lib/animations'
 import { PageHeader, SectionHeader, EmptyState } from "../shared"
 import { useState, useRef, useCallback } from "react"
 import { Star, Camera, Send, Lock, Package, ImagePlus, Video, Play, X, Eye, ThumbsUp, ThumbsDown, Meh, CheckCircle2 } from "lucide-react"
@@ -10,20 +11,6 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
-
-const fadeIn = {
-  initial: { opacity: 0, y: 16 },
-  animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.3 }
-}
-
-const stagger = {
-  initial: { opacity: 0, y: 16 },
-  animate: (i: number) => ({
-    opacity: 1, y: 0,
-    transition: { delay: i * 0.05, duration: 0.3 }
-  })
-}
 
 // --- Media types ---
 interface ReviewImage {

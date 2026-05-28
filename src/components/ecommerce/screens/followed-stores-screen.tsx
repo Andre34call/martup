@@ -6,14 +6,7 @@ import { PageHeader, EmptyState } from "../shared"
 import { useState } from "react"
 import { Heart, Star, Check } from "lucide-react"
 import { Card } from "@/components/ui/card"
-
-const stagger = {
-  initial: { opacity: 0, y: 16 },
-  animate: (i: number) => ({
-    opacity: 1, y: 0,
-    transition: { delay: i * 0.05, duration: 0.3 }
-  })
-}
+import { stagger } from '@/lib/animations'
 
 export function FollowedStoresScreen() {
   const { setSelectedSeller, navigate } = useAppStore()

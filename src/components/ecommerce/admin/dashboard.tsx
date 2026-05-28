@@ -17,25 +17,12 @@ import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { useAppStore } from "@/lib/store"
 import { formatPrice } from "@/lib/utils"
+import { fadeIn, stagger } from '@/lib/animations'
 import { PageHeader, SectionHeader } from "../shared"
 import { useState, useRef, useEffect } from "react"
 import { AnimatePresence } from "framer-motion"
 import { LoadingSpinner } from "../loading-spinner"
-
-// ==================== ANIMATION VARIANTS ====================
-const fadeIn = {
-  initial: { opacity: 0, y: 16 },
-  animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.3 }
-}
-
-const stagger = {
-  initial: { opacity: 0, y: 16 },
-  animate: (i: number) => ({
-    opacity: 1, y: 0,
-    transition: { delay: i * 0.05, duration: 0.3 }
-  })
-}
+import { ELEVATED_ROLES } from "@/lib/types"
 
 export function AdminDashboard() {
   const { navigate, switchRole, userRole, currentUser, showToast, withdrawRequests, products, orders, adminUsers, adminStats, fetchAdminStats, fetchAdminUsers, fetchAdminWithdrawals, fetchDivisions, divisions } = useAppStore()
@@ -56,7 +43,7 @@ export function AdminDashboard() {
     revenueChart: adminStats.revenueChart,
     userGrowth: adminStats.userGrowth,
     totalDivisions: adminStats.totalDivisions ?? divisions.length,
-    totalStaff: adminStats.totalStaff ?? adminUsers.filter(u => ['admin', 'manager', 'finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr'].includes(u.role)).length,
+    totalStaff: adminStats.totalStaff ?? adminUsers.filter(u => ELEVATED_ROLES.includes(u.role as import('@/lib/types').UserRole)).length,
     pendingSellerVerifications: adminStats.unverifiedSellers ?? adminUsers.filter(u => u.role === 'seller' && !u.isVerified).length,
     openComplaints: adminStats.openComplaints ?? 0,
     topSellers: adminStats.topSellers ?? [],

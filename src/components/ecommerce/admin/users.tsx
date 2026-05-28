@@ -9,29 +9,19 @@ import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { useAppStore } from "@/lib/store"
 import { PageHeader, SearchBar, EmptyState } from "../shared"
+import { stagger } from '@/lib/animations'
 import { useState, useEffect } from "react"
 import { ConfirmDialog } from "../confirm-dialog"
 import { LoadingSpinner } from "../loading-spinner"
-import { getAuthHeaders } from '@/lib/store/getAuthHeaders'
+import { apiClient } from '@/lib/api-client'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Input } from "@/components/ui/input"
-
-// ==================== ANIMATION VARIANTS ====================
-const stagger = {
-  initial: { opacity: 0, y: 16 },
-  animate: (i: number) => ({
-    opacity: 1, y: 0,
-    transition: { delay: i * 0.05, duration: 0.3 }
-  })
-}
+import { ELEVATED_ROLES } from '@/lib/types'
+import { DIVISION_ROLES } from '@/lib/auth-middleware'
 
 // SECURITY: No more hardcoded email — use the centralized SUPER_ADMIN_EMAIL from env
 // This matches the backend env.SUPER_ADMIN_EMAIL which reads from environment variable
 const SUPER_ADMIN_EMAIL = process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAIL || 'kholisakm@gmail.com'
-
-// Role hierarchy constants
-const ELEVATED_ROLES = ['admin', 'manager', 'finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr']
-const DIVISION_ROLES = ['finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr']
 
 export function AdminUsers() {
   const { showToast, adminUsers, updateAdminUser, deleteAdminUser, fetchAdminUsers, currentUser, divisions, fetchDivisions } = useAppStore()
@@ -57,11 +47,7 @@ export function AdminUsers() {
 
   const handleUpdateUser = async (userId: string, updates: Record<string, unknown>) => {
     try {
-      const res = await fetch('/api/admin/users', {
-        method: 'PUT',
-        headers: getAuthHeaders(true),
-        body: JSON.stringify({ userId, updates }),
-      })
+      const res = await apiClient.rawPut('/api/admin/users', { userId, updates })
       const data = await res.json()
       if (data.success) {
         fetchAdminUsers()
@@ -78,7 +64,7 @@ export function AdminUsers() {
 
   const handleDeleteUser = async (userId: string) => {
     try {
-      const res = await fetch('/api/admin/users', { method: 'DELETE', headers: getAuthHeaders(true), body: JSON.stringify({ userId }) })
+      const res = await apiClient.rawDelete('/api/admin/users', { userId })
       const data = await res.json()
       if (data.success) {
         showToast("User dihapus", "info")
@@ -388,11 +374,7 @@ export function AdminUsers() {
                     payload = { userId: promoteUser.id, divisionId: selectedDivisionId }
                   }
 
-                  const res = await fetch('/api/admin/users', {
-                    method: 'PATCH',
-                    headers: getAuthHeaders(true),
-                    body: JSON.stringify(payload),
-                  })
+                  const res = await apiClient.rawPatch('/api/admin/users', payload)
                   const data = await res.json()
                   if (data.success) {
                     showToast(data.message || `${promoteUser.name} berhasil dipromosikan`, 'success')

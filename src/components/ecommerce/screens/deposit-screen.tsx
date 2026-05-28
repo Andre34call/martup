@@ -3,18 +3,13 @@
 import { motion } from "framer-motion"
 import { useAppStore } from "@/lib/store"
 import { formatPrice } from "@/lib/utils"
+import { fadeIn } from '@/lib/animations'
 import { PageHeader, SectionHeader, WalletBalanceCard } from "../shared"
 import { useState } from "react"
 import { CreditCard, Wallet, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-
-const fadeIn = {
-  initial: { opacity: 0, y: 16 },
-  animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.3 }
-}
 
 export function DepositScreen() {
   const { currentUser, walletBalance, topUpWallet, showToast, goBack } = useAppStore()

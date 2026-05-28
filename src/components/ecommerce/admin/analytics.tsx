@@ -9,16 +9,10 @@ import {
 import { Card } from "@/components/ui/card"
 import { useAppStore } from "@/lib/store"
 import { formatPrice } from "@/lib/utils"
+import { fadeIn } from '@/lib/animations'
 import { PageHeader, SectionHeader } from "../shared"
 import { useState, useEffect } from "react"
 import { LoadingSpinner } from "../loading-spinner"
-
-// ==================== ANIMATION VARIANTS ====================
-const fadeIn = {
-  initial: { opacity: 0, y: 16 },
-  animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.3 }
-}
 
 // ==================== HELPER: Compute top sellers from store data ====================
 function computeTopSellers(products: { sellerId: string; seller: { storeName: string }; price: number; sold: number; rating: number; reviewCount: number }[]) {

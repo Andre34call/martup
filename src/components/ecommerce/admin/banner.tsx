@@ -10,25 +10,11 @@ import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { useAppStore } from "@/lib/store"
 import { PageHeader, SectionHeader, EmptyState } from "../shared"
+import { fadeIn, stagger } from '@/lib/animations'
 import { useState, useRef, useEffect } from "react"
 import { ConfirmDialog } from "../confirm-dialog"
 import { LoadingSpinner } from "../loading-spinner"
-import { getAuthHeaders } from '@/lib/store/getAuthHeaders'
-
-// ==================== ANIMATION VARIANTS ====================
-const fadeIn = {
-  initial: { opacity: 0, y: 16 },
-  animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.3 }
-}
-
-const stagger = {
-  initial: { opacity: 0, y: 16 },
-  animate: (i: number) => ({
-    opacity: 1, y: 0,
-    transition: { delay: i * 0.05, duration: 0.3 }
-  })
-}
+import { apiClient, ApiClientError } from '@/lib/api-client'
 
 const BANNER_POSITIONS = [
   { value: "home_top", label: "Home Atas" },
@@ -40,6 +26,10 @@ const BANNER_POSITIONS = [
   { value: "checkout_top", label: "Checkout Atas" },
   { value: "popup", label: "Popup" },
 ] as const
+
+// ==================== TYPE ALIASES (avoid TSX generic ambiguity) ====================
+type BannerMutationResponse = { success: boolean; error?: string }
+type UploadResponse = { success: boolean; url?: string; error?: string }
 
 export function AdminBanner() {
   const { showToast, adminBanners, fetchAdminBanners } = useAppStore()
@@ -69,21 +59,15 @@ export function AdminBanner() {
     try {
       const formData = new FormData()
       formData.append('file', file)
-      const uploadHeaders: Record<string, string> = {}
-      if (typeof window !== 'undefined') {
-        const token = localStorage.getItem('authToken')
-        if (token) uploadHeaders['Authorization'] = `Bearer ${token}`
-      }
-      const uploadRes = await fetch('/api/upload', { method: 'POST', headers: uploadHeaders, body: formData })
-      const uploadData = await uploadRes.json()
+      const uploadData = await apiClient.upload<UploadResponse>('/api/upload', formData)
       if (uploadData.success) {
-        setNewBannerImageUrl(uploadData.url)
+        setNewBannerImageUrl(uploadData.url || '')
         showToast('Gambar berhasil diupload', 'success')
       } else {
         showToast(uploadData.error || 'Gagal mengupload gambar', 'error')
       }
-    } catch {
-      showToast('Gagal mengupload gambar', 'error')
+    } catch (err) {
+      showToast(err instanceof ApiClientError ? err.message : 'Gagal mengupload gambar', 'error')
     } finally {
       setIsUploading(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
@@ -92,39 +76,29 @@ export function AdminBanner() {
 
   const handleToggleActive = async (bannerId: string, isActive: boolean) => {
     try {
-      const res = await fetch('/api/admin/banners', {
-        method: 'PUT',
-        headers: getAuthHeaders(true),
-        body: JSON.stringify({ bannerId, isActive: !isActive }),
-      })
-      const data = await res.json()
+      const data = await apiClient.put<BannerMutationResponse>('/api/admin/banners', { bannerId, isActive: !isActive })
       if (data.success) {
         fetchAdminBanners()
         showToast(!isActive ? "Banner diaktifkan" : "Banner dinonaktifkan", "success")
       } else {
         showToast(data.error || "Gagal mengubah status banner", "error")
       }
-    } catch {
-      showToast("Gagal mengubah status banner", "error")
+    } catch (err) {
+      showToast(err instanceof ApiClientError ? err.message : "Gagal mengubah status banner", "error")
     }
   }
 
   const handleDeleteBanner = async (bannerId: string) => {
     try {
-      const res = await fetch('/api/admin/banners', {
-        method: 'DELETE',
-        headers: getAuthHeaders(true),
-        body: JSON.stringify({ bannerId }),
-      })
-      const data = await res.json()
+      const data = await apiClient.del<BannerMutationResponse>('/api/admin/banners', { bannerId })
       if (data.success) {
         fetchAdminBanners()
         showToast('Banner berhasil dihapus', 'success')
       } else {
         showToast(data.error || 'Gagal menghapus banner', 'error')
       }
-    } catch {
-      showToast('Gagal menghapus banner', 'error')
+    } catch (err) {
+      showToast(err instanceof ApiClientError ? err.message : 'Gagal menghapus banner', 'error')
     }
   }
 
@@ -151,12 +125,7 @@ export function AdminBanner() {
       if (newBannerStartDate) body.startDate = newBannerStartDate
       if (newBannerEndDate) body.endDate = newBannerEndDate
 
-      const res = await fetch('/api/admin/banners', {
-        method: 'POST',
-        headers: getAuthHeaders(true),
-        body: JSON.stringify(body),
-      })
-      const data = await res.json()
+      const data = await apiClient.post<BannerMutationResponse>('/api/admin/banners', body)
       if (data.success) {
         showToast('Banner berhasil ditambahkan', 'success')
         setNewBannerTitle('')
@@ -171,8 +140,8 @@ export function AdminBanner() {
       } else {
         showToast(data.error || 'Gagal menambahkan banner', 'error')
       }
-    } catch {
-      showToast('Gagal menambahkan banner', 'error')
+    } catch (err) {
+      showToast(err instanceof ApiClientError ? err.message : 'Gagal menambahkan banner', 'error')
     } finally {
       setIsSaving(false)
     }

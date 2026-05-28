@@ -10,27 +10,13 @@ import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { useAppStore } from "@/lib/store"
 import { formatPrice } from "@/lib/utils"
+import { fadeIn, stagger } from '@/lib/animations'
 import { PageHeader, SectionHeader, SearchBar, EmptyState } from "../shared"
 import { useState, useEffect, useCallback } from "react"
 import { ConfirmDialog } from "../confirm-dialog"
 import { LoadingSpinner } from "../loading-spinner"
-import { getAuthHeaders } from '@/lib/store/getAuthHeaders'
+import { apiClient } from '@/lib/api-client'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
-
-// ==================== ANIMATION VARIANTS ====================
-const fadeIn = {
-  initial: { opacity: 0, y: 16 },
-  animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.3 }
-}
-
-const stagger = {
-  initial: { opacity: 0, y: 16 },
-  animate: (i: number) => ({
-    opacity: 1, y: 0,
-    transition: { delay: i * 0.05, duration: 0.3 }
-  })
-}
 
 interface AdminProductItem {
   id: string
@@ -78,8 +64,7 @@ export function AdminProducts() {
   const fetchAdminProducts = useCallback(async () => {
     try {
       setLoading(true)
-      const res = await fetch('/api/admin/products?limit=500', { headers: getAuthHeaders() })
-      const data = await res.json()
+      const data = await apiClient.get<{ success: boolean; data: any[] }>('/api/admin/products', { limit: '500' })
       if (data.success) {
         const mapped: AdminProductItem[] = (data.data || []).map((p: any) => ({
           id: p.id,
@@ -116,8 +101,7 @@ export function AdminProducts() {
   useEffect(() => {
     const fetchCategories = async () => {
       try {
-        const res = await fetch('/api/admin/categories', { headers: getAuthHeaders() })
-        const data = await res.json()
+        const data = await apiClient.get<{ success: boolean; data: any[] }>('/api/admin/categories')
         if (data.success) {
           setCategories((data.data || []).map((c: any) => ({ id: c.id, name: c.name })))
         }
@@ -128,12 +112,7 @@ export function AdminProducts() {
 
   const handleStatusChange = async (productId: string, newStatus: string) => {
     try {
-      const res = await fetch('/api/admin/products', {
-        method: 'PUT',
-        headers: getAuthHeaders(true),
-        body: JSON.stringify({ productId, status: newStatus }),
-      })
-      const data = await res.json()
+      const data = await apiClient.put<{ success: boolean; error?: string }>('/api/admin/products', { productId, status: newStatus })
       if (data.success) {
         setAdminProducts(prev => prev.map(p => p.id === productId ? { ...p, status: newStatus } : p))
         showToast(newStatus === 'active' ? "Produk diapprove" : "Produk diblokir", "success")
@@ -147,12 +126,7 @@ export function AdminProducts() {
 
   const handleDelete = async (productId: string) => {
     try {
-      const res = await fetch('/api/admin/products', {
-        method: 'DELETE',
-        headers: getAuthHeaders(true),
-        body: JSON.stringify({ productId }),
-      })
-      const data = await res.json()
+      const data = await apiClient.del<{ success: boolean; error?: string }>('/api/admin/products', { productId })
       if (data.success) {
         setAdminProducts(prev => prev.filter(p => p.id !== productId))
         showToast("Produk dihapus", "info")
@@ -175,21 +149,7 @@ export function AdminProducts() {
         formData.append('file', file)
         formData.append('bucket', 'products')
         formData.append('folder', 'images')
-        const res = await fetch('/api/upload', {
-          method: 'POST',
-          headers: (() => {
-            const h: Record<string, string> = {}
-            if (typeof window !== 'undefined') {
-              const token = localStorage.getItem('authToken') || localStorage.getItem('martup_token')
-              if (token) h['Authorization'] = `Bearer ${token}`
-              const csrfToken = document.cookie.match(/csrf_token=([^;]+)/)?.[1]
-              if (csrfToken) h['x-csrf-token'] = decodeURIComponent(csrfToken)
-            }
-            return h
-          })(),
-          body: formData,
-        })
-        const data = await res.json()
+        const data = await apiClient.upload<{ success: boolean; data?: { url: string }; error?: string }>('/api/upload', formData)
         if (data.success && data.data?.url) {
           newImages.push(data.data.url)
         } else {
@@ -214,21 +174,7 @@ export function AdminProducts() {
       formData.append('file', file)
       formData.append('bucket', 'products')
       formData.append('folder', 'videos')
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        headers: (() => {
-          const h: Record<string, string> = {}
-          if (typeof window !== 'undefined') {
-            const token = localStorage.getItem('authToken') || localStorage.getItem('martup_token')
-            if (token) h['Authorization'] = `Bearer ${token}`
-            const csrfToken = document.cookie.match(/csrf_token=([^;]+)/)?.[1]
-            if (csrfToken) h['x-csrf-token'] = decodeURIComponent(csrfToken)
-          }
-          return h
-        })(),
-        body: formData,
-      })
-      const data = await res.json()
+      const data = await apiClient.upload<{ success: boolean; data?: { url: string }; error?: string }>('/api/upload', formData)
       if (data.success && data.data?.url) {
         setEditVideoUrl(data.data.url)
         showToast('Video berhasil diupload', 'success')
@@ -244,12 +190,7 @@ export function AdminProducts() {
 
   const handleEditProduct = async (productId: string, updates: Record<string, unknown>) => {
     try {
-      const res = await fetch('/api/admin/products', {
-        method: 'PUT',
-        headers: getAuthHeaders(true),
-        body: JSON.stringify({ productId, ...updates }),
-      })
-      const data = await res.json()
+      const data = await apiClient.put<{ success: boolean; error?: string }>('/api/admin/products', { productId, ...updates })
       if (data.success) {
         setAdminProducts(prev => prev.map(p => p.id === productId ? { ...p, ...updates, price: Number(updates.price ?? p.price) } : p))
         showToast("Produk berhasil diupdate", "success")

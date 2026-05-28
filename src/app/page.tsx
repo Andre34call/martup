@@ -6,6 +6,7 @@ import { useAppStore } from '@/lib/store'
 import { useEffect } from 'react'
 import { BottomNav, AdminBottomNav, SellerBottomNav } from '@/components/ecommerce/shared'
 import { ErrorBoundary } from '@/components/error-boundary'
+import { ELEVATED_ROLES } from '@/lib/types'
 
 // Auth screens
 import { SplashScreen, OnboardingScreen, LoginScreen, RegisterScreen, OTPScreen, ForgotPasswordScreen, ResetPasswordScreen, EmailVerificationScreen } from '@/components/ecommerce/auth-screens'
@@ -118,7 +119,6 @@ function ScreenRenderer() {
   // Security: If currentScreen is an admin screen but user is not actually an admin/manager, redirect to home
   // Use useEffect to avoid calling navigate during render
   const isAdminScreen = ADMIN_SCREENS.includes(currentScreen)
-  const ELEVATED_ROLES = ['admin', 'manager', 'finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr']
   const isActualAdmin = ELEVATED_ROLES.includes(currentUser?.role || '')
 
   // Redirect non-admin users away from admin screens

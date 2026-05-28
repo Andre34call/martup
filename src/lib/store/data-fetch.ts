@@ -2,6 +2,7 @@ import type { StateCreator } from 'zustand'
 import { logger } from '@/lib/logger'
 import type { DataFetchSlice, AppStore } from './types'
 import type { User, UserRole, Seller, OrderStatus, Notification as AppNotification } from '../types'
+import { ELEVATED_ROLES } from '../types'
 import { getAuthHeaders } from './getAuthHeaders'
 
 // We need a reference to the wishlist store for fetchUserData - import it lazily
@@ -257,7 +258,7 @@ export const createDataFetchSlice: StateCreator<AppStore, [], [], DataFetchSlice
       }
 
       // Fetch platform settings for admin/manager users
-      if (['admin', 'manager', 'finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr'].includes(data.user?.role)) {
+      if (ELEVATED_ROLES.includes(data.user?.role as UserRole)) {
         get().fetchPlatformSettings()
       }
 

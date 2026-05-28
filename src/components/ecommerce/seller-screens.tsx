@@ -18,25 +18,11 @@ import { Switch } from "@/components/ui/switch"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { useAppStore, getAuthHeaders } from "@/lib/store"
 import { formatPrice, formatRelativeTime } from "@/lib/utils"
+import { fadeIn, stagger } from '@/lib/animations'
 import { PageHeader, SectionHeader, StatusBadge, SearchBar, EmptyState, WalletBalanceCard } from "./shared"
 import type { Order } from "@/lib/types"
 import { useState, useRef, useEffect } from "react"
 import { AnimatePresence } from "framer-motion"
-
-// ==================== ANIMATION VARIANTS ====================
-const fadeIn = {
-  initial: { opacity: 0, y: 16 },
-  animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.3 }
-}
-
-const stagger = {
-  initial: { opacity: 0, y: 16 },
-  animate: (i: number) => ({
-    opacity: 1, y: 0,
-    transition: { delay: i * 0.05, duration: 0.3 }
-  })
-}
 
 // ==================== (mock data removed — all data from store) ====================
 

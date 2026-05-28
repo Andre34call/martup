@@ -1,7 +1,9 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { useAppStore, getAuthHeaders } from "@/lib/store"
+import { useAppStore } from "@/lib/store"
+import { apiClient, ApiClientError } from '@/lib/api-client'
+import { fadeIn } from '@/lib/animations'
 import { PageHeader, SectionHeader } from "../shared"
 import { useState, useRef, useEffect } from "react"
 import { Settings as SettingsIcon, Shield, Bell, Globe, Lock, Trash2, MapPin, Camera, RotateCcw, ChevronRight, Phone, MessageSquare, Edit, FileText, Eye, EyeOff, Loader2 } from "lucide-react"
@@ -11,12 +13,6 @@ import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-
-const fadeIn = {
-  initial: { opacity: 0, y: 16 },
-  animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.3 }
-}
 
 export function SettingsScreen() {
   const { currentUser, showToast, logout, avatarUrl, uploadAvatar, updateProfile, settings, updateSettings, deleteAccount, navigate } = useAppStore()
@@ -50,13 +46,10 @@ export function SettingsScreen() {
   useEffect(() => {
     const fetch2FAStatus = async () => {
       try {
-        const res = await fetch('/api/user/2fa', { headers: getAuthHeaders() })
-        if (res.ok) {
-          const data = await res.json()
-          if (data.success && data.data) {
-            setTwoFAEnabled(data.data.twoFactorEnabled)
-            updateSettings({ twoFactor: data.data.twoFactorEnabled })
-          }
+        const data = await apiClient.get<{ success: boolean; data?: { twoFactorEnabled: boolean } }>('/api/user/2fa')
+        if (data.success && data.data) {
+          setTwoFAEnabled(data.data.twoFactorEnabled)
+          updateSettings({ twoFactor: data.data.twoFactorEnabled })
         }
       } catch {
         // Silently fail, will default to false
@@ -94,12 +87,7 @@ export function SettingsScreen() {
   const handle2FASendOtp = async () => {
     setTwoFASending(true)
     try {
-      const res = await fetch('/api/user/2fa', {
-        method: 'POST',
-        headers: getAuthHeaders(true),
-        body: JSON.stringify({ action: 'send-otp' }),
-      })
-      const data = await res.json()
+      const data = await apiClient.post<{ success: boolean; message?: string; error?: string; devOtp?: string }>('/api/user/2fa', { action: 'send-otp' })
       if (data.success) {
         setTwoFAStep('verify')
         setTwoFACountdown(60)
@@ -111,8 +99,8 @@ export function SettingsScreen() {
       } else {
         showToast(data.error || 'Gagal mengirim OTP', 'error')
       }
-    } catch {
-      showToast('Terjadi kesalahan koneksi', 'error')
+    } catch (err) {
+      showToast(err instanceof ApiClientError ? err.message : 'Terjadi kesalahan koneksi', 'error')
     }
     setTwoFASending(false)
   }
@@ -122,12 +110,7 @@ export function SettingsScreen() {
     if (twoFAOtp.length !== 6) return
     setTwoFAVerifying(true)
     try {
-      const res = await fetch('/api/user/2fa', {
-        method: 'POST',
-        headers: getAuthHeaders(true),
-        body: JSON.stringify({ action: 'enable', otpCode: twoFAOtp }),
-      })
-      const data = await res.json()
+      const data = await apiClient.post<{ success: boolean; error?: string }>('/api/user/2fa', { action: 'enable', otpCode: twoFAOtp })
       if (data.success) {
         setTwoFAEnabled(true)
         updateSettings({ twoFactor: true })
@@ -136,8 +119,8 @@ export function SettingsScreen() {
       } else {
         showToast(data.error || 'Verifikasi gagal', 'error')
       }
-    } catch {
-      showToast('Terjadi kesalahan koneksi', 'error')
+    } catch (err) {
+      showToast(err instanceof ApiClientError ? err.message : 'Terjadi kesalahan koneksi', 'error')
     }
     setTwoFAVerifying(false)
   }
@@ -150,12 +133,7 @@ export function SettingsScreen() {
     }
     setTwoFADisableLoading(true)
     try {
-      const res = await fetch('/api/user/2fa', {
-        method: 'DELETE',
-        headers: getAuthHeaders(true),
-        body: JSON.stringify({ password: twoFADisablePassword }),
-      })
-      const data = await res.json()
+      const data = await apiClient.del<{ success: boolean; error?: string }>('/api/user/2fa', { password: twoFADisablePassword })
       if (data.success) {
         setTwoFAEnabled(false)
         updateSettings({ twoFactor: false })
@@ -164,8 +142,8 @@ export function SettingsScreen() {
       } else {
         showToast(data.error || 'Gagal menonaktifkan 2FA', 'error')
       }
-    } catch {
-      showToast('Terjadi kesalahan koneksi', 'error')
+    } catch (err) {
+      showToast(err instanceof ApiClientError ? err.message : 'Terjadi kesalahan koneksi', 'error')
     }
     setTwoFADisableLoading(false)
   }
@@ -231,12 +209,7 @@ export function SettingsScreen() {
 
     setIsChangingPassword(true)
     try {
-      const res = await fetch('/api/user/password', {
-        method: 'POST',
-        headers: getAuthHeaders(true),
-        body: JSON.stringify({ currentPassword, newPassword, confirmPassword }),
-      })
-
+      const res = await apiClient.rawPost('/api/user/password', { currentPassword, newPassword, confirmPassword })
       const data = await res.json()
 
       if (!res.ok || !data.success) {

@@ -11,26 +11,12 @@ import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { useAppStore } from "@/lib/store"
 import { formatPrice, formatRelativeTime } from "@/lib/utils"
+import { fadeIn, stagger } from '@/lib/animations'
 import { PageHeader, EmptyState } from "../shared"
 import { useState, useEffect, useCallback } from "react"
 import { ConfirmDialog } from "../confirm-dialog"
 import { LoadingSpinner } from "../loading-spinner"
-import { getAuthHeaders } from '@/lib/store/getAuthHeaders'
-
-// ==================== ANIMATION VARIANTS ====================
-const fadeIn = {
-  initial: { opacity: 0, y: 16 },
-  animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.3 }
-}
-
-const stagger = {
-  initial: { opacity: 0, y: 16 },
-  animate: (i: number) => ({
-    opacity: 1, y: 0,
-    transition: { delay: i * 0.05, duration: 0.3 }
-  })
-}
+import { apiClient, ApiClientError } from '@/lib/api-client'
 
 // ==================== TYPE DEFINITIONS ====================
 interface DepositItem {
@@ -49,6 +35,10 @@ interface DepositItem {
   updatedAt: string
 }
 
+// ==================== TYPE ALIASES (avoid TSX generic ambiguity) ====================
+type DepositListResponse = { success: boolean; data: DepositItem[]; error?: string }
+type DepositMutationResponse = { success: boolean; error?: string }
+
 // ==================== ADMIN DEPOSITS ====================
 export function AdminDeposits() {
   const { showToast } = useAppStore()
@@ -62,8 +52,7 @@ export function AdminDeposits() {
   const fetchDeposits = useCallback(async () => {
     try {
       setLoading(true)
-      const res = await fetch("/api/admin/deposits", { headers: getAuthHeaders() })
-      const data = await res.json()
+      const data = await apiClient.get<DepositListResponse>("/api/admin/deposits")
       if (data.success) {
         setDeposits(data.data)
       }
@@ -88,20 +77,15 @@ export function AdminDeposits() {
 
   const handleApprove = async (depositId: string) => {
     try {
-      const res = await fetch("/api/admin/deposits", {
-        method: "PUT",
-        headers: getAuthHeaders(true),
-        body: JSON.stringify({ depositId, status: "success" }),
-      })
-      const data = await res.json()
+      const data = await apiClient.put<DepositMutationResponse>("/api/admin/deposits", { depositId, status: "success" })
       if (data.success) {
         showToast("Deposit disetujui - saldo ditambahkan", "success")
         fetchDeposits()
       } else {
         showToast(data.error || "Gagal menyetujui deposit", "error")
       }
-    } catch {
-      showToast("Gagal menyetujui deposit", "error")
+    } catch (err) {
+      showToast(err instanceof ApiClientError ? err.message : "Gagal menyetujui deposit", "error")
     }
   }
 
@@ -110,12 +94,7 @@ export function AdminDeposits() {
     setConfirmAction({
       action: async () => {
         try {
-          const res = await fetch("/api/admin/deposits", {
-            method: "PUT",
-            headers: getAuthHeaders(true),
-            body: JSON.stringify({ depositId: showRejectModal, status: "failed", adminNote: rejectNote || "Ditolak oleh admin" }),
-          })
-          const data = await res.json()
+          const data = await apiClient.put<DepositMutationResponse>("/api/admin/deposits", { depositId: showRejectModal, status: "failed", adminNote: rejectNote || "Ditolak oleh admin" })
           if (data.success) {
             showToast("Deposit ditolak", "info")
             setShowRejectModal(null)
@@ -124,8 +103,8 @@ export function AdminDeposits() {
           } else {
             showToast(data.error || "Gagal menolak deposit", "error")
           }
-        } catch {
-          showToast("Gagal menolak deposit", "error")
+        } catch (err) {
+          showToast(err instanceof ApiClientError ? err.message : "Gagal menolak deposit", "error")
         }
       },
       title: 'Tolak Deposit',

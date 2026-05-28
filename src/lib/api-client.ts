@@ -200,6 +200,25 @@ export const apiClient = {
     })
   },
 
+  patch: async <T>(url: string, body?: unknown): Promise<T> => {
+    const fullUrl = buildUrl(url)
+    const response = await fetchWithCsrfRetry(fullUrl, {
+      method: 'PATCH',
+      headers: getHeaders(true),
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    })
+    return handleResponse<T>(response)
+  },
+
+  rawPatch: async (url: string, body: unknown): Promise<Response> => {
+    const fullUrl = buildUrl(url)
+    return fetchWithCsrfRetry(fullUrl, {
+      method: 'PATCH',
+      headers: getHeaders(true),
+      body: JSON.stringify(body),
+    })
+  },
+
   rawPut: async (url: string, body: unknown): Promise<Response> => {
     const fullUrl = buildUrl(url)
     return fetchWithCsrfRetry(fullUrl, {
@@ -215,6 +234,15 @@ export const apiClient = {
       method: 'DELETE',
       headers: getHeaders(true),
       body: body !== undefined ? JSON.stringify(body) : undefined,
+    })
+  },
+
+  rawPatch: async (url: string, body: unknown): Promise<Response> => {
+    const fullUrl = buildUrl(url)
+    return fetchWithCsrfRetry(fullUrl, {
+      method: 'PATCH',
+      headers: getHeaders(true),
+      body: JSON.stringify(body),
     })
   },
 }

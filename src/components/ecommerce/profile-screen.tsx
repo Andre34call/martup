@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
+import { ELEVATED_ROLES } from "@/lib/types"
 
 // Default values for unauthenticated users — NOT a mock, just sensible defaults
 const DEFAULT_USER_VALUES = {
@@ -428,7 +429,7 @@ export function ProfileScreen() {
         </div>
 
         {/* Admin Panel - Show if user has admin/manager access */}
-        {['admin', 'manager', 'finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr'].includes(currentUser?.role || '') && (
+        {ELEVATED_ROLES.includes(currentUser?.role || '') && (
           <div className="px-4 pb-4">
             <motion.button
               whileTap={{ scale: 0.98 }}

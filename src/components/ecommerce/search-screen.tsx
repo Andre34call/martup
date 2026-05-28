@@ -10,7 +10,7 @@ import { ArrowLeft, Search, X, Clock, TrendingUp, Flame, Trash2, ChevronRight, L
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { getAuthHeaders } from "@/lib/store/getAuthHeaders"
+import { apiClient } from '@/lib/api-client'
 
 const TRENDING_SEARCHES = [
   "iPhone 15",
@@ -55,6 +55,8 @@ interface SearchResult {
   facets: SearchFacets
   query: string
 }
+
+type SearchApiResponse = { success: boolean; data: SearchResult; error?: string }
 
 type SortOption = 'relevance' | 'price_asc' | 'price_desc' | 'newest' | 'popular' | 'rating'
 
@@ -180,46 +182,39 @@ export function SearchScreen() {
       return
     }
 
-    const abortController = new AbortController()
+    let cancelled = false
     const fetchSearch = async () => {
       setIsLoading(true)
       setError(null)
 
       try {
-        const params = new URLSearchParams()
-        params.set('q', debouncedQuery.trim())
-        if (selectedCategorySlug) params.set('category', selectedCategorySlug)
-        if (sortBy !== 'relevance') params.set('sortBy', sortBy)
-        if (minPrice) params.set('minPrice', minPrice)
-        if (maxPrice) params.set('maxPrice', maxPrice)
-        if (conditionFilter) params.set('condition', conditionFilter)
-        params.set('page', String(currentPage))
-        params.set('limit', '20')
-
-        const res = await fetch(`/api/search?${params.toString()}`, {
-          method: 'GET',
-          headers: getAuthHeaders(),
-          signal: abortController.signal,
-        })
-
-        const data = await res.json()
-
-        if (!res.ok) {
-          throw new Error(data.error || 'Pencarian gagal')
+        const params: Record<string, string | undefined> = {
+          q: debouncedQuery.trim(),
+          category: selectedCategorySlug || undefined,
+          sortBy: sortBy !== 'relevance' ? sortBy : undefined,
+          minPrice: minPrice || undefined,
+          maxPrice: maxPrice || undefined,
+          condition: conditionFilter || undefined,
+          page: String(currentPage),
+          limit: '20',
         }
 
+        const data = await apiClient.get<SearchApiResponse>('/api/search', params)
+
+        if (cancelled) return
+
         if (data.success && data.data) {
-          setSearchResult(data.data as SearchResult)
+          setSearchResult(data.data)
         } else {
           setSearchResult(null)
         }
       } catch (err: unknown) {
-        if (err instanceof DOMException && err.name === 'AbortError') return
+        if (cancelled) return
         const message = err instanceof Error ? err.message : 'Terjadi kesalahan saat mencari'
         setError(message)
         setSearchResult(null)
       } finally {
-        if (!abortController.signal.aborted) {
+        if (!cancelled) {
           setIsLoading(false)
         }
       }
@@ -228,7 +223,7 @@ export function SearchScreen() {
     fetchSearch()
 
     return () => {
-      abortController.abort()
+      cancelled = true
     }
   }, [debouncedQuery, selectedCategorySlug, sortBy, minPrice, maxPrice, conditionFilter, currentPage])
 

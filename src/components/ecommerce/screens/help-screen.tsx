@@ -8,14 +8,7 @@ import { HelpCircle, ChevronDown, ChevronUp, Phone, Package, CreditCard, MapPin,
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
-
-const stagger = {
-  initial: { opacity: 0, y: 16 },
-  animate: (i: number) => ({
-    opacity: 1, y: 0,
-    transition: { delay: i * 0.05, duration: 0.3 }
-  })
-}
+import { stagger } from '@/lib/animations'
 
 export function HelpScreen() {
   const { showToast, navigate } = useAppStore()

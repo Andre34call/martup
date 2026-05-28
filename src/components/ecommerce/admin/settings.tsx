@@ -11,15 +11,9 @@ import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { useAppStore } from "@/lib/store"
 import { PageHeader, SectionHeader } from "../shared"
+import { fadeIn } from '@/lib/animations'
 import { useState, useEffect, useCallback } from "react"
-import { getAuthHeaders } from '@/lib/store/getAuthHeaders'
-
-// ==================== ANIMATION VARIANTS ====================
-const fadeIn = {
-  initial: { opacity: 0, y: 16 },
-  animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.3 }
-}
+import { apiClient, ApiClientError } from '@/lib/api-client'
 
 // ==================== TYPE DEFINITIONS ====================
 interface PlatformSettings {
@@ -40,6 +34,9 @@ interface PlatformSettings {
   returnWindowDays: number
 }
 
+// ==================== TYPE ALIASES (avoid TSX generic ambiguity) ====================
+type SettingsResponse = { success: boolean; data: PlatformSettings; error?: string }
+
 // ==================== ADMIN SETTINGS ====================
 export function AdminSettings() {
   const { showToast, fetchPlatformSettings } = useAppStore()
@@ -50,8 +47,7 @@ export function AdminSettings() {
   const fetchSettings = useCallback(async () => {
     try {
       setLoading(true)
-      const res = await fetch("/api/admin/settings", { headers: getAuthHeaders() })
-      const data = await res.json()
+      const data = await apiClient.get<SettingsResponse>("/api/admin/settings")
       if (data.success) {
         setSettings(data.data)
         // Sync to global store so other components (checkout, etc.) can use settings
@@ -72,12 +68,7 @@ export function AdminSettings() {
     if (!settings) return
     try {
       setSaving(true)
-      const res = await fetch("/api/admin/settings", {
-        method: "PUT",
-        headers: getAuthHeaders(true),
-        body: JSON.stringify(settings),
-      })
-      const data = await res.json()
+      const data = await apiClient.put<SettingsResponse>("/api/admin/settings", settings)
       if (data.success) {
         showToast("Pengaturan berhasil disimpan", "success")
         setSettings(data.data)
@@ -86,8 +77,8 @@ export function AdminSettings() {
       } else {
         showToast(data.error || "Gagal menyimpan pengaturan", "error")
       }
-    } catch {
-      showToast("Gagal menyimpan pengaturan", "error")
+    } catch (err) {
+      showToast(err instanceof ApiClientError ? err.message : "Gagal menyimpan pengaturan", "error")
     } finally {
       setSaving(false)
     }

@@ -10,20 +10,12 @@ import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { useAppStore } from "@/lib/store"
 import { formatPrice, formatDate } from "@/lib/utils"
+import { stagger } from '@/lib/animations'
 import { PageHeader, SectionHeader, SearchBar, EmptyState } from "../shared"
 import { useState, useEffect, useCallback } from "react"
 import { ConfirmDialog } from "../confirm-dialog"
 import { LoadingSpinner } from "../loading-spinner"
-import { getAuthHeaders } from '@/lib/store/getAuthHeaders'
-
-// ==================== ANIMATION VARIANTS ====================
-const stagger = {
-  initial: { opacity: 0, y: 16 },
-  animate: (i: number) => ({
-    opacity: 1, y: 0,
-    transition: { delay: i * 0.05, duration: 0.3 }
-  })
-}
+import { apiClient, ApiClientError } from '@/lib/api-client'
 
 // ==================== TYPE DEFINITIONS ====================
 interface VoucherItem {
@@ -47,6 +39,10 @@ interface VoucherItem {
   createdAt: string
 }
 
+// ==================== TYPE ALIASES (avoid TSX generic ambiguity) ====================
+type VoucherListResponse = { success: boolean; data: VoucherItem[]; error?: string }
+type VoucherMutationResponse = { success: boolean; error?: string }
+
 // ==================== ADMIN VOUCHERS ====================
 export function AdminVouchers() {
   const { showToast } = useAppStore()
@@ -65,8 +61,7 @@ export function AdminVouchers() {
   const fetchVouchers = useCallback(async () => {
     try {
       setLoading(true)
-      const res = await fetch("/api/admin/vouchers", { headers: getAuthHeaders() })
-      const data = await res.json()
+      const data = await apiClient.get<VoucherListResponse>("/api/admin/vouchers")
       if (data.success) {
         setVouchers(data.data)
       }
@@ -101,24 +96,19 @@ export function AdminVouchers() {
       return
     }
     try {
-      const res = await fetch("/api/admin/vouchers", {
-        method: "POST",
-        headers: getAuthHeaders(true),
-        body: JSON.stringify({
-          code: form.code.toUpperCase(),
-          name: form.name,
-          type: form.type,
-          value: form.value,
-          minPurchase: form.minPurchase,
-          maxDiscount: form.maxDiscount || null,
-          usageLimit: form.usageLimit || null,
-          perUserLimit: form.perUserLimit,
-          validFrom: form.validFrom,
-          validUntil: form.validUntil,
-          isActive: true,
-        }),
+      const data = await apiClient.post<VoucherMutationResponse>("/api/admin/vouchers", {
+        code: form.code.toUpperCase(),
+        name: form.name,
+        type: form.type,
+        value: form.value,
+        minPurchase: form.minPurchase,
+        maxDiscount: form.maxDiscount || null,
+        usageLimit: form.usageLimit || null,
+        perUserLimit: form.perUserLimit,
+        validFrom: form.validFrom,
+        validUntil: form.validUntil,
+        isActive: true,
       })
-      const data = await res.json()
       if (data.success) {
         showToast("Voucher berhasil ditambahkan", "success")
         setShowAddForm(false)
@@ -127,46 +117,36 @@ export function AdminVouchers() {
       } else {
         showToast(data.error || "Gagal menambahkan voucher", "error")
       }
-    } catch {
-      showToast("Gagal menambahkan voucher", "error")
+    } catch (err) {
+      showToast(err instanceof ApiClientError ? err.message : "Gagal menambahkan voucher", "error")
     }
   }
 
   const handleToggle = async (voucherId: string, isActive: boolean) => {
     try {
-      const res = await fetch("/api/admin/vouchers", {
-        method: "PUT",
-        headers: getAuthHeaders(true),
-        body: JSON.stringify({ voucherId, isActive: !isActive }),
-      })
-      const data = await res.json()
+      const data = await apiClient.put<VoucherMutationResponse>("/api/admin/vouchers", { voucherId, isActive: !isActive })
       if (data.success) {
         showToast(isActive ? "Voucher dinonaktifkan" : "Voucher diaktifkan", "success")
         fetchVouchers()
       } else {
         showToast(data.error || "Gagal memperbarui voucher", "error")
       }
-    } catch {
-      showToast("Gagal memperbarui voucher", "error")
+    } catch (err) {
+      showToast(err instanceof ApiClientError ? err.message : "Gagal memperbarui voucher", "error")
     }
   }
 
   const handleDelete = async (voucherId: string) => {
     try {
-      const res = await fetch("/api/admin/vouchers", {
-        method: "DELETE",
-        headers: getAuthHeaders(true),
-        body: JSON.stringify({ voucherId }),
-      })
-      const data = await res.json()
+      const data = await apiClient.del<VoucherMutationResponse>("/api/admin/vouchers", { voucherId })
       if (data.success) {
         showToast("Voucher berhasil dihapus", "success")
         fetchVouchers()
       } else {
         showToast(data.error || "Gagal menghapus voucher", "error")
       }
-    } catch {
-      showToast("Gagal menghapus voucher", "error")
+    } catch (err) {
+      showToast(err instanceof ApiClientError ? err.message : "Gagal menghapus voucher", "error")
     }
   }
 

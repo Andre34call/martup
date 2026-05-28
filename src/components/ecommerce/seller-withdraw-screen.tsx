@@ -13,24 +13,10 @@ import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { useAppStore } from "@/lib/store"
 import { formatPrice } from "@/lib/mock-data"
+import { fadeIn, stagger } from '@/lib/animations'
 import { PageHeader, SectionHeader, StatusBadge, EmptyState } from "./shared"
 import type { BankAccount, WithdrawRequest, WithdrawStatus } from "@/lib/types"
 import { useState, useMemo } from "react"
-
-// ==================== ANIMATION VARIANTS ====================
-const fadeIn = {
-  initial: { opacity: 0, y: 16 },
-  animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.3 }
-}
-
-const stagger = {
-  initial: { opacity: 0, y: 16 },
-  animate: (i: number) => ({
-    opacity: 1, y: 0,
-    transition: { delay: i * 0.05, duration: 0.3 }
-  })
-}
 
 // ==================== BANK LOGOS ====================
 const BANK_INFO: Record<string, { name: string; color: string; icon: string }> = {

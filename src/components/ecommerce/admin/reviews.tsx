@@ -9,20 +9,12 @@ import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { useAppStore } from "@/lib/store"
 import { formatRelativeTime } from "@/lib/utils"
+import { stagger } from '@/lib/animations'
 import { PageHeader, SearchBar, EmptyState } from "../shared"
 import { useState, useEffect, useCallback } from "react"
 import { ConfirmDialog } from "../confirm-dialog"
 import { LoadingSpinner } from "../loading-spinner"
-import { getAuthHeaders } from '@/lib/store/getAuthHeaders'
-
-// ==================== ANIMATION VARIANTS ====================
-const stagger = {
-  initial: { opacity: 0, y: 16 },
-  animate: (i: number) => ({
-    opacity: 1, y: 0,
-    transition: { delay: i * 0.05, duration: 0.3 }
-  })
-}
+import { apiClient } from '@/lib/api-client'
 
 interface AdminReviewItem {
   id: string
@@ -53,8 +45,7 @@ export function AdminReviews() {
       const params = new URLSearchParams()
       if (statusFilter !== "all") params.set("status", statusFilter)
       params.set("limit", "200")
-      const res = await fetch(`/api/admin/reviews?${params.toString()}`, { headers: getAuthHeaders() })
-      const data = await res.json()
+      const data = await apiClient.get<{ success: boolean; data: AdminReviewItem[]; error?: string }>(`/api/admin/reviews?${params.toString()}`)
       if (data.success) {
         setAdminReviews(data.data || [])
       } else {
@@ -73,11 +64,7 @@ export function AdminReviews() {
 
   const handleToggleHidden = async (reviewId: string, currentHidden: boolean) => {
     try {
-      const res = await fetch("/api/admin/reviews", {
-        method: "PUT",
-        headers: getAuthHeaders(true),
-        body: JSON.stringify({ reviewId, isHidden: !currentHidden }),
-      })
+      const res = await apiClient.rawPut("/api/admin/reviews", { reviewId, isHidden: !currentHidden })
       const data = await res.json()
       if (data.success) {
         setAdminReviews((prev) =>
@@ -94,11 +81,7 @@ export function AdminReviews() {
 
   const handleDelete = async (reviewId: string) => {
     try {
-      const res = await fetch("/api/admin/reviews", {
-        method: "DELETE",
-        headers: getAuthHeaders(true),
-        body: JSON.stringify({ reviewId }),
-      })
+      const res = await apiClient.rawDelete("/api/admin/reviews", { reviewId })
       const data = await res.json()
       if (data.success) {
         setAdminReviews((prev) => prev.filter((r) => r.id !== reviewId))

@@ -7,27 +7,14 @@ import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { useAppStore } from "@/lib/store"
+import { apiClient, ApiClientError } from '@/lib/api-client'
 import { formatPrice, formatDate } from "@/lib/utils"
+import { fadeIn, stagger } from '@/lib/animations'
 import { PageHeader, StatusBadge, EmptyState } from "./shared"
 import type { OrderStatus, Order } from "@/lib/types"
 import { useState, useMemo, useEffect } from "react"
 import { ConfirmDialog } from "./confirm-dialog"
 import { LoadingSpinner } from "./loading-spinner"
-
-// ==================== ANIMATION VARIANTS ====================
-const fadeIn = {
-  initial: { opacity: 0, y: 16 },
-  animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.3 }
-}
-
-const stagger = {
-  initial: { opacity: 0, y: 16 },
-  animate: (i: number) => ({
-    opacity: 1, y: 0,
-    transition: { delay: i * 0.05, duration: 0.3 }
-  })
-}
 
 // ==================== TYPES ====================
 type AdminOrderStatus = "pending" | "processing" | "shipped" | "delivered" | "cancelled"
@@ -145,20 +132,15 @@ export function AdminOrdersScreen() {
   const handleStatusUpdate = async (orderId: string, newStatus: OrderStatus) => {
     setUpdating(orderId)
     try {
-      const res = await fetch('/api/admin/orders', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderId, status: newStatus }),
-      })
-      const data = await res.json()
+      const data = await apiClient.put<{ success: boolean; error?: string }>('/api/admin/orders', { orderId, status: newStatus })
       if (data.success) {
         // Refresh admin orders list
         await fetchAdminOrders()
       } else {
         showToast(data.error || 'Gagal mengubah status pesanan', 'error')
       }
-    } catch {
-      showToast('Gagal mengubah status pesanan', 'error')
+    } catch (err) {
+      showToast(err instanceof ApiClientError ? err.message : 'Gagal mengubah status pesanan', 'error')
     } finally {
       setUpdating(null)
     }

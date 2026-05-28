@@ -14,28 +14,32 @@ import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { useAppStore } from "@/lib/store"
 import { PageHeader, SectionHeader, EmptyState } from "./shared"
+import { fadeIn, stagger } from '@/lib/animations'
 import { WORK_TYPE_DISPLAY, WORK_PRIORITY_DISPLAY, WORK_STATUS_DISPLAY, WORK_TYPE_TO_DIVISION } from "@/lib/types"
 import type { WorkItem, Division } from "@/lib/types"
 import { useState, useEffect, useCallback } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
-import { getAuthHeaders } from '@/lib/store/getAuthHeaders'
+import { apiClient, ApiClientError } from '@/lib/api-client'
 import { ConfirmDialog } from "./confirm-dialog"
 import { LoadingSpinner } from "./loading-spinner"
 import { formatRelativeTime } from "@/lib/utils"
 
-// ==================== ANIMATION VARIANTS ====================
-const fadeIn = {
-  initial: { opacity: 0, y: 16 },
-  animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.3 }
+// ==================== API RESPONSE TYPES ====================
+interface WorkItemsResponse {
+  success: boolean
+  data?: WorkItem[]
+  counts?: Record<string, number>
 }
 
-const stagger = {
-  initial: { opacity: 0, y: 16 },
-  animate: (i: number) => ({
-    opacity: 1, y: 0,
-    transition: { delay: i * 0.05, duration: 0.3 }
-  })
+interface WorkItemMutationResponse {
+  success: boolean
+  data?: WorkItem
+  error?: string
+}
+
+interface WorkItemCreateResponse {
+  success: boolean
+  error?: string
 }
 
 // ==================== HELPERS ====================
@@ -636,12 +640,11 @@ export function AdminWorkflow() {
   const fetchWorkItems = useCallback(async (divisionId?: string, status?: string) => {
     setLoading(true)
     try {
-      const params = new URLSearchParams()
-      if (divisionId) params.set('divisionId', divisionId)
-      if (status && status !== 'all') params.set('status', status)
-      params.set('limit', '200')
-      const res = await fetch(`/api/admin/work-items?${params.toString()}`, { headers: getAuthHeaders() })
-      const data = await res.json()
+      const data = await apiClient.get<WorkItemsResponse>('/api/admin/work-items', {
+        divisionId,
+        status: status && status !== 'all' ? status : undefined,
+        limit: '200',
+      })
       if (data.success) {
         setWorkItems(data.data || [])
         setCounts(data.counts || {})
@@ -698,12 +701,7 @@ export function AdminWorkflow() {
   const handleStatusChange = async (itemId: string, newStatus: string) => {
     setIsUpdating(true)
     try {
-      const res = await fetch(`/api/admin/work-items`, {
-        method: 'PATCH',
-        headers: getAuthHeaders(true),
-        body: JSON.stringify({ workItemId: itemId, status: newStatus }),
-      })
-      const data = await res.json()
+      const data = await apiClient.patch<WorkItemMutationResponse>('/api/admin/work-items', { workItemId: itemId, status: newStatus })
       if (data.success) {
         showToast(`Status diperbarui ke ${WORK_STATUS_DISPLAY[newStatus]?.label || newStatus}`, 'success')
         // Refresh data
@@ -720,8 +718,8 @@ export function AdminWorkflow() {
       } else {
         showToast(data.error || 'Gagal memperbarui status', 'error')
       }
-    } catch {
-      showToast('Gagal memperbarui status', 'error')
+    } catch (err) {
+      showToast(err instanceof ApiClientError ? err.message : 'Gagal memperbarui status', 'error')
     } finally {
       setIsUpdating(false)
     }
@@ -731,12 +729,7 @@ export function AdminWorkflow() {
   const handleAssignToMe = async (itemId: string) => {
     setIsUpdating(true)
     try {
-      const res = await fetch(`/api/admin/work-items`, {
-        method: 'PATCH',
-        headers: getAuthHeaders(true),
-        body: JSON.stringify({ workItemId: itemId, assignToSelf: true }),
-      })
-      const data = await res.json()
+      const data = await apiClient.patch<WorkItemMutationResponse>('/api/admin/work-items', { workItemId: itemId, assignToSelf: true })
       if (data.success) {
         showToast('Tugas ditugaskan ke Anda', 'success')
         if (selectedDivision) {
@@ -751,8 +744,8 @@ export function AdminWorkflow() {
       } else {
         showToast(data.error || 'Gagal menugaskan', 'error')
       }
-    } catch {
-      showToast('Gagal menugaskan', 'error')
+    } catch (err) {
+      showToast(err instanceof ApiClientError ? err.message : 'Gagal menugaskan', 'error')
     } finally {
       setIsUpdating(false)
     }
@@ -779,12 +772,7 @@ export function AdminWorkflow() {
       if (formData.divisionId) {
         body.divisionId = formData.divisionId
       }
-      const res = await fetch('/api/admin/work-items', {
-        method: 'POST',
-        headers: getAuthHeaders(true),
-        body: JSON.stringify(body),
-      })
-      const data = await res.json()
+      const data = await apiClient.post<WorkItemCreateResponse>('/api/admin/work-items', body)
       if (data.success) {
         showToast('Tugas berhasil dibuat', 'success')
         setShowCreateDialog(false)
@@ -797,8 +785,8 @@ export function AdminWorkflow() {
       } else {
         showToast(data.error || 'Gagal membuat tugas', 'error')
       }
-    } catch {
-      showToast('Gagal membuat tugas', 'error')
+    } catch (err) {
+      showToast(err instanceof ApiClientError ? err.message : 'Gagal membuat tugas', 'error')
     } finally {
       setIsSubmitting(false)
     }

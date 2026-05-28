@@ -3,6 +3,7 @@
 import { motion } from "framer-motion"
 import { useAppStore } from "@/lib/store"
 import { formatPrice } from "@/lib/utils"
+import { fadeIn, stagger } from '@/lib/animations'
 import { PageHeader, EmptyState } from "../shared"
 import { useState, useEffect, useMemo } from "react"
 import { Ticket, Copy, Check } from "lucide-react"
@@ -11,20 +12,7 @@ import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { logger } from '@/lib/logger'
-
-const fadeIn = {
-  initial: { opacity: 0, y: 16 },
-  animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.3 }
-}
-
-const stagger = {
-  initial: { opacity: 0, y: 16 },
-  animate: (i: number) => ({
-    opacity: 1, y: 0,
-    transition: { delay: i * 0.05, duration: 0.3 }
-  })
-}
+import { apiClient } from '@/lib/api-client'
 
 export function VoucherScreen() {
   const { vouchers, selectVoucher, showToast, goBack, usedVoucherIds } = useAppStore()
@@ -39,25 +27,22 @@ export function VoucherScreen() {
     const fetchVouchers = async () => {
       setIsLoadingVouchers(true)
       try {
-        const res = await fetch('/api/vouchers')
-        if (res.ok) {
-          const data = await res.json()
-          if (data.success && data.data) {
-            const mapped = data.data.map((v: any) => ({
-              id: v.id,
-              code: v.code || '',
-              name: v.name,
-              description: v.description || '',
-              type: v.type || 'fixed',
-              value: v.value || 0,
-              maxDiscount: v.maxDiscount || undefined,
-              minPurchase: v.minPurchase || 0,
-              isActive: v.isActive ?? true,
-              validFrom: v.validFrom || new Date().toISOString(),
-              validUntil: v.validUntil || new Date().toISOString(),
-            }))
-            setApiVouchers(mapped)
-          }
+        const data = await apiClient.get<{ success: boolean; data?: any[] }>('/api/vouchers')
+        if (data.success && data.data) {
+          const mapped = data.data.map((v: any) => ({
+            id: v.id,
+            code: v.code || '',
+            name: v.name,
+            description: v.description || '',
+            type: v.type || 'fixed',
+            value: v.value || 0,
+            maxDiscount: v.maxDiscount || undefined,
+            minPurchase: v.minPurchase || 0,
+            isActive: v.isActive ?? true,
+            validFrom: v.validFrom || new Date().toISOString(),
+            validUntil: v.validUntil || new Date().toISOString(),
+          }))
+          setApiVouchers(mapped)
         }
       } catch (error) {
         logger.warn({ component: 'vouchers', err: error }, 'Failed to fetch vouchers')

@@ -13,24 +13,10 @@ import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { useAppStore } from "@/lib/store"
 import { PageHeader, SectionHeader, EmptyState } from "./shared"
+import { fadeIn, stagger } from '@/lib/animations'
 import { ROLE_DISPLAY, STAFF_ROLES } from "@/lib/types"
 import type { Division } from "@/lib/types"
 import { useState, useEffect, useRef } from "react"
-
-// ==================== ANIMATION VARIANTS ====================
-const fadeIn = {
-  initial: { opacity: 0, y: 16 },
-  animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.3 }
-}
-
-const stagger = {
-  initial: { opacity: 0, y: 16 },
-  animate: (i: number) => ({
-    opacity: 1, y: 0,
-    transition: { delay: i * 0.05, duration: 0.3 }
-  })
-}
 
 // Color mapping for divisions
 const colorMap: Record<string, { bg: string; text: string; border: string; light: string }> = {

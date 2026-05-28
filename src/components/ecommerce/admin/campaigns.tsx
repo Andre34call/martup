@@ -10,19 +10,11 @@ import { Card } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { useAppStore } from "@/lib/store"
 import { formatDate } from "@/lib/utils"
+import { stagger } from '@/lib/animations'
 import { PageHeader, EmptyState } from "../shared"
 import { useState, useEffect, useCallback } from "react"
 import { ConfirmDialog } from "../confirm-dialog"
-import { getAuthHeaders } from '@/lib/store/getAuthHeaders'
-
-// ==================== ANIMATION VARIANTS ====================
-const stagger = {
-  initial: { opacity: 0, y: 16 },
-  animate: (i: number) => ({
-    opacity: 1, y: 0,
-    transition: { delay: i * 0.05, duration: 0.3 }
-  })
-}
+import { apiClient, ApiClientError } from '@/lib/api-client'
 
 // ==================== TYPE DEFINITIONS ====================
 interface CampaignItem {
@@ -42,6 +34,10 @@ interface CampaignItem {
   createdAt: string
 }
 
+// ==================== TYPE ALIASES (avoid TSX generic ambiguity) ====================
+type CampaignListResponse = { success: boolean; data: CampaignItem[]; error?: string }
+type CampaignMutationResponse = { success: boolean; error?: string }
+
 // ==================== ADMIN CAMPAIGNS ====================
 export function AdminCampaigns() {
   const { showToast } = useAppStore()
@@ -54,8 +50,7 @@ export function AdminCampaigns() {
   const fetchCampaigns = useCallback(async () => {
     try {
       setLoading(true)
-      const res = await fetch("/api/admin/campaigns", { headers: getAuthHeaders() })
-      const data = await res.json()
+      const data = await apiClient.get<CampaignListResponse>("/api/admin/campaigns")
       if (data.success) {
         setCampaigns(data.data)
       }
@@ -83,20 +78,15 @@ export function AdminCampaigns() {
 
   const handleToggleActive = async (campaignId: string, isActive: boolean) => {
     try {
-      const res = await fetch("/api/admin/campaigns", {
-        method: "PUT",
-        headers: getAuthHeaders(true),
-        body: JSON.stringify({ campaignId, isActive: !isActive }),
-      })
-      const data = await res.json()
+      const data = await apiClient.put<CampaignMutationResponse>("/api/admin/campaigns", { campaignId, isActive: !isActive })
       if (data.success) {
         showToast(isActive ? "Kampanye dinonaktifkan" : "Kampanye diaktifkan", "success")
         fetchCampaigns()
       } else {
         showToast(data.error || "Gagal memperbarui kampanye", "error")
       }
-    } catch {
-      showToast("Gagal memperbarui kampanye", "error")
+    } catch (err) {
+      showToast(err instanceof ApiClientError ? err.message : "Gagal memperbarui kampanye", "error")
     }
   }
 

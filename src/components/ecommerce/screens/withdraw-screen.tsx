@@ -3,6 +3,7 @@
 import { motion } from "framer-motion"
 import { useAppStore } from "@/lib/store"
 import { formatPrice } from "@/lib/utils"
+import { fadeIn, stagger } from '@/lib/animations'
 import { PageHeader, SectionHeader } from "../shared"
 import { useState } from "react"
 import { ArrowUpRight, Banknote, ChevronRight } from "lucide-react"
@@ -10,20 +11,6 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-
-const fadeIn = {
-  initial: { opacity: 0, y: 16 },
-  animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.3 }
-}
-
-const stagger = {
-  initial: { opacity: 0, y: 16 },
-  animate: (i: number) => ({
-    opacity: 1, y: 0,
-    transition: { delay: i * 0.05, duration: 0.3 }
-  })
-}
 
 export function WithdrawScreen() {
   const { currentUser, walletBalance, walletHoldBalance, withdrawWallet, sellerBankAccounts, withdrawRequests, showToast, goBack } = useAppStore()

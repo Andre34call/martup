@@ -9,14 +9,7 @@ import { RotateCcw, X, ImagePlus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
-
-const stagger = {
-  initial: { opacity: 0, y: 16 },
-  animate: (i: number) => ({
-    opacity: 1, y: 0,
-    transition: { delay: i * 0.05, duration: 0.3 }
-  })
-}
+import { stagger } from '@/lib/animations'
 
 export function RefundScreen() {
   const { showToast, goBack } = useAppStore()

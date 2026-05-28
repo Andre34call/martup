@@ -13,16 +13,8 @@ import { PageHeader, SectionHeader, SearchBar, EmptyState } from "../shared"
 import { useState, useEffect, useCallback } from "react"
 import { ConfirmDialog } from "../confirm-dialog"
 import { LoadingSpinner } from "../loading-spinner"
-import { getAuthHeaders } from '@/lib/store/getAuthHeaders'
-
-// ==================== ANIMATION VARIANTS ====================
-const stagger = {
-  initial: { opacity: 0, y: 16 },
-  animate: (i: number) => ({
-    opacity: 1, y: 0,
-    transition: { delay: i * 0.05, duration: 0.3 }
-  })
-}
+import { apiClient, ApiClientError } from '@/lib/api-client'
+import { stagger } from '@/lib/animations'
 
 // ==================== TYPE DEFINITIONS ====================
 interface CategoryItem {
@@ -41,6 +33,10 @@ interface CategoryItem {
   updatedAt: string
 }
 
+// ==================== TYPE ALIASES (avoid TSX generic ambiguity) ====================
+type CategoryListResponse = { success: boolean; data: CategoryItem[]; error?: string }
+type CategoryMutationResponse = { success: boolean; error?: string }
+
 // ==================== ADMIN CATEGORIES ====================
 export function AdminCategories() {
   const { showToast } = useAppStore()
@@ -55,8 +51,7 @@ export function AdminCategories() {
   const fetchCategories = useCallback(async () => {
     try {
       setLoading(true)
-      const res = await fetch("/api/admin/categories", { headers: getAuthHeaders() })
-      const data = await res.json()
+      const data = await apiClient.get<CategoryListResponse>("/api/admin/categories")
       if (data.success) {
         setCategories(data.data)
       }
@@ -87,18 +82,13 @@ export function AdminCategories() {
       return
     }
     try {
-      const res = await fetch("/api/admin/categories", {
-        method: "POST",
-        headers: getAuthHeaders(true),
-        body: JSON.stringify({
-          name: form.name,
-          icon: form.icon || null,
-          parentId: form.parentId || null,
-          sortOrder: form.sortOrder,
-          isActive: true,
-        }),
+      const data = await apiClient.post<CategoryMutationResponse>("/api/admin/categories", {
+        name: form.name,
+        icon: form.icon || null,
+        parentId: form.parentId || null,
+        sortOrder: form.sortOrder,
+        isActive: true,
       })
-      const data = await res.json()
       if (data.success) {
         showToast("Kategori berhasil ditambahkan", "success")
         setShowAddForm(false)
@@ -107,46 +97,36 @@ export function AdminCategories() {
       } else {
         showToast(data.error || "Gagal menambahkan kategori", "error")
       }
-    } catch {
-      showToast("Gagal menambahkan kategori", "error")
+    } catch (err) {
+      showToast(err instanceof ApiClientError ? err.message : "Gagal menambahkan kategori", "error")
     }
   }
 
   const handleUpdate = async (categoryId: string, updates: Record<string, unknown>) => {
     try {
-      const res = await fetch("/api/admin/categories", {
-        method: "PUT",
-        headers: getAuthHeaders(true),
-        body: JSON.stringify({ categoryId, ...updates }),
-      })
-      const data = await res.json()
+      const data = await apiClient.put<CategoryMutationResponse>("/api/admin/categories", { categoryId, ...updates })
       if (data.success) {
         showToast("Kategori berhasil diperbarui", "success")
         fetchCategories()
       } else {
         showToast(data.error || "Gagal memperbarui kategori", "error")
       }
-    } catch {
-      showToast("Gagal memperbarui kategori", "error")
+    } catch (err) {
+      showToast(err instanceof ApiClientError ? err.message : "Gagal memperbarui kategori", "error")
     }
   }
 
   const handleDelete = async (categoryId: string) => {
     try {
-      const res = await fetch("/api/admin/categories", {
-        method: "DELETE",
-        headers: getAuthHeaders(true),
-        body: JSON.stringify({ categoryId }),
-      })
-      const data = await res.json()
+      const data = await apiClient.del<CategoryMutationResponse>("/api/admin/categories", { categoryId })
       if (data.success) {
         showToast("Kategori berhasil dihapus (nonaktif)", "success")
         fetchCategories()
       } else {
         showToast(data.error || "Gagal menghapus kategori", "error")
       }
-    } catch {
-      showToast("Gagal menghapus kategori", "error")
+    } catch (err) {
+      showToast(err instanceof ApiClientError ? err.message : "Gagal menghapus kategori", "error")
     }
   }
 

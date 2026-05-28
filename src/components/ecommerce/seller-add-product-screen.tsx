@@ -9,6 +9,7 @@ import { useAppStore } from "@/lib/store"
 import { apiClient } from "@/lib/api-client"
 import { uploadFile } from "@/lib/upload"
 import { formatPrice } from "@/lib/utils"
+import { fadeIn } from '@/lib/animations'
 import { PageHeader } from "./shared"
 import type { Product } from "@/lib/types"
 import { logger } from '@/lib/logger'
@@ -18,21 +19,6 @@ import { useState, useRef } from "react"
 const MAX_PRODUCT_IMAGES = 8
 const MAX_PRODUCT_IMAGE_SIZE_MB = 5
 const MAX_VIDEO_SIZE_MB = 30
-
-// ==================== ANIMATION VARIANTS ====================
-const fadeIn = {
-  initial: { opacity: 0, y: 16 },
-  animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.3 }
-}
-
-const stagger = {
-  initial: { opacity: 0, y: 16 },
-  animate: (i: number) => ({
-    opacity: 1, y: 0,
-    transition: { delay: i * 0.05, duration: 0.3 }
-  })
-}
 
 // ==================== VARIANT GROUP TYPE ====================
 interface VariantGroup {

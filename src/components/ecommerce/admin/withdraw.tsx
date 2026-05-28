@@ -12,19 +12,11 @@ import { Separator } from "@/components/ui/separator"
 import { useAppStore } from "@/lib/store"
 import type { WithdrawStatus } from "@/lib/types"
 import { formatPrice, formatRelativeTime } from "@/lib/utils"
+import { stagger } from '@/lib/animations'
 import { PageHeader, SectionHeader, EmptyState } from "../shared"
 import { useState, useEffect } from "react"
 import { ConfirmDialog } from "../confirm-dialog"
 import { LoadingSpinner } from "../loading-spinner"
-
-// ==================== ANIMATION VARIANTS ====================
-const stagger = {
-  initial: { opacity: 0, y: 16 },
-  animate: (i: number) => ({
-    opacity: 1, y: 0,
-    transition: { delay: i * 0.05, duration: 0.3 }
-  })
-}
 
 export function AdminWithdraw() {
   const { showToast, withdrawRequests, updateWithdrawStatus, fetchAdminWithdrawals } = useAppStore()
