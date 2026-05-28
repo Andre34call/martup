@@ -16,14 +16,18 @@ export const createAuthSlice: StateCreator<AppStore, [], [], AuthSlice> = (set, 
   currentUser: null,
   userRole: 'buyer' as UserRole,
 
-  login: (user: User) => set({
-    isAuthenticated: true,
-    currentUser: user,
-    userRole: user.role,
-    currentScreen: 'home',
-    avatarUrl: user.avatar || null,
-    resetPasswordToken: '', // Clear any stale reset token on login
-  }),
+  login: (user: User) => {
+    // Clear any stale reset token on login (both Zustand and sessionStorage)
+    try { if (typeof window !== 'undefined') sessionStorage.removeItem('martup_reset_token') } catch { /* ignore */ }
+    set({
+      isAuthenticated: true,
+      currentUser: user,
+      userRole: user.role,
+      currentScreen: 'home',
+      avatarUrl: user.avatar || null,
+      resetPasswordToken: '', // Clear any stale reset token on login
+    })
+  },
 
   logout: async () => {
     // Clear auth tokens
@@ -189,6 +193,22 @@ export const createAuthSlice: StateCreator<AppStore, [], [], AuthSlice> = (set, 
   },
 
   deleteAccount: async () => {
+    const userId = get().currentUser?.id
+    // Attempt to delete the account from the server
+    if (userId) {
+      try {
+        await fetch('/api/user/delete', {
+          method: 'DELETE',
+          headers: getAuthHeaders(true),
+        })
+      } catch (err) {
+        logger.warn({ component: 'auth', err }, 'Failed to delete account from server')
+        // Continue with local cleanup even if server delete fails
+      }
+    }
+    // Clear auth tokens
+    localStorage.removeItem('authToken')
+    localStorage.removeItem('martup_token')
     try {
       await signOut({ redirect: false })
     } catch {
@@ -231,5 +251,9 @@ export const createAuthSlice: StateCreator<AppStore, [], [], AuthSlice> = (set, 
       searchQuery: '',
       homeBanners: [],
     })
+    // Clear cart store
+    if (_useCartStore) {
+      _useCartStore.getState().clearCart()
+    }
   },
 })

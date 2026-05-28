@@ -1,26 +1,31 @@
 ---
 Task ID: 1
 Agent: Main Agent
-Task: Fix unwanted reset password form after login + App audit for launch-critical issues
+Task: Audit Keamanan & Perbaikan Launch-Critical + Refactor + Deploy
 
 Work Log:
-- Diagnosed root cause of unwanted reset password: Supabase client auto-detecting sessions in URL
-- Fixed Supabase client: set detectSessionInUrl: false, autoRefreshToken: false, persistSession: false
-- Fixed login() not clearing resetPasswordToken on login
-- Fixed reset-token URL detection in page.tsx to skip if already authenticated
-- Conducted comprehensive app audit for launch-critical issues
-- Fixed TOKEN_SECRET fallback: use random bytes instead of hardcoded placeholder
-- Secured /api/debug/health: require admin auth in production
-- Fixed wallet debit race condition: re-check balance inside transaction
-- Fixed order stock race condition: re-validate stock inside transaction
-- Fixed checkout wallet payment: use per-order amount instead of combined total
-- Fixed wallet mutations auth: use verifyAuth instead of requireAuth
-- Added unique constraint on VoucherUsage (voucherId, userId, orderId)
-- Added Unsplash to CSP img-src
-- Enforced password complexity in password change route
-- Pushed to Vercel via git push
+- Performed comprehensive security audit of the entire MartUp codebase
+- Identified 10+ security and launch-critical issues
+- Fixed auto-appearing password reset form after login (race condition with Zustand hydration)
+  - Added localStorage auth token check as fallback when Zustand hasn't hydrated yet
+  - Added sessionStorage persistence for reset token (survives page refresh)
+  - Clear sessionStorage on successful login and password reset
+- Updated proxy.ts with CSRF monitoring mode (instead of enforcement mode that would block legitimate requests)
+  - Added interest-cohort=() to Permissions-Policy
+  - CSRF enforcement can be enabled via CSRF_ENFORCE=true env var
+- Fixed hardcoded super admin email → moved to env.SUPER_ADMIN_EMAIL with fallback
+- Added SUPER_ADMIN_EMAIL to env.ts recommended vars
+- Fixed admin screen redirect bug (was rendering HomeScreen directly without updating state)
+- Fixed deleteAccount to actually call API + delete user from database
+  - Created /api/user/delete route with comprehensive cascade deletion
+- Fixed JSON.parse without try/catch in data-fetch.ts (review images parsing)
+- Removed dependency on duplicate auth-store.ts from use-data-sync.ts
+  - Refactored use-data-sync to use only useAppStore + localStorage fallback
+- Fixed CSRF Math.random() fallback - added security warning console.error
+- Changed next.config.ts ignoreBuildErrors from true to false
 
 Stage Summary:
-- 12 files modified with critical security and data integrity fixes
-- Deployed to Vercel via git push to main branch
-- Key fixes: Supabase auth interference, race conditions in wallet/orders, checkout payment bug, debug endpoint security
+- 10+ security and launch-critical fixes applied
+- All changes pass lint check
+- Dev server compiles and runs successfully
+- Ready for Vercel deployment

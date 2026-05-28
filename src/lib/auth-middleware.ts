@@ -221,7 +221,7 @@ export async function verifySuperAdmin(request: NextRequest): Promise<AuthResult
   if (!authResult.success) return authResult
 
   // Super admin must have role 'admin' AND specific email
-  const SUPER_ADMIN_EMAIL = 'kholisakm@gmail.com'
+  const SUPER_ADMIN_EMAIL = env.SUPER_ADMIN_EMAIL
   if (authResult.user.role !== 'admin' || authResult.user.email !== SUPER_ADMIN_EMAIL) {
     return { success: false, error: 'Forbidden - Super Admin access required', status: 403 }
   }

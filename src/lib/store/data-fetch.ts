@@ -235,7 +235,11 @@ export const createDataFetchSlice: StateCreator<AppStore, [], [], DataFetchSlice
             productId: r.productId,
             rating: r.rating,
             content: r.content || undefined,
-            images: r.images ? (typeof r.images === 'string' ? JSON.parse(r.images) : r.images) : [],
+            images: (() => {
+              if (!r.images) return []
+              if (typeof r.images !== 'string') return r.images
+              try { return JSON.parse(r.images) } catch { return [] }
+            })(),
             userName: r.user?.name || 'Anonymous',
             userAvatar: r.user?.avatar || undefined,
             createdAt: r.createdAt,

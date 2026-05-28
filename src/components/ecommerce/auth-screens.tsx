@@ -1488,7 +1488,14 @@ export function ForgotPasswordScreen() {
 // ==================== RESET PASSWORD SCREEN ====================
 export function ResetPasswordScreen() {
   const { navigate, showToast } = useAppStore()
-  const resetToken = useAppStore((s) => s.resetPasswordToken) || ""
+  const zustandResetToken = useAppStore((s) => s.resetPasswordToken) || ""
+  // Also check sessionStorage in case the user refreshed the page
+  // (Zustand state is not persisted, but sessionStorage survives refresh)
+  const [sessionResetToken] = useState(() => {
+    if (typeof window === 'undefined') return ''
+    try { return sessionStorage.getItem('martup_reset_token') || '' } catch { return '' }
+  })
+  const resetToken = zustandResetToken || sessionResetToken
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
@@ -1536,8 +1543,9 @@ export function ResetPasswordScreen() {
       if (data.success) {
         setIsSuccess(true)
         showToast(data.message || 'Password berhasil direset!', 'success')
-        // Clear the token from store
+        // Clear the token from store AND sessionStorage
         useAppStore.setState({ resetPasswordToken: '' })
+        try { sessionStorage.removeItem('martup_reset_token') } catch { /* ignore */ }
       } else {
         showToast(data.error || 'Gagal mereset password', 'error')
       }

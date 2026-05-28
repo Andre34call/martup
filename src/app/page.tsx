@@ -121,23 +121,17 @@ function ScreenRenderer() {
   const isActualAdmin = currentUser?.role === 'admin'
 
   // Redirect non-admin users away from admin screens
+  // SECURITY: Use useEffect to avoid calling navigate during render
+  // This prevents the state from being out of sync with the rendered screen
+  useEffect(() => {
+    if (isAdminScreen && !isActualAdmin) {
+      navigate('home')
+    }
+  }, [isAdminScreen, isActualAdmin, navigate])
+
+  // If user is on an admin screen but isn't admin, show nothing while redirecting
   if (isAdminScreen && !isActualAdmin) {
-    // Use a key change to trigger re-render with home screen
-    return (
-      <AnimatePresence mode="wait">
-        <motion.div
-          key="home-redirect"
-          variants={{ initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0 } }}
-          initial="initial"
-          animate="animate"
-          exit="exit"
-          transition={{ duration: 0.2 }}
-          className="flex-1 overflow-y-auto no-scrollbar"
-        >
-          <HomeScreen />
-        </motion.div>
-      </AnimatePresence>
-    )
+    return null
   }
 
   const screenVariants = {
@@ -251,19 +245,30 @@ export default function Home() {
   const isSubScreen = SUB_SCREENS.includes(currentScreen)
 
   // Detect password reset token in URL on mount
-  // Only redirect to reset-password if user is NOT already authenticated
+  // SECURITY: Only redirect to reset-password if user is NOT already authenticated
+  // Check BOTH Zustand state AND localStorage to prevent race conditions where
+  // Zustand hasn't hydrated yet but the user has a valid auth token stored.
   const isAuthenticated = useAppStore((s) => s.isAuthenticated)
   useEffect(() => {
     if (typeof window === 'undefined') return
     const params = new URLSearchParams(window.location.search)
     const resetToken = params.get('reset-token')
     if (resetToken) {
-      // Clean URL first, regardless of auth state
+      // Clean URL immediately to prevent token from being bookmarked/shared
       window.history.replaceState({}, '', '/')
-      // If already authenticated, ignore the reset token — user can use "Ubah Password" in settings
-      if (isAuthenticated) return
-      // Store the token and navigate to reset-password screen
+
+      // Check if user is already authenticated — check BOTH Zustand state and localStorage
+      // Zustand may not have hydrated yet on page load, so also check localStorage
+      const hasAuthToken = !!(localStorage.getItem('authToken') || localStorage.getItem('martup_token'))
+      if (isAuthenticated || hasAuthToken) {
+        // User is authenticated — ignore the reset token
+        // They can use "Ubah Password" in settings if needed
+        return
+      }
+
+      // Store the token in both Zustand (for current session) and sessionStorage (survives refresh)
       useAppStore.setState({ resetPasswordToken: resetToken })
+      try { sessionStorage.setItem('martup_reset_token', resetToken) } catch { /* ignore */ }
       navigate('reset-password')
     }
   }, [navigate, isAuthenticated])

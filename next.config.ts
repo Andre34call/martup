@@ -3,10 +3,10 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   typescript: {
-    // Safety net: ignore TS errors from stale cached files (examples/skills/mini-services)
-    // that may persist in Vercel's build cache despite .vercelignore.
-    // Real TS errors in src/ are still caught by `bun run lint` (eslint) locally.
-    ignoreBuildErrors: true,
+    // SECURITY: Do NOT ignore build errors in production.
+    // If there are TS errors in example/skill/mini-service files that
+    // shouldn't block the build, exclude those directories in tsconfig.json instead.
+    ignoreBuildErrors: false,
   },
 };
 

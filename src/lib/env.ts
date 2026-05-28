@@ -12,6 +12,7 @@ const recommendedVars = [
   'CSRF_SECRET',
   'CRON_SECRET',
   'ADMIN_SETUP_SECRET',
+  'SUPER_ADMIN_EMAIL',
   'GOOGLE_CLIENT_ID',
   'GOOGLE_CLIENT_SECRET',
   'RESEND_API_KEY',
@@ -57,6 +58,7 @@ export const env = {
   CSRF_SECRET: process.env.CSRF_SECRET || process.env.NEXTAUTH_SECRET || '',
   CRON_SECRET: process.env.CRON_SECRET || '',
   ADMIN_SETUP_SECRET: process.env.ADMIN_SETUP_SECRET || process.env.NEXTAUTH_SECRET || '',
+  SUPER_ADMIN_EMAIL: process.env.SUPER_ADMIN_EMAIL || 'kholisakm@gmail.com', // Fallback for existing deployments
   SMS_PROVIDER: process.env.SMS_PROVIDER || 'mock',
   MIDTRANS_SERVER_KEY: process.env.MIDTRANS_SERVER_KEY || '',
   MIDTRANS_IS_PRODUCTION: process.env.MIDTRANS_IS_PRODUCTION === 'true',

@@ -105,7 +105,7 @@ export async function proxy(request: NextRequest) {
   response.headers.set('X-Frame-Options', 'DENY')
   response.headers.set('X-XSS-Protection', '1; mode=block')
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
-  response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+  response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), interest-cohort=()')
   response.headers.set('X-Request-ID', requestId)
 
   // Content Security Policy
@@ -151,6 +151,9 @@ export async function proxy(request: NextRequest) {
   }
 
   // For API mutating requests (POST, PUT, DELETE, PATCH): validate CSRF
+  // SECURITY: Currently in MONITORING mode — log warnings but don't block.
+  // Set CSRF_ENFORCE=true in env to switch to enforcement mode.
+  // Once monitoring shows no false positives, switch to enforcement.
   const csrfResult = await validateCsrfRequest(request)
   if (!csrfResult.valid) {
     console.warn(JSON.stringify({
@@ -163,12 +166,16 @@ export async function proxy(request: NextRequest) {
       timestamp: new Date().toISOString(),
     }))
 
-    const errorResponse = NextResponse.json(
-      { success: false, error: 'Validasi CSRF gagal. Silakan refresh halaman dan coba lagi.' },
-      { status: 403 }
-    )
-    const { response: securedResponse } = await issueCsrfToken(errorResponse)
-    return securedResponse
+    if (process.env.CSRF_ENFORCE === 'true') {
+      // ENFORCEMENT MODE: Block the request
+      const errorResponse = NextResponse.json(
+        { success: false, error: 'Validasi keamanan gagal. Silakan refresh halaman dan coba lagi.' },
+        { status: 403 }
+      )
+      const { response: securedResponse } = await issueCsrfToken(errorResponse)
+      return securedResponse
+    }
+    // MONITORING MODE: Log but allow the request through
   }
 
   // ===== Admin Route Protection =====

@@ -211,7 +211,10 @@ function generateRandomHex(bytes: number): string {
   if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
     crypto.getRandomValues(array)
   } else {
-    // Fallback for environments without crypto
+    // SECURITY WARNING: Fallback to Math.random() is NOT cryptographically secure.
+    // This should never happen in modern Node.js or browser environments.
+    // If you see this warning, investigate why crypto.getRandomValues is unavailable.
+    console.error('[SECURITY] crypto.getRandomValues unavailable — CSRF token generation using insecure fallback!')
     for (let i = 0; i < bytes; i++) {
       array[i] = Math.floor(Math.random() * 256)
     }
