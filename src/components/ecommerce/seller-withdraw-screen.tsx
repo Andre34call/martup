@@ -12,7 +12,7 @@ import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { useAppStore } from "@/lib/store"
-import { formatPrice } from "@/lib/mock-data"
+import { formatPrice } from "@/lib/utils"
 import { fadeIn, stagger } from '@/lib/animations'
 import { PageHeader, SectionHeader, StatusBadge, EmptyState } from "./shared"
 import type { BankAccount, WithdrawRequest, WithdrawStatus } from "@/lib/types"

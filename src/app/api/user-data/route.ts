@@ -64,6 +64,7 @@ export async function GET(request: NextRequest) {
       addresses,
       reviews,
       wishlists,
+      followedStores,
     ] = await Promise.all([
       // User profile
       db.user.findUnique({
@@ -176,6 +177,12 @@ export async function GET(request: NextRequest) {
         where: { userId },
         select: { productId: true },
       }),
+
+      // Followed store IDs
+      db.followedStore.findMany({
+        where: { userId },
+        select: { sellerId: true },
+      }),
     ])
 
     if (!user) {
@@ -208,6 +215,9 @@ export async function GET(request: NextRequest) {
     // Extract wishlist product IDs
     const wishlistProductIds = wishlists.map((w) => w.productId)
 
+    // Extract followed store IDs
+    const followedStoreIds = followedStores.map((fs) => fs.sellerId)
+
     // Count unread notifications
     const unreadNotificationCount = notifications.filter((n) => !n.isRead).length
 
@@ -223,6 +233,7 @@ export async function GET(request: NextRequest) {
         addresses,
         reviews: parsedReviews,
         wishlistProductIds,
+        followedStoreIds,
       },
     }))
   } catch (error: unknown) {

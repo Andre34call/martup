@@ -53,6 +53,7 @@ model User {
   ledDivision   Division? @relation("DivisionHead")
   userSettings  UserSetting[]
   workAssignments WorkItem[] @relation("WorkAssignments")
+  followedStores FollowedStore[]
 }
 
 model Seller {
@@ -87,6 +88,7 @@ model Seller {
   wallet          Wallet?
   campaigns       Campaign[]
   vouchers        Voucher[]
+  followers       FollowedStore[]
 }
 
 model Address {
@@ -397,6 +399,19 @@ model Wishlist {
   product   Product  @relation(fields: [productId], references: [id])
 
   @@unique([userId, productId])
+}
+
+model FollowedStore {
+  id        String   @id @default(cuid())
+  userId    String
+  sellerId  String
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id])
+  seller    Seller   @relation(fields: [sellerId], references: [id])
+
+  @@unique([userId, sellerId])
+  @@index([userId])
 }
 
 // ==================== CHAT ====================

@@ -563,9 +563,10 @@ export function ProductDetailScreen() {
                 variant="outline"
                 size="sm"
                 className="flex-1 h-9 text-xs rounded-lg border-emerald-500 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
-                onClick={() => {
-                  toggleFollowStore(product.sellerId)
-                  showToast(isFollowingStore(product.sellerId) ? "Berhenti mengikuti toko" : "Berhasil mengikuti toko!", "success")
+                onClick={async () => {
+                  const wasFollowing = isFollowingStore(product.sellerId)
+                  await toggleFollowStore(product.sellerId)
+                  showToast(wasFollowing ? "Berhenti mengikuti toko" : "Berhasil mengikuti toko!", "success")
                 }}
               >
                 <Check className="w-3.5 h-3.5 mr-1" />

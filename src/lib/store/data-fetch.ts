@@ -101,6 +101,11 @@ export const createDataFetchSlice: StateCreator<AppStore, [], [], DataFetchSlice
         useWishlistStore.setState({ wishlistIds: mergedIds })
       }
 
+      // Update followed stores
+      if (data.followedStoreIds) {
+        set({ followedStoreIds: data.followedStoreIds })
+      }
+
       // Fetch platform settings for admin/manager users
       if (ELEVATED_ROLES.includes(data.user?.role as UserRole)) {
         get().fetchPlatformSettings()

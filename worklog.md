@@ -945,3 +945,35 @@ Stage Summary:
 - **No hardcoded emails** — SUPER_ADMIN_EMAIL uses env var only
 - **Zero TypeScript errors** (npx tsc --noEmit passes)
 - **Lint passes ✅**, **dev server 200 ✅**
+---
+Task ID: 4-f
+Agent: main
+Task: Remove mock/hardcoded data and replace with database data
+
+Work Log:
+- Scanned entire codebase for mock/hardcoded data using Explore agent
+- Found src/lib/mock-data.ts (320 lines) — dead code, not imported except for formatPrice in one file
+- Found followed-stores-screen.tsx had hardcoded store data (5 stores with mock IDs)
+- Found constants.ts shipping options — legitimate fallback data, kept as-is
+- Found help-screen.tsx FAQ data — static content, acceptable as-is
+- Deleted src/lib/mock-data.ts entirely (320 lines of dead mock data)
+- Fixed stale import in seller-withdraw-screen.tsx: changed `import { formatPrice } from "@/lib/mock-data"` to `import { formatPrice } from "@/lib/utils"`
+- Added FollowedStore model to Prisma schema (userId, sellerId, unique constraint)
+- Added User.followedStores and Seller.followers relations
+- Ran `bun run db:push` to sync schema with database
+- Created /api/followed-stores/route.ts with GET (list with seller details) and POST (toggle follow/unfollow)
+- Updated /api/user-data/route.ts to fetch and return followedStoreIds
+- Updated data-fetch.ts to set followedStoreIds from API response
+- Updated FollowedStoresSlice type: added followedStoresData, made toggleFollowStore async, added fetchFollowedStores
+- Rewrote followed-stores.ts store slice with API integration (optimistic update + server sync)
+- Rewrote followed-stores-screen.tsx to use store data from API instead of hardcoded mock
+- Fixed product-detail-screen.tsx: toggleFollowStore now async with correct toast message timing
+- TypeScript compilation passes, lint passes, dev server OK
+
+Stage Summary:
+- Deleted mock-data.ts (320 lines of dead mock code)
+- Fixed 1 stale import (formatPrice → utils)
+- Added FollowedStore Prisma model + API endpoint + store integration
+- followed-stores-screen.tsx now loads real data from database
+- toggleFollowStore is now async with optimistic updates
+- Zero remaining mock data in active code paths

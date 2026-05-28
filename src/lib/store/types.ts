@@ -114,8 +114,20 @@ export interface VoucherSlice {
 
 export interface FollowedStoresSlice {
   followedStoreIds: string[]
-  toggleFollowStore: (storeId: string) => void
+  followedStoresData: Array<{
+    id: string
+    storeName: string
+    storeSlug: string
+    storeAvatar: string
+    isVerified: boolean
+    isPremium: boolean
+    rating: number
+    totalProducts: number
+    totalSales: number
+  }>
+  toggleFollowStore: (storeId: string) => Promise<void>
   isFollowingStore: (storeId: string) => boolean
+  fetchFollowedStores: (userId: string) => Promise<void>
 }
 
 export interface SearchSlice {
