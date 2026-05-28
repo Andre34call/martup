@@ -437,7 +437,7 @@ export function SellerProducts() {
 
 // ==================== SELLER ORDERS ====================
 export function SellerOrders() {
-  const { navigate, updateOrderStatus, showToast, orders, updateOrderTracking, seller } = useAppStore()
+  const { navigate, updateOrderStatus, showToast, orders, updateOrderTracking, seller, reviews } = useAppStore()
   const [activeTab, setActiveTab] = useState("all")
   const [showTrackingDialog, setShowTrackingDialog] = useState(false)
   const [trackingOrderId, setTrackingOrderId] = useState<string | null>(null)
@@ -445,6 +445,10 @@ export function SellerOrders() {
   const [showCancelDialog, setShowCancelDialog] = useState(false)
   const [cancelOrderId, setCancelOrderId] = useState<string | null>(null)
   const [cancelReason, setCancelReason] = useState("")
+  const [showReplyDialog, setShowReplyDialog] = useState(false)
+  const [replyReviewId, setReplyReviewId] = useState<string | null>(null)
+  const [replyContent, setReplyContent] = useState("")
+  const [isSubmittingReply, setIsSubmittingReply] = useState(false)
 
   // Derive sellerId from store seller
   const sellerId = seller?.id || ''
@@ -452,15 +456,25 @@ export function SellerOrders() {
   // Map real store orders for current seller to display format
   const sellerOrders = orders
     .filter(o => o.sellerId === sellerId)
-    .map(o => ({
-      id: o.id,
-      orderNumber: o.orderNumber,
-      buyerName: o.address.recipient,
-      items: o.items.map(i => `${i.productName} x${i.quantity}`).join(', '),
-      amount: o.totalAmount,
-      status: o.status,
-      date: new Date(o.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }),
-    }))
+    .map(o => {
+      // Find reviews for this order's products that don't have a seller reply yet
+      const orderProductIds = o.items.map(i => i.productId)
+      const unrepliedReviews = reviews.filter(r =>
+        orderProductIds.includes(r.productId) && !r.sellerReply
+      )
+      return {
+        id: o.id,
+        orderNumber: o.orderNumber,
+        buyerName: o.address.recipient,
+        items: o.items.map(i => `${i.productName} x${i.quantity}`).join(', '),
+        itemIds: o.items.map(i => i.id),
+        amount: o.totalAmount,
+        status: o.status,
+        date: new Date(o.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }),
+        hasUnrepliedReview: unrepliedReviews.length > 0,
+        firstUnrepliedReviewId: unrepliedReviews[0]?.id || null,
+      }
+    })
 
   const tabs = [
     { key: "all", label: "Semua", count: sellerOrders.length },
@@ -569,6 +583,15 @@ export function SellerOrders() {
                       <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg" onClick={() => showToast("Invoice dicetak", "info")}>
                         <Printer className="w-3 h-3 mr-1" /> Invoice
                       </Button>
+                      {order.status === "delivered" && order.hasUnrepliedReview && order.firstUnrepliedReviewId && (
+                        <Button size="sm" className="h-8 text-xs rounded-lg bg-amber-500 hover:bg-amber-600 text-white" onClick={() => {
+                          setReplyReviewId(order.firstUnrepliedReviewId!)
+                          setReplyContent("")
+                          setShowReplyDialog(true)
+                        }}>
+                          <MessageCircle className="w-3 h-3 mr-1" /> Balas Ulasan
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </Card>
@@ -680,6 +703,58 @@ export function SellerOrders() {
               className="bg-red-500 hover:bg-red-600 text-white rounded-xl h-10 flex-1"
             >
               Batalkan Pesanan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reply to Review Dialog */}
+      <Dialog open={showReplyDialog} onOpenChange={setShowReplyDialog}>
+        <DialogContent className="max-w-[340px] rounded-2xl p-5">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold">Balas Ulasan</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 mt-2">
+            <label className="text-xs font-medium text-foreground">Balasan Anda <span className="text-red-500">*</span></label>
+            <textarea
+              value={replyContent}
+              onChange={(e) => setReplyContent(e.target.value)}
+              placeholder="Tulis balasan untuk ulasan pembeli..."
+              maxLength={500}
+              className="w-full min-h-[80px] rounded-xl border border-input bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 resize-none"
+              autoFocus
+            />
+            <p className="text-[10px] text-muted-foreground text-right">{replyContent.length}/500</p>
+          </div>
+          <DialogFooter className="mt-4 gap-2">
+            <Button variant="outline" onClick={() => setShowReplyDialog(false)} className="rounded-xl h-10 flex-1">
+              Batal
+            </Button>
+            <Button
+              disabled={isSubmittingReply || !replyContent.trim()}
+              onClick={async () => {
+                if (!replyContent.trim() || !replyReviewId) return
+                setIsSubmittingReply(true)
+                try {
+                  const res = await apiClient.rawPut('/api/reviews/reply', { reviewId: replyReviewId, reply: replyContent.trim() })
+                  const data = await res.json()
+                  if (!res.ok || !data.success) {
+                    throw new Error(data.error || 'Gagal membalas ulasan')
+                  }
+                  showToast("Balasan berhasil dikirim!", "success")
+                  setShowReplyDialog(false)
+                  setReplyReviewId(null)
+                  setReplyContent("")
+                } catch (err: unknown) {
+                  const message = err instanceof ApiClientError ? err.message : err instanceof Error ? err.message : 'Gagal membalas ulasan'
+                  showToast(message, "error")
+                } finally {
+                  setIsSubmittingReply(false)
+                }
+              }}
+              className="bg-amber-500 hover:bg-amber-600 text-white rounded-xl h-10 flex-1"
+            >
+              {isSubmittingReply ? 'Mengirim...' : 'Kirim Balasan'}
             </Button>
           </DialogFooter>
         </DialogContent>

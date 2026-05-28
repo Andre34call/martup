@@ -82,10 +82,12 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' },
     })
 
-    // Parse JSON images field for each review
+    // Parse JSON images field for each review, include seller reply
     const parsedReviews = reviews.map((review) => ({
       ...review,
       images: parseJsonField(review.images),
+      sellerReply: review.sellerReply || undefined,
+      sellerReplyAt: review.sellerReplyAt || undefined,
     }))
 
     return NextResponse.json(serializeDecimal({
@@ -141,6 +143,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // SECURITY: orderItemId is REQUIRED — only buyers with a successful transaction can review
+    if (!orderItemId) {
+      return NextResponse.json(
+        { success: false, error: 'Hanya pembeli yang telah melakukan transaksi berhasil dapat memberikan ulasan' },
+        { status: 400 }
+      )
+    }
+
     if (!rating || typeof rating !== 'number' || rating < 1 || rating > 5) {
       return NextResponse.json(
         { success: false, error: 'rating is required and must be between 1 and 5' },
@@ -165,47 +175,53 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // SECURITY: If orderItemId is provided, verify it belongs to the user's order
-    if (orderItemId) {
-      const orderItem = await db.orderItem.findUnique({
-        where: { id: orderItemId },
-        include: { order: true },
-      })
+    // SECURITY: Verify orderItem belongs to the user, order is delivered, and product matches
+    const orderItem = await db.orderItem.findUnique({
+      where: { id: orderItemId },
+      include: { order: true },
+    })
 
-      if (!orderItem) {
-        return NextResponse.json(
-          { success: false, error: 'Order item not found' },
-          { status: 404 }
-        )
-      }
+    if (!orderItem) {
+      return NextResponse.json(
+        { success: false, error: 'Order item not found' },
+        { status: 404 }
+      )
+    }
 
-      // Verify the order belongs to the authenticated user
-      if (orderItem.order.userId !== authResult.user.id) {
-        return NextResponse.json(
-          { success: false, error: 'Forbidden - You can only review your own orders' },
-          { status: 403 }
-        )
-      }
+    // Verify the order belongs to the authenticated user
+    if (orderItem.order.userId !== authResult.user.id) {
+      return NextResponse.json(
+        { success: false, error: 'Forbidden - You can only review your own orders' },
+        { status: 403 }
+      )
+    }
 
-      // Verify the order item belongs to the specified product
-      if (orderItem.productId !== productId) {
-        return NextResponse.json(
-          { success: false, error: 'Order item does not belong to the specified product' },
-          { status: 400 }
-        )
-      }
+    // Verify the order item belongs to the specified product
+    if (orderItem.productId !== productId) {
+      return NextResponse.json(
+        { success: false, error: 'Order item does not belong to the specified product' },
+        { status: 400 }
+      )
+    }
 
-      // SECURITY: Check that no review already exists for this orderItem (one review per item)
-      const existingReview = await db.review.findUnique({
-        where: { orderItemId },
-      })
+    // SECURITY: Verify the order status is 'delivered' (successful transaction)
+    if (orderItem.order.status !== 'delivered') {
+      return NextResponse.json(
+        { success: false, error: 'Hanya pesanan yang sudah diterima (delivered) yang dapat diulas' },
+        { status: 400 }
+      )
+    }
 
-      if (existingReview) {
-        return NextResponse.json(
-          { success: false, error: 'A review already exists for this order item' },
-          { status: 409 }
-        )
-      }
+    // SECURITY: Check that no review already exists for this orderItem (one review per item)
+    const existingReview = await db.review.findUnique({
+      where: { orderItemId },
+    })
+
+    if (existingReview) {
+      return NextResponse.json(
+        { success: false, error: 'A review already exists for this order item' },
+        { status: 409 }
+      )
     }
 
     // Stringify images array if provided
@@ -219,7 +235,7 @@ export async function POST(request: NextRequest) {
         data: {
           userId: authResult.user.id,
           productId,
-          orderItemId: orderItemId || null,
+          orderItemId,
           rating,
           content: content || null,
           images: imagesData,

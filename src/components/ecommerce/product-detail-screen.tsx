@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { useAppStore, useCartStore, useWishlistStore } from "@/lib/store"
 import { formatPrice } from "@/lib/utils"
 import { SHIPPING_OPTIONS } from "@/lib/constants"
+import { apiClient } from "@/lib/api-client"
 import {
   PageHeader, QuantitySelector, PriceDisplay, ProductCard, EmptyState,
   FlashSaleTimer, RatingStars, AvatarWithName, SellerBadge
@@ -235,19 +236,15 @@ function VariantSelector({
 
 // ==================== MAIN COMPONENT ====================
 export function ProductDetailScreen() {
-  const { selectedProductId, navigate, goBack, setSelectedProduct, setSelectedSeller, setSelectedChatRoom, showToast, toggleFollowStore, isFollowingStore, chatRooms, products, reviews: storeReviews, addReview, createChatRoom, fetchProductReviews, isAuthenticated, currentUser } = useAppStore()
+  const { selectedProductId, navigate, goBack, setSelectedProduct, setSelectedSeller, setSelectedChatRoom, showToast, toggleFollowStore, isFollowingStore, chatRooms, products, reviews: storeReviews, createChatRoom, fetchProductReviews, isAuthenticated, currentUser } = useAppStore()
   const { addItem } = useCartStore()
   const { toggleWishlist, isWishlisted } = useWishlistStore()
-
-  const [showReviewDialog, setShowReviewDialog] = useState(false)
-  const [reviewRating, setReviewRating] = useState(5)
-  const [reviewContent, setReviewContent] = useState("")
-  const [isSubmittingReview, setIsSubmittingReview] = useState(false)
 
   const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null)
   const [quantity, setQuantity] = useState(1)
   const [showAddedToast, setShowAddedToast] = useState(false)
   const [showShippingModal, setShowShippingModal] = useState(false)
+  const [canReview, setCanReview] = useState(false)
 
   const product = products.find(p => p.id === selectedProductId)
 
@@ -257,6 +254,29 @@ export function ProductDetailScreen() {
       fetchProductReviews(selectedProductId)
     }
   }, [selectedProductId, fetchProductReviews])
+
+  // Check if user can review this product (only if authenticated)
+  useEffect(() => {
+    if (!isAuthenticated || !selectedProductId) {
+      return
+    }
+    let cancelled = false
+    apiClient.get<{ success: boolean; canReview: boolean }>('/api/reviews/can-review', { productId: selectedProductId })
+      .then((data) => {
+        if (!cancelled) {
+          setCanReview(data.canReview || false)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCanReview(false)
+        }
+      })
+    return () => { cancelled = true }
+  }, [isAuthenticated, selectedProductId])
+
+  // Reset canReview when not authenticated or no product selected
+  const effectiveCanReview = isAuthenticated && selectedProductId ? canReview : false
 
   // Derive effective variant - if selected variant doesn't belong to current product, treat as null
   const effectiveVariant = selectedVariant && product?.variants.some(v => v.id === selectedVariant.id)
@@ -641,12 +661,12 @@ export function ProductDetailScreen() {
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold">Ulasan Pembeli</h3>
               <div className="flex items-center gap-2">
-                {isAuthenticated && (
+                {effectiveCanReview && (
                   <button
                     className="text-xs text-emerald-600 font-medium flex items-center gap-0.5"
-                    onClick={() => setShowReviewDialog(true)}
+                    onClick={() => navigate('review')}
                   >
-                    Tulis Ulasan
+                    Beri Ulasan
                   </button>
                 )}
                 <button className="text-xs text-emerald-600 font-medium flex items-center gap-0.5" onClick={() => showToast("Semua ulasan ditampilkan", "info")}>
@@ -706,6 +726,20 @@ export function ProductDetailScreen() {
                     <RatingStars rating={review.rating} size="sm" showValue={false} />
                   </div>
                   <p className="text-sm text-muted-foreground leading-relaxed">{review.content}</p>
+                  {/* Seller Reply */}
+                  {review.sellerReply && (
+                    <div className="mt-1 p-2.5 bg-emerald-50 dark:bg-emerald-950/20 rounded-lg border border-emerald-200 dark:border-emerald-800/30">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">Penjual</span>
+                        {review.sellerReplyAt && (
+                          <span className="text-[9px] text-muted-foreground">
+                            {new Date(review.sellerReplyAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground leading-relaxed">{review.sellerReply}</p>
+                    </div>
+                  )}
                   <p className="text-[10px] text-muted-foreground">
                     {new Date(review.createdAt).toLocaleDateString('id-ID', {
                       day: 'numeric', month: 'short', year: 'numeric'
@@ -800,96 +834,6 @@ export function ProductDetailScreen() {
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* Write Review Dialog */}
-      <Dialog open={showReviewDialog} onOpenChange={setShowReviewDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Tulis Ulasan</DialogTitle>
-            <DialogDescription>Bagikan pengalamanmu tentang produk ini</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            {/* Star Rating */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Rating</label>
-              <div className="flex items-center gap-1">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <button
-                    key={star}
-                    onClick={() => setReviewRating(star)}
-                    className="p-1 hover:scale-110 transition-transform"
-                  >
-                    <Star
-                      className={`w-7 h-7 transition-colors ${
-                        star <= reviewRating
-                          ? "fill-amber-400 text-amber-400"
-                          : "text-muted-foreground"
-                      }`}
-                    />
-                  </button>
-                ))}
-                <span className="ml-2 text-sm font-medium text-muted-foreground">
-                  {reviewRating}/5
-                </span>
-              </div>
-            </div>
-            {/* Review Content */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Ulasan</label>
-              <Textarea
-                value={reviewContent}
-                onChange={(e) => setReviewContent(e.target.value)}
-                placeholder="Tulis pengalamanmu tentang produk ini..."
-                className="min-h-[100px] resize-none"
-                maxLength={1000}
-              />
-              <p className="text-[10px] text-muted-foreground text-right">
-                {reviewContent.length}/1000
-              </p>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setShowReviewDialog(false)}
-              className="rounded-lg"
-            >
-              Batal
-            </Button>
-            <Button
-              className="bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg"
-              disabled={isSubmittingReview || !reviewContent.trim()}
-              onClick={async () => {
-                if (!product || !currentUser) return
-                setIsSubmittingReview(true)
-                try {
-                  const review = {
-                    id: `review-${Date.now()}`,
-                    userId: currentUser.id,
-                    productId: product.id,
-                    rating: reviewRating,
-                    content: reviewContent.trim(),
-                    userName: currentUser.name,
-                    userAvatar: currentUser.avatar,
-                    createdAt: new Date().toISOString(),
-                  }
-                  addReview(review, '')
-                  setShowReviewDialog(false)
-                  setReviewContent('')
-                  setReviewRating(5)
-                  showToast('Ulasan berhasil ditambahkan!', 'success')
-                } catch {
-                  showToast('Gagal menambahkan ulasan', 'error')
-                } finally {
-                  setIsSubmittingReview(false)
-                }
-              }}
-            >
-              {isSubmittingReview ? 'Mengirim...' : 'Kirim Ulasan'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* 9. Sticky Bottom CTA */}
       <div className="fixed bottom-0 left-0 right-0 z-40 glass border-t border-border/50 pb-safe">

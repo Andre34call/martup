@@ -1,66 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
+import { verifyAuth } from '@/lib/auth-middleware'
 
 import { logger } from '@/lib/logger'
-// GET /api/auth/me - Get current authenticated user from NextAuth session
-// This is called client-side after Google OAuth to get user data
-// If the user doesn't exist in DB yet (sync-user failed), create them here
+// GET /api/auth/me - Get current authenticated user
+// Supports two auth methods:
+// 1. NextAuth session (Google OAuth) — via verifyAuth
+// 2. HMAC-signed bearer token (email/password) — via verifyAuth
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
+    // Use verifyAuth which checks both NextAuth session and HMAC bearer token
+    const authResult = await verifyAuth(request)
 
-    if (!session?.user?.email) {
+    if (!authResult.success) {
       return NextResponse.json(
-        { success: false, error: 'Not authenticated' },
-        { status: 401 }
+        { success: false, error: authResult.error },
+        { status: authResult.status }
       )
     }
 
-    let user = await db.user.findUnique({
-      where: { email: session.user.email },
+    // Get full user data from DB (verifyAuth only returns basic fields)
+    const user = await db.user.findUnique({
+      where: { id: authResult.user.id },
       include: {
         seller: true,
         wallet: true,
       },
     })
 
-    // If user doesn't exist in DB yet (sync-user might have failed),
-    // create them here as a fallback - always as buyer role
     if (!user) {
-      user = await db.user.create({
-        data: {
-          email: session.user.email,
-          name: session.user.name || session.user.email.split('@')[0],
-          avatar: session.user.image || null,
-          role: 'buyer', // ALWAYS buyer - admin must be promoted via admin panel
-          isVerified: true, // Google OAuth users are pre-verified
-          wallet: {
-            create: {
-              balance: 0,
-              holdBalance: 0,
-            },
-          },
-        },
-        include: {
-          seller: true,
-          wallet: true,
-        },
-      })
-
-      // Create welcome notification
-      await db.notification.create({
-        data: {
-          userId: user.id,
-          title: 'Selamat Datang di MartUp! 🎉',
-          content: 'Terima kasih telah bergabung. Mulai belanja atau jual produk sekarang!',
-          type: 'system',
-          isRead: false,
-        },
-      })
-
-      logger.info({ component: 'auth', email: session.user.email }, 'User created via /api/auth/me fallback')
+      return NextResponse.json(
+        { success: false, error: 'User not found' },
+        { status: 404 }
+      )
     }
 
     // Check if user is blocked

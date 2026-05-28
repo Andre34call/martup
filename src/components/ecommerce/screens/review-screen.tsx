@@ -187,9 +187,10 @@ export function ReviewScreen() {
     const order = orders.find(o => o.id === orderId)
     if (!order) return
 
-    // Get the first item's productId for the review
+    // Get the first item's productId and orderItemId for the review
     const orderItem = order.items[0]
     const productId = orderItem?.productId || ''
+    const orderItemId = orderItem?.id || ''
 
     // Cleanup object URLs for images
     const orderImages = images[orderId] || []
@@ -202,6 +203,7 @@ export function ReviewScreen() {
       id: `rev-${Date.now()}`,
       userId: currentUser?.id || 'u1',
       productId,
+      orderItemId,
       rating,
       content: reviewTexts[orderId] || undefined,
       images: imageUrls.length > 0 ? imageUrls : undefined,
@@ -210,8 +212,8 @@ export function ReviewScreen() {
       createdAt: new Date().toISOString(),
     }
 
-    // Save to store
-    addReview(review, orderId)
+    // Save to store — pass orderItemId for purchase verification
+    addReview(review, orderId, orderItemId)
 
     // Clear local state
     setImages(prev => ({ ...prev, [orderId]: [] }))
@@ -622,6 +624,21 @@ export function ReviewScreen() {
                       </div>
                       {orderReview.content && (
                         <p className="text-xs text-muted-foreground leading-relaxed">{orderReview.content}</p>
+                      )}
+
+                      {/* Seller Reply */}
+                      {orderReview.sellerReply && (
+                        <div className="mt-2 p-2.5 bg-emerald-50 dark:bg-emerald-950/20 rounded-lg border border-emerald-200 dark:border-emerald-800/30">
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">Penjual</span>
+                            {orderReview.sellerReplyAt && (
+                              <span className="text-[9px] text-muted-foreground">
+                                {new Date(orderReview.sellerReplyAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground leading-relaxed">{orderReview.sellerReply}</p>
+                        </div>
                       )}
 
                       {/* Submitted review images */}

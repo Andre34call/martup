@@ -180,11 +180,14 @@ export interface Review {
   id: string
   userId: string
   productId: string
+  orderItemId?: string
   rating: number
   content?: string
   images?: string[]
   userName: string
   userAvatar?: string
+  sellerReply?: string
+  sellerReplyAt?: string
   createdAt: string
 }
 

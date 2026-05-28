@@ -5,12 +5,12 @@ import { useAppStore, useCartStore, useWishlistStore } from '@/lib/store'
 import { logger } from '@/lib/logger'
 
 /**
- * useDataSync - Watches auth state from useAppStore and localStorage and syncs
+ * useDataSync - Watches auth state from useAppStore and syncs
  * data from API when a user is authenticated.
  *
  * Auth detection:
- * - useAppStore.isAuthenticated (set by login() or DataFetcher for NextAuth/OAuth)
- * - localStorage auth tokens (for page refresh recovery before Zustand hydrates)
+ * - useAppStore.isAuthenticated (set by login() or DataFetcher for token recovery)
+ * - localStorage auth tokens (for edge cases before Zustand rehydrates)
  *
  * On authentication: fetches user data, merges local cart to server, syncs wishlist.
  * Note: mergeLocalToServer internally calls syncFromServer, so we don't need a separate call.
@@ -35,9 +35,7 @@ export function useDataSync() {
 
   useEffect(() => {
     // Determine effective auth from useAppStore + localStorage fallback
-    // This handles the case where Zustand hasn't hydrated yet but the user
-    // has a valid auth token in localStorage (from a previous session)
-    const hasLocalAuthToken = !!localStorage.getItem('authToken')
+    const hasLocalAuthToken = typeof window !== 'undefined' && !!localStorage.getItem('authToken')
     const effectiveUserId = appStoreUserId
     const effectiveIsAuthenticated = appStoreIsAuthenticated || (hasLocalAuthToken && !!appStoreUserId)
 

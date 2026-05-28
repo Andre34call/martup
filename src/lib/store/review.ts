@@ -10,10 +10,11 @@ type ProductReviewsResponse = { success?: boolean; data?: any[]; [key: string]: 
 export const createReviewSlice: StateCreator<AppStore, [], [], ReviewSlice> = (set, get) => ({
   reviews: [],
   reviewedOrderIds: [],
-  addReview: (review, orderId) => {
+  addReview: (review, orderId, orderItemId) => {
     // Call the API to persist the review (fire-and-forget)
     apiClient.post('/api/reviews', {
       productId: review.productId,
+      orderItemId: orderItemId || undefined,
       rating: review.rating,
       content: review.content,
       images: review.images,
@@ -31,7 +32,7 @@ export const createReviewSlice: StateCreator<AppStore, [], [], ReviewSlice> = (s
       })
       return {
         reviews: [review, ...state.reviews],
-        reviewedOrderIds: [...state.reviewedOrderIds, orderId],
+        reviewedOrderIds: orderId ? [...state.reviewedOrderIds, orderId] : state.reviewedOrderIds,
         products: updatedProducts,
       }
     })
@@ -92,11 +93,14 @@ export const createReviewSlice: StateCreator<AppStore, [], [], ReviewSlice> = (s
             id: r.id as string,
             userId: r.userId as string,
             productId: r.productId as string,
+            orderItemId: r.orderItemId as string | undefined,
             rating: r.rating as number,
             content: r.content as string || undefined,
             images: typeof r.images === 'string' ? JSON.parse(r.images) : (r.images as string[]) || undefined,
             userName: (user?.name as string) || 'User',
             userAvatar: (user?.avatar as string) || undefined,
+            sellerReply: r.sellerReply as string | undefined,
+            sellerReplyAt: r.sellerReplyAt as string | undefined,
             createdAt: r.createdAt as string,
           }
         })

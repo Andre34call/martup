@@ -41,18 +41,18 @@ function ZustandHydration({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * DataFetcher — handles the NextAuth (Google OAuth) → useAppStore login bridge.
+ * DataFetcher — handles auth session recovery and the NextAuth → useAppStore bridge.
  *
- * Data syncing (fetchUserData, mergeLocalToServer, syncWishlistFromServer) is
- * handled by the useDataSync hook, so this component only needs to:
- *  1. Bridge the NextAuth session into useAppStore via login()
- *  2. Connect the WebSocket after login
- *  3. Fetch global data (products, categories) on mount
+ * Three auth recovery paths:
+ *  1. NextAuth session (Google OAuth) — detected via useSession()
+ *  2. HMAC bearer token in localStorage (email/password) — detected on mount
+ *  3. Data sync via useDataSync hook after login() is called
  */
 function DataFetcher({ children }: { children: React.ReactNode }) {
   const { data: session, status } = useSession()
   const { fetchProducts, fetchCategories, isAuthenticated, login, connectSocket, disconnectSocket } = useAppStore()
   const initialFetchDone = useRef(false)
+  const tokenRecoveryDone = useRef(false)
 
   // Fetch global data (products, categories) on mount & setup storage
   useEffect(() => {
@@ -61,7 +61,6 @@ function DataFetcher({ children }: { children: React.ReactNode }) {
       fetchProducts()
       fetchCategories()
       // Setup Supabase Storage bucket (idempotent - safe to call multiple times)
-      // apiClient.rawPost adds auth headers + CSRF automatically (replacing getAuthHeaders(true))
       apiClient.rawPost('/api/setup/storage', undefined)
         .then(res => res.json())
         .then(data => {
@@ -75,7 +74,70 @@ function DataFetcher({ children }: { children: React.ReactNode }) {
     }
   }, [fetchProducts, fetchCategories])
 
-  // Handle auth session - Google OAuth bridge
+  // ── Auth Recovery Path 1: HMAC bearer token from localStorage ─────
+  // This handles the case where the user logged in via email/password,
+  // then refreshed the page. Zustand doesn't persist auth state, but
+  // the authToken is still in localStorage. We use it to restore the session.
+  useEffect(() => {
+    if (tokenRecoveryDone.current) return
+
+    // Only attempt recovery if not already authenticated
+    if (isAuthenticated) {
+      tokenRecoveryDone.current = true
+      return
+    }
+
+    // Check if there's an auth token in localStorage
+    if (typeof window === 'undefined') return
+    const authToken = localStorage.getItem('authToken')
+    if (!authToken) {
+      tokenRecoveryDone.current = true
+      return
+    }
+
+    // Attempt to restore session by calling /api/auth/me
+    // apiClient automatically adds the Authorization header from localStorage
+    tokenRecoveryDone.current = true
+
+    ;(async () => {
+      try {
+        const data = await apiClient.get<AuthMeResponse>('/api/auth/me')
+        if (data.success && data.user) {
+          login({
+            id: data.user.id,
+            email: data.user.email,
+            name: data.user.name,
+            phone: data.user.phone || undefined,
+            avatar: data.user.avatar || undefined,
+            role: (data.user.role || 'buyer') as UserRole,
+            isVerified: data.user.isVerified || false,
+            loyaltyPoints: data.user.loyaltyPoints || 0,
+            coins: data.user.coins || 0,
+            referralCode: data.user.referralCode || undefined,
+          })
+          // Set Sentry user context for error tracking
+          setSentryUser({
+            id: data.user.id,
+            email: data.user.email,
+            name: data.user.name,
+            phone: data.user.phone || undefined,
+            role: data.user.role || 'buyer',
+          })
+          // Connect WebSocket (data sync is handled by useDataSync)
+          connectSocket()
+        } else {
+          // Token is invalid or expired — clear it
+          localStorage.removeItem('authToken')
+        }
+      } catch (err) {
+        logger.warn({ component: 'providers', err: err }, 'Failed to restore session from authToken')
+        // Don't clear the token — it might be a temporary network error
+        // The user can try again on next page load
+      }
+    })()
+  }, [isAuthenticated, login, connectSocket])
+
+  // ── Auth Recovery Path 2: NextAuth session (Google OAuth) ──────────
   // Only calls login() to set useAppStore auth state; data sync is handled by useDataSync
   useEffect(() => {
     if (status === 'authenticated' && session?.user && !isAuthenticated) {
@@ -107,7 +169,7 @@ function DataFetcher({ children }: { children: React.ReactNode }) {
             connectSocket()
           }
         } catch (err) {
-          logger.warn({ component: 'providers', err: err }, 'Failed to fetch user data')
+          logger.warn({ component: 'providers', err: err }, 'Failed to fetch user data via NextAuth')
         }
       })()
     }

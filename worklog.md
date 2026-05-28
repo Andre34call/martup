@@ -1133,3 +1133,38 @@ Stage Summary:
 - Seller ratings now auto-update when reviews are created/updated/deleted
 - Admin recalculate-stats endpoint available for manual stat fixes
 - Live site verified: real data showing (e.g., sold=1 for products in real orders, sold=0 for those without)
+
+---
+Task ID: 6
+Agent: Main Coordinator
+Task: Fix review system (purchase verification + seller reply) and persistent login
+
+Work Log:
+- Investigated current review system: found that orderItemId was optional in POST /api/reviews, allowing anyone to review any product
+- Investigated login persistence: found that email/password auth tokens in localStorage weren't being used to restore sessions on page refresh
+- Fixed middleware/proxy conflict: removed middleware.ts.bak (Next.js 16 requires proxy.ts only)
+
+**Review System Changes:**
+1. Updated Review type (types.ts) — added orderItemId, sellerReply, sellerReplyAt fields
+2. Updated POST /api/reviews — made orderItemId REQUIRED, added delivered status check
+3. Updated GET /api/reviews — now includes sellerReply and sellerReplyAt in response
+4. Created GET /api/reviews/can-review — new endpoint checking if user has delivered orders for a product
+5. Updated review store (review.ts) — passes orderItemId to API, maps sellerReply/sellerReplyAt
+6. Updated ReviewSlice type — addReview now accepts orderItemId parameter
+7. Updated ReviewScreen — passes orderItemId when submitting, shows seller replies
+8. Updated ProductDetailScreen — removed "Tulis Ulasan" dialog (anyone could review), added "Beri Ulasan" button (only for verified buyers), shows seller replies
+9. Updated mapReview mapper — includes orderItemId, sellerReply, sellerReplyAt
+10. Updated SellerOrders — added "Balas Ulasan" button for delivered orders with unreplied reviews, added reply dialog
+
+**Login Persistence Changes:**
+1. Updated /api/auth/me — now uses verifyAuth() which accepts both NextAuth sessions AND HMAC bearer tokens
+2. Updated providers.tsx DataFetcher — added token recovery on mount: if authToken exists in localStorage and user isn't authenticated, calls /api/auth/me to restore session
+3. Updated useDataSync — added SSR-safe check for localStorage
+
+Stage Summary:
+- Reviews now require purchase verification: only buyers with delivered orders can review ✅
+- Seller replies visible on ProductDetailScreen and ReviewScreen ✅
+- Seller can reply to reviews from the orders screen ✅
+- Login persists across page refresh for both Google OAuth and email/password users ✅
+- Removed old middleware.ts (Next.js 16 uses proxy.ts) ✅
+- Lint passes ✅, dev server OK ✅

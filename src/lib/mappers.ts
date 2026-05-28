@@ -189,6 +189,7 @@ export function mapReview(raw: any): Review {
     id: raw.id,
     userId: raw.userId,
     productId: raw.productId,
+    orderItemId: raw.orderItemId || undefined,
     rating: raw.rating,
     content: raw.content || undefined,
     images: (() => {
@@ -198,6 +199,8 @@ export function mapReview(raw: any): Review {
     })(),
     userName: raw.user?.name || 'Anonymous',
     userAvatar: raw.user?.avatar || undefined,
+    sellerReply: raw.sellerReply || undefined,
+    sellerReplyAt: raw.sellerReplyAt || undefined,
     createdAt: raw.createdAt,
   }
 }
