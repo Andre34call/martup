@@ -113,7 +113,7 @@ export function AdminDashboard() {
     revenueChart: adminStats.revenueChart,
     userGrowth: adminStats.userGrowth,
     totalDivisions: adminStats.totalDivisions ?? divisions.length,
-    totalStaff: adminStats.totalStaff ?? adminUsers.filter(u => ['admin', 'finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr'].includes(u.role)).length,
+    totalStaff: adminStats.totalStaff ?? adminUsers.filter(u => ['admin', 'manager', 'finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr'].includes(u.role)).length,
     pendingSellerVerifications: adminStats.unverifiedSellers ?? adminUsers.filter(u => u.role === 'seller' && !u.isVerified).length,
     openComplaints: adminStats.openComplaints ?? 0,
     topSellers: adminStats.topSellers ?? [],
@@ -147,6 +147,7 @@ export function AdminDashboard() {
     buyer: "bg-emerald-500",
     seller: "bg-orange-500",
     admin: "bg-purple-500",
+    manager: "bg-violet-500",
   }
 
   if (isLoading) return <div className="pb-20"><PageHeader title="MartUp Admin" /><div className="px-4"><LoadingSpinner message="Memuat dashboard..." /></div></div>
@@ -158,7 +159,9 @@ export function AdminDashboard() {
         <div className="flex items-center justify-between h-14 px-4">
           <div className="flex items-center gap-2">
             <h1 className="text-base font-bold text-foreground">MartUp Admin</h1>
-            <Badge className="bg-blue-600 text-white text-[10px] px-1.5 py-0.5">Admin</Badge>
+            <Badge className={`text-white text-[10px] px-1.5 py-0.5 ${
+              currentUser?.role === 'manager' ? 'bg-violet-600' : 'bg-blue-600'
+            }`}>{currentUser?.role === 'manager' ? 'Manager' : 'Admin'}</Badge>
           </div>
           <div className="flex items-center gap-2">
             <motion.button
@@ -176,7 +179,7 @@ export function AdminDashboard() {
               <Settings className="w-5 h-5 text-muted-foreground" />
             </motion.button>
             {/* View Switcher - Only switches UI view, not actual role */}
-            {currentUser?.role === 'admin' && (
+            {['admin', 'manager'].includes(currentUser?.role || '') && (
             <div className="relative" ref={roleMenuRef}>
               <motion.button
                 whileTap={{ scale: 0.95 }}
@@ -196,7 +199,7 @@ export function AdminDashboard() {
                     className="absolute right-0 top-full mt-2 bg-card rounded-xl shadow-lg border border-border p-2 min-w-[160px] z-50"
                   >
                     <p className="text-xs text-muted-foreground px-3 py-1.5 font-medium">Switch View</p>
-                    {(["buyer", "seller", "admin"] as const).map((role) => (
+                    {(["buyer", "seller", "admin", "manager"] as const).map((role) => (
                       <button
                         key={role}
                         onClick={() => { switchRole(role); setShowRoleMenu(false) }}
@@ -388,7 +391,13 @@ export function AdminDashboard() {
 }
 
 // ==================== ADMIN USERS ====================
-const SUPER_ADMIN_EMAIL = 'kholisakm@gmail.com'
+// SECURITY: No more hardcoded email — use the centralized SUPER_ADMIN_EMAIL from env
+// This matches the backend env.SUPER_ADMIN_EMAIL which reads from environment variable
+const SUPER_ADMIN_EMAIL = process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAIL || 'kholisakm@gmail.com'
+
+// Role hierarchy constants
+const ELEVATED_ROLES = ['admin', 'manager', 'finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr']
+const DIVISION_ROLES = ['finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr']
 
 export function AdminUsers() {
   const { showToast, adminUsers, updateAdminUser, deleteAdminUser, fetchAdminUsers, currentUser, divisions, fetchDivisions } = useAppStore()
@@ -397,13 +406,15 @@ export function AdminUsers() {
   const [isLoading, setIsLoading] = useState(true)
   const [confirmAction, setConfirmAction] = useState<{action: () => void, title: string, message: string} | null>(null)
 
-  // Super admin state
+  // Permission state
   const [isSuperAdmin, setIsSuperAdmin] = useState(false)
   const [promoteUser, setPromoteUser] = useState<{id: string; name: string; email: string; role: string} | null>(null)
   const [selectedDivisionId, setSelectedDivisionId] = useState<string>('')
   const [promoteLoading, setPromoteLoading] = useState(false)
 
   const isUserSuperAdmin = currentUser?.email === SUPER_ADMIN_EMAIL && currentUser?.role === 'admin'
+  const isUserManager = currentUser?.role === 'manager'
+  const canPromote = isUserSuperAdmin || isUserManager // Manager + Super Admin can promote
 
   useEffect(() => {
     Promise.all([fetchAdminUsers(), fetchDivisions()]).finally(() => setIsLoading(false))
@@ -475,6 +486,7 @@ export function AdminUsers() {
             { key: "buyer", label: "Buyer" },
             { key: "seller", label: "Seller" },
             { key: "admin", label: "Admin" },
+            { key: "manager", label: "Manager" },
             { key: "finance", label: "Finance" },
             { key: "pr", label: "PR" },
             { key: "tech", label: "Tech" },
@@ -517,6 +529,8 @@ export function AdminUsers() {
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-medium text-foreground truncate">{user.name}</p>
                         <Badge variant="outline" className={`text-[9px] ${
+                          user.email === SUPER_ADMIN_EMAIL ? "border-purple-300 text-purple-600" :
+                          user.role === "manager" ? "border-violet-300 text-violet-600" :
                           user.role === "admin" ? "border-purple-300 text-purple-600" :
                           user.role === "seller" ? "border-orange-300 text-orange-600" :
                           user.role === "finance" ? "border-emerald-300 text-emerald-600" :
@@ -529,7 +543,7 @@ export function AdminUsers() {
                           user.role === "hr" ? "border-teal-300 text-teal-600" :
                           "border-emerald-300 text-emerald-600"
                         }`}>
-                          {user.email === SUPER_ADMIN_EMAIL ? '👑 Super Admin' : user.role}
+                          {user.email === SUPER_ADMIN_EMAIL ? '👑 Super Admin' : user.role === 'manager' ? '👔 Manager' : user.role}
                         </Badge>
                       </div>
                       <p className="text-xs text-muted-foreground truncate">{user.email}</p>
@@ -571,8 +585,8 @@ export function AdminUsers() {
                         <Check className="w-3 h-3 mr-0.5" /> Unblock
                       </Button>
                     )}
-                    {/* Promote to Division button - only for super admin, for non-elevated-role users */}
-                    {isSuperAdmin && !['admin', 'finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr'].includes(user.role) && user.email !== SUPER_ADMIN_EMAIL && (
+                    {/* Promote to Division/Admin - Manager and Super Admin can promote non-elevated users */}
+                    {canPromote && !ELEVATED_ROLES.includes(user.role) && user.email !== SUPER_ADMIN_EMAIL && (
                       <Button size="sm" className="h-7 text-[11px] rounded-lg bg-purple-500 hover:bg-purple-600 text-white" onClick={() => {
                         setPromoteUser({ id: user.id, name: user.name, email: user.email, role: user.role })
                         setSelectedDivisionId('')
@@ -580,8 +594,8 @@ export function AdminUsers() {
                         <Shield className="w-3 h-3 mr-0.5" /> Promote
                       </Button>
                     )}
-                    {/* Demote / Remove from Division - only super admin can demote elevated roles */}
-                    {isSuperAdmin && ['admin', 'finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr'].includes(user.role) && user.email !== SUPER_ADMIN_EMAIL && (
+                    {/* Demote / Remove from Division — Manager can demote division admins, Super Admin can demote anyone */}
+                    {((isSuperAdmin && ELEVATED_ROLES.includes(user.role)) || (isUserManager && DIVISION_ROLES.includes(user.role))) && user.email !== SUPER_ADMIN_EMAIL && (
                       <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-purple-600 hover:text-purple-700 hover:bg-purple-50 dark:hover:bg-purple-900/20" onClick={() => setConfirmAction({
                         action: () => { handleUpdateUser(user.id, { role: 'buyer', divisionId: null }).then(() => showToast(`${user.name} telah dikembalikan menjadi buyer`, "info")) },
                         title: 'Kembalikan ke Buyer',
@@ -633,9 +647,32 @@ export function AdminUsers() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs font-medium text-foreground">Pilih Divisi</label>
-                <p className="text-[10px] text-muted-foreground">User akan menjadi admin divisi yang dipilih dengan akses sesuai divisi tersebut.</p>
-                <div className="space-y-2 max-h-60 overflow-y-auto">
+                <label className="text-xs font-medium text-foreground">Pilih Role</label>
+                <p className="text-[10px] text-muted-foreground">User akan mendapatkan akses sesuai role yang dipilih.</p>
+                <div className="space-y-2 max-h-72 overflow-y-auto">
+                  {/* Option: Manager — Super Admin only */}
+                  {isSuperAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedDivisionId('__manager__')}
+                      className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-colors text-left ${
+                        selectedDivisionId === '__manager__'
+                          ? 'border-violet-400 bg-violet-50 dark:bg-violet-950/30'
+                          : 'border-border hover:bg-muted/50'
+                      }`}
+                    >
+                      <div className="w-9 h-9 rounded-lg bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center flex-shrink-0">
+                        <Shield className="w-4 h-4 text-violet-600" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-foreground">Manager</p>
+                        <p className="text-[10px] text-muted-foreground">Mengawasi semua divisi, bisa promosi ke admin divisi</p>
+                      </div>
+                      {selectedDivisionId === '__manager__' && (
+                        <Check className="w-4 h-4 text-violet-600 ml-auto flex-shrink-0" />
+                      )}
+                    </button>
+                  )}
                   {/* Option: Regular Admin (no division) */}
                   <button
                     type="button"
@@ -684,11 +721,13 @@ export function AdminUsers() {
                 </div>
               </div>
 
-              {/* Warning about super admin */}
+              {/* Warning about role hierarchy */}
               <div className="flex items-start gap-2 p-2.5 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800">
                 <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
                 <p className="text-[10px] text-amber-600 dark:text-amber-400">
-                  User yang dipromosikan akan memiliki akses ke panel sesuai divisi. Super Admin hanya bisa dipegang oleh kholisakm@gmail.com.
+                  {isSuperAdmin 
+                    ? 'Sebagai Super Admin, Anda dapat mempromosikan user ke role apapun termasuk Manager.'
+                    : 'Sebagai Manager, Anda dapat mempromosikan user ke admin divisi. Hanya Super Admin yang bisa promosi ke Manager.'}
                 </p>
               </div>
             </div>
@@ -703,9 +742,17 @@ export function AdminUsers() {
                 if (!promoteUser || !selectedDivisionId) return
                 setPromoteLoading(true)
                 try {
-                  const payload = selectedDivisionId === '__admin__'
-                    ? { userId: promoteUser.id, divisionId: null }
-                    : { userId: promoteUser.id, divisionId: selectedDivisionId }
+                  let payload: Record<string, unknown>
+                  if (selectedDivisionId === '__manager__') {
+                    // Promote to Manager — Super Admin only
+                    payload = { userId: promoteUser.id, promoteToManager: true }
+                  } else if (selectedDivisionId === '__admin__') {
+                    // Promote to regular Admin (no division)
+                    payload = { userId: promoteUser.id, divisionId: null }
+                  } else {
+                    // Promote to division admin
+                    payload = { userId: promoteUser.id, divisionId: selectedDivisionId }
+                  }
 
                   const res = await fetch('/api/admin/users', {
                     method: 'PATCH',

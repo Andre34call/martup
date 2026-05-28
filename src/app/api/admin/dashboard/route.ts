@@ -1,8 +1,16 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 
 import { logger } from '@/lib/logger'
-export async function GET() {
+
+// GET /api/admin/dashboard - Dashboard stats
+// SECURITY: Requires admin/manager authentication
+export async function GET(request: NextRequest) {
+  // Auth check — this was previously missing (critical security fix)
+  const authResult = await verifyAdmin(request)
+  if (!authResult.success) return authErrorResponse(authResult)
+
   try {
     const [
       totalUsers,

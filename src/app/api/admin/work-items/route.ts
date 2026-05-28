@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { verifyAdmin, verifySuperAdmin, authErrorResponse } from '@/lib/auth-middleware'
+import { verifyAdmin, verifySuperAdmin, authErrorResponse, isSuperAdmin } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
 import { logger } from '@/lib/logger'
 import {
@@ -485,7 +485,8 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Non-super-admins can only delete items in certain states
-    if (authResult.user.role === 'admin' && authResult.user.email !== 'kholisakm@gmail.com') {
+    // Managers and regular admins need Super Admin for hard-delete of open/in_progress items
+    if (!isSuperAdmin(authResult.user.role, authResult.user.email)) {
       // Verify super admin for hard-delete of open/in_progress items
       const superAdminResult = await verifySuperAdmin(request)
       if (!superAdminResult.success && (existing.status === 'open' || existing.status === 'in_progress')) {

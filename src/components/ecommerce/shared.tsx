@@ -178,7 +178,7 @@ export function BottomNav() {
               className="absolute bottom-20 right-4 bg-card rounded-xl shadow-lg border border-border p-2 min-w-[160px]"
             >
               <p className="text-xs text-muted-foreground px-3 py-1.5 font-medium">Switch Role</p>
-              {(["buyer", "seller", ...(currentUser?.role === 'admin' ? ["admin" as const] : [])] as const).map((role) => (
+              {(["buyer", "seller", ...(['admin', 'manager'].includes(currentUser?.role || '') ? ["admin" as const, "manager" as const] : [])] as const).map((role) => (
                 <button
                   key={role}
                   onClick={() => handleRoleSwitch(role)}
@@ -812,6 +812,10 @@ const roleConfig: Record<string, { label: string; className: string }> = {
     label: "Seller",
     className: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
   },
+  manager: {
+    label: "Manager",
+    className: "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400",
+  },
   admin: {
     label: "Admin",
     className: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
@@ -819,7 +823,10 @@ const roleConfig: Record<string, { label: string; className: string }> = {
 }
 
 export function RoleBadge({ role, size = "sm" }: RoleBadgeProps) {
-  const config = roleConfig[role]
+  const config = roleConfig[role] || {
+    label: role?.charAt(0).toUpperCase() + role?.slice(1) || 'User',
+    className: "bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400",
+  }
   const sizeClasses = size === "sm" ? "text-[10px] px-1.5 py-0.5" : "text-xs px-2 py-1"
 
   return (
@@ -1513,7 +1520,7 @@ export function AdminBottomNav() {
               className="absolute bottom-20 right-4 bg-card rounded-xl shadow-lg border border-border p-2 min-w-[160px]"
             >
               <p className="text-xs text-muted-foreground px-3 py-1.5 font-medium">Switch Role</p>
-              {(["buyer", "seller", ...(currentUser?.role === 'admin' ? ["admin" as const] : [])] as const).map((role) => (
+              {(["buyer", "seller", ...(['admin', 'manager'].includes(currentUser?.role || '') ? ["admin" as const, "manager" as const] : [])] as const).map((role) => (
                 <button
                   key={role}
                   onClick={() => handleRoleSwitch(role)}
@@ -1616,7 +1623,7 @@ export function SellerBottomNav() {
               className="absolute bottom-20 right-4 bg-card rounded-xl shadow-lg border border-border p-2 min-w-[160px]"
             >
               <p className="text-xs text-muted-foreground px-3 py-1.5 font-medium">Switch Role</p>
-              {(["buyer", "seller", ...(currentUser?.role === 'admin' ? ["admin" as const] : [])] as const).map((role) => (
+              {(["buyer", "seller", ...(['admin', 'manager'].includes(currentUser?.role || '') ? ["admin" as const, "manager" as const] : [])] as const).map((role) => (
                 <button
                   key={role}
                   onClick={() => handleRoleSwitch(role)}

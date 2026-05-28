@@ -421,22 +421,25 @@ export function ProfileScreen() {
           </motion.button>
         </div>
 
-        {/* Admin Panel - Only show if user is actually an admin */}
-        {currentUser?.role === 'admin' && (
+        {/* Admin Panel - Show if user has admin/manager access */}
+        {['admin', 'manager', 'finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr'].includes(currentUser?.role || '') && (
           <div className="px-4 pb-4">
             <motion.button
               whileTap={{ scale: 0.98 }}
-              onClick={() => handleRoleSwitch("admin")}
+              onClick={() => handleRoleSwitch(currentUser?.role === 'manager' ? 'manager' : 'admin')}
               className="w-full"
             >
-              <div className="bg-gradient-to-r from-purple-600 to-violet-600 rounded-xl p-4 text-white text-left shadow-sm">
+              <div className={currentUser?.role === 'manager' 
+                ? "bg-gradient-to-r from-violet-600 to-purple-600 rounded-xl p-4 text-white text-left shadow-sm"
+                : "bg-gradient-to-r from-purple-600 to-violet-600 rounded-xl p-4 text-white text-left shadow-sm"
+              }>
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
                     <LayoutDashboard className="w-5 h-5" />
                   </div>
                   <div className="flex-1">
-                    <p className="text-sm font-bold">Admin Panel</p>
-                    <p className="text-xs opacity-90 mt-0.5">Kelola platform MartUp</p>
+                    <p className="text-sm font-bold">{currentUser?.role === 'manager' ? 'Manager Panel' : 'Admin Panel'}</p>
+                    <p className="text-xs opacity-90 mt-0.5">{currentUser?.role === 'manager' ? 'Kelola divisi & tim MartUp' : 'Kelola platform MartUp'}</p>
                   </div>
                   <ChevronRight className="w-5 h-5 opacity-70" />
                 </div>
@@ -451,13 +454,14 @@ export function ProfileScreen() {
             <div className="bg-card rounded-xl border border-border/50 p-4">
               <h3 className="text-sm font-bold text-foreground mb-3">Switch Role (Dev Only)</h3>
               <div className="flex gap-2">
-                {(["buyer", "seller", ...(currentUser?.role === 'admin' ? ["admin" as const] : [])] as const).map((role) => {
-                  const roleIcons = { buyer: User, seller: Store, admin: LayoutDashboard }
+                {(["buyer", "seller", ...(currentUser?.role === 'admin' || currentUser?.role === 'manager' ? ["admin" as const, "manager" as const] : [])] as const).map((role) => {
+                  const roleIcons = { buyer: User, seller: Store, admin: LayoutDashboard, manager: LayoutDashboard }
                   const RoleIcon = roleIcons[role]
                   const roleColors = {
                     buyer: userRole === "buyer" ? "bg-emerald-500 text-white border-emerald-500" : "bg-muted text-muted-foreground border-border",
                     seller: userRole === "seller" ? "bg-orange-500 text-white border-orange-500" : "bg-muted text-muted-foreground border-border",
                     admin: userRole === "admin" ? "bg-purple-500 text-white border-purple-500" : "bg-muted text-muted-foreground border-border",
+                    manager: userRole === "manager" ? "bg-violet-500 text-white border-violet-500" : "bg-muted text-muted-foreground border-border",
                   }
                   return (
                     <motion.button

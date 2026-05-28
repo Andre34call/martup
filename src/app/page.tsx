@@ -115,10 +115,11 @@ function ScreenRenderer() {
   const currentUser = useAppStore((s) => s.currentUser)
   const navigate = useAppStore((s) => s.navigate)
 
-  // Security: If currentScreen is an admin screen but user is not actually an admin, redirect to home
+  // Security: If currentScreen is an admin screen but user is not actually an admin/manager, redirect to home
   // Use useEffect to avoid calling navigate during render
   const isAdminScreen = ADMIN_SCREENS.includes(currentScreen)
-  const isActualAdmin = currentUser?.role === 'admin'
+  const ELEVATED_ROLES = ['admin', 'manager', 'finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr']
+  const isActualAdmin = ELEVATED_ROLES.includes(currentUser?.role || '')
 
   // Redirect non-admin users away from admin screens
   // SECURITY: Use useEffect to avoid calling navigate during render

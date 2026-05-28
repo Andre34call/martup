@@ -153,7 +153,7 @@ export async function PUT(request: NextRequest) {
     }
 
     // SECURITY: Verify ownership based on role
-    if (authResult.user.role === 'admin') {
+    if (['admin', 'manager'].includes(authResult.user.role)) {
       // Admin can update any order - no additional checks needed
     } else if (authResult.user.role === 'buyer') {
       // Buyers can only cancel their own orders

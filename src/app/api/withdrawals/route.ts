@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     const where: Record<string, unknown> = {}
 
     // SECURITY: Non-admin users can only see their own withdrawals
-    if (authResult.user.role === 'admin') {
+    if (['admin', 'manager'].includes(authResult.user.role)) {
       // Admin can filter by sellerId or see all
       if (sellerId) where.sellerId = sellerId
     } else {

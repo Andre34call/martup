@@ -16,7 +16,7 @@ model User {
   phone         String?
   name          String
   avatar        String?
-  role          String    @default("buyer") // buyer, seller, admin, finance, pr, tech, cs, marketing, operations
+  role          String    @default("buyer") // buyer, seller, manager, admin, finance, pr, tech, cs, marketing, operations
   divisionId    String?   // FK to Division
   password      String?
   otpCode            String?

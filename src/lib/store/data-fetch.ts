@@ -256,8 +256,8 @@ export const createDataFetchSlice: StateCreator<AppStore, [], [], DataFetchSlice
         }
       }
 
-      // Fetch platform settings for admin users
-      if (data.user?.role === 'admin') {
+      // Fetch platform settings for admin/manager users
+      if (['admin', 'manager', 'finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr'].includes(data.user?.role)) {
         get().fetchPlatformSettings()
       }
 

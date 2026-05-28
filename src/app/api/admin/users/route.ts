@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { verifyAdmin, verifySuperAdmin, authErrorResponse } from '@/lib/auth-middleware'
+import { verifyAdmin, verifyManager, verifySuperAdmin, authErrorResponse, isSuperAdmin, isManager, ELEVATED_ROLES, MANAGER_ASSIGNABLE_ROLES, DIVISION_ROLES } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
+import { env } from '@/lib/env'
 
 import { logger } from '@/lib/logger'
 
-// Super admin email — the only account that can promote users to admin/division roles
-const SUPER_ADMIN_EMAIL = 'kholisakm@gmail.com'
+// SECURITY: Super admin email — centralized from env.ts (no more hardcoded duplication)
+const SUPER_ADMIN_EMAIL = env.SUPER_ADMIN_EMAIL
 
 // Division role mapping — which role corresponds to which division slug
 const DIVISION_SLUG_ROLE_MAP: Record<string, string> = {
@@ -77,10 +78,16 @@ export async function GET(request: NextRequest) {
       }
     })
 
+    // Determine user's permission level for frontend
+    const isUserSuperAdmin = isSuperAdmin(authResult.user.role, authResult.user.email)
+    const isUserManager = isManager(authResult.user.role)
+
     return NextResponse.json(serializeDecimal({
       success: true,
       data: mapped,
-      isSuperAdmin: authResult.user.email === SUPER_ADMIN_EMAIL,
+      // Permission flags — let frontend know what actions are available
+      isSuperAdmin: isUserSuperAdmin,
+      isManager: isUserSuperAdmin || isUserManager, // Super admin can also do manager things
     }))
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error'
@@ -93,7 +100,10 @@ export async function GET(request: NextRequest) {
 }
 
 // PUT /api/admin/users - Update user (verify, block, unblock, change role)
-// Role changes (promote to admin/division) require super admin
+// Role changes follow the hierarchy:
+// - Super Admin: can promote to any role including manager
+// - Manager: can promote to admin/division roles, but NOT to manager
+// - Regular Admin: can only verify/block/unblock, cannot change roles
 export async function PUT(request: NextRequest) {
   const authResult = await verifyAdmin(request)
   if (!authResult.success) return authErrorResponse(authResult)
@@ -121,10 +131,22 @@ export async function PUT(request: NextRequest) {
       )
     }
 
+    // Determine current user's permission level
+    const isCurrentUserSuperAdmin = isSuperAdmin(authResult.user.role, authResult.user.email)
+    const isCurrentUserManager = isManager(authResult.user.role)
+
     // Protect super admin from being modified by anyone
-    if (targetUser.email === SUPER_ADMIN_EMAIL && authResult.user.email !== SUPER_ADMIN_EMAIL) {
+    if (isSuperAdmin(targetUser.role, targetUser.email) && !isCurrentUserSuperAdmin) {
       return NextResponse.json(
         { success: false, error: 'Super Admin tidak dapat diubah oleh admin lain' },
+        { status: 403 }
+      )
+    }
+
+    // Protect manager from being modified by non-super-admin
+    if (isManager(targetUser.role) && !isCurrentUserSuperAdmin) {
+      return NextResponse.json(
+        { success: false, error: 'Manager hanya dapat diubah oleh Super Admin' },
         { status: 403 }
       )
     }
@@ -146,7 +168,7 @@ export async function PUT(request: NextRequest) {
     if (role !== undefined || updates?.role !== undefined) {
       const roleValue = role || updates?.role
       // Validate role value
-      const validRoles = ['buyer', 'seller', 'admin', 'finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr']
+      const validRoles = ['buyer', 'seller', 'admin', 'manager', ...DIVISION_ROLES]
       if (!validRoles.includes(roleValue)) {
         return NextResponse.json(
           { success: false, error: `Invalid role. Must be one of: ${validRoles.join(', ')}` },
@@ -154,26 +176,40 @@ export async function PUT(request: NextRequest) {
         )
       }
 
-      // SECURITY: Only super admin can promote to admin or division roles
-      const elevatedRoles = ['admin', 'finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr']
-      const targetCurrentRole = targetUser.role
-      const isPromotingToElevated = elevatedRoles.includes(roleValue) && !elevatedRoles.includes(targetCurrentRole)
+      // HIERARCHY ENFORCEMENT: Role changes are restricted by permission level
+      const isPromotingToElevated = (ELEVATED_ROLES as readonly string[]).includes(roleValue) && !(ELEVATED_ROLES as readonly string[]).includes(targetUser.role)
+      const isPromotingToManager = roleValue === 'manager'
 
-      if (isPromotingToElevated && authResult.user.email !== SUPER_ADMIN_EMAIL) {
-        return NextResponse.json(
-          { success: false, error: 'Hanya Super Admin yang dapat mempromosikan user ke role admin atau divisi' },
-          { status: 403 }
-        )
+      if (isPromotingToElevated || isPromotingToManager) {
+        // Only Super Admin can promote to Manager
+        if (isPromotingToManager && !isCurrentUserSuperAdmin) {
+          return NextResponse.json(
+            { success: false, error: 'Hanya Super Admin yang dapat mempromosikan user ke role Manager' },
+            { status: 403 }
+          )
+        }
+
+        // Manager can promote to admin/division roles (but not manager)
+        // Regular admin cannot promote at all
+        if (isPromotingToElevated && !isPromotingToManager) {
+          if (!isCurrentUserSuperAdmin && !isCurrentUserManager) {
+            return NextResponse.json(
+              { success: false, error: 'Hanya Manager atau Super Admin yang dapat mempromosikan user ke role admin atau divisi' },
+              { status: 403 }
+            )
+          }
+          // Manager cannot promote to manager (already handled above)
+        }
       }
 
       // SECURITY: Nobody can promote to super admin (role='admin' + super admin email)
-      if (roleValue === 'admin' && targetUser.email !== SUPER_ADMIN_EMAIL) {
-        // Allow super admin to promote to admin role, but this is NOT super admin
+      if (roleValue === 'admin' && !isSuperAdmin(roleValue, targetUser.email)) {
+        // Allow super admin/manager to promote to admin role, but this is NOT super admin
         // Super admin is identified by email, not just role
       }
 
       // Prevent admin from removing their own admin role
-      if (roleValue !== 'admin' && userId === authResult.user.id) {
+      if (roleValue !== 'admin' && roleValue !== 'manager' && userId === authResult.user.id) {
         return NextResponse.json(
           { success: false, error: 'Cannot remove your own admin role' },
           { status: 400 }
@@ -182,8 +218,14 @@ export async function PUT(request: NextRequest) {
       updateData.role = roleValue
     }
 
-    // Support divisionId updates
+    // Support divisionId updates — only manager/super admin can change
     if (updates?.divisionId !== undefined) {
+      if (!isCurrentUserSuperAdmin && !isCurrentUserManager) {
+        return NextResponse.json(
+          { success: false, error: 'Hanya Manager atau Super Admin yang dapat mengubah divisi user' },
+          { status: 403 }
+        )
+      }
       updateData.divisionId = updates.divisionId
     }
 
@@ -219,20 +261,32 @@ export async function PUT(request: NextRequest) {
   }
 }
 
-// PATCH /api/admin/users/promote - Super admin promotes user to division admin
+// PATCH /api/admin/users/promote - Manager/Super Admin promotes user to division admin
 // This is the dedicated endpoint for promoting users to division-based roles
 export async function PATCH(request: NextRequest) {
-  const authResult = await verifySuperAdmin(request)
+  // Manager or Super Admin can promote to division admin
+  const authResult = await verifyManager(request)
   if (!authResult.success) return authErrorResponse(authResult)
 
   try {
     const body = await request.json()
-    const { userId, divisionId } = body
+    const { userId, divisionId, promoteToManager } = body
 
     if (!userId) {
       return NextResponse.json(
         { success: false, error: 'userId is required' },
         { status: 400 }
+      )
+    }
+
+    // Determine current user's permission level
+    const isCurrentUserSuperAdmin = isSuperAdmin(authResult.user.role, authResult.user.email)
+
+    // Only Super Admin can promote to Manager
+    if (promoteToManager && !isCurrentUserSuperAdmin) {
+      return NextResponse.json(
+        { success: false, error: 'Hanya Super Admin yang dapat mempromosikan user ke Manager' },
+        { status: 403 }
       )
     }
 
@@ -248,10 +302,18 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
-    // Cannot promote super admin
-    if (targetUser.email === SUPER_ADMIN_EMAIL) {
+    // Cannot modify super admin
+    if (isSuperAdmin(targetUser.role, targetUser.email)) {
       return NextResponse.json(
         { success: false, error: 'Super Admin tidak dapat diubah' },
+        { status: 403 }
+      )
+    }
+
+    // Cannot modify manager (only super admin can)
+    if (isManager(targetUser.role) && !isCurrentUserSuperAdmin) {
+      return NextResponse.json(
+        { success: false, error: 'Manager hanya dapat diubah oleh Super Admin' },
         { status: 403 }
       )
     }
@@ -259,7 +321,11 @@ export async function PATCH(request: NextRequest) {
     let newRole = ''
     let newDivisionId: string | null = divisionId || null
 
-    if (divisionId) {
+    if (promoteToManager) {
+      // Promote to Manager role
+      newRole = 'manager'
+      newDivisionId = null // Managers are not tied to a specific division
+    } else if (divisionId) {
       // Look up the division to determine the role
       const division = await db.division.findUnique({
         where: { id: divisionId },
@@ -282,7 +348,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Validate the role
-    const validRoles = ['admin', 'finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr']
+    const validRoles = ['admin', 'manager', ...DIVISION_ROLES]
     if (!validRoles.includes(newRole)) {
       return NextResponse.json(
         { success: false, error: `Role "${newRole}" tidak valid untuk promosi` },
@@ -320,7 +386,7 @@ export async function PATCH(request: NextRequest) {
     // Create notification for the promoted user
     const divisionName = newDivisionId
       ? (await db.division.findUnique({ where: { id: newDivisionId }, select: { name: true } }))?.name || newRole
-      : 'Admin'
+      : newRole === 'manager' ? 'Manager' : 'Admin'
 
     await db.notification.create({
       data: {
@@ -331,7 +397,7 @@ export async function PATCH(request: NextRequest) {
       },
     })
 
-    logger.info({ promotedUserId: userId, newRole, divisionId: newDivisionId, promotedBy: authResult.user.id }, 'User promoted by super admin')
+    logger.info({ promotedUserId: userId, newRole, divisionId: newDivisionId, promotedBy: authResult.user.id }, 'User promoted by manager/super admin')
 
     return NextResponse.json(serializeDecimal({
       success: true,
@@ -379,11 +445,20 @@ export async function DELETE(request: NextRequest) {
     // Protect super admin from deletion
     const targetUser = await db.user.findUnique({
       where: { id: userId },
-      select: { email: true },
+      select: { email: true, role: true },
     })
-    if (targetUser?.email === SUPER_ADMIN_EMAIL) {
+
+    if (targetUser && isSuperAdmin(targetUser.role, targetUser.email)) {
       return NextResponse.json(
         { success: false, error: 'Super Admin tidak dapat dihapus' },
+        { status: 403 }
+      )
+    }
+
+    // Only Super Admin can delete a Manager
+    if (targetUser && isManager(targetUser.role) && !isSuperAdmin(authResult.user.role, authResult.user.email)) {
+      return NextResponse.json(
+        { success: false, error: 'Hanya Super Admin yang dapat menghapus Manager' },
         { status: 403 }
       )
     }

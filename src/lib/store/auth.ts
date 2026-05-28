@@ -182,7 +182,7 @@ export const createAuthSlice: StateCreator<AppStore, [], [], AuthSlice> = (set, 
     set({
       userRole: role,
       currentUser: get().currentUser ? { ...get().currentUser!, role } : null,
-      currentScreen: role === 'buyer' ? 'home' : role === 'seller' ? 'seller-dashboard' : 'admin-dashboard',
+      currentScreen: role === 'buyer' ? 'home' : role === 'seller' ? 'seller-dashboard' : ['admin', 'manager'].includes(role) ? 'admin-dashboard' : 'home',
       isLoading: false,
     })
 

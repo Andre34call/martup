@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
+import { verifyAdmin, verifySuperAdmin, authErrorResponse } from '@/lib/auth-middleware'
 import { db } from '@/lib/db'
 
 import { logger, logSecurityEvent } from '@/lib/logger'
@@ -79,9 +79,10 @@ export async function GET(request: NextRequest) {
 }
 
 // PUT /api/admin/settings - Update platform settings
+// SECURITY: Only Super Admin can change platform settings (commission rate, etc.)
 export async function PUT(request: NextRequest) {
   try {
-    const authResult = await verifyAdmin(request)
+    const authResult = await verifySuperAdmin(request)
     if (!authResult.success) return authErrorResponse(authResult)
 
     const body = await request.json()

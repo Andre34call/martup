@@ -171,7 +171,7 @@ export async function PUT(
       select: { id: true },
     })
     const isSeller = seller !== null && order.sellerId === seller.id
-    const isAdmin = authResult.user.role === 'admin'
+    const isAdmin = ['admin', 'manager'].includes(authResult.user.role)
 
     // Step 7: Authorization checks — who can set which status
     if (status === 'cancelled') {

@@ -10,6 +10,23 @@ import { env } from '@/lib/env'
 // SECURITY OVERHAUL: Removed insecure x-auth-user-id method
 // Only NextAuth session and HMAC-signed bearer tokens are accepted
 
+// ==================== ROLE HIERARCHY ====================
+// Super Admin (role='admin' + email=env.SUPER_ADMIN_EMAIL) — Full access, can promote anyone
+//   └── Manager (role='manager') — Can manage divisions, promote to division admin, but not to manager/super admin
+//        └── Division Admin (role='finance'|'pr'|'tech'|'cs'|'marketing'|'operations'|'legal'|'hr') — Division-specific access
+//             └── Admin (role='admin' without super admin email) — Basic admin panel access
+//                  └── Seller (role='seller') — Store management
+//                       └── Buyer (role='buyer') — Shopping only
+
+// All roles that have admin/staff-level access (above seller/buyer)
+const ELEVATED_ROLES = ['admin', 'manager', 'finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr'] as const
+// Division-specific roles (below manager, above regular admin in division scope)
+const DIVISION_ROLES = ['finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr'] as const
+// Roles that a Manager can assign (division admins + regular admin)
+const MANAGER_ASSIGNABLE_ROLES = ['admin', ...DIVISION_ROLES] as const
+
+export { ELEVATED_ROLES, DIVISION_ROLES, MANAGER_ASSIGNABLE_ROLES }
+
 // ==================== RATE LIMITING ====================
 // Uses the advanced rate limiter from rate-limit.ts which supports
 // both in-memory (dev) and Redis/Vercel KV (production) backends.
@@ -194,15 +211,43 @@ export async function verifyAuth(request: NextRequest): Promise<AuthResult | Aut
   return { success: false, error: 'Unauthorized - Please login first', status: 401 }
 }
 
+// ==================== ROLE CHECK HELPERS ====================
+
+/**
+ * Check if a user is a Super Admin (role='admin' + specific email).
+ */
+export function isSuperAdmin(role: string, email: string): boolean {
+  return role === 'admin' && email === env.SUPER_ADMIN_EMAIL
+}
+
+/**
+ * Check if a user is a Manager.
+ */
+export function isManager(role: string): boolean {
+  return role === 'manager'
+}
+
+/**
+ * Check if a user has any elevated role (admin, manager, or division staff).
+ */
+export function isElevatedRole(role: string): boolean {
+  return (ELEVATED_ROLES as readonly string[]).includes(role)
+}
+
+// ==================== ROLE-LEVEL VERIFICATION ====================
+
 /**
  * Verify that the request comes from an admin user.
+ * Includes: admin, manager, and all division roles.
+ * This is the base check for any admin panel access.
  */
 export async function verifyAdmin(request: NextRequest): Promise<AuthResult | AuthError> {
   const authResult = await verifyAuth(request)
 
   if (!authResult.success) return authResult
 
-  const adminRoles = ['admin']
+  // Admin panel access: admin, manager, and all division roles
+  const adminRoles = ['admin', 'manager', ...DIVISION_ROLES]
   if (!adminRoles.includes(authResult.user.role)) {
     return { success: false, error: 'Forbidden - Admin access required', status: 403 }
   }
@@ -211,9 +256,29 @@ export async function verifyAdmin(request: NextRequest): Promise<AuthResult | Au
 }
 
 /**
+ * Verify that the request comes from a Manager or Super Admin.
+ * Managers can manage divisions, promote to division admins, but NOT to manager/super admin.
+ */
+export async function verifyManager(request: NextRequest): Promise<AuthResult | AuthError> {
+  const authResult = await verifyAuth(request)
+
+  if (!authResult.success) return authResult
+
+  // Manager or Super Admin only
+  const isSuperAdminUser = isSuperAdmin(authResult.user.role, authResult.user.email)
+  const isManagerUser = isManager(authResult.user.role)
+
+  if (!isSuperAdminUser && !isManagerUser) {
+    return { success: false, error: 'Forbidden - Manager or Super Admin access required', status: 403 }
+  }
+
+  return authResult
+}
+
+/**
  * Verify that the request comes from a super admin user.
- * Super admin is the primary admin identified by email (kholisakm@gmail.com).
- * Only super admin can promote users to division admins or remove admin roles.
+ * Super admin is the primary admin identified by email (from env.SUPER_ADMIN_EMAIL).
+ * Only super admin can promote users to manager or remove admin roles.
  */
 export async function verifySuperAdmin(request: NextRequest): Promise<AuthResult | AuthError> {
   const authResult = await verifyAuth(request)
@@ -221,8 +286,7 @@ export async function verifySuperAdmin(request: NextRequest): Promise<AuthResult
   if (!authResult.success) return authResult
 
   // Super admin must have role 'admin' AND specific email
-  const SUPER_ADMIN_EMAIL = env.SUPER_ADMIN_EMAIL
-  if (authResult.user.role !== 'admin' || authResult.user.email !== SUPER_ADMIN_EMAIL) {
+  if (!isSuperAdmin(authResult.user.role, authResult.user.email)) {
     return { success: false, error: 'Forbidden - Super Admin access required', status: 403 }
   }
 
@@ -231,14 +295,14 @@ export async function verifySuperAdmin(request: NextRequest): Promise<AuthResult
 
 /**
  * Verify that the request comes from an admin or staff user.
+ * Includes all elevated roles: admin, manager, and division staff.
  */
 export async function verifyStaff(request: NextRequest): Promise<AuthResult | AuthError> {
   const authResult = await verifyAuth(request)
 
   if (!authResult.success) return authResult
 
-  const staffRoles = ['admin', 'finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr']
-  if (!staffRoles.includes(authResult.user.role)) {
+  if (!isElevatedRole(authResult.user.role)) {
     return { success: false, error: 'Forbidden - Staff access required', status: 403 }
   }
 

@@ -1,6 +1,6 @@
 // ==================== TYPES ====================
 
-export type UserRole = 'buyer' | 'seller' | 'admin' | 'finance' | 'pr' | 'tech' | 'cs' | 'marketing' | 'operations' | 'legal' | 'hr'
+export type UserRole = 'buyer' | 'seller' | 'admin' | 'manager' | 'finance' | 'pr' | 'tech' | 'cs' | 'marketing' | 'operations' | 'legal' | 'hr'
 export type ScreenName =
   | 'splash' | 'onboarding' | 'login' | 'register' | 'otp' | 'forgot-password' | 'reset-password' | 'email-verification'
   | 'home' | 'search' | 'category' | 'product-detail' | 'wishlist'
@@ -448,20 +448,25 @@ export const WORK_STATUS_DISPLAY: Record<string, { label: string; color: string 
 }
 
 // All staff roles (division-based)
-export const STAFF_ROLES: UserRole[] = ['finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr']
+export const STAFF_ROLES: UserRole[] = ['manager', 'finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr']
 
-// Role display info
-export const ROLE_DISPLAY: Record<string, { label: string; color: string; icon: string }> = {
-  buyer: { label: 'Buyer', color: 'emerald', icon: '🛒' },
-  seller: { label: 'Seller', color: 'orange', icon: '🏪' },
-  admin: { label: 'Admin', color: 'purple', icon: '👑' },
-  superadmin: { label: 'Super Admin', color: 'purple', icon: '👑' },
-  finance: { label: 'Finance', color: 'emerald', icon: '💰' },
-  pr: { label: 'PR & Komunikasi', color: 'blue', icon: '📢' },
-  tech: { label: 'Tech & Bug', color: 'purple', icon: '🐛' },
-  cs: { label: 'Customer Service', color: 'orange', icon: '🎧' },
-  marketing: { label: 'Marketing', color: 'pink', icon: '📊' },
-  operations: { label: 'Operations', color: 'amber', icon: '⚙️' },
-  legal: { label: 'Legal', color: 'red', icon: '⚖️' },
-  hr: { label: 'HR & Admin', color: 'teal', icon: '👥' },
+// Roles that have elevated access (above seller/buyer)
+export const ELEVATED_ROLES: UserRole[] = ['admin', 'manager', 'finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr']
+
+// Role display info — sorted by hierarchy level
+// Super Admin > Manager > Division Admin > Admin > Seller > Buyer
+export const ROLE_DISPLAY: Record<string, { label: string; color: string; icon: string; level: number }> = {
+  superadmin: { label: 'Super Admin', color: 'purple', icon: '👑', level: 100 },
+  manager: { label: 'Manager', color: 'violet', icon: '👔', level: 80 },
+  admin: { label: 'Admin', color: 'purple', icon: '🛡️', level: 60 },
+  finance: { label: 'Finance', color: 'emerald', icon: '💰', level: 50 },
+  pr: { label: 'PR & Komunikasi', color: 'blue', icon: '📢', level: 50 },
+  tech: { label: 'Tech & Bug', color: 'purple', icon: '🐛', level: 50 },
+  cs: { label: 'Customer Service', color: 'orange', icon: '🎧', level: 50 },
+  marketing: { label: 'Marketing', color: 'pink', icon: '📊', level: 50 },
+  operations: { label: 'Operations', color: 'amber', icon: '⚙️', level: 50 },
+  legal: { label: 'Legal', color: 'red', icon: '⚖️', level: 50 },
+  hr: { label: 'HR & Admin', color: 'teal', icon: '👥', level: 50 },
+  seller: { label: 'Seller', color: 'orange', icon: '🏪', level: 20 },
+  buyer: { label: 'Buyer', color: 'emerald', icon: '🛒', level: 10 },
 }

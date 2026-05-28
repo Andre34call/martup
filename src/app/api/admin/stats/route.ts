@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
       db.user.count({
         where: {
           role: {
-            in: ['admin', 'finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr'],
+            in: ['admin', 'manager', 'finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr'],
           },
         },
       }),
