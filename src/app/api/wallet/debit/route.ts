@@ -60,13 +60,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check sufficient balance
-    if (Number(wallet.balance) < amount) {
-      return NextResponse.json(
-        { success: false, error: `Saldo tidak mencukupi. Saldo: Rp ${Number(wallet.balance).toLocaleString('id-ID')}, Dibutuhkan: Rp ${amount.toLocaleString('id-ID')}` },
-        { status: 400 }
-      )
-    }
+    // Note: Balance check is ALSO done inside the transaction below for race condition safety.
+    // This pre-check provides a nicer error message before entering the transaction.
 
     // Find and validate the order
     const order = await db.order.findUnique({
@@ -146,6 +141,15 @@ export async function POST(request: NextRequest) {
 
     // Process everything in a single database transaction
     const result = await db.$transaction(async (tx) => {
+      // SECURITY: Re-fetch wallet inside transaction to prevent race conditions (double-spend)
+      const currentWallet = await tx.wallet.findUnique({
+        where: { id: wallet.id },
+      })
+
+      if (!currentWallet || Number(currentWallet.balance) < amount) {
+        throw new Error(`Saldo tidak mencukupi. Saldo: Rp ${Number(currentWallet?.balance ?? 0).toLocaleString('id-ID')}, Dibutuhkan: Rp ${amount.toLocaleString('id-ID')}`)
+      }
+
       // 1. Deduct wallet balance
       const updatedWallet = await tx.wallet.update({
         where: { id: wallet.id },

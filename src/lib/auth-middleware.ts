@@ -68,10 +68,14 @@ const TOKEN_SECRET = (() => {
     if (process.env.NEXT_PHASE === 'phase-production-build') {
       return 'build-placeholder-not-for-production-use'
     }
-    // On Vercel serverless, don't throw at module level — log and use a fallback
-    // This prevents crashing the entire function on cold start
-    console.error('[FATAL] TOKEN_SECRET or NEXTAUTH_SECRET environment variable must be set. Token generation will fail.')
-    return 'missing-secret-placeholder-tokens-will-not-work'
+    // SECURITY: Do NOT use a fallback secret in production.
+    // If TOKEN_SECRET is missing, token verification will fail (not succeed with a known secret).
+    // This prevents token forgery attacks.
+    console.error('[FATAL] TOKEN_SECRET environment variable must be set. Auth tokens will not validate correctly.')
+    // Return a random string that changes every server start — tokens signed with this
+    // won't validate on subsequent starts, effectively disabling the bearer token auth path.
+    // Users will need to re-login. This is safer than a hardcoded placeholder.
+    return crypto.randomBytes(32).toString('hex')
   }
   return secret
 })()

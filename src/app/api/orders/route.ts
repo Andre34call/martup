@@ -469,7 +469,27 @@ export async function POST(request: NextRequest) {
       }
 
       // Update product sold count and stock
+      // SECURITY: Re-validate stock inside transaction to prevent race conditions (oversell)
       for (const item of items as Array<{ productId: string; quantity: number; variantId?: string | null }>) {
+        const currentProduct = await tx.product.findUnique({
+          where: { id: item.productId },
+          select: { stock: true, name: true },
+        })
+        if (!currentProduct || currentProduct.stock < item.quantity) {
+          throw new Error(`Stok tidak mencukupi untuk "${currentProduct?.name || item.productId}". Tersedia: ${currentProduct?.stock ?? 0}, Diminta: ${item.quantity}`)
+        }
+
+        // Also check variant stock if variantId is provided
+        if (item.variantId) {
+          const currentVariant = await tx.productVariant.findUnique({
+            where: { id: item.variantId },
+            select: { stock: true, name: true },
+          })
+          if (currentVariant && currentVariant.stock < item.quantity) {
+            throw new Error(`Stok varian tidak mencukupi untuk "${currentVariant.name}". Tersedia: ${currentVariant.stock}, Diminta: ${item.quantity}`)
+          }
+        }
+
         await tx.product.update({
           where: { id: item.productId },
           data: {

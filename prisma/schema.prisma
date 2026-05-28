@@ -490,6 +490,7 @@ model VoucherUsage {
   voucher   Voucher  @relation(fields: [voucherId], references: [id])
   order     Order    @relation(fields: [orderId], references: [id])
 
+  @@unique([voucherId, userId, orderId])
   @@index([voucherId, userId])
 }
 

@@ -463,7 +463,7 @@ export function CheckoutScreen() {
       // For wallet payment: order status = 'paid' immediately
       // For Midtrans/Card/COD: order status = 'pending' (awaiting payment)
       const isImmediatePayment = selectedPayment === 'wallet'
-      const createdOrderIds: string[] = []
+      const createdOrders: { id: string; totalAmount: number }[] = []
 
       for (const group of groupedBySeller) {
         const sellerShipping = shippingBySeller[group.seller.id]
@@ -514,7 +514,7 @@ export function CheckoutScreen() {
 
           if (data.success && data.data) {
             const apiOrder = data.data
-            createdOrderIds.push(apiOrder.id)
+            createdOrders.push({ id: apiOrder.id, totalAmount: groupTotal })
             const localOrder = {
               id: apiOrder.id,
               orderNumber: apiOrder.orderNumber,
@@ -568,17 +568,18 @@ export function CheckoutScreen() {
 
       if (selectedPayment === 'wallet') {
         // Wallet payment: pay each order via /api/wallet/debit
+        // IMPORTANT: Use per-order amount (not combined total) to match order totalAmount
         if (selectedVoucher) markVoucherUsed(selectedVoucher.id)
 
         let walletPaymentSuccess = true
-        for (const orderId of createdOrderIds) {
+        for (const order of createdOrders) {
           try {
             const walletRes = await fetch('/api/wallet/debit', {
               method: 'POST',
               headers: getAuthHeaders(true),
               body: JSON.stringify({
-                orderId,
-                amount: totalAmount,
+                orderId: order.id,
+                amount: order.totalAmount,
                 description: `Pembayaran pesanan via MartUp Pay`,
               }),
             })
@@ -612,25 +613,25 @@ export function CheckoutScreen() {
         // Midtrans / Card payment: open Snap popup for each seller order
         if (selectedVoucher) markVoucherUsed(selectedVoucher.id)
 
-        if (createdOrderIds.length > 0) {
+        if (createdOrders.length > 0) {
           try {
             let allSuccess = true
             let anyPending = false
 
             // Process each order's payment sequentially
             // (Each seller gets their own Midtrans transaction)
-            for (let i = 0; i < createdOrderIds.length; i++) {
+            for (let i = 0; i < createdOrders.length; i++) {
               const paymentRes = await fetch('/api/payment/create', {
                 method: 'POST',
                 headers: getAuthHeaders(true),
-                body: JSON.stringify({ orderId: createdOrderIds[i] }),
+                body: JSON.stringify({ orderId: createdOrders[i].id }),
               })
               const paymentData = await paymentRes.json()
 
               if (paymentData.success && paymentData.data?.token) {
                 // Show progress for multi-seller
-                if (createdOrderIds.length > 1) {
-                  showToast(`Pembayaran ${i + 1} dari ${createdOrderIds.length} toko...`, 'info')
+                if (createdOrders.length > 1) {
+                  showToast(`Pembayaran ${i + 1} dari ${createdOrders.length} toko...`, 'info')
                 }
 
                 // Open Midtrans Snap popup
@@ -651,7 +652,7 @@ export function CheckoutScreen() {
                 }
               } else {
                 // Snap token creation failed for this order
-                logger.warn({ component: 'checkout', orderId: createdOrderIds[i], err: paymentData.error }, 'Snap token creation failed')
+                logger.warn({ component: 'checkout', orderId: createdOrders[i].id, err: paymentData.error }, 'Snap token creation failed')
                 allSuccess = false
               }
             }

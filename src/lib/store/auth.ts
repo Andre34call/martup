@@ -22,6 +22,7 @@ export const createAuthSlice: StateCreator<AppStore, [], [], AuthSlice> = (set, 
     userRole: user.role,
     currentScreen: 'home',
     avatarUrl: user.avatar || null,
+    resetPasswordToken: '', // Clear any stale reset token on login
   }),
 
   logout: async () => {

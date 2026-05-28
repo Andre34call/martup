@@ -1,9 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 
 // GET /api/debug/health - Diagnostic endpoint to check Vercel deployment health
-// This helps identify missing env vars and database connectivity issues
+// SECURITY: Only available in development OR with admin authentication
 export async function GET(request: NextRequest) {
+  // SECURITY: Block this endpoint in production unless admin-authenticated
+  if (process.env.NODE_ENV === 'production') {
+    const authResult = await verifyAdmin(request)
+    if (!authResult.success) {
+      return authErrorResponse(authResult)
+    }
+  }
+
   const diagnostics: Record<string, { status: string; detail?: string }> = {}
 
   // 1. Check critical environment variables

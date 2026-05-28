@@ -116,7 +116,7 @@ export async function proxy(request: NextRequest) {
       `script-src 'self' 'nonce-${nonce}' https://vercel.live https://va.vercel-scripts.com https://app.midtrans.com https://app.sandbox.midtrans.com`,
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' https://fonts.gstatic.com",
-      "img-src 'self' data: blob: https://rzrfouzuxcxdbhadbppi.supabase.co https://vercel.live https://app.midtrans.com",
+      "img-src 'self' data: blob: https://rzrfouzuxcxdbhadbppi.supabase.co https://images.unsplash.com https://vercel.live https://app.midtrans.com",
       "connect-src 'self' https://rzrfouzuxcxdbhadbppi.supabase.co wss: https://va.vercel-scripts.com https://app.midtrans.com https://app.sandbox.midtrans.com",
       "frame-src https://app.midtrans.com https://app.sandbox.midtrans.com",
       "frame-ancestors 'none'",

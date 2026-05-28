@@ -251,18 +251,22 @@ export default function Home() {
   const isSubScreen = SUB_SCREENS.includes(currentScreen)
 
   // Detect password reset token in URL on mount
+  // Only redirect to reset-password if user is NOT already authenticated
+  const isAuthenticated = useAppStore((s) => s.isAuthenticated)
   useEffect(() => {
     if (typeof window === 'undefined') return
     const params = new URLSearchParams(window.location.search)
     const resetToken = params.get('reset-token')
     if (resetToken) {
+      // Clean URL first, regardless of auth state
+      window.history.replaceState({}, '', '/')
+      // If already authenticated, ignore the reset token — user can use "Ubah Password" in settings
+      if (isAuthenticated) return
       // Store the token and navigate to reset-password screen
       useAppStore.setState({ resetPasswordToken: resetToken })
       navigate('reset-password')
-      // Clean URL without reload
-      window.history.replaceState({}, '', '/')
     }
-  }, [navigate])
+  }, [navigate, isAuthenticated])
 
   const getBottomNav = () => {
     if (isAuthScreen || isSubScreen) return null

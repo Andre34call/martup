@@ -1,12 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAuth } from '@/lib/auth-helpers'
-
+import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
 import { logger } from '@/lib/logger'
+
 // GET /api/wallet/mutations — Get wallet mutation history
 export async function GET(request: NextRequest) {
   try {
-    const user = await requireAuth()
+    // SECURITY: Use verifyAuth (supports both NextAuth session and bearer tokens)
+    // Previously used requireAuth which only checked NextAuth sessions,
+    // preventing email/password users from accessing their wallet mutations.
+    const authResult = await verifyAuth(request)
+    if (!authResult.success) {
+      return authErrorResponse(authResult)
+    }
+    const userId = authResult.user.id
     const { searchParams } = request.nextUrl
 
     const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10))
@@ -15,13 +22,13 @@ export async function GET(request: NextRequest) {
 
     // Get or create wallet
     let wallet = await db.wallet.findUnique({
-      where: { userId: user.id },
+      where: { userId },
     })
 
     if (!wallet) {
       wallet = await db.wallet.create({
         data: {
-          userId: user.id,
+          userId,
           balance: 0,
           holdBalance: 0,
         },

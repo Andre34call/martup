@@ -34,10 +34,22 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // New password minimum length
+    // New password minimum length and complexity (same as registration)
     if (newPassword.length < 8) {
       return NextResponse.json(
         { success: false, error: 'Password baru minimal 8 karakter' },
+        { status: 400 }
+      )
+    }
+    if (!/[a-zA-Z]/.test(newPassword)) {
+      return NextResponse.json(
+        { success: false, error: 'Password baru harus mengandung huruf' },
+        { status: 400 }
+      )
+    }
+    if (!/\d/.test(newPassword)) {
+      return NextResponse.json(
+        { success: false, error: 'Password baru harus mengandung angka' },
         { status: 400 }
       )
     }
