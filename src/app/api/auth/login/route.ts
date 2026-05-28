@@ -47,9 +47,11 @@ export async function POST(request: NextRequest) {
       )
     }
     const { email, password } = validation.data
+    logger.info({ email }, 'Login attempt')
 
-    // Find user by email
-    const user = await db.user.findUnique({
+    // Find user by email (lowercased by Zod schema)
+    // Also try case-insensitive lookup for backward compatibility with existing mixed-case emails
+    let user = await db.user.findUnique({
       where: { email },
       include: {
         seller: true,
@@ -57,17 +59,45 @@ export async function POST(request: NextRequest) {
       },
     })
 
+    // Fallback: try case-insensitive lookup for legacy mixed-case emails in the database
+    if (!user) {
+      user = await db.user.findFirst({
+        where: { email: { equals: email, mode: 'insensitive' } },
+        include: {
+          seller: true,
+          wallet: true,
+        },
+      })
+      // Auto-normalize the email in the database so future logins use the direct unique lookup
+      if (user && user.email !== email) {
+        logger.info({ oldEmail: user.email, newEmail: email }, 'Auto-normalizing email to lowercase')
+        await db.user.update({
+          where: { id: user.id },
+          data: { email },
+        })
+      }
+    }
+
     // User not found
     if (!user) {
+      logger.info({ email }, 'Login failed: user not found')
       // Don't reveal whether email exists or not for security
-      return NextResponse.json(
-        { success: false, error: 'Email atau password salah' },
-        { status: 401 }
-      )
+      const response: Record<string, unknown> = {
+        success: false,
+        error: 'Email atau password salah',
+      }
+      // In development, include debug info
+      if (process.env.NODE_ENV === 'development') {
+        response.debugUserFound = false
+      }
+      return NextResponse.json(response, { status: 401 })
     }
+
+    logger.info({ email, userId: user.id, hasPassword: !!user.password, isActive: user.isActive, isVerified: user.isVerified }, 'Login: user found')
 
     // Check if user is blocked
     if (!user.isActive) {
+      logger.warn({ email, userId: user.id }, 'Login failed: account blocked')
       return NextResponse.json(
         { success: false, error: 'Akun Anda telah diblokir. Hubungi admin.' },
         { status: 403 }
@@ -76,6 +106,7 @@ export async function POST(request: NextRequest) {
 
     // Check if user has a password set (OAuth-only users won't have one)
     if (!user.password) {
+      logger.info({ email, userId: user.id }, 'Login failed: no password (OAuth-only user)')
       return NextResponse.json(
         { success: false, error: 'Akun ini terdaftar melalui Google. Gunakan login Google atau atur password terlebih dahulu.' },
         { status: 401 }
@@ -85,23 +116,35 @@ export async function POST(request: NextRequest) {
     // Verify password
     const isPasswordValid = await bcrypt.compare(password, user.password)
     if (!isPasswordValid) {
-      return NextResponse.json(
-        { success: false, error: 'Email atau password salah' },
-        { status: 401 }
-      )
+      logger.info({ email, userId: user.id }, 'Login failed: incorrect password')
+      const response: Record<string, unknown> = {
+        success: false,
+        error: 'Email atau password salah',
+      }
+      // In development, include debug info
+      if (process.env.NODE_ENV === 'development') {
+        response.debugUserFound = true
+        response.debugPasswordMatch = false
+      }
+      return NextResponse.json(response, { status: 401 })
     }
 
     // Check if email is verified
     if (!user.isVerified) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Email belum diverifikasi. Silakan cek email Anda untuk link verifikasi.',
-          requiresVerification: true,
-          email: user.email,
-        },
-        { status: 403 }
-      )
+      logger.info({ email, userId: user.id }, 'Login failed: email not verified')
+      const response: Record<string, unknown> = {
+        success: false,
+        error: 'Email belum diverifikasi. Silakan cek email Anda untuk link verifikasi.',
+        requiresVerification: true,
+        email: user.email,
+      }
+      // In development, include debug info
+      if (process.env.NODE_ENV === 'development') {
+        response.debugUserFound = true
+        response.debugPasswordMatch = true
+        response.debugIsVerified = false
+      }
+      return NextResponse.json(response, { status: 403 })
     }
 
     // Check if user has 2FA enabled
@@ -149,6 +192,7 @@ export async function POST(request: NextRequest) {
     // Return user data (without password)
     const { password: _, ...userWithoutPassword } = user
 
+    logger.info({ email, userId: user.id }, 'Login successful')
     return NextResponse.json({
       success: true,
       user: userWithoutPassword,

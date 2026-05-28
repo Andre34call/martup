@@ -318,7 +318,10 @@ export function LoginScreen() {
     setTouchedPassword(true)
 
     // Trim whitespace from email to avoid hidden-char login failures
-    const trimmedInput = emailOrPhone.trim()
+    // Also lowercase emails (but not phone numbers) to match server normalization
+    const trimmedInput = isValidPhone(emailOrPhone.trim())
+      ? emailOrPhone.trim()
+      : emailOrPhone.trim().toLowerCase()
 
     // Re-validate after trimming (fix stale state race condition)
     const hasInput = trimmedInput && password

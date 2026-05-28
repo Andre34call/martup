@@ -1202,3 +1202,65 @@ Stage Summary:
 - Register/reset password still requires min 8 chars ✅
 - Existing users with shorter passwords can now login ✅
 - Lint passes ✅
+
+---
+Task ID: 1
+Agent: code
+Task: Fix Login Bug for Email-Registered Accounts
+
+Work Log:
+- Read worklog.md and all 4 target files (validations.ts, api-client.ts, login route, auth-screens.tsx)
+- **Fix 1: Email case normalization** in `src/lib/validations.ts`
+  - Added `.toLowerCase()` to `loginSchema.email` (after `.trim()`)
+  - Added `.trim().toLowerCase()` to `registerSchema.email` (was missing `.trim()` too)
+  - Added `.trim().toLowerCase()` to `forgotPasswordSchema.email`
+  - `resetPasswordSchema` has no email field, so no change needed
+- **Fix 2: Skip CSRF for auth routes** in `src/lib/api-client.ts`
+  - Added early return in `fetchWithCsrfRetry()` for URLs containing `/api/auth/`
+  - Auth routes are CSRF-exempt — skipping CSRF handling prevents response body consumption issues on 403 (requiresVerification)
+  - The function now returns `fetch(url, options)` directly for auth routes
+- **Fix 3: Debug logging** in `src/app/api/auth/login/route.ts`
+  - Added `logger.info` at key points: login attempt, user found, user not found
+  - Added `logger.info` for specific failure reasons: account blocked, no password (OAuth-only), incorrect password, email not verified
+  - Added `logger.info` for successful login
+  - Added `logger.warn` for blocked accounts
+  - Added debug fields in development mode: `debugUserFound`, `debugPasswordMatch`, `debugIsVerified` on error responses
+- **Fix 4: Frontend email normalization** in `src/components/ecommerce/auth-screens.tsx`
+  - Changed `handleLogin` to lowercase email input before sending to server
+  - Uses `isValidPhone()` check to avoid lowercasing phone numbers
+  - `const trimmedInput = isValidPhone(emailOrPhone.trim()) ? emailOrPhone.trim() : emailOrPhone.trim().toLowerCase()`
+- Lint passes ✅
+- Dev server compiles and runs ✅
+
+Stage Summary:
+- Root cause 1 fixed: Email case sensitivity — both Zod schemas and frontend now normalize emails to lowercase
+- Root cause 2 fixed: CSRF retry logic no longer interferes with auth route 403 responses (requiresVerification)
+- Root cause 3 improved: Debug logging and dev-mode diagnostics help diagnose login failures
+- Zero breaking changes — lint passes, dev server OK
+
+---
+Task ID: 1
+Agent: main
+Task: Fix login bug for email-registered accounts - "Email atau password salah"
+
+Work Log:
+- Analyzed the complete login flow: frontend auth-screens.tsx → apiClient.rawPost → fetchWithCsrfRetry → middleware → /api/auth/login route
+- Identified 3 root causes:
+  1. Email case sensitivity: loginSchema and registerSchema didn't normalize emails to lowercase. PostgreSQL findUnique is case-sensitive, so "User@email.com" != "user@email.com"
+  2. CSRF retry interfering with auth routes: fetchWithCsrfRetry consumed the 403 response body (for requiresVerification) via response.clone().json(), potentially causing issues
+  3. No debug logging made it impossible to diagnose the exact failure point
+- Fix 1: Added .toLowerCase() to email fields in loginSchema, registerSchema, forgotPasswordSchema (src/lib/validations.ts)
+- Fix 2: Added early return in fetchWithCsrfRetry for auth routes to bypass CSRF handling (src/lib/api-client.ts)
+- Fix 3: Added comprehensive debug logging to login API route + dev-mode debug fields (src/app/api/auth/login/route.ts)
+- Fix 4: Added email normalization on frontend handleLogin - lowercase emails but not phone numbers (src/components/ecommerce/auth-screens.tsx)
+- Fix 5: Added case-insensitive fallback lookup in login API for legacy mixed-case emails in the database, with auto-normalization
+- Verified lint passes ✅
+- Verified login API works correctly with local dev server ✅
+
+Stage Summary:
+- Root cause: email case sensitivity + CSRF retry interfering with auth route responses
+- Email normalization added at 3 layers: Zod schema (server), frontend input, and case-insensitive DB fallback
+- CSRF handling bypassed for auth routes to prevent 403 response body consumption
+- Debug logging added to login API for future diagnostics
+- Dev-mode debug fields (debugUserFound, debugPasswordMatch, debugIsVerified) added
+- Auto-migration: legacy mixed-case emails are auto-normalized on first login

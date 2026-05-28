@@ -85,6 +85,13 @@ async function fetchWithCsrfRetry(url: string, options: RequestInit): Promise<Re
     (options.method || 'GET').toUpperCase()
   )
 
+  // Auth routes are CSRF-exempt — skip all CSRF handling to avoid
+  // response body consumption issues on 403 (requiresVerification)
+  const isAuthRoute = url.includes('/api/auth/')
+  if (isAuthRoute) {
+    return fetch(url, options)
+  }
+
   // For mutating requests, ensure we have a CSRF token before making the request
   if (isMutating) {
     const csrfToken = await ensureCsrfToken()
