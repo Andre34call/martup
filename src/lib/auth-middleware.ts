@@ -5,6 +5,7 @@ import { authOptions } from '@/lib/auth'
 import crypto from 'crypto'
 import { createRateLimiter, type RateLimitResult, rateLimitHeaders } from '@/lib/rate-limit'
 import { env } from '@/lib/env'
+import { SESSION_COOKIE_NAME } from '@/lib/session-cookie'
 
 // ==================== AUTH MIDDLEWARE ====================
 // SECURITY OVERHAUL: Removed insecure x-auth-user-id method
@@ -166,9 +167,10 @@ export interface AuthError {
 
 /**
  * Verify that the request comes from an authenticated user.
- * SECURITY: Only two methods are accepted:
+ * SECURITY: Three methods are accepted:
  * 1. NextAuth session (for Google OAuth users)
- * 2. HMAC-signed bearer token (for email/password users)
+ * 2. HMAC-signed session cookie (for email/password users — sticky login)
+ * 3. HMAC-signed bearer token (fallback for API clients)
  * 
  * REMOVED: x-auth-user-id header method (was a critical security vulnerability)
  */
@@ -189,10 +191,26 @@ export async function verifyAuth(request: NextRequest): Promise<AuthResult | Aut
       }
     }
   } catch {
-    // NextAuth session check failed, try bearer token
+    // NextAuth session check failed, try other methods
   }
 
-  // Method 2: Check HMAC-signed bearer token (for email/password login)
+  // Method 2: Check HMAC-signed session cookie (sticky login — primary method)
+  // Session cookies are httpOnly, sent automatically by the browser, and cleared on browser close
+  const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME)?.value
+  if (sessionCookie) {
+    const userId = verifyAuthToken(sessionCookie)
+    if (userId) {
+      const dbUser = await db.user.findUnique({
+        where: { id: userId },
+        select: { id: true, email: true, name: true, role: true, isVerified: true, isActive: true },
+      })
+      if (dbUser && dbUser.isActive) {
+        return { success: true, user: dbUser }
+      }
+    }
+  }
+
+  // Method 3: Check HMAC-signed bearer token (fallback for API clients)
   const authHeader = request.headers.get('authorization')
   const bearerToken = authHeader?.replace(/^bearer\s+/i, '')
   if (bearerToken) {

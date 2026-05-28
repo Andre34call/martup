@@ -16,6 +16,7 @@ import type { User, UserRole } from "@/lib/types"
 import { logger } from '@/lib/logger'
 import { apiClient, ApiClientError } from '@/lib/api-client'
 import { loginSchema } from '@/lib/validations'
+import { setAuthFlagCookie } from '@/lib/session-cookie'
 
 // ==================== TYPE ALIASES ====================
 type LoginResponse = { success: boolean; requiresVerification?: boolean; requires2FA?: boolean; email?: string; phone?: string; userId?: string; message?: string; token?: string; user?: { id: string; email: string; phone?: string; name: string; avatar?: string; role?: string; isVerified?: boolean; loyaltyPoints?: number; coins?: number; twoFactorEnabled?: boolean }; devOtp?: string; error?: string }
@@ -365,11 +366,9 @@ export function LoginScreen() {
       }
 
       if (data.success && data.user) {
-        // Store auth token — also store as martup_token for backward compat
-        if (data.token) {
-          localStorage.setItem('authToken', data.token)
-          localStorage.setItem('martup_token', data.token)
-        }
+        // Auth token is now stored in httpOnly session cookie by the server.
+        // Set a non-httpOnly flag cookie so client can detect auth state quickly.
+        setAuthFlagCookie()
         const user: User = {
           id: data.user.id,
           email: data.user.email,
@@ -665,10 +664,8 @@ export function RegisterScreen() {
           console.log('[DEV] Verification URL:', data.devVerifyUrl)
         }
       } else if (data.user) {
-        // Fallback: auto-login (e.g., Google OAuth users)
-        if (data.token) {
-          localStorage.setItem('authToken', data.token)
-        }
+        // Auto-login: token is in httpOnly session cookie set by server
+        setAuthFlagCookie()
         const user: User = {
           id: data.user.id,
           email: data.user.email,
@@ -1148,9 +1145,8 @@ export function OTPScreen() {
 
       const data = await apiClient.post<OtpVerifyResponse>('/api/auth/otp/verify', { phone: formattedPhone, otpCode: otp })
       if (data.user) {
-        if (data.token) {
-          localStorage.setItem('authToken', data.token)
-        }
+        // Token is in httpOnly session cookie set by server
+        setAuthFlagCookie()
         const user: User = {
           id: data.user.id,
           email: data.user.email || '',

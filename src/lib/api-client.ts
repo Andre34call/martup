@@ -26,7 +26,9 @@ class ApiClientError extends Error {
 }
 
 /**
- * Get auth token from localStorage.
+ * Get auth token from localStorage (fallback for backward compatibility).
+ * Primary auth is now via httpOnly session cookie — the browser sends it automatically.
+ * The Authorization header is kept as a secondary auth method for API clients.
  */
 function getToken(): string | null {
   if (typeof window === 'undefined') return null

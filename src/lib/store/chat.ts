@@ -4,6 +4,7 @@ import type { ChatSlice, AppStore } from './types'
 import type { ChatRoom, ChatMessage } from '../types'
 import { apiClient } from '@/lib/api-client'
 import { io, Socket } from 'socket.io-client'
+import { hasAuthFlagCookie } from '@/lib/session-cookie'
 
 type ChatRoomsResponse = { success: boolean; data?: Array<Record<string, unknown>> }
 type ChatMessagesResponse = { success: boolean; data?: Array<Record<string, unknown>> }
@@ -257,8 +258,9 @@ export const createChatSlice: StateCreator<AppStore, [], [], ChatSlice> = (set, 
     // Don't connect if already connected or connecting
     if (socket?.connected) return
 
-    const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null
-    if (!token) return
+    // Check auth via session cookie flag (primary) or localStorage (fallback)
+    const isAuth = hasAuthFlagCookie() || !!localStorage.getItem('authToken')
+    if (!isAuth) return
 
     // If no WebSocket URL configured, skip WebSocket entirely (REST-only chat)
     if (!isWsAvailable) {
@@ -280,6 +282,9 @@ export const createChatSlice: StateCreator<AppStore, [], [], ChatSlice> = (set, 
     // Handle connection
     socket.on('connect', () => {
       // Authenticate after connection
+      // Session cookie is sent automatically by the browser via the handshake.
+      // Also try sending the token from localStorage as a fallback for the auth event.
+      const token = localStorage.getItem('authToken') || ''
       socket!.emit('auth', { token })
     })
 

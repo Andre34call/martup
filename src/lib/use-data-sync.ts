@@ -3,14 +3,15 @@
 import { useEffect, useRef } from 'react'
 import { useAppStore, useCartStore, useWishlistStore } from '@/lib/store'
 import { logger } from '@/lib/logger'
+import { hasAuthFlagCookie } from '@/lib/session-cookie'
 
 /**
  * useDataSync - Watches auth state from useAppStore and syncs
  * data from API when a user is authenticated.
  *
  * Auth detection:
- * - useAppStore.isAuthenticated (set by login() or DataFetcher for token recovery)
- * - localStorage auth tokens (for edge cases before Zustand rehydrates)
+ * - useAppStore.isAuthenticated (set by login() or DataFetcher for session recovery)
+ * - Auth flag cookie (for edge cases before Zustand rehydrates)
  *
  * On authentication: fetches user data, merges local cart to server, syncs wishlist.
  * Note: mergeLocalToServer internally calls syncFromServer, so we don't need a separate call.
@@ -34,8 +35,8 @@ export function useDataSync() {
   const lastSyncedUserIdRef = useRef<string | null>(null)
 
   useEffect(() => {
-    // Determine effective auth from useAppStore + localStorage fallback
-    const hasLocalAuthToken = typeof window !== 'undefined' && !!localStorage.getItem('authToken')
+    // Determine effective auth from useAppStore + cookie flag fallback
+    const hasLocalAuthToken = typeof window !== 'undefined' && hasAuthFlagCookie()
     const effectiveUserId = appStoreUserId
     const effectiveIsAuthenticated = appStoreIsAuthenticated || (hasLocalAuthToken && !!appStoreUserId)
 

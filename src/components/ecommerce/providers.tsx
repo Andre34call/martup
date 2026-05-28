@@ -11,6 +11,7 @@ import { logger } from '@/lib/logger'
 import { useDataSync } from '@/lib/use-data-sync'
 import { ApiProvider } from '@/hooks/api/provider'
 import { apiClient } from '@/lib/api-client'
+import { hasAuthFlagCookie, deleteAuthFlagCookie } from '@/lib/session-cookie'
 
 interface AuthMeResponse {
   success: boolean
@@ -74,10 +75,13 @@ function DataFetcher({ children }: { children: React.ReactNode }) {
     }
   }, [fetchProducts, fetchCategories])
 
-  // ── Auth Recovery Path 1: HMAC bearer token from localStorage ─────
-  // This handles the case where the user logged in via email/password,
-  // then refreshed the page. Zustand doesn't persist auth state, but
-  // the authToken is still in localStorage. We use it to restore the session.
+  // ── Auth Recovery Path 1: Session cookie (sticky login) ──────────
+  // This handles the case where the user logged in (email/password or OTP),
+  // then refreshed the page or opened a new tab.
+  // The httpOnly session cookie (martup_session) is sent automatically by the browser.
+  // The auth flag cookie (martup_auth) is checked first as a quick gate.
+  // Session cookies persist across refreshes and tab closes, but are CLEARED
+  // when the browser is closed — providing the "sticky login" behavior.
   useEffect(() => {
     if (tokenRecoveryDone.current) return
 
@@ -87,16 +91,20 @@ function DataFetcher({ children }: { children: React.ReactNode }) {
       return
     }
 
-    // Check if there's an auth token in localStorage
     if (typeof window === 'undefined') return
-    const authToken = localStorage.getItem('authToken')
-    if (!authToken) {
+
+    // Check the auth flag cookie first — if it doesn't exist, no session cookie either
+    // (both are session cookies, cleared together when browser closes)
+    if (!hasAuthFlagCookie()) {
+      // Also clean up any stale localStorage tokens from older sessions
+      localStorage.removeItem('authToken')
+      localStorage.removeItem('martup_token')
       tokenRecoveryDone.current = true
       return
     }
 
-    // Attempt to restore session by calling /api/auth/me
-    // apiClient automatically adds the Authorization header from localStorage
+    // Auth flag exists → try to restore session via /api/auth/me
+    // The httpOnly session cookie will be sent automatically by the browser
     tokenRecoveryDone.current = true
 
     ;(async () => {
@@ -126,12 +134,14 @@ function DataFetcher({ children }: { children: React.ReactNode }) {
           // Connect WebSocket (data sync is handled by useDataSync)
           connectSocket()
         } else {
-          // Token is invalid or expired — clear it
+          // Session cookie is invalid or expired — clear flag and stale localStorage
+          deleteAuthFlagCookie()
           localStorage.removeItem('authToken')
+          localStorage.removeItem('martup_token')
         }
       } catch (err) {
-        logger.warn({ component: 'providers', err: err }, 'Failed to restore session from authToken')
-        // Don't clear the token — it might be a temporary network error
+        logger.warn({ component: 'providers', err: err }, 'Failed to restore session from cookie')
+        // Don't clear the flag — it might be a temporary network error
         // The user can try again on next page load
       }
     })()

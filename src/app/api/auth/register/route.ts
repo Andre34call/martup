@@ -6,6 +6,7 @@ import crypto from 'crypto'
 import { sendEmail, emailVerificationTemplate } from '@/lib/email'
 import { logger } from '@/lib/logger'
 import { validateBody, registerSchema } from '@/lib/validations'
+import { setSessionCookies } from '@/lib/session-cookie'
 
 // POST /api/auth/register - Register a new user with email and password
 // Now requires email verification before login
@@ -72,12 +73,14 @@ export async function POST(request: NextRequest) {
           })
           const { password: _, ...userWithoutPassword } = fullUser!
 
-          return NextResponse.json({
+          const resp = NextResponse.json({
             success: true,
             user: userWithoutPassword,
             token,
             message: 'Akun Anda telah aktif! Silakan login.',
           })
+          setSessionCookies(resp, token)
+          return resp
         }
 
         // Real email: generate verification token and send email
@@ -185,12 +188,14 @@ export async function POST(request: NextRequest) {
 
       const { password: _, ...userWithoutPassword } = fullUser!
 
-      return NextResponse.json({
+      const resp = NextResponse.json({
         success: true,
         user: userWithoutPassword,
         token,
         message: 'Registrasi berhasil! Akun Anda telah aktif.',
       })
+      setSessionCookies(resp, token)
+      return resp
     }
 
     // Real email provider: send verification email

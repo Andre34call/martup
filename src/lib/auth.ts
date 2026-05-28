@@ -27,6 +27,25 @@ export const authOptions: NextAuthOptions = {
   ],
   session: {
     strategy: 'jwt',
+    // No maxAge — the JWT is validated by the session cookie lifetime instead.
+    // When the browser closes, the next-auth.session-token session cookie is deleted,
+    // and the user must re-authenticate. This provides "sticky login" behavior:
+    // - Refresh page → still logged in ✅
+    // - Close tab → still logged in ✅
+    // - Close browser → logged out ✅
+  },
+  cookies: {
+    sessionToken: {
+      name: 'next-auth.session-token',
+      options: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: process.env.NODE_ENV === 'production',
+        // Intentionally NO maxAge → session cookie (cleared when browser closes)
+        // This ensures Google OAuth users also get the "sticky login" behavior
+      },
+    },
   },
   callbacks: {
     async jwt({ token, account, user }) {

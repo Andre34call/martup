@@ -10,6 +10,8 @@ export interface UploadResult {
 function getUploadAuthHeaders(): Record<string, string> {
   const headers: Record<string, string> = {}
   if (typeof window !== 'undefined') {
+    // Auth is primarily via httpOnly session cookie (sent automatically by browser).
+    // Authorization header from localStorage is a secondary/fallback method.
     const token = localStorage.getItem('authToken')
     if (token) {
       headers['Authorization'] = `Bearer ${token}`

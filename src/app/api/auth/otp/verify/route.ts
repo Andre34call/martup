@@ -4,6 +4,7 @@ import { checkRateLimit, generateAuthToken } from '@/lib/auth-middleware'
 import crypto from 'crypto'
 
 import { logger } from '@/lib/logger'
+import { setSessionCookies } from '@/lib/session-cookie'
 // POST /api/auth/otp/verify - Verify OTP code and log in the user
 export async function POST(request: NextRequest) {
   try {
@@ -149,13 +150,15 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    return NextResponse.json({
+    const resp = NextResponse.json({
       success: true,
       user: fullUser,
       token,
       isNewUser: user.name === 'New Member',
       message: 'Verifikasi OTP berhasil!',
     })
+    setSessionCookies(resp, token)
+    return resp
   } catch (error: unknown) {
     // Error logged above — generic message returned to client
     logger.error({ err: error }, 'OTP verify error')

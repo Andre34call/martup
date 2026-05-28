@@ -258,9 +258,9 @@ export default function Home() {
       // Clean URL immediately to prevent token from being bookmarked/shared
       window.history.replaceState({}, '', '/')
 
-      // Check if user is already authenticated — check BOTH Zustand state and localStorage
-      // Zustand may not have hydrated yet on page load, so also check localStorage
-      const hasAuthToken = !!localStorage.getItem('authToken')
+      // Check if user is already authenticated — check Zustand state and session cookie
+      // Zustand may not have hydrated yet on page load, so also check cookie flag
+      const hasAuthToken = typeof document !== 'undefined' && document.cookie.split(';').some(c => c.trim().startsWith('martup_auth='))
       if (isAuthenticated || hasAuthToken) {
         // User is authenticated — ignore the reset token
         // They can use "Ubah Password" in settings if needed

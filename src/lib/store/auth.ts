@@ -6,6 +6,7 @@ import type { UserRole, Seller } from '../types'
 import { apiClient } from '@/lib/api-client'
 import { useCartStore } from './cart'
 import { mapSeller } from '../mappers'
+import { deleteAuthFlagCookie } from '@/lib/session-cookie'
 
 // API response types
 type UserDataApiResponse = { data?: any; [key: string]: any }
@@ -29,7 +30,15 @@ export const createAuthSlice: StateCreator<AppStore, [], [], AuthSlice> = (set, 
   },
 
   logout: async () => {
-    // Clear auth tokens
+    // Call server logout to clear httpOnly session cookies
+    try {
+      await apiClient.post('/api/auth/logout')
+    } catch (err) {
+      logger.warn({ component: 'auth', err }, 'Failed to call server logout endpoint')
+    }
+    // Clear client-side auth flag cookie
+    deleteAuthFlagCookie()
+    // Clear any stale localStorage tokens (from older sessions)
     localStorage.removeItem('authToken')
     localStorage.removeItem('martup_token')
     // Sign out from NextAuth to clear the session cookie
@@ -157,7 +166,13 @@ export const createAuthSlice: StateCreator<AppStore, [], [], AuthSlice> = (set, 
         // Continue with local cleanup even if server delete fails
       }
     }
-    // Clear auth tokens
+    // Clear session cookies via server logout
+    try {
+      await apiClient.post('/api/auth/logout')
+    } catch (err) {
+      logger.warn({ component: 'auth', err }, 'Failed to call server logout during account deletion')
+    }
+    deleteAuthFlagCookie()
     localStorage.removeItem('authToken')
     localStorage.removeItem('martup_token')
     try {

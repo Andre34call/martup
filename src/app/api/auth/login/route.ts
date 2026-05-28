@@ -6,6 +6,7 @@ import crypto from 'crypto'
 
 import { logger } from '@/lib/logger'
 import { validateBody, loginSchema } from '@/lib/validations'
+import { setSessionCookies } from '@/lib/session-cookie'
 
 // Helper: check if a string looks like a valid bcrypt hash
 function isValidBcryptHash(hash: string): boolean {
@@ -182,12 +183,14 @@ export async function POST(request: NextRequest) {
         // Edge case: 2FA enabled but no phone — allow login anyway and suggest disabling 2FA
         const token = generateAuthToken(user.id)
         const { password: _, ...userWithoutPassword } = user
-        return NextResponse.json({
+        const resp = NextResponse.json({
           success: true,
           user: userWithoutPassword,
           token,
           message: 'Login berhasil (2FA tidak dapat diverifikasi karena nomor HP tidak tersedia)',
         })
+        setSessionCookies(resp, token)
+        return resp
       }
 
       // Generate OTP for 2FA verification
@@ -222,12 +225,16 @@ export async function POST(request: NextRequest) {
     const { password: _, ...userWithoutPassword } = user
 
     logger.info({ email, userId: user.id }, 'Login successful')
-    return NextResponse.json({
+
+    const response = NextResponse.json({
       success: true,
       user: userWithoutPassword,
       token,
       message: 'Login berhasil',
     })
+    // Set session cookies (httpOnly + flag) — session cookies are cleared when browser closes
+    setSessionCookies(response, token)
+    return response
   } catch (error: any) {
     logger.error({ err: error, code: error?.code }, 'Login error')
     

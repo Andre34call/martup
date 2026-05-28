@@ -31,10 +31,10 @@ interface CartState {
 
 // ==================== HELPERS ====================
 
-/** Check if user is authenticated by looking for authToken in localStorage */
+/** Check if user is authenticated by looking for auth flag cookie */
 function isUserAuthenticated(): boolean {
   if (typeof window === 'undefined') return false
-  return !!localStorage.getItem('authToken')
+  return document.cookie.split(';').some(c => c.trim().startsWith('martup_auth='))
 }
 
 /** Map a server cart item response to our local CartItem type */
@@ -246,13 +246,8 @@ export const useCartStore = create<CartState>()(
             if (failures.length > 0) {
               // Re-sync from server on partial failure to ensure consistency
               logger.warn({ component: 'cart' }, 'Cart checkAll: some updates failed, re-syncing from server')
-              const token = localStorage.getItem('authToken')
-              if (token) {
-                // Extract userId from token payload (HMAC token contains userId)
-                // Instead, just re-fetch. We need the userId but don't have it here.
-                // We'll just revert locally since we can't get userId easily
-                set({ items: previousItems })
-              }
+              // Revert locally since some updates failed
+              set({ items: previousItems })
             }
           })
         }
