@@ -999,3 +999,34 @@ Stage Summary:
 - Lint passes ✅
 - Launch readiness improved from ~73% to ~85%
 - C6 was the largest fix: 120+ instances across 62 files sanitized
+
+---
+Task ID: deploy-vercel
+Agent: main
+Task: Deploy MartUp to Vercel and verify it works
+
+Work Log:
+- Checked project structure: Next.js 16 + TypeScript + Prisma PostgreSQL + Supabase
+- Ran lint (passes) and TypeScript type-check (passes)
+- Identified Vercel-incompatible code: chat WebSocket used XTransformPort=3004 (sandbox Caddy pattern)
+- Fixed chat.ts: made WebSocket URL configurable via NEXT_PUBLIC_CHAT_WS_URL env var
+  - On sandbox: NEXT_PUBLIC_CHAT_WS_URL=/?XTransformPort=3004 (Caddy gateway)
+  - On Vercel: leave empty → chat falls back to REST-only mode (no WebSocket)
+- Added NEXT_PUBLIC_CHAT_WS_URL to .env (sandbox) and .env.example
+- Committed and pushed to GitHub (commit 2c98ede)
+- Vercel auto-deploy triggered via GitHub integration
+- Deployment succeeded (status: success)
+- Verified live site at https://martup-seven.vercel.app:
+  - Homepage: 200 ✅
+  - Health check: healthy, DB ok, Memory ok ✅
+  - CSRF token: working ✅
+  - Admin login (admin@martup.com): success ✅
+  - Buyer login (buyer@martup.com): success ✅
+  - All API endpoints (categories, products, banners, vouchers, search): 200 ✅
+  - Auth validation: working ✅
+
+Stage Summary:
+- Deployment to Vercel SUCCEEDED ✅
+- Live URL: https://martup-seven.vercel.app
+- Chat feature runs in REST-only mode on Vercel (WebSocket disabled, can be enabled later with a WebSocket service)
+- All core functionality verified working: auth, DB, API, security headers
