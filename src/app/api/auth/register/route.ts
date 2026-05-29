@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { checkRateLimit } from '@/lib/auth-middleware'
+import { checkRateLimit, generateAuthToken } from '@/lib/auth-middleware'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
 import { sendEmail, emailVerificationTemplate } from '@/lib/email'
 import { logger } from '@/lib/logger'
 import { validateBody, registerSchema } from '@/lib/validations'
 import { setSessionCookies } from '@/lib/session-cookie'
+import { hashToken } from '@/lib/token-hash'
+import { sanitizeInput } from '@/lib/sanitize'
 
 // POST /api/auth/register - Register a new user with email and password
 // Now requires email verification before login
@@ -29,7 +31,8 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-    const { name, email, phone, password } = validation.data
+    const { name: rawName, email, phone, password } = validation.data
+    const name = sanitizeInput(rawName)
 
     // Check if email already exists
     const existingUser = await db.user.findUnique({
@@ -63,15 +66,15 @@ export async function POST(request: NextRequest) {
 
           logger.info({ component: 'auth', email }, 'Unverified user auto-verified on re-registration')
 
-          // Generate auth token
-          const { generateAuthToken } = await import('@/lib/auth-middleware')
-          const token = generateAuthToken(existingUser.id)
-
+          // Fetch full user data for response
           const fullUser = await db.user.findUnique({
             where: { id: existingUser.id },
-            include: { seller: true, wallet: true },
+            select: { id: true, email: true, name: true, phone: true, avatar: true, role: true, isVerified: true, isActive: true, loyaltyPoints: true, coins: true, referralCode: true, dailyCheckIn: true, divisionId: true, tokenVersion: true, createdAt: true, updatedAt: true, seller: true, wallet: true },
           })
           const { password: _, ...userWithoutPassword } = fullUser!
+
+          // Generate auth token with tokenVersion
+          const token = generateAuthToken(existingUser.id, fullUser?.tokenVersion ?? 0)
 
           const resp = NextResponse.json({
             success: true,
@@ -93,7 +96,7 @@ export async function POST(request: NextRequest) {
             name,
             password: hashedPassword,
             phone: phone || existingUser.phone,
-            emailVerificationToken: verificationToken,
+            emailVerificationToken: hashToken(verificationToken),
             emailVerificationExpiry: verificationExpiry,
           },
         })
@@ -148,7 +151,7 @@ export async function POST(request: NextRequest) {
         password: hashedPassword,
         role: 'buyer',
         isVerified: shouldAutoVerify, // Auto-verify when no real email provider
-        emailVerificationToken: shouldAutoVerify ? null : verificationToken,
+        emailVerificationToken: shouldAutoVerify ? null : hashToken(verificationToken),
         emailVerificationExpiry: shouldAutoVerify ? null : verificationExpiry,
         wallet: {
           create: {
@@ -176,22 +179,22 @@ export async function POST(request: NextRequest) {
       // Auto-verified: no email sent, user can login immediately
       logger.info({ component: 'auth', email, provider: emailProvider }, 'User auto-verified (mock email provider)')
 
-      // Generate auth token so user is automatically logged in
-      const { generateAuthToken } = await import('@/lib/auth-middleware')
-      const token = generateAuthToken(user.id)
-
       // Fetch full user data for response
       const fullUser = await db.user.findUnique({
         where: { id: user.id },
-        include: { seller: true, wallet: true },
+        select: { id: true, email: true, name: true, phone: true, avatar: true, role: true, isVerified: true, isActive: true, loyaltyPoints: true, coins: true, referralCode: true, dailyCheckIn: true, divisionId: true, tokenVersion: true, createdAt: true, updatedAt: true, seller: true, wallet: true },
       })
 
       const { password: _, ...userWithoutPassword } = fullUser!
+
+      // Generate auth token so user is automatically logged in
+      const token = generateAuthToken(user.id, fullUser?.tokenVersion ?? 0)
 
       const resp = NextResponse.json({
         success: true,
         user: userWithoutPassword,
         token,
+        isSuperAdmin: false, // New registrations are never Super Admin
         message: 'Registrasi berhasil! Akun Anda telah aktif.',
       })
       setSessionCookies(resp, token)

@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
         },
       })
 
-      const token = generateAuthToken(updatedUser.id)
+      const token = generateAuthToken(updatedUser.id, updatedUser.tokenVersion ?? 0)
 
       return NextResponse.json({
         success: true,
@@ -160,7 +160,7 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    const token = generateAuthToken(user.id)
+    const token = generateAuthToken(user.id, user.tokenVersion ?? 0)
 
     return NextResponse.json({
       success: true,

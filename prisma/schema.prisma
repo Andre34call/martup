@@ -28,6 +28,7 @@ model User {
   resetPasswordToken        String?
   resetPasswordExpiry       DateTime?
   isActive           Boolean   @default(true)
+  tokenVersion       Int       @default(0) // Incremented on password change to invalidate existing sessions
   referralCode  String?   @unique
   referredBy    String?
   loyaltyPoints Int       @default(0)

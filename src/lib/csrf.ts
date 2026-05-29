@@ -51,6 +51,15 @@ function getCsrfSecret(): string {
  */
 export async function generateCsrfToken(): Promise<string> {
   const secret = getCsrfSecret()
+  if (!secret) {
+    // CSRF secret not configured — generate a placeholder token
+    // This allows the page to render, but CSRF validation will fail on mutating requests
+    // In production, CSRF_SECRET must be set for proper protection
+    const randomBytes = generateRandomHex(32)
+    const timestamp = Date.now().toString()
+    const payload = `${randomBytes}:${timestamp}:no-csrf-secret`
+    return base64Encode(payload)
+  }
   const randomBytes = generateRandomHex(32)
   const timestamp = Date.now().toString()
   const signature = await hmacSign(secret, `${randomBytes}:${timestamp}`)

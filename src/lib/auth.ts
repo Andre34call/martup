@@ -18,11 +18,41 @@ if (process.env.VERCEL) {
   }
 }
 
+// ==================== GOOGLE OAUTH DIAGNOSTICS ====================
+// Log diagnostic info at startup to help debug Google OAuth issues
+const googleClientId = process.env.GOOGLE_CLIENT_ID
+const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET
+const nextauthSecret = process.env.NEXTAUTH_SECRET
+const nextauthUrl = process.env.NEXTAUTH_URL
+
+if (process.env.NODE_ENV === 'production' || process.env.VERCEL) {
+  if (!googleClientId || !googleClientSecret) {
+    console.error(
+      '[AUTH ERROR] Google OAuth is NOT configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in your Vercel Dashboard → Settings → Environment Variables. ' +
+      'Google login will NOT work without these.'
+    )
+  } else {
+    console.log('[AUTH] Google OAuth configured ✅')
+  }
+  if (!nextauthSecret) {
+    console.error(
+      '[AUTH ERROR] NEXTAUTH_SECRET is NOT set. Session tokens and OAuth will NOT work. ' +
+      'Set NEXTAUTH_SECRET in your Vercel Dashboard → Settings → Environment Variables.'
+    )
+  }
+  if (!nextauthUrl || nextauthUrl.includes('localhost')) {
+    console.warn(
+      `[AUTH WARN] NEXTAUTH_URL is "${nextauthUrl || '(not set)'}". On Vercel, this should be your production URL (e.g., https://martup-seven.vercel.app). ` +
+      'It has been auto-corrected to VERCEL_URL if available.'
+    )
+  }
+}
+
 export const authOptions: NextAuthOptions = {
   providers: [
     GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID || '',
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+      clientId: googleClientId || '',
+      clientSecret: googleClientSecret || '',
     }),
   ],
   session: {
@@ -64,10 +94,18 @@ export const authOptions: NextAuthOptions = {
       return session
     },
     async signIn({ user, account, profile }) {
+      // Check if Google OAuth is properly configured
+      if (!googleClientId || !googleClientSecret) {
+        logger.error({ component: 'auth' }, 'Google OAuth credentials not configured — cannot sign in with Google')
+        // Return false to prevent sign-in without proper configuration
+        // This shows an error on the login page instead of silently failing
+        return '/?error=google_oauth_not_configured'
+      }
+
       // Sync user to our database
       try {
         // SECURITY: Add internal secret to verify this is from NextAuth callback, not external caller
-        const internalSecret = env.NEXTAUTH_SECRET
+        const internalSecret = nextauthSecret
         if (!internalSecret) {
           logger.error({ component: 'auth' }, 'NEXTAUTH_SECRET not set — cannot sync Google OAuth user')
           return true // Still allow sign-in, /api/auth/me will handle user creation as fallback
@@ -104,9 +142,16 @@ export const authOptions: NextAuthOptions = {
             providerAccountId: account?.providerAccountId,
           }),
         })
+
+        if (!response.ok) {
+          logger.warn({ component: 'auth', status: response.status, email: user.email }, 'sync-user returned non-OK status')
+        }
+
         const data = await response.json()
         if (!data.success) {
           logger.warn({ component: 'auth', error: data.error, email: user.email }, 'Failed to sync Google user — /api/auth/me will create user as fallback')
+        } else {
+          logger.info({ component: 'auth', email: user.email, isNewUser: data.isNewUser }, 'Google OAuth user synced successfully')
         }
       } catch (error) {
         logger.warn({ component: 'auth', err: error, email: user.email }, 'Error syncing Google user — /api/auth/me will create user as fallback')
@@ -118,5 +163,6 @@ export const authOptions: NextAuthOptions = {
     signIn: '/',
     error: '/',
   },
-  secret: env.NEXTAUTH_SECRET || undefined,
+  debug: process.env.NODE_ENV === 'development',
+  secret: nextauthSecret || undefined,
 }

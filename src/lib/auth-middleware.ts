@@ -101,27 +101,44 @@ const TOKEN_EXPIRY = 24 * 60 * 60 * 1000 // 24 hours
 
 /**
  * Generate an HMAC-signed auth token.
- * Format: base64(userId:timestamp:hmacSignature)
+ * Format: base64(userId:tokenVersion:timestamp:hmacSignature)
  * This prevents token forgery - without the secret, attackers cannot create valid tokens.
+ * tokenVersion is included so that sessions can be invalidated when the user changes their password.
  */
-export function generateAuthToken(userId: string): string {
+export function generateAuthToken(userId: string, tokenVersion: number = 0): string {
   const timestamp = Date.now().toString()
   const signature = crypto
     .createHmac('sha256', TOKEN_SECRET)
-    .update(`${userId}:${timestamp}`)
+    .update(`${userId}:${tokenVersion}:${timestamp}`)
     .digest('hex')
-  const payload = `${userId}:${timestamp}:${signature}`
+  const payload = `${userId}:${tokenVersion}:${timestamp}:${signature}`
   return Buffer.from(payload).toString('base64')
 }
 
 /**
  * Verify an HMAC-signed auth token.
- * Returns the userId if valid, null otherwise.
+ * Returns { userId, tokenVersion } if valid, null otherwise.
+ * The caller should check that the tokenVersion matches the user's current tokenVersion in the DB.
+ * If they don't match, the token was issued before a password change and should be rejected.
  */
-export function verifyAuthToken(token: string): string | null {
+export function verifyAuthToken(token: string): { userId: string; tokenVersion: number } | null {
   try {
     const decoded = Buffer.from(token, 'base64').toString()
-    const [userId, timestamp, signature] = decoded.split(':')
+    const parts = decoded.split(':')
+
+    // Support both old format (userId:timestamp:signature) and new format (userId:tokenVersion:timestamp:signature)
+    let userId: string, tokenVersion: string, timestamp: string, signature: string
+
+    if (parts.length === 3) {
+      // Old format: userId:timestamp:signature (tokenVersion = 0)
+      ;[userId, timestamp, signature] = parts
+      tokenVersion = '0'
+    } else if (parts.length === 4) {
+      // New format: userId:tokenVersion:timestamp:signature
+      ;[userId, tokenVersion, timestamp, signature] = parts
+    } else {
+      return null
+    }
 
     if (!userId || !timestamp || !signature) return null
 
@@ -132,14 +149,23 @@ export function verifyAuthToken(token: string): string | null {
     // Verify HMAC signature
     const expectedSignature = crypto
       .createHmac('sha256', TOKEN_SECRET)
-      .update(`${userId}:${timestamp}`)
+      .update(`${userId}:${tokenVersion}:${timestamp}`)
       .digest('hex')
 
     if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature))) {
-      return null
+      // Try old format signature for backward compatibility during migration
+      const oldExpectedSignature = crypto
+        .createHmac('sha256', TOKEN_SECRET)
+        .update(`${userId}:${timestamp}`)
+        .digest('hex')
+      if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(oldExpectedSignature))) {
+        return null
+      }
+      // Old format signature matched — return with tokenVersion 0
+      return { userId, tokenVersion: 0 }
     }
 
-    return userId
+    return { userId, tokenVersion: parseInt(tokenVersion) || 0 }
   } catch {
     return null
   }
@@ -156,6 +182,7 @@ export interface AuthResult {
     role: string
     isVerified: boolean
     isActive: boolean
+    tokenVersion: number
   }
 }
 
@@ -183,7 +210,7 @@ export async function verifyAuth(request: NextRequest): Promise<AuthResult | Aut
       if (userEmail) {
         const dbUser = await db.user.findUnique({
           where: { email: userEmail },
-          select: { id: true, email: true, name: true, role: true, isVerified: true, isActive: true },
+          select: { id: true, email: true, name: true, role: true, isVerified: true, isActive: true, tokenVersion: true },
         })
         if (dbUser && dbUser.isActive) {
           return { success: true, user: dbUser }
@@ -198,13 +225,18 @@ export async function verifyAuth(request: NextRequest): Promise<AuthResult | Aut
   // Session cookies are httpOnly, sent automatically by the browser, and cleared on browser close
   const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME)?.value
   if (sessionCookie) {
-    const userId = verifyAuthToken(sessionCookie)
-    if (userId) {
+    const tokenResult = verifyAuthToken(sessionCookie)
+    if (tokenResult) {
       const dbUser = await db.user.findUnique({
-        where: { id: userId },
-        select: { id: true, email: true, name: true, role: true, isVerified: true, isActive: true },
+        where: { id: tokenResult.userId },
+        select: { id: true, email: true, name: true, role: true, isVerified: true, isActive: true, tokenVersion: true },
       })
       if (dbUser && dbUser.isActive) {
+        // SECURITY: Check tokenVersion to invalidate sessions after password change
+        if (tokenResult.tokenVersion !== dbUser.tokenVersion) {
+          // Token was issued before password change — reject it
+          return { success: false, error: 'Session expired - Please login again', status: 401 }
+        }
         return { success: true, user: dbUser }
       }
     }
@@ -214,13 +246,17 @@ export async function verifyAuth(request: NextRequest): Promise<AuthResult | Aut
   const authHeader = request.headers.get('authorization')
   const bearerToken = authHeader?.replace(/^bearer\s+/i, '')
   if (bearerToken) {
-    const userId = verifyAuthToken(bearerToken)
-    if (userId) {
+    const tokenResult = verifyAuthToken(bearerToken)
+    if (tokenResult) {
       const dbUser = await db.user.findUnique({
-        where: { id: userId },
-        select: { id: true, email: true, name: true, role: true, isVerified: true, isActive: true },
+        where: { id: tokenResult.userId },
+        select: { id: true, email: true, name: true, role: true, isVerified: true, isActive: true, tokenVersion: true },
       })
       if (dbUser && dbUser.isActive) {
+        // SECURITY: Check tokenVersion to invalidate sessions after password change
+        if (tokenResult.tokenVersion !== dbUser.tokenVersion) {
+          return { success: false, error: 'Session expired - Please login again', status: 401 }
+        }
         return { success: true, user: dbUser }
       }
     }

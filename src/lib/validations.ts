@@ -3,14 +3,18 @@ import { z } from 'zod'
 // ==================== Auth ====================
 export const loginSchema = z.object({
   email: z.string().trim().toLowerCase().email('Email tidak valid'),
-  password: z.string().min(6, 'Password minimal 6 karakter'),
+  password: z.string().min(1, 'Password wajib diisi'), // Accept any non-empty password for login (existing users may have shorter passwords)
 })
 
 export const registerSchema = z.object({
   name: z.string().min(2, 'Nama minimal 2 karakter').max(100),
   email: z.string().trim().toLowerCase().email('Email tidak valid'),
   phone: z.string().optional(),
-  password: z.string().min(8, 'Password minimal 8 karakter'),
+  password: z.string()
+    .min(8, 'Password minimal 8 karakter')
+    .regex(/[a-z]/, 'Password harus mengandung huruf kecil')
+    .regex(/[A-Z]/, 'Password harus mengandung huruf besar')
+    .regex(/\d/, 'Password harus mengandung angka'),
   role: z.enum(['buyer', 'seller']).optional(),
 })
 
@@ -21,13 +25,21 @@ export const forgotPasswordSchema = z.object({
 // Note: resetPasswordSchema does not have an email field, so no .toLowerCase() needed
 export const resetPasswordSchema = z.object({
   token: z.string().min(1, 'Token wajib diisi'),
-  password: z.string().min(8, 'Password minimal 8 karakter'),
+  password: z.string()
+    .min(8, 'Password minimal 8 karakter')
+    .regex(/[a-z]/, 'Password harus mengandung huruf kecil')
+    .regex(/[A-Z]/, 'Password harus mengandung huruf besar')
+    .regex(/\d/, 'Password harus mengandung angka'),
 })
 
 // ==================== User ====================
 export const updatePasswordSchema = z.object({
   currentPassword: z.string().min(1, 'Password saat ini wajib diisi'),
-  newPassword: z.string().min(8, 'Password baru minimal 8 karakter'),
+  newPassword: z.string()
+    .min(8, 'Password baru minimal 8 karakter')
+    .regex(/[a-z]/, 'Password harus mengandung huruf kecil')
+    .regex(/[A-Z]/, 'Password harus mengandung huruf besar')
+    .regex(/\d/, 'Password harus mengandung angka'),
   confirmPassword: z.string().min(1, 'Konfirmasi password wajib diisi'),
 })
 

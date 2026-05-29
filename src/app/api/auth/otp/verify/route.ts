@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { checkRateLimit, generateAuthToken } from '@/lib/auth-middleware'
-import crypto from 'crypto'
 
 import { logger } from '@/lib/logger'
 import { setSessionCookies } from '@/lib/session-cookie'
+import { verifyOtpHash } from '@/lib/token-hash'
 // POST /api/auth/otp/verify - Verify OTP code and log in the user
 export async function POST(request: NextRequest) {
   try {
@@ -83,12 +83,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Use timing-safe comparison to prevent timing attacks
-    const expectedOtp = user.otpCode
-    const isOtpValid = crypto.timingSafeEqual(
-      Buffer.from(otpCode),
-      Buffer.from(expectedOtp)
-    )
+    // Verify OTP code against stored hash (timing-safe)
+    const isOtpValid = verifyOtpHash(otpCode, user.otpCode)
 
     if (!isOtpValid) {
       return NextResponse.json(
@@ -107,8 +103,8 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    // Generate auth token
-    const token = generateAuthToken(user.id)
+    // Generate auth token (with tokenVersion for session invalidation)
+    const token = generateAuthToken(user.id, user.tokenVersion ?? 0)
 
     // Return user data (without password and OTP)
     const { password: _, otpCode: __, otpExpiry: ___, ...userWithoutSensitive } = user
@@ -143,6 +139,7 @@ export async function POST(request: NextRequest) {
         referralCode: true,
         dailyCheckIn: true,
         divisionId: true,
+        tokenVersion: true,
         createdAt: true,
         updatedAt: true,
         seller: true,

@@ -5,6 +5,7 @@ import crypto from 'crypto'
 
 import { logger } from '@/lib/logger'
 import { sendOTP } from '@/lib/sms-gateway'
+import { hashOtp } from '@/lib/token-hash'
 // OTP configuration
 const OTP_LENGTH = 6
 const OTP_EXPIRY_MINUTES = 5
@@ -63,11 +64,11 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      // Update existing user's OTP
+      // Update existing user's OTP (store hashed)
       await db.user.update({
         where: { id: user.id },
         data: {
-          otpCode,
+          otpCode: hashOtp(otpCode),
           otpExpiry,
         },
       })
@@ -81,7 +82,7 @@ export async function POST(request: NextRequest) {
           name: 'New Member',
           role: 'buyer',
           isVerified: false,
-          otpCode,
+          otpCode: hashOtp(otpCode),
           otpExpiry,
           wallet: {
             create: {

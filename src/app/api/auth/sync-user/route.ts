@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { checkRateLimit, generateAuthToken } from '@/lib/auth-middleware'
+import { sanitizeInput } from '@/lib/sanitize'
 
 import { logger } from '@/lib/logger'
 // POST /api/auth/sync-user - Sync user from Google OAuth
@@ -83,7 +84,7 @@ export async function POST(request: NextRequest) {
       user = await db.user.create({
         data: {
           email: normalizedEmail,
-          name: name || normalizedEmail.split('@')[0],
+          name: sanitizeInput(name || normalizedEmail.split('@')[0]),
           avatar: avatar || null,
           role: 'buyer', // ALWAYS buyer by default - NEVER admin
           isVerified: true, // OAuth users are pre-verified (Google verified their email)
@@ -115,7 +116,7 @@ export async function POST(request: NextRequest) {
       if (name && name !== user.name) {
         await db.user.update({
           where: { id: user.id },
-          data: { name, avatar: avatar || user.avatar },
+          data: { name: sanitizeInput(name), avatar: avatar || user.avatar },
         })
       }
 

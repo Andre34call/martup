@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { sendEmail, emailVerifiedTemplate } from '@/lib/email'
 import { logger } from '@/lib/logger'
+import { hashToken } from '@/lib/token-hash'
 
 // GET /api/auth/verify-email?token=xxx
 // Verifies a user's email using the token sent to their email
@@ -41,10 +42,10 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Find user by verification token
+    // Find user by verification token (hash the plaintext token to match DB record)
     const user = await db.user.findFirst({
       where: {
-        emailVerificationToken: token,
+        emailVerificationToken: hashToken(token),
         emailVerificationExpiry: { gt: new Date() },
       },
     })

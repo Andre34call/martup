@@ -16,6 +16,7 @@ export const createAuthSlice: StateCreator<AppStore, [], [], AuthSlice> = (set, 
   currentUser: null,
   userRole: 'buyer' as UserRole,
   originalRole: 'buyer' as UserRole,
+  isSuperAdminUser: false,
 
   login: (user) => {
     // Clear any stale reset token on login (both Zustand and sessionStorage)
@@ -25,6 +26,7 @@ export const createAuthSlice: StateCreator<AppStore, [], [], AuthSlice> = (set, 
       currentUser: user,
       userRole: user.role,
       originalRole: user.role, // Preserve the original DB role for role switching
+      isSuperAdminUser: user.isSuperAdmin ?? false, // Set from API response
       currentScreen: 'home',
       avatarUrl: user.avatar || null,
       resetPasswordToken: '', // Clear any stale reset token on login
@@ -55,6 +57,7 @@ export const createAuthSlice: StateCreator<AppStore, [], [], AuthSlice> = (set, 
       currentUser: null,
       userRole: 'buyer',
       originalRole: 'buyer',
+      isSuperAdminUser: false,
       currentScreen: 'login',
       orders: [],
       notifications: [],
@@ -190,6 +193,7 @@ export const createAuthSlice: StateCreator<AppStore, [], [], AuthSlice> = (set, 
       currentUser: null,
       userRole: 'buyer',
       originalRole: 'buyer',
+      isSuperAdminUser: false,
       currentScreen: 'login',
       orders: [],
       notifications: [],

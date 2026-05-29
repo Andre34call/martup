@@ -3,6 +3,8 @@ import { db } from '@/lib/db'
 import { authLimiter } from '@/lib/rate-limit'
 import { logger } from '@/lib/logger'
 import bcrypt from 'bcryptjs'
+import { hashToken } from '@/lib/token-hash'
+import { validateBody, resetPasswordSchema } from '@/lib/validations'
 
 // POST /api/auth/reset-password
 // Resets the user's password using the token from the email
@@ -19,46 +21,19 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { token, password } = body
+    const validation = validateBody(resetPasswordSchema, body)
+    if (!validation.success) {
+      return NextResponse.json(
+        { success: false, error: validation.error },
+        { status: 400 }
+      )
+    }
+    const { token, password } = validation.data
 
-    if (!token || typeof token !== 'string') {
-      return NextResponse.json(
-        { success: false, error: 'Token reset tidak valid' },
-        { status: 400 }
-      )
-    }
-
-    if (!password || typeof password !== 'string') {
-      return NextResponse.json(
-        { success: false, error: 'Password baru wajib diisi' },
-        { status: 400 }
-      )
-    }
-
-    // Validate password strength
-    if (password.length < 8) {
-      return NextResponse.json(
-        { success: false, error: 'Password minimal 8 karakter' },
-        { status: 400 }
-      )
-    }
-    if (!/[a-zA-Z]/.test(password)) {
-      return NextResponse.json(
-        { success: false, error: 'Password harus mengandung huruf' },
-        { status: 400 }
-      )
-    }
-    if (!/\d/.test(password)) {
-      return NextResponse.json(
-        { success: false, error: 'Password harus mengandung angka' },
-        { status: 400 }
-      )
-    }
-
-    // Find user by reset token that hasn't expired
+    // Find user by reset token that hasn't expired (hash plaintext token to match DB record)
     const user = await db.user.findFirst({
       where: {
-        resetPasswordToken: token,
+        resetPasswordToken: hashToken(token),
         resetPasswordExpiry: { gt: new Date() },
       },
     })
@@ -74,13 +49,14 @@ export async function POST(request: NextRequest) {
     const salt = await bcrypt.genSalt(12)
     const hashedPassword = await bcrypt.hash(password, salt)
 
-    // Update the user's password and clear the reset token
+    // Update the user's password, clear the reset token, and increment tokenVersion to invalidate all existing sessions
     await db.user.update({
       where: { id: user.id },
       data: {
         password: hashedPassword,
         resetPasswordToken: null,
         resetPasswordExpiry: null,
+        tokenVersion: { increment: 1 },
       },
     })
 

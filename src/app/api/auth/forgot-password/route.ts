@@ -4,6 +4,7 @@ import { sendEmail, passwordResetTemplate } from '@/lib/email'
 import { authLimiter } from '@/lib/rate-limit'
 import { logger } from '@/lib/logger'
 import crypto from 'crypto'
+import { hashToken } from '@/lib/token-hash'
 
 // POST /api/auth/forgot-password
 // Sends a password reset email to the user
@@ -63,7 +64,7 @@ export async function POST(request: NextRequest) {
     await db.user.update({
       where: { id: user.id },
       data: {
-        resetPasswordToken: resetToken,
+        resetPasswordToken: hashToken(resetToken),
         resetPasswordExpiry: resetExpiry,
       },
     })

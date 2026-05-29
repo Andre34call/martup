@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { checkRateLimit, generateAuthToken } from '@/lib/auth-middleware'
+import { checkRateLimit, generateAuthToken, isSuperAdmin } from '@/lib/auth-middleware'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
 
 import { logger } from '@/lib/logger'
+import { hashOtp } from '@/lib/token-hash'
 import { validateBody, loginSchema } from '@/lib/validations'
 import { setSessionCookies } from '@/lib/session-cookie'
 
@@ -126,30 +127,14 @@ export async function POST(request: NextRequest) {
       isPasswordValid = false
     }
 
-    // FALLBACK: If bcrypt.compare fails AND the stored hash doesn't look like a valid bcrypt hash,
-    // try a plain-text comparison (for legacy accounts where password was stored unhashed).
-    // If it matches, re-hash and update the database so future logins use bcrypt.
+    // SECURITY: Plaintext password fallback has been REMOVED.
+    // If a password hash is not valid bcrypt, the login is rejected.
+    // Users with corrupted/legacy passwords must use the "Forgot Password" flow to reset.
     if (!isPasswordValid && !isBcryptHash) {
-      if (user.password === password) {
-        logger.info({ email, userId: user.id, hashPrefix }, 'Login: detected plain-text password, re-hashing')
-        try {
-          const saltRounds = 12
-          const hashedPassword = await bcrypt.hash(password, saltRounds)
-          await db.user.update({
-            where: { id: user.id },
-            data: { password: hashedPassword },
-          })
-          isPasswordValid = true
-          logger.info({ email, userId: user.id }, 'Login: plain-text password re-hashed successfully')
-        } catch (fixError) {
-          logger.error({ email, userId: user.id, err: fixError }, 'Login: failed to re-hash plain-text password')
-        }
-      } else {
-        logger.info(
-          { email, userId: user.id, hashPrefix, isBcryptHash },
-          'Login failed: incorrect password (stored hash is not valid bcrypt format)'
-        )
-      }
+      logger.warn(
+        { email, userId: user.id, hashPrefix },
+        'Login failed: stored password is not valid bcrypt format — user must reset password'
+      )
     }
 
     if (!isPasswordValid) {
@@ -181,7 +166,7 @@ export async function POST(request: NextRequest) {
     if (user.twoFactorEnabled) {
       if (!user.phone) {
         // Edge case: 2FA enabled but no phone — allow login anyway and suggest disabling 2FA
-        const token = generateAuthToken(user.id)
+        const token = generateAuthToken(user.id, user.tokenVersion ?? 0)
         const { password: _, ...userWithoutPassword } = user
         const resp = NextResponse.json({
           success: true,
@@ -199,7 +184,7 @@ export async function POST(request: NextRequest) {
 
       await db.user.update({
         where: { id: user.id },
-        data: { otpCode, otpExpiry },
+        data: { otpCode: hashOtp(otpCode), otpExpiry },
       })
 
       // In production: Send OTP via SMS gateway
@@ -219,7 +204,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Normal login (no 2FA) — generate auth token
-    const token = generateAuthToken(user.id)
+    const token = generateAuthToken(user.id, user.tokenVersion ?? 0)
 
     // Return user data (without password)
     const { password: _, ...userWithoutPassword } = user
@@ -230,6 +215,7 @@ export async function POST(request: NextRequest) {
       success: true,
       user: userWithoutPassword,
       token,
+      isSuperAdmin: isSuperAdmin(user.role, user.email),
       message: 'Login berhasil',
     })
     // Set session cookies (httpOnly + flag) — session cookies are cleared when browser closes

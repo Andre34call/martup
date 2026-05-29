@@ -17,7 +17,8 @@ export interface AuthSlice {
   currentUser: User | null
   userRole: UserRole
   originalRole: UserRole // The actual DB role — never mutated by switchRole
-  login: (user: User) => void
+  isSuperAdminUser: boolean // Whether the current user is a Super Admin (role='admin' + specific email)
+  login: (user: User & { isSuperAdmin?: boolean }) => void
   logout: () => Promise<void>
   switchRole: (role: UserRole) => Promise<void>
   deleteAccount: () => void

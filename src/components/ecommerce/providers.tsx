@@ -27,6 +27,7 @@ interface AuthMeResponse {
     coins?: number
     referralCode?: string
   }
+  isSuperAdmin?: boolean
 }
 
 function ZustandHydration({ children }: { children: React.ReactNode }) {
@@ -122,6 +123,7 @@ function DataFetcher({ children }: { children: React.ReactNode }) {
             loyaltyPoints: data.user.loyaltyPoints || 0,
             coins: data.user.coins || 0,
             referralCode: data.user.referralCode || undefined,
+            isSuperAdmin: data.isSuperAdmin || false,
           })
           // Set Sentry user context for error tracking
           setSentryUser({
@@ -166,6 +168,7 @@ function DataFetcher({ children }: { children: React.ReactNode }) {
               loyaltyPoints: data.user.loyaltyPoints || 0,
               coins: data.user.coins || 0,
               referralCode: data.user.referralCode || undefined,
+              isSuperAdmin: data.isSuperAdmin || false,
             })
             // Set auth flag cookie for Google OAuth users (same as email login)
             setAuthFlagCookie()

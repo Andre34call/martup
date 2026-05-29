@@ -369,7 +369,7 @@ export function LoginScreen() {
         // Auth token is now stored in httpOnly session cookie by the server.
         // Set a non-httpOnly flag cookie so client can detect auth state quickly.
         setAuthFlagCookie()
-        const user: User = {
+        const user: User & { isSuperAdmin?: boolean } = {
           id: data.user.id,
           email: data.user.email,
           phone: data.user.phone || undefined,
@@ -380,6 +380,7 @@ export function LoginScreen() {
           loyaltyPoints: data.user.loyaltyPoints || 0,
           coins: data.user.coins || 0,
           twoFactorEnabled: data.user.twoFactorEnabled || false,
+          isSuperAdmin: data.isSuperAdmin || false,
         }
         login(user)
         const { fetchUserData, connectSocket } = useAppStore.getState()
@@ -666,7 +667,7 @@ export function RegisterScreen() {
       } else if (data.user) {
         // Auto-login: token is in httpOnly session cookie set by server
         setAuthFlagCookie()
-        const user: User = {
+        const user: User & { isSuperAdmin?: boolean } = {
           id: data.user.id,
           email: data.user.email,
           phone: data.user.phone || undefined,
@@ -677,6 +678,7 @@ export function RegisterScreen() {
           loyaltyPoints: data.user.loyaltyPoints || 0,
           coins: data.user.coins || 0,
           twoFactorEnabled: data.user.twoFactorEnabled || false,
+          isSuperAdmin: data.isSuperAdmin || false,
         }
         login(user)
         const { fetchUserData, connectSocket } = useAppStore.getState()
@@ -1147,7 +1149,7 @@ export function OTPScreen() {
       if (data.user) {
         // Token is in httpOnly session cookie set by server
         setAuthFlagCookie()
-        const user: User = {
+        const user: User & { isSuperAdmin?: boolean } = {
           id: data.user.id,
           email: data.user.email || '',
           phone: data.user.phone || formattedPhone,
@@ -1158,6 +1160,7 @@ export function OTPScreen() {
           loyaltyPoints: data.user.loyaltyPoints || 0,
           coins: data.user.coins || 0,
           twoFactorEnabled: data.user.twoFactorEnabled || false,
+          isSuperAdmin: false, // OTP login users are never Super Admin
         }
         login(user)
         const { fetchUserData, connectSocket } = useAppStore.getState()

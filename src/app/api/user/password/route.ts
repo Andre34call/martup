@@ -86,10 +86,13 @@ export async function POST(request: NextRequest) {
     const saltRounds = 12
     const hashedNewPassword = await bcrypt.hash(newPassword, saltRounds)
 
-    // Step 7: Update user's password in database
+    // Step 7: Update user's password in database and invalidate all existing sessions
     await db.user.update({
       where: { id: authResult.user.id },
-      data: { password: hashedNewPassword },
+      data: { 
+        password: hashedNewPassword,
+        tokenVersion: { increment: 1 }, // Invalidate all existing sessions
+      },
     })
 
     // Step 8: Log security event

@@ -6,6 +6,7 @@ import bcrypt from 'bcryptjs'
 import { logger } from '@/lib/logger'
 import { sendOTP } from '@/lib/sms-gateway'
 import { validateBody, twoFactorActionSchema, twoFactorDisableSchema } from '@/lib/validations'
+import { hashOtp, verifyOtpHash } from '@/lib/token-hash'
 
 // OTP configuration for 2FA
 const OTP_LENGTH = 6
@@ -104,7 +105,7 @@ export async function POST(request: NextRequest) {
 
       await db.user.update({
         where: { id: user.id },
-        data: { otpCode: newOtpCode, otpExpiry },
+        data: { otpCode: hashOtp(newOtpCode), otpExpiry },
       })
 
       // Send OTP via configured SMS gateway (mock/twilio/fonnte)
@@ -175,11 +176,8 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      // Timing-safe comparison
-      const isOtpValid = crypto.timingSafeEqual(
-        Buffer.from(otpCode),
-        Buffer.from(user.otpCode)
-      )
+      // Verify OTP against stored hash (timing-safe)
+      const isOtpValid = verifyOtpHash(otpCode, user.otpCode)
 
       if (!isOtpValid) {
         return NextResponse.json(

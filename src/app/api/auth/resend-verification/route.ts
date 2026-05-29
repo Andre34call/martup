@@ -4,6 +4,7 @@ import { checkRateLimit } from '@/lib/auth-middleware'
 import crypto from 'crypto'
 import { sendEmail, emailVerificationTemplate } from '@/lib/email'
 import { logger } from '@/lib/logger'
+import { hashToken } from '@/lib/token-hash'
 
 // POST /api/auth/resend-verification
 // Resends email verification to an unverified user
@@ -66,7 +67,7 @@ export async function POST(request: NextRequest) {
     await db.user.update({
       where: { id: user.id },
       data: {
-        emailVerificationToken: verificationToken,
+        emailVerificationToken: hashToken(verificationToken),
         emailVerificationExpiry: verificationExpiry,
       },
     })

@@ -1,10 +1,49 @@
 "use client"
 
 import { motion, AnimatePresence } from "framer-motion"
-import { Heart, ShoppingCart, MessageCircle, User, Home, Grid3X3, Check, BarChart3, Users, Package, TrendingUp } from "lucide-react"
+import { Heart, ShoppingCart, MessageCircle, User, Home, Grid3X3, Check, BarChart3, Users, Package, TrendingUp, Shield } from "lucide-react"
 import { useAppStore, useCartStore } from "@/lib/store"
 import type { ScreenName } from "@/lib/types"
 import { useState, useEffect, useRef } from "react"
+
+// ==================== HELPER: Determine available roles for switching ====================
+// Uses originalRole (DB role) to determine which roles are available.
+// Super Admin (role='admin' + isSuperAdmin) sees: buyer, seller, Super Admin
+// Manager sees: buyer, seller, manager
+// Admin sees: buyer, seller, admin
+// Regular user sees: buyer, seller
+function getAvailableRoles(originalRole: string, isSuperAdmin: boolean): Array<"buyer" | "seller" | "admin" | "manager" | "superadmin"> {
+  if (isSuperAdmin) {
+    return ["buyer", "seller", "superadmin"]
+  }
+  if (originalRole === 'manager') {
+    return ["buyer", "seller", "manager"]
+  }
+  if (originalRole === 'admin') {
+    return ["buyer", "seller", "admin"]
+  }
+  return ["buyer", "seller"]
+}
+
+const roleColors: Record<string, string> = {
+  buyer: "bg-emerald-500",
+  seller: "bg-orange-500",
+  admin: "bg-purple-500",
+  manager: "bg-violet-500",
+  superadmin: "bg-red-500",
+}
+
+const roleLabels: Record<string, string> = {
+  buyer: "Buyer",
+  seller: "Seller",
+  admin: "Admin",
+  manager: "Manager",
+  superadmin: "Super Admin",
+}
+
+const roleIcons: Record<string, string> = {
+  superadmin: "🛡️",
+}
 
 // ==================== BOTTOM NAV ====================
 const navItems = [
@@ -16,12 +55,13 @@ const navItems = [
 ]
 
 export function BottomNav() {
-  const { currentScreen, navigate, userRole, currentUser, originalRole, switchRole, totalUnreadChats } = useAppStore()
+  const { currentScreen, navigate, userRole, currentUser, originalRole, switchRole, isSuperAdminUser, totalUnreadChats } = useAppStore()
   const { getTotalItemCount } = useCartStore()
   const [showRoleMenu, setShowRoleMenu] = useState(false)
   const roleMenuRef = useRef<HTMLDivElement>(null)
 
   const cartCount = getTotalItemCount()
+  const availableRoles = getAvailableRoles(originalRole, isSuperAdminUser)
 
   const getActiveTab = (): number => {
     const idx = navItems.findIndex(item => item.screens.includes(currentScreen))
@@ -54,23 +94,10 @@ export function BottomNav() {
     navigate(screenMap[navItems[idx].key] || "home")
   }
 
-  const handleRoleSwitch = (role: "buyer" | "seller" | "admin" | "manager") => {
-    switchRole(role)
+  const handleRoleSwitch = (role: "buyer" | "seller" | "admin" | "manager" | "superadmin") => {
+    // Map superadmin → admin for the switchRole function (admin is the DB role)
+    switchRole(role === "superadmin" ? "admin" : role)
     setShowRoleMenu(false)
-  }
-
-  const roleColors: Record<string, string> = {
-    buyer: "bg-emerald-500",
-    seller: "bg-orange-500",
-    admin: "bg-purple-500",
-    manager: "bg-violet-500",
-  }
-
-  const roleLabels: Record<string, string> = {
-    buyer: "Buyer",
-    seller: "Seller",
-    admin: "Admin",
-    manager: "Manager",
   }
 
   return (
@@ -144,7 +171,7 @@ export function BottomNav() {
                             setShowRoleMenu(!showRoleMenu)
                           }
                         }}
-                        className={`absolute -top-1.5 -right-1.5 w-3.5 h-3.5 rounded-full border-2 border-background ${roleColors[userRole]} hover:scale-125 transition-transform cursor-pointer`}
+                        className={`absolute -top-1.5 -right-1.5 w-3.5 h-3.5 rounded-full border-2 border-background ${roleColors[isSuperAdminUser ? 'superadmin' : userRole]} hover:scale-125 transition-transform cursor-pointer`}
                         title="Switch Role"
                       />
                     )}
@@ -171,22 +198,27 @@ export function BottomNav() {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 10, scale: 0.95 }}
               transition={{ duration: 0.15 }}
-              className="absolute bottom-20 right-4 bg-card rounded-xl shadow-lg border border-border p-2 min-w-[160px]"
+              className="absolute bottom-20 right-4 bg-card rounded-xl shadow-lg border border-border p-2 min-w-[180px]"
             >
               <p className="text-xs text-muted-foreground px-3 py-1.5 font-medium">Switch Role</p>
-              {(["buyer", "seller", ...(['admin', 'manager'].includes(currentUser?.role || '') ? ["admin" as const, "manager" as const] : [])] as const).map((role) => (
+              {availableRoles.map((role) => (
                 <button
                   key={role}
                   onClick={() => handleRoleSwitch(role)}
                   className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
-                    userRole === role
+                    (role === "superadmin" && userRole === "admin" && isSuperAdminUser)
+                      ? "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300"
+                      : userRole === role || (role === "admin" && userRole === "admin" && !isSuperAdminUser)
                       ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
                       : "hover:bg-muted text-foreground"
                   }`}
                 >
                   <span className={`w-2.5 h-2.5 rounded-full ${roleColors[role]}`} />
-                  <span className="font-medium">{roleLabels[role]}</span>
-                  {userRole === role && (
+                  <span className="font-medium">
+                    {roleIcons[role] && <span className="mr-1">{roleIcons[role]}</span>}
+                    {roleLabels[role]}
+                  </span>
+                  {((role === "superadmin" && userRole === "admin" && isSuperAdminUser) || userRole === role) && (
                     <Check className="w-3.5 h-3.5 ml-auto text-emerald-600" />
                   )}
                 </button>
@@ -201,31 +233,18 @@ export function BottomNav() {
 
 // ==================== ADMIN BOTTOM NAV ====================
 export function AdminBottomNav() {
-  const { currentScreen, navigate, userRole, currentUser, originalRole, switchRole } = useAppStore()
+  const { currentScreen, navigate, userRole, currentUser, originalRole, switchRole, isSuperAdminUser } = useAppStore()
   const [showRoleMenu, setShowRoleMenu] = useState(false)
   const roleMenuRef = useRef<HTMLDivElement>(null)
+  const availableRoles = getAvailableRoles(originalRole, isSuperAdminUser)
 
   const items = [
     { key: "admin-dashboard", label: "Home", icon: BarChart3, screen: "admin-dashboard" as ScreenName },
     { key: "admin-users", label: "Users", icon: Users, screen: "admin-users" as ScreenName },
     { key: "admin-products", label: "Products", icon: Package, screen: "admin-products" as ScreenName },
     { key: "admin-analytics", label: "Stats", icon: TrendingUp, screen: "admin-analytics" as ScreenName },
-    { key: "switch", label: "Switch", icon: Users, screen: null },
+    { key: "switch", label: "Switch", icon: Shield, screen: null },
   ]
-
-  const roleColors: Record<string, string> = {
-    buyer: "bg-emerald-500",
-    seller: "bg-orange-500",
-    admin: "bg-purple-500",
-    manager: "bg-violet-500",
-  }
-
-  const roleLabels: Record<string, string> = {
-    buyer: "Buyer",
-    seller: "Seller",
-    admin: "Admin",
-    manager: "Manager",
-  }
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -237,8 +256,8 @@ export function AdminBottomNav() {
     return () => document.removeEventListener("mousedown", handleClickOutside)
   }, [])
 
-  const handleRoleSwitch = (role: "buyer" | "seller" | "admin" | "manager") => {
-    switchRole(role)
+  const handleRoleSwitch = (role: "buyer" | "seller" | "admin" | "manager" | "superadmin") => {
+    switchRole(role === "superadmin" ? "admin" : role)
     setShowRoleMenu(false)
   }
 
@@ -255,12 +274,12 @@ export function AdminBottomNav() {
                   onClick={() => item.key === "switch" ? setShowRoleMenu(!showRoleMenu) : item.screen && navigate(item.screen)}
                   className="relative flex flex-col items-center justify-center gap-0.5 w-16 h-full"
                 >
-                  <Icon className={`w-5 h-5 ${isActive || item.key === "switch" ? "text-blue-600" : "text-muted-foreground"}`} strokeWidth={isActive ? 2.5 : 2} />
+                  <Icon className={`w-5 h-5 ${isActive || item.key === "switch" ? (isSuperAdminUser ? "text-red-600" : "text-blue-600") : "text-muted-foreground"}`} strokeWidth={isActive ? 2.5 : 2} />
                   {/* Role indicator dot on switch tab */}
                   {item.key === "switch" && (
-                    <span className={`absolute top-2 right-3 w-2.5 h-2.5 rounded-full border border-background ${roleColors[userRole]}`} />
+                    <span className={`absolute top-2 right-3 w-2.5 h-2.5 rounded-full border border-background ${roleColors[isSuperAdminUser ? 'superadmin' : userRole]}`} />
                   )}
-                  <span className={`text-[10px] font-medium ${isActive || item.key === "switch" ? "text-blue-600" : "text-muted-foreground"}`}>{item.label}</span>
+                  <span className={`text-[10px] font-medium ${isActive || item.key === "switch" ? (isSuperAdminUser ? "text-red-600" : "text-blue-600") : "text-muted-foreground"}`}>{item.label}</span>
                 </motion.button>
               )
             })}
@@ -276,22 +295,27 @@ export function AdminBottomNav() {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 10, scale: 0.95 }}
               transition={{ duration: 0.15 }}
-              className="absolute bottom-20 right-4 bg-card rounded-xl shadow-lg border border-border p-2 min-w-[160px]"
+              className="absolute bottom-20 right-4 bg-card rounded-xl shadow-lg border border-border p-2 min-w-[180px]"
             >
               <p className="text-xs text-muted-foreground px-3 py-1.5 font-medium">Switch Role</p>
-              {(["buyer", "seller", ...(['admin', 'manager'].includes(currentUser?.role || '') ? ["admin" as const, "manager" as const] : [])] as const).map((role) => (
+              {availableRoles.map((role) => (
                 <button
                   key={role}
                   onClick={() => handleRoleSwitch(role)}
                   className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
-                    userRole === role
+                    (role === "superadmin" && isSuperAdminUser)
+                      ? "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300"
+                      : userRole === role
                       ? "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300"
                       : "hover:bg-muted text-foreground"
                   }`}
                 >
                   <span className={`w-2.5 h-2.5 rounded-full ${roleColors[role]}`} />
-                  <span className="font-medium">{roleLabels[role]}</span>
-                  {userRole === role && (
+                  <span className="font-medium">
+                    {roleIcons[role] && <span className="mr-1">{roleIcons[role]}</span>}
+                    {roleLabels[role]}
+                  </span>
+                  {((role === "superadmin" && isSuperAdminUser) || userRole === role) && (
                     <Check className="w-3.5 h-3.5 ml-auto text-blue-600" />
                   )}
                 </button>
@@ -306,31 +330,18 @@ export function AdminBottomNav() {
 
 // ==================== SELLER BOTTOM NAV ====================
 export function SellerBottomNav() {
-  const { currentScreen, navigate, userRole, currentUser, originalRole, switchRole } = useAppStore()
+  const { currentScreen, navigate, userRole, currentUser, originalRole, switchRole, isSuperAdminUser } = useAppStore()
   const [showRoleMenu, setShowRoleMenu] = useState(false)
   const roleMenuRef = useRef<HTMLDivElement>(null)
+  const availableRoles = getAvailableRoles(originalRole, isSuperAdminUser)
 
   const items = [
     { key: "seller-dashboard", label: "Home", icon: BarChart3, screen: "seller-dashboard" as ScreenName },
     { key: "seller-products", label: "Produk", icon: Package, screen: "seller-products" as ScreenName },
     { key: "seller-orders", label: "Pesanan", icon: ShoppingCart, screen: "seller-orders" as ScreenName },
     { key: "seller-chat", label: "Chat", icon: MessageCircle, screen: "seller-chat" as ScreenName },
-    { key: "switch", label: "Switch", icon: Users, screen: null },
+    { key: "switch", label: "Switch", icon: Shield, screen: null },
   ]
-
-  const roleColors: Record<string, string> = {
-    buyer: "bg-emerald-500",
-    seller: "bg-orange-500",
-    admin: "bg-purple-500",
-    manager: "bg-violet-500",
-  }
-
-  const roleLabels: Record<string, string> = {
-    buyer: "Buyer",
-    seller: "Seller",
-    admin: "Admin",
-    manager: "Manager",
-  }
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -342,8 +353,8 @@ export function SellerBottomNav() {
     return () => document.removeEventListener("mousedown", handleClickOutside)
   }, [])
 
-  const handleRoleSwitch = (role: "buyer" | "seller" | "admin" | "manager") => {
-    switchRole(role)
+  const handleRoleSwitch = (role: "buyer" | "seller" | "admin" | "manager" | "superadmin") => {
+    switchRole(role === "superadmin" ? "admin" : role)
     setShowRoleMenu(false)
   }
 
@@ -363,7 +374,7 @@ export function SellerBottomNav() {
                   <Icon className={`w-5 h-5 ${isActive || item.key === "switch" ? "text-orange-600" : "text-muted-foreground"}`} strokeWidth={isActive ? 2.5 : 2} />
                   {/* Role indicator dot on switch tab */}
                   {item.key === "switch" && (
-                    <span className={`absolute top-2 right-3 w-2.5 h-2.5 rounded-full border border-background ${roleColors[userRole]}`} />
+                    <span className={`absolute top-2 right-3 w-2.5 h-2.5 rounded-full border border-background ${roleColors[isSuperAdminUser ? 'superadmin' : userRole]}`} />
                   )}
                   <span className={`text-[10px] font-medium ${isActive || item.key === "switch" ? "text-orange-600" : "text-muted-foreground"}`}>{item.label}</span>
                 </motion.button>
@@ -372,7 +383,7 @@ export function SellerBottomNav() {
           </nav>
         </div>
 
-        {/* Role switcher popup */}
+        {/* Role switcher popup — KEY FIX: Uses originalRole (not userRole) to determine available roles */}
         <AnimatePresence>
           {showRoleMenu && (
             <motion.div
@@ -381,22 +392,27 @@ export function SellerBottomNav() {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 10, scale: 0.95 }}
               transition={{ duration: 0.15 }}
-              className="absolute bottom-20 right-4 bg-card rounded-xl shadow-lg border border-border p-2 min-w-[160px]"
+              className="absolute bottom-20 right-4 bg-card rounded-xl shadow-lg border border-border p-2 min-w-[180px]"
             >
               <p className="text-xs text-muted-foreground px-3 py-1.5 font-medium">Switch Role</p>
-              {(["buyer", "seller", ...(['admin', 'manager'].includes(currentUser?.role || '') ? ["admin" as const, "manager" as const] : [])] as const).map((role) => (
+              {availableRoles.map((role) => (
                 <button
                   key={role}
                   onClick={() => handleRoleSwitch(role)}
                   className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
-                    userRole === role
+                    (role === "superadmin" && isSuperAdminUser)
+                      ? "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300"
+                      : userRole === role
                       ? "bg-orange-50 text-orange-700 dark:bg-orange-950 dark:text-orange-300"
                       : "hover:bg-muted text-foreground"
                   }`}
                 >
                   <span className={`w-2.5 h-2.5 rounded-full ${roleColors[role]}`} />
-                  <span className="font-medium">{roleLabels[role]}</span>
-                  {userRole === role && (
+                  <span className="font-medium">
+                    {roleIcons[role] && <span className="mr-1">{roleIcons[role]}</span>}
+                    {roleLabels[role]}
+                  </span>
+                  {((role === "superadmin" && isSuperAdminUser) || userRole === role) && (
                     <Check className="w-3.5 h-3.5 ml-auto text-orange-600" />
                   )}
                 </button>
