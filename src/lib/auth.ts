@@ -144,19 +144,27 @@ export const authOptions: NextAuthOptions = {
         })
 
         if (!response.ok) {
-          logger.warn({ component: 'auth', status: response.status, email: user.email }, 'sync-user returned non-OK status')
-        }
-
-        const data = await response.json()
-        if (!data.success) {
-          logger.warn({ component: 'auth', error: data.error, email: user.email }, 'Failed to sync Google user — /api/auth/me will create user as fallback')
+          logger.warn({ component: 'auth', status: response.status, email: user.email }, 'sync-user returned non-OK status — fallback to /api/auth/me')
         } else {
-          logger.info({ component: 'auth', email: user.email, isNewUser: data.isNewUser }, 'Google OAuth user synced successfully')
+          try {
+            const data = await response.json()
+            if (!data.success) {
+              logger.warn({ component: 'auth', error: data.error, email: user.email }, 'Failed to sync Google user — fallback to /api/auth/me')
+            } else {
+              logger.info({ component: 'auth', email: user.email, isNewUser: data.isNewUser }, 'Google OAuth user synced successfully')
+            }
+          } catch {
+            logger.warn({ component: 'auth', email: user.email }, 'Failed to parse sync-user response — fallback to /api/auth/me')
+          }
         }
       } catch (error) {
-        logger.warn({ component: 'auth', err: error, email: user.email }, 'Error syncing Google user — /api/auth/me will create user as fallback')
+        logger.warn({ component: 'auth', err: error, email: user.email }, 'Error syncing Google user — fallback to /api/auth/me')
       }
-      return true // Always allow sign-in — /api/auth/me handles fallback user creation
+
+      // Always allow sign-in — /api/auth/me handles fallback user creation
+      // The DataFetcher component on the frontend will detect the NextAuth session
+      // and call /api/auth/me which creates the user if missing
+      return true
     },
   },
   pages: {

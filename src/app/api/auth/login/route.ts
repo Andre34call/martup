@@ -33,6 +33,10 @@ function maskPhone(phone: string): string {
   return `${visibleStart}${maskedMiddle}${visibleEnd}`
 }
 
+// Account lockout configuration
+const MAX_FAILED_ATTEMPTS = 10  // Lock account after 10 failed attempts
+const LOCKOUT_DURATION_MINUTES = 30  // Lock for 30 minutes
+
 // POST /api/auth/login - Login with email and password
 export async function POST(request: NextRequest) {
   try {
@@ -106,6 +110,24 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Check if account is temporarily locked due to too many failed attempts
+    if (user.failedLoginAttempts >= MAX_FAILED_ATTEMPTS && user.lockedUntil && new Date() < user.lockedUntil) {
+      const remainingMinutes = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60000)
+      logger.warn({ email, userId: user.id, remainingMinutes }, 'Login failed: account temporarily locked')
+      return NextResponse.json(
+        { success: false, error: `Akun sementara dikunci karena terlalu banyak percobaan gagal. Coba lagi dalam ${remainingMinutes} menit.` },
+        { status: 423 }
+      )
+    }
+
+    // If lockout period has expired, reset the counter
+    if (user.lockedUntil && new Date() >= user.lockedUntil) {
+      await db.user.update({
+        where: { id: user.id },
+        data: { failedLoginAttempts: 0, lockedUntil: null },
+      })
+    }
+
     // Check if user has a password set (OAuth-only users won't have one)
     if (!user.password) {
       logger.info({ email, userId: user.id }, 'Login failed: no password (OAuth-only user)')
@@ -142,6 +164,25 @@ export async function POST(request: NextRequest) {
         { email, userId: user.id, hashPrefix, isBcryptHash },
         'Login failed: incorrect password'
       )
+
+      // Increment failed login attempts for account lockout
+      const newFailedAttempts = (user.failedLoginAttempts || 0) + 1
+      const lockUntil = newFailedAttempts >= MAX_FAILED_ATTEMPTS
+        ? new Date(Date.now() + LOCKOUT_DURATION_MINUTES * 60 * 1000)
+        : null
+
+      await db.user.update({
+        where: { id: user.id },
+        data: {
+          failedLoginAttempts: newFailedAttempts,
+          ...(lockUntil ? { lockedUntil: lockUntil } : {}),
+        },
+      })
+
+      if (lockUntil) {
+        logger.warn({ email, userId: user.id }, `Account locked for ${LOCKOUT_DURATION_MINUTES} minutes due to ${newFailedAttempts} failed attempts`)
+      }
+
       return NextResponse.json(
         { success: false, error: 'Email atau password salah' },
         { status: 401 }
@@ -205,6 +246,14 @@ export async function POST(request: NextRequest) {
 
     // Normal login (no 2FA) — generate auth token
     const token = generateAuthToken(user.id, user.tokenVersion ?? 0)
+
+    // Reset failed login attempts on successful login
+    if (user.failedLoginAttempts > 0 || user.lockedUntil) {
+      await db.user.update({
+        where: { id: user.id },
+        data: { failedLoginAttempts: 0, lockedUntil: null },
+      })
+    }
 
     // Return user data (without password)
     const { password: _, ...userWithoutPassword } = user

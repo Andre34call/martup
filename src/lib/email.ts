@@ -18,14 +18,21 @@ interface EmailResult {
   messageId?: string
   error?: string
   devUrl?: string // For mock provider - shows what would be sent
+  provider?: string // Which provider was actually used
 }
 
 function getProvider(): EmailProvider {
-  return (process.env.EMAIL_PROVIDER as EmailProvider) || 'mock'
+  const configured = (process.env.EMAIL_PROVIDER as EmailProvider) || 'mock'
+  // If resend is configured but API key is missing, fall back to mock
+  if (configured === 'resend' && !process.env.RESEND_API_KEY) {
+    logger.warn({ component: 'email' }, 'EMAIL_PROVIDER=resend but RESEND_API_KEY is not set — falling back to mock')
+    return 'mock'
+  }
+  return configured
 }
 
 function getFromEmail(): string {
-  return process.env.EMAIL_FROM || 'MartUp <noreply@martup.id>'
+  return process.env.EMAIL_FROM || 'MartUp <onboarding@resend.dev>'
 }
 
 // ==================== MOCK PROVIDER (Development) ====================
@@ -47,6 +54,7 @@ async function sendMockEmail(message: EmailMessage): Promise<EmailResult> {
     success: true,
     messageId: `mock-${Date.now()}`,
     devUrl: `/api/auth/verify-email?token=dev-verify-${devToken}`,
+    provider: 'mock',
   }
 }
 
@@ -85,6 +93,7 @@ async function sendResendEmail(message: EmailMessage): Promise<EmailResult> {
     return {
       success: true,
       messageId: data.id,
+      provider: 'resend',
     }
   } catch (error) {
     logger.error({ component: 'email', err: error }, 'Resend send failed')

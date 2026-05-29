@@ -147,13 +147,27 @@ export const createAuthSlice: StateCreator<AppStore, [], [], AuthSlice> = (set, 
       }
     }
 
-    // Now navigate after seller data is resolved
+    // Determine the target screen based on the role
+    // For Super Admin (admin role), navigate to admin-dashboard
+    // For managers, navigate to admin-dashboard
+    // For regular admins, navigate to admin-dashboard
+    let targetScreen: string
+    if (role === 'buyer') {
+      targetScreen = 'home'
+    } else if (role === 'seller') {
+      targetScreen = 'seller-dashboard'
+    } else if (['admin', 'manager'].includes(role)) {
+      targetScreen = 'admin-dashboard'
+    } else {
+      targetScreen = 'home'
+    }
+
     // IMPORTANT: Only update userRole (view-level), NOT currentUser.role (DB identity)
     // This preserves the original role so users can switch back to admin/manager
     set({
       userRole: role,
       // DO NOT mutate currentUser.role — keep the original DB role intact
-      currentScreen: role === 'buyer' ? 'home' : role === 'seller' ? 'seller-dashboard' : ['admin', 'manager'].includes(role) ? 'admin-dashboard' : 'home',
+      currentScreen: targetScreen as any,
       isLoading: false,
     })
 

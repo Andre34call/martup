@@ -1519,3 +1519,32 @@ Stage Summary:
 - Super Admin navigation: Role switcher now uses `originalRole` + `isSuperAdminUser` flag; Super Admin can always switch back
 - CSRF: Fixed crash when CSRF_SECRET not set in local dev
 - Lint passes ✅, dev server renders ✅
+---
+Task ID: 10-items-fix
+Agent: Main
+Task: Fix 10 audit items (Google OAuth, email verification, Super Admin navigation, security hardening)
+
+Work Log:
+- Analyzed all 10 items and determined that items 4, 5, 7, 8, 9 were already implemented
+- **Issue 1 (Google OAuth)**: Fixed CSRF middleware blocking internal sync-user requests by adding x-internal-secret header exemption
+- **Issue 1 (Google OAuth)**: Fixed admin route middleware to also check martup_session cookie (not just next-auth.session-token)
+- **Issue 1 (Google OAuth)**: Improved NextAuth signIn callback error handling (parse response JSON safely, better fallback logging)
+- **Issue 2 (Email verification)**: Fixed email provider fallback: when EMAIL_PROVIDER=resend but RESEND_API_KEY missing, falls back to mock with warning
+- **Issue 2 (Email verification)**: Changed default from email from noreply@martup.id to onboarding@resend.dev (Resend's default verified domain)
+- **Issue 2 (Email verification)**: Added email failure handling in register route — informs user if email failed to send
+- **Issue 3 (Super Admin navigation)**: ROOT CAUSE FOUND: /api/seller/register was changing user's DB role from 'admin' to 'seller', destroying Super Admin status
+- **Issue 3 (Super Admin navigation)**: Fixed seller register to NOT change DB role for elevated users (admin, manager, division roles)
+- **Issue 3 (Super Admin navigation)**: Improved switchRole function for clearer screen navigation logic
+- **Issue 6 (Password complexity)**: Added special character requirement to all password schemas (register, reset, update)
+- **Issue 10 (Security hardening)**: Added account lockout after 10 failed login attempts (30-minute lockout)
+- **Issue 10 (Security hardening)**: Added failedLoginAttempts and lockedUntil fields to Prisma User schema
+- Lint passes ✅
+
+Stage Summary:
+- Items 4, 5, 7, 8, 9 were already implemented (token hashing, session invalidation, plaintext removal, OTP hashing, name sanitization)
+- Google OAuth: CSRF exemption for internal requests + admin middleware fix
+- Email verification: provider fallback + from email fix + failure handling
+- Super Admin: Critical bug fix — seller registration no longer demotes elevated users
+- Password: Special character requirement added
+- Account lockout: 10 failed attempts = 30 min lock
+- Prisma schema updated with failedLoginAttempts + lockedUntil fields (needs db:push in production)

@@ -151,7 +151,12 @@ export async function middleware(request: NextRequest) {
 
   // For API mutating requests (POST, PUT, DELETE, PATCH): validate CSRF
   // SECURITY: CSRF is enforced by default. Set CSRF_ENFORCE=false to switch to monitoring mode.
-  const csrfResult = await validateCsrfRequest(request)
+  // EXEMPTION: Internal requests with x-internal-secret header are exempted (e.g., NextAuth sync-user)
+  const isInternalRequest = !!request.headers.get('x-internal-secret')
+  let csrfResult: { valid: boolean; reason?: string } = { valid: true }
+  if (!isInternalRequest) {
+    csrfResult = await validateCsrfRequest(request)
+  }
   if (!csrfResult.valid) {
     const isEnforce = process.env.CSRF_ENFORCE !== 'false' // Enforce by default
 
@@ -179,10 +184,12 @@ export async function middleware(request: NextRequest) {
   }
 
   // ===== Admin Route Protection =====
+  // Quick pre-check before route handlers do full auth verification
   if (pathname.startsWith('/api/admin/')) {
     const isSetupRoute = pathname === '/api/admin/setup' || pathname === '/api/admin/init'
     const hasAuth = request.headers.get('authorization') ||
-      request.headers.get('cookie')?.includes('next-auth.session-token')
+      request.headers.get('cookie')?.includes('next-auth.session-token') ||
+      request.headers.get('cookie')?.includes('martup_session')
 
     if (!hasAuth && !isSetupRoute) {
       return NextResponse.json(

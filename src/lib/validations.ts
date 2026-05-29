@@ -14,7 +14,8 @@ export const registerSchema = z.object({
     .min(8, 'Password minimal 8 karakter')
     .regex(/[a-z]/, 'Password harus mengandung huruf kecil')
     .regex(/[A-Z]/, 'Password harus mengandung huruf besar')
-    .regex(/\d/, 'Password harus mengandung angka'),
+    .regex(/\d/, 'Password harus mengandung angka')
+    .regex(/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/, 'Password harus mengandung karakter khusus (!@#$% dll)'),
   role: z.enum(['buyer', 'seller']).optional(),
 })
 
@@ -29,7 +30,8 @@ export const resetPasswordSchema = z.object({
     .min(8, 'Password minimal 8 karakter')
     .regex(/[a-z]/, 'Password harus mengandung huruf kecil')
     .regex(/[A-Z]/, 'Password harus mengandung huruf besar')
-    .regex(/\d/, 'Password harus mengandung angka'),
+    .regex(/\d/, 'Password harus mengandung angka')
+    .regex(/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/, 'Password harus mengandung karakter khusus (!@#$% dll)'),
 })
 
 // ==================== User ====================
@@ -39,7 +41,8 @@ export const updatePasswordSchema = z.object({
     .min(8, 'Password baru minimal 8 karakter')
     .regex(/[a-z]/, 'Password harus mengandung huruf kecil')
     .regex(/[A-Z]/, 'Password harus mengandung huruf besar')
-    .regex(/\d/, 'Password harus mengandung angka'),
+    .regex(/\d/, 'Password harus mengandung angka')
+    .regex(/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/, 'Password harus mengandung karakter khusus (!@#$% dll)'),
   confirmPassword: z.string().min(1, 'Konfirmasi password wajib diisi'),
 })
 

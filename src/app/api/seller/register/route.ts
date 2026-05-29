@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { verifyAuth, checkRateLimit } from '@/lib/auth-middleware'
+import { verifyAuth, checkRateLimit, isSuperAdmin, isElevatedRole } from '@/lib/auth-middleware'
 import { validateBody, sellerRegisterSchema } from '@/lib/validations'
 
 import { logger } from '@/lib/logger'
+
+// Elevated roles that should NOT be demoted to 'seller' when registering as a seller.
+// Super Admin, Manager, and Division Admins must keep their elevated role.
+// They can access the seller view via role switching (frontend-only).
+const ELEVATED_ROLES_SET = new Set(['admin', 'manager', 'finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr'])
+
 // POST /api/seller/register - Register user as seller
 export async function POST(request: NextRequest) {
   try {
@@ -89,12 +95,20 @@ export async function POST(request: NextRequest) {
     }
 
     // Create seller and update user role in a transaction
+    // SECURITY: If user has an elevated role (admin, manager, division), do NOT demote them to 'seller'.
+    // They access the seller view via frontend role switching — their DB role must stay elevated.
+    const isElevatedUser = ELEVATED_ROLES_SET.has(user.role)
+    const isSuperAdminUser = isSuperAdmin(user.role, user.email)
+
     const seller = await db.$transaction(async (tx) => {
-      // Update user role to seller
-      await tx.user.update({
-        where: { id: userId },
-        data: { role: 'seller' },
-      })
+      // Only update role to 'seller' if user is currently a 'buyer'
+      // Elevated users (admin, manager, division) keep their role and access seller view via switchRole
+      if (!isElevatedUser) {
+        await tx.user.update({
+          where: { id: userId },
+          data: { role: 'seller' },
+        })
+      }
 
       // Create seller profile
       const newSeller = await tx.seller.create({

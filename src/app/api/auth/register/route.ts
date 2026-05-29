@@ -211,13 +211,27 @@ export async function POST(request: NextRequest) {
       html: template.html,
     })
 
-    logger.info({ component: 'auth', email, emailResult }, 'Verification email sent')
+    logger.info({ component: 'auth', email, emailProvider: emailResult.provider, emailSuccess: emailResult.success, emailError: emailResult.error }, 'Verification email sent')
+
+    // If email failed to send, inform the user and provide a resend option
+    if (!emailResult.success) {
+      logger.error({ component: 'auth', email, error: emailResult.error }, 'Failed to send verification email')
+      return NextResponse.json({
+        success: true,
+        requiresVerification: true,
+        email,
+        emailSent: false,
+        message: 'Registrasi berhasil, tetapi email verifikasi gagal dikirim. Gunakan fitur "Kirim Ulang" di halaman login.',
+        devVerifyUrl: emailResult.devUrl,
+      })
+    }
 
     // Return success WITHOUT token — user must verify email first
     return NextResponse.json({
       success: true,
       requiresVerification: true,
       email,
+      emailSent: true,
       message: 'Registrasi berhasil! Silakan cek email Anda untuk verifikasi.',
       devVerifyUrl: emailResult.devUrl, // For mock provider in development
     })
