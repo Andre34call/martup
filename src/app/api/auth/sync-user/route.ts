@@ -57,21 +57,33 @@ export async function POST(request: NextRequest) {
     }
 
     // Google OAuth flow (existing logic)
-    // Check if user exists by email
+    // Check if user exists by email (case-insensitive to prevent duplicate accounts)
+    const normalizedEmail = email.toLowerCase()
     let user = await db.user.findUnique({
-      where: { email },
+      where: { email: normalizedEmail },
       include: {
         seller: true,
         wallet: true,
       },
     })
 
+    // Fallback: case-insensitive search if exact match not found
+    if (!user && email !== normalizedEmail) {
+      user = await db.user.findFirst({
+        where: { email: { equals: email, mode: 'insensitive' } },
+        include: {
+          seller: true,
+          wallet: true,
+        },
+      })
+    }
+
     if (!user) {
       // Create new user via OAuth - CLEAN SLATE (no orders, no notifications, no products)
       user = await db.user.create({
         data: {
-          email,
-          name: name || email.split('@')[0],
+          email: normalizedEmail,
+          name: name || normalizedEmail.split('@')[0],
           avatar: avatar || null,
           role: 'buyer', // ALWAYS buyer by default - NEVER admin
           isVerified: true, // OAuth users are pre-verified (Google verified their email)

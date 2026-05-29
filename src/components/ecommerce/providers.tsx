@@ -11,7 +11,7 @@ import { logger } from '@/lib/logger'
 import { useDataSync } from '@/lib/use-data-sync'
 import { ApiProvider } from '@/hooks/api/provider'
 import { apiClient } from '@/lib/api-client'
-import { hasAuthFlagCookie, deleteAuthFlagCookie } from '@/lib/session-cookie'
+import { hasAuthFlagCookie, deleteAuthFlagCookie, setAuthFlagCookie } from '@/lib/session-cookie'
 
 interface AuthMeResponse {
   success: boolean
@@ -167,6 +167,8 @@ function DataFetcher({ children }: { children: React.ReactNode }) {
               coins: data.user.coins || 0,
               referralCode: data.user.referralCode || undefined,
             })
+            // Set auth flag cookie for Google OAuth users (same as email login)
+            setAuthFlagCookie()
             // Set Sentry user context for error tracking
             setSentryUser({
               id: data.user.id,

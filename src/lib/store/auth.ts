@@ -15,6 +15,7 @@ export const createAuthSlice: StateCreator<AppStore, [], [], AuthSlice> = (set, 
   isAuthenticated: false,
   currentUser: null,
   userRole: 'buyer' as UserRole,
+  originalRole: 'buyer' as UserRole,
 
   login: (user) => {
     // Clear any stale reset token on login (both Zustand and sessionStorage)
@@ -23,6 +24,7 @@ export const createAuthSlice: StateCreator<AppStore, [], [], AuthSlice> = (set, 
       isAuthenticated: true,
       currentUser: user,
       userRole: user.role,
+      originalRole: user.role, // Preserve the original DB role for role switching
       currentScreen: 'home',
       avatarUrl: user.avatar || null,
       resetPasswordToken: '', // Clear any stale reset token on login
@@ -52,6 +54,7 @@ export const createAuthSlice: StateCreator<AppStore, [], [], AuthSlice> = (set, 
       isAuthenticated: false,
       currentUser: null,
       userRole: 'buyer',
+      originalRole: 'buyer',
       currentScreen: 'login',
       orders: [],
       notifications: [],
@@ -142,9 +145,11 @@ export const createAuthSlice: StateCreator<AppStore, [], [], AuthSlice> = (set, 
     }
 
     // Now navigate after seller data is resolved
+    // IMPORTANT: Only update userRole (view-level), NOT currentUser.role (DB identity)
+    // This preserves the original role so users can switch back to admin/manager
     set({
       userRole: role,
-      currentUser: get().currentUser ? { ...get().currentUser!, role } : null,
+      // DO NOT mutate currentUser.role — keep the original DB role intact
       currentScreen: role === 'buyer' ? 'home' : role === 'seller' ? 'seller-dashboard' : ['admin', 'manager'].includes(role) ? 'admin-dashboard' : 'home',
       isLoading: false,
     })
@@ -184,6 +189,7 @@ export const createAuthSlice: StateCreator<AppStore, [], [], AuthSlice> = (set, 
       isAuthenticated: false,
       currentUser: null,
       userRole: 'buyer',
+      originalRole: 'buyer',
       currentScreen: 'login',
       orders: [],
       notifications: [],

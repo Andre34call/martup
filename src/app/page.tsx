@@ -114,12 +114,13 @@ function GlobalToast() {
 function ScreenRenderer() {
   const currentScreen = useAppStore((s) => s.currentScreen)
   const currentUser = useAppStore((s) => s.currentUser)
+  const originalRole = useAppStore((s) => s.originalRole)
   const navigate = useAppStore((s) => s.navigate)
 
   // Security: If currentScreen is an admin screen but user is not actually an admin/manager, redirect to home
-  // Use useEffect to avoid calling navigate during render
+  // Use originalRole (DB role) instead of currentUser.role which may be overwritten by switchRole
   const isAdminScreen = ADMIN_SCREENS.includes(currentScreen)
-  const isActualAdmin = ELEVATED_ROLES.includes((currentUser?.role || '') as UserRole)
+  const isActualAdmin = ELEVATED_ROLES.includes((originalRole || currentUser?.role || '') as UserRole)
 
   // Redirect non-admin users away from admin screens
   // SECURITY: Use useEffect to avoid calling navigate during render

@@ -16,7 +16,7 @@ const navItems = [
 ]
 
 export function BottomNav() {
-  const { currentScreen, navigate, userRole, currentUser, switchRole, totalUnreadChats } = useAppStore()
+  const { currentScreen, navigate, userRole, currentUser, originalRole, switchRole, totalUnreadChats } = useAppStore()
   const { getTotalItemCount } = useCartStore()
   const [showRoleMenu, setShowRoleMenu] = useState(false)
   const roleMenuRef = useRef<HTMLDivElement>(null)
@@ -201,7 +201,7 @@ export function BottomNav() {
 
 // ==================== ADMIN BOTTOM NAV ====================
 export function AdminBottomNav() {
-  const { currentScreen, navigate, userRole, currentUser, switchRole } = useAppStore()
+  const { currentScreen, navigate, userRole, currentUser, originalRole, switchRole } = useAppStore()
   const [showRoleMenu, setShowRoleMenu] = useState(false)
   const roleMenuRef = useRef<HTMLDivElement>(null)
 
@@ -306,7 +306,7 @@ export function AdminBottomNav() {
 
 // ==================== SELLER BOTTOM NAV ====================
 export function SellerBottomNav() {
-  const { currentScreen, navigate, userRole, currentUser, switchRole } = useAppStore()
+  const { currentScreen, navigate, userRole, currentUser, originalRole, switchRole } = useAppStore()
   const [showRoleMenu, setShowRoleMenu] = useState(false)
   const roleMenuRef = useRef<HTMLDivElement>(null)
 

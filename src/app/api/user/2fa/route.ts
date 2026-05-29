@@ -272,7 +272,7 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    const isPasswordValid = await bcrypt.compare(password, user.password)
+    const isPasswordValid = await bcrypt.compare(password, user.password) as unknown as boolean
     if (!isPasswordValid) {
       return NextResponse.json(
         { success: false, error: 'Password salah' },

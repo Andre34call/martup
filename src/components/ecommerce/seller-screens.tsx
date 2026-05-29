@@ -32,7 +32,7 @@ type AuthMeResponse = { user?: { id: string } }
 
 // ==================== SELLER DASHBOARD ====================
 export function SellerDashboard() {
-  const { navigate, unreadNotificationCount, switchRole, userRole, orders, sellerBalance, currentUser, products, seller, sellerStats, fetchSellerStats, commissionRate } = useAppStore()
+  const { navigate, unreadNotificationCount, switchRole, userRole, orders, sellerBalance, currentUser, originalRole, products, seller, sellerStats, fetchSellerStats, commissionRate } = useAppStore()
   const sellerId = seller?.id || ''
 
   // Fetch seller stats from API when seller ID becomes available
@@ -147,7 +147,7 @@ export function SellerDashboard() {
                     className="absolute right-0 top-full mt-2 bg-card rounded-xl shadow-lg border border-border p-2 min-w-[160px] z-50"
                   >
                     <p className="text-xs text-muted-foreground px-3 py-1.5 font-medium">Switch Role</p>
-                    {(["buyer", "seller", ...(['admin', 'manager'].includes(currentUser?.role || '') ? ["admin" as const, "manager" as const] : [])] as const).map((role) => (
+                    {(["buyer", "seller", ...(['admin', 'manager'].includes(originalRole || '') ? ["admin" as const, "manager" as const] : [])] as const).map((role) => (
                       <button
                         key={role}
                         onClick={() => { switchRole(role); setShowRoleMenu(false) }}

@@ -201,11 +201,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   switchRole: (role) => {
-    const currentUser = get().user
-    if (!currentUser) return
-    const updatedUser = { ...currentUser, role }
-    saveToStorage({ user: updatedUser })
-    set({ user: updatedUser })
+    // Only update the display role, NOT the user object's role
+    // This preserves the original DB role for proper role switching back
+    // The auth-store is secondary — the main store in lib/store/auth.ts handles the full logic
   },
 }))
 

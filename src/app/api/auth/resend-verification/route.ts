@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
     })
 
     // Send verification email
-    const baseUrl = process.env.NEXTAUTH_URL || 'https://martup-seven.vercel.app'
+    const baseUrl = process.env.NEXTAUTH_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
     const verificationUrl = `${baseUrl}/api/auth/verify-email?token=${verificationToken}`
     const template = emailVerificationTemplate(user.name, verificationUrl)
     const emailResult = await sendEmail({

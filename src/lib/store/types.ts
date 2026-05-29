@@ -16,6 +16,7 @@ export interface AuthSlice {
   isAuthenticated: boolean
   currentUser: User | null
   userRole: UserRole
+  originalRole: UserRole // The actual DB role — never mutated by switchRole
   login: (user: User) => void
   logout: () => Promise<void>
   switchRole: (role: UserRole) => Promise<void>

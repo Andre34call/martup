@@ -66,7 +66,7 @@ function MenuItem({
 
 // ==================== PROFILE SCREEN ====================
 export function ProfileScreen() {
-  const { currentUser, userRole, switchRole, orders, navigate, logout, showToast, avatarUrl, uploadAvatar, walletBalance, walletCoins, vouchers } = useAppStore()
+  const { currentUser, userRole, originalRole, switchRole, orders, navigate, logout, showToast, avatarUrl, uploadAvatar, walletBalance, walletCoins, vouchers } = useAppStore()
   const avatarInputRef = useRef<HTMLInputElement>(null)
   const [avatarError, setAvatarError] = useState(false)
 
@@ -461,7 +461,7 @@ export function ProfileScreen() {
             <div className="bg-card rounded-xl border border-border/50 p-4">
               <h3 className="text-sm font-bold text-foreground mb-3">Switch Role (Dev Only)</h3>
               <div className="flex gap-2">
-                {(["buyer", "seller", ...(currentUser?.role === 'admin' || currentUser?.role === 'manager' ? ["admin" as const, "manager" as const] : [])] as const).map((role) => {
+                {(["buyer", "seller", ...(originalRole === 'admin' || originalRole === 'manager' ? ["admin" as const, "manager" as const] : [])] as const).map((role) => {
                   const roleIcons = { buyer: User, seller: Store, admin: LayoutDashboard, manager: LayoutDashboard }
                   const RoleIcon = roleIcons[role]
                   const roleColors = {

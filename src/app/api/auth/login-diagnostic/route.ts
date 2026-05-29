@@ -59,14 +59,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Try bcrypt compare with the provided password if given
-    let passwordCheck = null
+    let passwordCheck: { bcryptMatch: boolean; plainTextMatch: boolean; autoFixed: boolean } | null = null
     if (body.password) {
       const isBcryptHash = passwordInfo.looksLikeBcrypt
       let bcryptResult = false
       let plainTextResult = false
 
       try {
-        bcryptResult = await bcrypt.compare(body.password, user.password)
+        bcryptResult = await bcrypt.compare(body.password, user.password!) as unknown as boolean
       } catch {
         bcryptResult = false
       }

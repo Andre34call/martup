@@ -25,7 +25,7 @@ import { LoadingSpinner } from "../loading-spinner"
 import { ELEVATED_ROLES } from "@/lib/types"
 
 export function AdminDashboard() {
-  const { navigate, switchRole, userRole, currentUser, showToast, withdrawRequests, products, orders, adminUsers, adminStats, fetchAdminStats, fetchAdminUsers, fetchAdminWithdrawals, fetchDivisions, divisions } = useAppStore()
+  const { navigate, switchRole, userRole, currentUser, originalRole, showToast, withdrawRequests, products, orders, adminUsers, adminStats, fetchAdminStats, fetchAdminUsers, fetchAdminWithdrawals, fetchDivisions, divisions } = useAppStore()
 
   const [isLoading, setIsLoading] = useState(true)
 
@@ -109,7 +109,7 @@ export function AdminDashboard() {
               <Settings className="w-5 h-5 text-muted-foreground" />
             </motion.button>
             {/* View Switcher - Only switches UI view, not actual role */}
-            {['admin', 'manager'].includes(currentUser?.role || '') && (
+            {['admin', 'manager'].includes(originalRole || '') && (
             <div className="relative" ref={roleMenuRef}>
               <motion.button
                 whileTap={{ scale: 0.95 }}

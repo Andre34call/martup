@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
     const hashPrefix = user.password.substring(0, 4)
 
     try {
-      isPasswordValid = await bcrypt.compare(password, user.password)
+      isPasswordValid = await bcrypt.compare(password, user.password) as unknown as boolean
     } catch (compareError) {
       logger.warn({ email, userId: user.id, hashPrefix, err: compareError }, 'Login: bcrypt.compare threw an error — hash may be corrupted')
       isPasswordValid = false

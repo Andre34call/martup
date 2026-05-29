@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Step 5: Verify current password
-    const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password)
+    const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password) as unknown as boolean
     if (!isCurrentPasswordValid) {
       // Security: log failed attempt
       logger.warn({ userId: user.id, email: user.email }, 'Failed password change attempt')
