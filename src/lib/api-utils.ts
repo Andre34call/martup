@@ -171,10 +171,10 @@ export async function verifyAuthOrSession(request: NextRequest): Promise<AuthUse
   // --- Method 1: HMAC-signed Bearer token ---
   const bearerToken = request.headers.get('authorization')?.replace('Bearer ', '')
   if (bearerToken) {
-    const userId = verifyAuthToken(bearerToken)
-    if (userId) {
+    const authResult = verifyAuthToken(bearerToken)
+    if (authResult) {
       const dbUser = await db.user.findUnique({
-        where: { id: userId },
+        where: { id: authResult.userId },
         select: {
           id: true,
           email: true,
