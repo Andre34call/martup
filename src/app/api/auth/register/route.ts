@@ -71,7 +71,8 @@ export async function POST(request: NextRequest) {
             where: { id: existingUser.id },
             select: { id: true, email: true, name: true, phone: true, avatar: true, role: true, isVerified: true, isActive: true, loyaltyPoints: true, coins: true, referralCode: true, dailyCheckIn: true, divisionId: true, tokenVersion: true, createdAt: true, updatedAt: true, seller: true, wallet: true },
           })
-          const { password: _, ...userWithoutPassword } = fullUser!
+          // fullUser doesn't include password in select, so no need to destructure it out
+          const userWithoutPassword = fullUser!
 
           // Generate auth token with tokenVersion
           const token = generateAuthToken(existingUser.id, fullUser?.tokenVersion ?? 0)
@@ -185,7 +186,8 @@ export async function POST(request: NextRequest) {
         select: { id: true, email: true, name: true, phone: true, avatar: true, role: true, isVerified: true, isActive: true, loyaltyPoints: true, coins: true, referralCode: true, dailyCheckIn: true, divisionId: true, tokenVersion: true, createdAt: true, updatedAt: true, seller: true, wallet: true },
       })
 
-      const { password: _, ...userWithoutPassword } = fullUser!
+      // fullUser doesn't include password in select, so no need to destructure it out
+      const userWithoutPassword = fullUser!
 
       // Generate auth token so user is automatically logged in
       const token = generateAuthToken(user.id, fullUser?.tokenVersion ?? 0)
