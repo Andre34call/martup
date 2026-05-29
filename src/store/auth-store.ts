@@ -4,6 +4,7 @@ import { create } from 'zustand'
 import { apiClient } from '@/lib/api-client'
 import { useAppStore } from '@/lib/store'
 import type { User, Seller, UserRole } from '@/lib/types'
+import { logger } from '@/lib/logger'
 
 // ==================== AUTH STORE ====================
 
@@ -26,10 +27,13 @@ interface AuthState {
 
 const STORAGE_KEYS = {
   userId: 'martup_user_id',
-  token: 'martup_token',
   user: 'martup_user',
   seller: 'martup_seller',
 } as const
+
+// SECURITY: Token is NO LONGER stored in localStorage to prevent XSS attacks.
+// Primary auth is via httpOnly session cookie (sent automatically by the browser).
+// The token is kept in-memory only for the current session.
 
 function loadFromStorage(): Partial<AuthState> {
   if (typeof window === 'undefined') {
@@ -42,8 +46,9 @@ function loadFromStorage(): Partial<AuthState> {
     }
   }
 
+  // SECURITY: Token is no longer loaded from localStorage.
+  // Auth state is determined by httpOnly session cookie presence (checked via /api/auth/me).
   const userId = localStorage.getItem(STORAGE_KEYS.userId)
-  const token = localStorage.getItem(STORAGE_KEYS.token)
   const userJson = localStorage.getItem(STORAGE_KEYS.user)
   const sellerJson = localStorage.getItem(STORAGE_KEYS.seller)
 
@@ -57,12 +62,13 @@ function loadFromStorage(): Partial<AuthState> {
     if (sellerJson) seller = JSON.parse(sellerJson)
   } catch { /* ignore */ }
 
+  // Authenticated only if we have user data (actual auth is via httpOnly cookie)
   return {
     userId,
     user,
     seller,
-    token,
-    isAuthenticated: !!token && !!user,
+    token: null, // Token no longer stored in localStorage
+    isAuthenticated: !!userId && !!user,
   }
 }
 
@@ -73,9 +79,12 @@ function saveToStorage(data: { userId?: string | null; token?: string | null; us
     if (data.userId) localStorage.setItem(STORAGE_KEYS.userId, data.userId)
     else localStorage.removeItem(STORAGE_KEYS.userId)
   }
+  // SECURITY: Token is NO LONGER saved to localStorage.
+  // Auth is handled by httpOnly session cookies set by the server.
+  // Clean up any legacy tokens that may still exist.
   if (data.token !== undefined) {
-    if (data.token) localStorage.setItem(STORAGE_KEYS.token, data.token)
-    else localStorage.removeItem(STORAGE_KEYS.token)
+    localStorage.removeItem('martup_token')
+    localStorage.removeItem('authToken')
   }
   if (data.user !== undefined) {
     if (data.user) localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(data.user))
@@ -90,6 +99,9 @@ function saveToStorage(data: { userId?: string | null; token?: string | null; us
 function clearStorage() {
   if (typeof window === 'undefined') return
   Object.values(STORAGE_KEYS).forEach((key) => localStorage.removeItem(key))
+  // Also clean up legacy token keys
+  localStorage.removeItem('martup_token')
+  localStorage.removeItem('authToken')
 }
 
 
@@ -108,7 +120,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     saveToStorage({
       userId: data.user.id,
-      token: data.token,
+      token: data.token, // Will clean up legacy localStorage tokens, not save new ones
       user: data.user,
       seller: data.seller,
     })
@@ -117,7 +129,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       userId: data.user.id,
       user: data.user,
       seller: data.seller,
-      token: data.token,
+      token: data.token, // In-memory only, NOT persisted to localStorage
       isAuthenticated: true,
     })
 
@@ -130,26 +142,34 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       registerData
     )
 
-    // After register, auto-login
-    const loginData = await apiClient.post<{ user: User; seller: Seller | null; token: string }>(
-      '/api/auth/login',
-      { email: registerData.email, password: registerData.password }
-    )
+    // After register, auto-login (only if registration doesn't require email verification)
+    // If email verification is required, the register API won't return a token
+    // and auto-login will fail gracefully
+    try {
+      const loginData = await apiClient.post<{ user: User; seller: Seller | null; token: string }>(
+        '/api/auth/login',
+        { email: registerData.email, password: registerData.password }
+      )
 
-    saveToStorage({
-      userId: loginData.user.id,
-      token: loginData.token,
-      user: loginData.user,
-      seller: loginData.seller,
-    })
+      saveToStorage({
+        userId: loginData.user.id,
+        token: loginData.token, // Will clean up legacy localStorage tokens, not save new ones
+        user: loginData.user,
+        seller: loginData.seller,
+      })
 
-    set({
-      userId: loginData.user.id,
-      user: loginData.user,
-      seller: loginData.seller,
-      token: loginData.token,
-      isAuthenticated: true,
-    })
+      set({
+        userId: loginData.user.id,
+        user: loginData.user,
+        seller: loginData.seller,
+        token: loginData.token, // In-memory only
+        isAuthenticated: true,
+      })
+    } catch {
+      // Auto-login after register may fail if email verification is required
+      // That's OK — the user will need to verify email first
+      logger.info({ component: 'auth' }, 'Auto-login after register skipped (email verification likely required)')
+    }
 
     // Data sync is handled by useDataSync hook — no manual sync needed here
   },

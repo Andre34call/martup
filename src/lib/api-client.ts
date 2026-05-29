@@ -26,12 +26,17 @@ class ApiClientError extends Error {
 }
 
 /**
- * Get auth token from localStorage (fallback for backward compatibility).
- * Primary auth is now via httpOnly session cookie — the browser sends it automatically.
- * The Authorization header is kept as a secondary auth method for API clients.
+ * Get auth token for API requests.
+ *
+ * SECURITY: Primary auth is now via httpOnly session cookie — the browser sends it automatically.
+ * The Bearer token from localStorage is retained ONLY as a fallback for backward compatibility
+ * during the transition period. It should NOT be written to localStorage for new sessions.
+ * New sessions use httpOnly cookies exclusively.
  */
 function getToken(): string | null {
   if (typeof window === 'undefined') return null
+  // Only read from localStorage for backward compatibility with existing sessions
+  // New sessions should NOT store tokens in localStorage (XSS-vulnerable)
   return localStorage.getItem('authToken') || localStorage.getItem('martup_token')
 }
 

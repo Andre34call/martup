@@ -182,9 +182,15 @@ export async function verifyAuthOrSession(request: NextRequest): Promise<AuthUse
           role: true,
           isVerified: true,
           isActive: true,
+          tokenVersion: true,
         },
       })
       if (dbUser && dbUser.isActive) {
+        // CRITICAL: Validate tokenVersion to reject stale tokens after password change
+        if (authResult.tokenVersion !== dbUser.tokenVersion) {
+          logger.warn({ userId: dbUser.id, tokenVersion: authResult.tokenVersion, dbVersion: dbUser.tokenVersion }, 'Token rejected — tokenVersion mismatch (password changed)')
+          return null
+        }
         return {
           userId: dbUser.id,
           role: dbUser.role,

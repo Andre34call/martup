@@ -50,8 +50,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if token was recently sent (prevent spam — 1 minute cooldown)
+    // emailVerificationExpiry = tokenCreatedAt + 24h, so tokenCreatedAt = expiry - 24h
     if (user.emailVerificationExpiry) {
-      const timeSinceLastSent = Date.now() - (24 * 60 * 60 * 1000 - (user.emailVerificationExpiry.getTime() - Date.now()))
+      const tokenCreatedAt = user.emailVerificationExpiry.getTime() - 24 * 60 * 60 * 1000
+      const timeSinceLastSent = Date.now() - tokenCreatedAt
       if (timeSinceLastSent < 60 * 1000) {
         return NextResponse.json(
           { success: false, error: 'Tunggu 1 menit sebelum mengirim ulang.' },
