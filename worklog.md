@@ -337,3 +337,24 @@ Stage Summary:
 - vercel.json build command is safe (no --accept-data-loss)
 - ESLint passes clean
 - Dev server compiles successfully
+
+---
+Task ID: 4
+Agent: Main Agent
+Task: Fix build error — voucher variable out of scope in orders/route.ts SG-7 check
+
+Work Log:
+- Fixed TypeScript build error at src/app/api/orders/route.ts:455
+  - Error: `Cannot find name 'voucher'` — variable was declared with `const` inside the `if (voucherCode ...)` block (line 315), out of scope at line 455
+  - Replaced the conditional `if (voucher?.usageLimit !== null ...)` check with an unconditional DB query
+  - The fix queries `updatedVoucher` from DB directly (which is actually MORE correct — it fetches the updated usageCount after the increment)
+  - New check: `const updatedVoucher = await tx.voucher.findUnique(...)` then `if (updatedVoucher && updatedVoucher.usageLimit !== null && updatedVoucher.usageCount > updatedVoucher.usageLimit)`
+- Also ran `prisma generate` to regenerate Prisma client (resolving `phone` field not recognized as unique for findUnique)
+- Verified: `npx tsc --noEmit` passes clean
+- Verified: `bun run lint` passes clean
+- Verified: `npx next build` succeeds
+
+Stage Summary:
+- Build error fixed — `voucher` variable scoping issue in SG-7 race condition check
+- Prisma client regenerated — `phone` field recognized as unique
+- TypeScript, ESLint, and Next.js build all pass clean

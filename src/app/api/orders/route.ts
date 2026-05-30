@@ -452,15 +452,13 @@ export async function POST(request: NextRequest) {
 
         // SECURITY (SG-7): Double-check voucher usage limit after creating usage record.
         // Prevents race condition where multiple orders could exceed the limit simultaneously.
-        if (voucher?.usageLimit !== null && voucher?.usageLimit !== undefined) {
-          const updatedVoucher = await tx.voucher.findUnique({
-            where: { id: validatedVoucherId },
-            select: { usageCount: true, usageLimit: true },
-          })
-          if (updatedVoucher && updatedVoucher.usageCount > updatedVoucher.usageLimit!) {
-            // Race condition detected — too many uses. Roll back by throwing an error
-            throw new Error('Voucher sudah melewati batas penggunaan. Silakan coba tanpa voucher.')
-          }
+        const updatedVoucher = await tx.voucher.findUnique({
+          where: { id: validatedVoucherId },
+          select: { usageCount: true, usageLimit: true },
+        })
+        if (updatedVoucher && updatedVoucher.usageLimit !== null && updatedVoucher.usageCount > updatedVoucher.usageLimit) {
+          // Race condition detected — too many uses. Roll back by throwing an error
+          throw new Error('Voucher sudah melewati batas penggunaan. Silakan coba tanpa voucher.')
         }
       }
 
