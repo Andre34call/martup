@@ -35,20 +35,17 @@ export async function GET(request: NextRequest) {
   ]
 
   const missing: string[] = []
-  const present: string[] = []
   for (const key of envChecks) {
     const value = process.env[key]
     if (!value || value === '') {
       missing.push(key)
-    } else {
-      present.push(key)
     }
   }
 
   diagnostics.envVars = {
     status: missing.length === 0 ? 'ok' : 'missing',
     detail: missing.length > 0
-      ? `MISSING: ${missing.join(', ')} | Present: ${present.join(', ')}`
+      ? `${missing.length} of ${envChecks.length} vars missing`
       : `All ${envChecks.length} vars present`,
   }
 
@@ -86,16 +83,14 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // 5. Check if specific seed users exist
+  // 5. Check if admin users exist (without revealing emails or password hashes)
   try {
-    const adminUser = await db.user.findUnique({ where: { email: 'admin@martup.com' } })
-    const buyerUser = await db.user.findUnique({ where: { email: 'buyer@martup.com' } })
-    diagnostics.seedUsers = {
-      status: adminUser && buyerUser ? 'ok' : 'missing',
-      detail: `admin@martup.com: ${adminUser ? 'exists' : 'NOT FOUND'}, buyer@martup.com: ${buyerUser ? 'exists' : 'NOT FOUND'}, admin password type: ${adminUser?.password?.startsWith('$2') ? 'bcrypt (correct)' : adminUser?.password ? 'PLAIN TEXT (broken!)' : 'N/A'}`,
+    diagnostics.adminUsers = {
+      status: (await db.user.count({ where: { role: 'admin', isActive: true } })) > 0 ? 'ok' : 'missing',
+      detail: `${await db.user.count({ where: { role: 'admin' } })} admin users in database`,
     }
   } catch (error: any) {
-    diagnostics.seedUsers = {
+    diagnostics.adminUsers = {
       status: 'error',
       detail: error.message?.substring(0, 200),
     }

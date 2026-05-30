@@ -3,9 +3,13 @@ import { db } from '@/lib/db'
 import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middleware'
 
 import { logger } from '@/lib/logger'
-// POST /api/vouchers/validate - Validate a voucher code
+// POST /api/vouchers/validate - Validate a voucher code (PREVIEW only)
 // Body: { code, userId, cartSubtotal, sellerId? }
 // Requires authentication
+// SECURITY (SG-7): This endpoint is a PREVIEW — it does NOT consume the voucher.
+// Actual voucher consumption (VoucherUsage creation + usageCount increment) happens in
+// /api/orders POST, which uses a transaction for atomicity. A post-increment check there
+// ensures usageLimit cannot be exceeded even under race conditions.
 export async function POST(request: NextRequest) {
   try {
     // Verify authentication
@@ -220,6 +224,11 @@ export async function POST(request: NextRequest) {
       validUntil: voucher.validUntil,
     }
 
+    // SECURITY (SG-7): Warn if usage is near the limit to reduce race-condition surprises
+    const nearLimitWarning = voucher.usageLimit !== null && (voucher.usageLimit - voucher.usageCount) <= 3
+      ? `Perhatian: Sisa penggunaan voucher ini hampir habis (${voucher.usageLimit - voucher.usageCount} tersisa). Berlaku siapa cepat dia dapat.`
+      : undefined
+
     return NextResponse.json({
       success: true,
       data: {
@@ -227,6 +236,7 @@ export async function POST(request: NextRequest) {
         voucher: voucherDetails,
         discountAmount,
         message: 'Voucher berhasil diterapkan!',
+        ...(nearLimitWarning ? { warning: nearLimitWarning } : {}),
       },
     })
   } catch (error: unknown) {

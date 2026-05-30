@@ -142,10 +142,13 @@ export async function POST(request: NextRequest) {
         })
       }
 
-      return NextResponse.json(
-        { success: false, error: 'Email sudah terdaftar. Silakan login.' },
-        { status: 409 }
-      )
+      // SECURITY: Don't reveal whether email is registered — return same message as successful registration
+      logger.info({ component: 'auth', email }, 'Registration attempt with existing verified email — returning generic message')
+      return NextResponse.json({
+        success: true,
+        requiresVerification: false,
+        message: 'Jika email tersedia, registrasi akan diproses. Cek email Anda untuk verifikasi.',
+      })
     }
 
     // Hash password

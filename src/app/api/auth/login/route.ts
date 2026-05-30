@@ -252,8 +252,18 @@ export async function POST(request: NextRequest) {
         data: { otpCode: hashOtp(otpCode), otpExpiry },
       })
 
-      // In production: Send OTP via SMS gateway
-      logger.info(`[2FA Login] OTP sent to ${user.phone} (expires in ${OTP_EXPIRY_MINUTES} min)`)
+      // Send OTP via SMS gateway
+      try {
+        const { sendOTP } = await import('@/lib/sms-gateway')
+        const smsResult = await sendOTP(user.phone, otpCode, OTP_EXPIRY_MINUTES)
+        if (smsResult.success) {
+          logger.info({ component: 'auth', userId: user.id, provider: smsResult.provider }, `[2FA Login] OTP sent to ${user.phone} via ${smsResult.provider}`)
+        } else {
+          logger.warn({ component: 'auth', userId: user.id, provider: smsResult.provider, error: smsResult.error }, `[2FA Login] Failed to send OTP to ${user.phone} via ${smsResult.provider}: ${smsResult.error}`)
+        }
+      } catch (smsError) {
+        logger.error({ component: 'auth', userId: user.id, err: smsError }, '[2FA Login] SMS gateway exception')
+      }
 
       const isDev = process.env.NODE_ENV === 'development'
 

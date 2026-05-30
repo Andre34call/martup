@@ -91,40 +91,16 @@ export async function POST(request: NextRequest) {
         },
       })
     } else {
-      // Create new user with OTP (will be completed after verification)
-      // Use a UUID-based internal email to avoid collisions with real emails
-      // and to make it clear these are system-generated accounts
-      const phoneDigits = normalizedPhone.replace(/\D/g, '')
-      const shortId = crypto.randomBytes(6).toString('hex')
-      const internalEmail = `otp_${phoneDigits}_${shortId}@martup.internal`
-      try {
-        user = await db.user.create({
-          data: {
-            email: internalEmail,
-            phone: normalizedPhone,
-            name: 'New Member',
-            role: 'buyer',
-            isVerified: false,
-            otpCode: hashOtp(otpCode),
-            otpExpiry,
-            wallet: {
-              create: {
-                balance: 0,
-                holdBalance: 0,
-              },
-            },
-          },
-        })
-      } catch (createError: any) {
-        // Handle unique constraint violation on phone field
-        if (createError?.code === 'P2002' && createError?.meta?.target?.includes('phone')) {
-          return NextResponse.json(
-            { success: false, error: 'Nomor HP sudah terdaftar. Silakan login dengan nomor HP tersebut.' },
-            { status: 409 }
-          )
-        }
-        throw createError
-      }
+      // SECURITY (SG-8): Don't auto-create user accounts on OTP send.
+      // Users must register first via /api/auth/register with their phone number.
+      // Return generic message to prevent phone number enumeration.
+      logger.info({ component: 'otp', phone: normalizedPhone }, 'OTP requested for unregistered phone — returning generic message')
+
+      // Don't reveal whether the phone is registered
+      return NextResponse.json({
+        success: true,
+        message: `Jika nomor HP terdaftar, kode OTP akan dikirim ke ${maskPhone(normalizedPhone)}`,
+      })
     }
 
     // Generate a verification request ID (HMAC-signed to prevent tampering)

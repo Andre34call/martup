@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAuth } from '@/lib/auth-middleware'
 import { logger } from '@/lib/logger'
+import { clearSessionCookies } from '@/lib/session-cookie'
+import bcrypt from 'bcryptjs'
 
 // DELETE /api/user/delete - Delete the authenticated user's account
 export async function DELETE(request: NextRequest) {
@@ -16,6 +18,38 @@ export async function DELETE(request: NextRequest) {
     }
 
     const userId = authResult.user.id
+
+    // SECURITY: Require password confirmation before deleting account
+    const body = await request.json()
+    const { password } = body as { password?: string }
+
+    // Get user with password for verification
+    const userWithPassword = await db.user.findUnique({
+      where: { id: userId },
+      select: { password: true },
+    })
+
+    if (userWithPassword?.password) {
+      // User has a password - require it
+      if (!password) {
+        return NextResponse.json({ success: false, error: 'Password wajib diisi untuk menghapus akun' }, { status: 400 })
+      }
+      const isValid = await bcrypt.compare(password, userWithPassword.password)
+      if (!isValid) {
+        return NextResponse.json({ success: false, error: 'Password salah' }, { status: 401 })
+      }
+    } else {
+      // OAuth-only user - require confirmation phrase
+      if (password !== 'DELETE') {
+        return NextResponse.json({ success: false, error: 'Ketik "DELETE" untuk mengkonfirmasi penghapusan akun' }, { status: 400 })
+      }
+    }
+
+    // Invalidate all existing tokens before deleting
+    await db.user.update({
+      where: { id: userId },
+      data: { tokenVersion: { increment: 1 } },
+    })
 
     // Wrap all deletions in a single transaction for atomicity
     await db.$transaction(async (tx) => {
@@ -124,10 +158,12 @@ export async function DELETE(request: NextRequest) {
 
     logger.info({ component: 'auth', userId }, 'User account deleted successfully')
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       message: 'Akun berhasil dihapus.',
     })
+    clearSessionCookies(response)
+    return response
   } catch (error) {
     logger.error({ err: error }, 'Delete account error')
     return NextResponse.json(

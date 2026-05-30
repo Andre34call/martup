@@ -136,6 +136,25 @@ export async function POST(
       return updatedOrder
     })
 
+    // SECURITY (SG-5): If order was paid via Midtrans (not wallet), request refund from Midtrans
+    if (order.paymentStatus === 'paid' && order.paymentMethod && order.paymentMethod !== 'wallet') {
+      try {
+        const { requestMidtransRefund } = await import('@/lib/midtrans-server')
+        const refundResult = await requestMidtransRefund(
+          order.orderNumber,
+          Number(order.totalAmount),
+          reason || 'Cancelled by buyer'
+        )
+        if (refundResult.success) {
+          logger.info({ orderId: order.id, orderNumber: order.orderNumber }, 'Midtrans refund requested')
+        } else {
+          logger.warn({ orderId: order.id, orderNumber: order.orderNumber, error: refundResult.message }, 'Midtrans refund failed — manual refund may be needed')
+        }
+      } catch (refundError) {
+        logger.error({ err: refundError, orderId: order.id }, 'Midtrans refund exception')
+      }
+    }
+
     return NextResponse.json(updated)
   } catch (error: unknown) {
     logger.error({ err: error }, 'POST /api/orders/[id]/cancel error')

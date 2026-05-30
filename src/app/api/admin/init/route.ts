@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { checkRateLimit, generateAuthToken } from '@/lib/auth-middleware'
 import bcrypt from 'bcryptjs'
 import { logger } from '@/lib/logger'
+import { setSessionCookies } from '@/lib/session-cookie'
 
 // POST /api/admin/init - Create the first admin user
 // SECURITY: This endpoint ONLY works when NO admin exists in the database.
@@ -112,7 +113,7 @@ export async function POST(request: NextRequest) {
 
       const token = generateAuthToken(updatedUser.id, updatedUser.tokenVersion ?? 0)
 
-      return NextResponse.json({
+      const response = NextResponse.json({
         success: true,
         message: `User "${email}" berhasil dipromosikan menjadi admin!`,
         user: {
@@ -124,6 +125,8 @@ export async function POST(request: NextRequest) {
         },
         token,
       })
+      setSessionCookies(response, token, true) // Remember me for admin
+      return response
     }
 
     // Create new admin user
@@ -162,7 +165,7 @@ export async function POST(request: NextRequest) {
 
     const token = generateAuthToken(user.id, user.tokenVersion ?? 0)
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       message: 'Admin user berhasil dibuat!',
       user: {
@@ -174,6 +177,8 @@ export async function POST(request: NextRequest) {
       },
       token,
     })
+    setSessionCookies(response, token, true) // Remember me for admin
+    return response
   } catch (error: any) {
     logger.error({ err: error }, 'Admin init error')
 

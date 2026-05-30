@@ -62,7 +62,15 @@ export const twoFactorDisableSchema = z.object({
 // ==================== Admin ====================
 export const adminUpdateUserSchema = z.object({
   userId: z.string().min(1, 'User ID wajib diisi'),
-  updates: z.record(z.string(), z.unknown()),
+  updates: z.object({
+    name: z.string().min(2).max(100).optional(),
+    email: z.string().email().optional(),
+    phone: z.string().nullable().optional(),
+    role: z.enum(['buyer', 'seller', 'admin']).optional(),
+    isActive: z.boolean().optional(),
+    isVerified: z.boolean().optional(),
+    divisionId: z.string().nullable().optional(),
+  }),
 })
 
 export const adminDeleteUserSchema = z.object({

@@ -137,11 +137,17 @@ export async function GET(request: NextRequest) {
       isSuperAdmin: userIsSuperAdmin,
     })
 
-    // TOKEN ROTATION: If the token is older than the rotation threshold,
-    // issue a fresh token in the response cookies. This limits the window
+    // TOKEN ROTATION: When the token is older than the rotation threshold,
+    // we issue a fresh token in the response cookies. This limits the window
     // of opportunity for stolen cookies (especially with Remember Me).
-    // The old token continues to work until it expires, but the browser
-    // will use the new one for subsequent requests.
+    //
+    // DESIGN TRADE-OFF: We do NOT increment tokenVersion here because that
+    // would invalidate ALL the user's existing tokens across all devices,
+    // forcing re-authentication on every device every hour. Instead, the
+    // old token continues to work until its 24-hour expiry, but the browser
+    // will use the new one for subsequent requests. For full invalidation
+    // of a stolen token, the user should use "Logout All Devices" which
+    // increments tokenVersion.
     if (authResult.shouldRotateToken) {
       const freshToken = generateAuthToken(user.id, user.tokenVersion ?? 0)
       // Check if the current session cookie has maxAge (Remember Me)
