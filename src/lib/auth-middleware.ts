@@ -235,7 +235,7 @@ export async function verifyAuth(request: NextRequest): Promise<AuthResult | Aut
         // SECURITY: Check tokenVersion to invalidate sessions after password change
         if (tokenResult.tokenVersion !== dbUser.tokenVersion) {
           // Token was issued before password change — reject it
-          return { success: false, error: 'Session expired - Please login again', status: 401 }
+          return { success: false, error: 'Sesi telah berakhir. Silakan login kembali.', status: 401 }
         }
         return { success: true, user: dbUser }
       }
@@ -255,14 +255,14 @@ export async function verifyAuth(request: NextRequest): Promise<AuthResult | Aut
       if (dbUser && dbUser.isActive) {
         // SECURITY: Check tokenVersion to invalidate sessions after password change
         if (tokenResult.tokenVersion !== dbUser.tokenVersion) {
-          return { success: false, error: 'Session expired - Please login again', status: 401 }
+          return { success: false, error: 'Sesi telah berakhir. Silakan login kembali.', status: 401 }
         }
         return { success: true, user: dbUser }
       }
     }
   }
 
-  return { success: false, error: 'Unauthorized - Please login first', status: 401 }
+  return { success: false, error: 'Belum terautentikasi. Silakan login terlebih dahulu.', status: 401 }
 }
 
 // ==================== ROLE CHECK HELPERS ====================
@@ -303,7 +303,7 @@ export async function verifyAdmin(request: NextRequest): Promise<AuthResult | Au
   // Admin panel access: admin, manager, and all division roles
   const adminRoles = ['admin', 'manager', ...DIVISION_ROLES]
   if (!adminRoles.includes(authResult.user.role)) {
-    return { success: false, error: 'Forbidden - Admin access required', status: 403 }
+    return { success: false, error: 'Akses ditolak. Diperlukan akses admin.', status: 403 }
   }
 
   return authResult
@@ -323,7 +323,7 @@ export async function verifyManager(request: NextRequest): Promise<AuthResult | 
   const isManagerUser = isManager(authResult.user.role)
 
   if (!isSuperAdminUser && !isManagerUser) {
-    return { success: false, error: 'Forbidden - Manager or Super Admin access required', status: 403 }
+    return { success: false, error: 'Akses ditolak. Diperlukan akses Manager atau Super Admin.', status: 403 }
   }
 
   return authResult
@@ -341,7 +341,7 @@ export async function verifySuperAdmin(request: NextRequest): Promise<AuthResult
 
   // Super admin must have role 'admin' AND specific email
   if (!isSuperAdmin(authResult.user.role, authResult.user.email)) {
-    return { success: false, error: 'Forbidden - Super Admin access required', status: 403 }
+    return { success: false, error: 'Akses ditolak. Diperlukan akses Super Admin.', status: 403 }
   }
 
   return authResult
@@ -357,7 +357,7 @@ export async function verifyStaff(request: NextRequest): Promise<AuthResult | Au
   if (!authResult.success) return authResult
 
   if (!isElevatedRole(authResult.user.role)) {
-    return { success: false, error: 'Forbidden - Staff access required', status: 403 }
+    return { success: false, error: 'Akses ditolak. Diperlukan akses staf.', status: 403 }
   }
 
   return authResult

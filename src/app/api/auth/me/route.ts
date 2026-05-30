@@ -106,7 +106,7 @@ export async function GET(request: NextRequest) {
 
     if (!user) {
       return NextResponse.json(
-        { success: false, error: 'User not found' },
+        { success: false, error: 'Pengguna tidak ditemukan' },
         { status: 404 }
       )
     }
@@ -114,7 +114,7 @@ export async function GET(request: NextRequest) {
     // Check if user is blocked
     if (!user.isActive) {
       return NextResponse.json(
-        { success: false, error: 'Account is blocked' },
+        { success: false, error: 'Akun telah diblokir' },
         { status: 403 }
       )
     }
@@ -122,7 +122,12 @@ export async function GET(request: NextRequest) {
     // Return user data (without password)
     const { password: _, ...userWithoutPassword } = user
 
-    // Include Super Admin flag for frontend
+    // SECURITY NOTE: isSuperAdmin is only included in the response for the
+    // user's OWN data (login/register/me endpoints). It is NOT exposed in any
+    // API that returns other users' data (e.g., admin user listing). This flag
+    // is needed by the frontend to show admin navigation. The user's role
+    // (e.g., 'admin') is already exposed in the response, so isSuperAdmin does
+    // not reveal additional privilege information beyond what role already shows.
     const userIsSuperAdmin = isSuperAdmin(user.role, user.email)
 
     return NextResponse.json({
@@ -136,7 +141,7 @@ export async function GET(request: NextRequest) {
     // Provide specific error for database connection issues
     const errorMessage = error?.code === 'P1001' || error?.code === 'P1002'
       ? 'Database tidak dapat diakses. Pastikan SUPABASE_DATABASE_URL sudah dikonfigurasi.'
-      : 'Internal server error'
+      : 'Terjadi kesalahan server'
     
     return NextResponse.json(
       { success: false, error: errorMessage },

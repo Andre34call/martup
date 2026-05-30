@@ -300,6 +300,7 @@ export function LoginScreen() {
   const [emailOrPhone, setEmailOrPhone] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
+  const [rememberMe, setRememberMe] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [touchedEmailOrPhone, setTouchedEmailOrPhone] = useState(false)
   const [touchedPassword, setTouchedPassword] = useState(false)
@@ -370,7 +371,7 @@ export function LoginScreen() {
 
       // Email + password login
       // Use rawPost to read response body even on 403 (requiresVerification)
-      const res = await apiClient.rawPost('/api/auth/login', { email: trimmedInput, password })
+      const res = await apiClient.rawPost('/api/auth/login', { email: trimmedInput, password, rememberMe })
       const data: LoginResponse = await res.json()
 
       // Email verification check — if email not verified, redirect to verification screen
@@ -521,8 +522,19 @@ export function LoginScreen() {
           )}
         </div>
 
-        {/* Forgot password */}
-        <div className="flex justify-end">
+        {/* Remember Me + Forgot password */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="remember-me"
+              checked={rememberMe}
+              onCheckedChange={(checked) => setRememberMe(checked === true)}
+              className="data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500"
+            />
+            <label htmlFor="remember-me" className="text-xs text-muted-foreground cursor-pointer select-none">
+              Ingat saya
+            </label>
+          </div>
           <button
             type="button"
             onClick={() => navigate("forgot-password")}
@@ -589,12 +601,15 @@ export function LoginScreen() {
           <Button
             type="button"
             variant="outline"
-            className="w-full h-12 rounded-xl font-medium text-sm border-border/50"
+            className="w-full h-12 rounded-xl font-medium text-sm border-border/50 relative overflow-hidden opacity-70"
             onClick={() => showToast("Apple Sign-In segera hadir!", "info")}
-            disabled={isLoading}
+            disabled={true}
           >
             <Apple className="w-5 h-5 mr-2" />
             Masuk dengan Apple
+            <span className="absolute top-1.5 right-3 text-[10px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400 px-1.5 py-0.5 rounded-md">
+              Segera Hadir
+            </span>
           </Button>
         </div>
 

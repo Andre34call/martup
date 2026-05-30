@@ -18,6 +18,9 @@ import { NextResponse } from 'next/server'
 export const SESSION_COOKIE_NAME = 'martup_session'
 export const AUTH_FLAG_COOKIE_NAME = 'martup_auth'
 
+// Remember Me duration: 30 days
+const REMEMBER_ME_MAX_AGE = 30 * 24 * 60 * 60 // seconds
+
 const COOKIE_OPTIONS = {
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
@@ -37,10 +40,24 @@ const FLAG_COOKIE_OPTIONS = {
 /**
  * Set both session cookies on a NextResponse.
  * Call this on every successful login/register/OTP-verify response.
+ * @param rememberMe - If true, cookies persist for 30 days; otherwise they are session cookies (cleared on browser close)
  */
-export function setSessionCookies(response: NextResponse, token: string): NextResponse {
-  response.cookies.set(SESSION_COOKIE_NAME, token, COOKIE_OPTIONS)
-  response.cookies.set(AUTH_FLAG_COOKIE_NAME, '1', FLAG_COOKIE_OPTIONS)
+export function setSessionCookies(response: NextResponse, token: string, rememberMe: boolean = false): NextResponse {
+  if (rememberMe) {
+    // Persistent cookies — survive browser close (30 days)
+    response.cookies.set(SESSION_COOKIE_NAME, token, {
+      ...COOKIE_OPTIONS,
+      maxAge: REMEMBER_ME_MAX_AGE,
+    })
+    response.cookies.set(AUTH_FLAG_COOKIE_NAME, '1', {
+      ...FLAG_COOKIE_OPTIONS,
+      maxAge: REMEMBER_ME_MAX_AGE,
+    })
+  } else {
+    // Session cookies — cleared when browser closes
+    response.cookies.set(SESSION_COOKIE_NAME, token, COOKIE_OPTIONS)
+    response.cookies.set(AUTH_FLAG_COOKIE_NAME, '1', FLAG_COOKIE_OPTIONS)
+  }
   return response
 }
 

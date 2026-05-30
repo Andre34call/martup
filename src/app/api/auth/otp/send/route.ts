@@ -83,7 +83,11 @@ export async function POST(request: NextRequest) {
       })
     } else {
       // Create new user with OTP (will be completed after verification)
-      const internalEmail = `phone_${normalizedPhone.replace(/\+/g, '')}@martup.internal`
+      // Use a UUID-based internal email to avoid collisions with real emails
+      // and to make it clear these are system-generated accounts
+      const phoneDigits = normalizedPhone.replace(/\D/g, '')
+      const shortId = crypto.randomBytes(6).toString('hex')
+      const internalEmail = `otp_${phoneDigits}_${shortId}@martup.internal`
       user = await db.user.create({
         data: {
           email: internalEmail,

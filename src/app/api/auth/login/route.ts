@@ -9,6 +9,7 @@ import { logger } from '@/lib/logger'
 import { hashOtp } from '@/lib/token-hash'
 import { validateBody, loginSchema } from '@/lib/validations'
 import { setSessionCookies } from '@/lib/session-cookie'
+import { sendEmail, accountLockedTemplate } from '@/lib/email'
 
 // Helper: check if a string looks like a valid bcrypt hash
 function isValidBcryptHash(hash: string): boolean {
@@ -67,6 +68,7 @@ export async function POST(request: NextRequest) {
       )
     }
     const { email, password } = validation.data
+    const rememberMe = body.rememberMe === true
     logger.info({ email }, 'Login attempt')
 
     // Find user by email (lowercased by Zod schema)
@@ -190,6 +192,20 @@ export async function POST(request: NextRequest) {
 
       if (lockUntil) {
         logger.warn({ email, userId: user.id }, `Account locked for ${LOCKOUT_DURATION_MINUTES} minutes due to ${newFailedAttempts} failed attempts`)
+
+        // SECURITY: Send email notification to the user about the account lock
+        // This helps legitimate users detect unauthorized login attempts on their account
+        try {
+          const lockTemplate = accountLockedTemplate(user.name, LOCKOUT_DURATION_MINUTES)
+          await sendEmail({
+            to: user.email,
+            subject: lockTemplate.subject,
+            html: lockTemplate.html,
+          })
+          logger.info({ component: 'auth', userId: user.id }, 'Account lockout notification email sent')
+        } catch (emailErr) {
+          logger.warn({ component: 'auth', err: emailErr }, 'Failed to send account lockout notification email')
+        }
       }
 
       return NextResponse.json(
@@ -272,11 +288,12 @@ export async function POST(request: NextRequest) {
       success: true,
       user: userWithoutPassword,
       token,
+      // SECURITY NOTE: isSuperAdmin is only in the user's own auth response — not in any user-listing API
       isSuperAdmin: isSuperAdmin(user.role, user.email),
       message: 'Login berhasil',
     })
-    // Set session cookies (httpOnly + flag) — session cookies are cleared when browser closes
-    setSessionCookies(response, token)
+    // Set session cookies (httpOnly + flag) — persistent if Remember Me, session otherwise
+    setSessionCookies(response, token, rememberMe)
     return response
   } catch (error: any) {
     logger.error({ err: error, code: error?.code }, 'Login error')
