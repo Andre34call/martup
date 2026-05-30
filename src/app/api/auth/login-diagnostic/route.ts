@@ -1,23 +1,58 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import bcrypt from 'bcryptjs'
-import { env } from '@/lib/env'
+import crypto from 'crypto'
 import { logger } from '@/lib/logger'
 
 /**
  * POST /api/auth/login-diagnostic - Diagnose login failures (admin-only).
  *
- * SECURITY IMPROVEMENTS:
- * - Uses a DEDICATED ADMIN_DIAGNOSTIC_SECRET (not TOKEN_SECRET)
- * - Does NOT expose password hash prefixes
- * - Does NOT perform plaintext password comparison
+ * SECURITY:
+ * - Requires a DEDICATED ADMIN_DIAGNOSTIC_SECRET env var (NOT TOKEN_SECRET)
+ * - DISABLED in production unless ADMIN_DIAGNOSTIC_SECRET is explicitly set
+ * - Does NOT expose password hashes, hash prefixes, or hash format details
+ * - Does NOT allow password verification (removed — was an attack vector)
  * - Does NOT auto-fix passwords
- * - Returns only safe diagnostic info
+ * - Rate limited: max 5 requests per minute per IP
+ * - Does NOT expose userId or other internal identifiers
  *
- * Set ADMIN_DIAGNOSTIC_SECRET in env vars. If not set, this endpoint is disabled.
+ * This endpoint only provides account status diagnostics:
+ * - Does the account exist?
+ * - Is it active/blocked/locked?
+ * - Is email verified?
+ * - Is 2FA enabled?
+ * - Is it an OAuth-only account (no password)?
  */
+
+// Simple in-memory rate limiter for this endpoint
+const diagnosticRateLimit = new Map<string, { count: number; expiresAt: number }>()
+const DIAGNOSTIC_RATE_LIMIT = 5 // max 5 requests per minute
+
 export async function POST(request: NextRequest) {
-  // SECURITY: Require a dedicated diagnostic secret — NOT the same as TOKEN_SECRET
+  // SECURITY: Rate limit this endpoint aggressively
+  const clientIp = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+    || request.headers.get('x-real-ip')
+    || 'unknown'
+
+  const now = Date.now()
+  const rateEntry = diagnosticRateLimit.get(clientIp)
+  if (!rateEntry || now > rateEntry.expiresAt) {
+    diagnosticRateLimit.set(clientIp, { count: 1, expiresAt: now + 60_000 })
+  } else {
+    rateEntry.count++
+    if (rateEntry.count > DIAGNOSTIC_RATE_LIMIT) {
+      return NextResponse.json(
+        { error: 'Terlalu banyak request. Coba lagi dalam 1 menit.' },
+        { status: 429 }
+      )
+    }
+  }
+
+  // Lazy cleanup of expired rate limit entries
+  for (const [key, entry] of diagnosticRateLimit.entries()) {
+    if (now > entry.expiresAt) diagnosticRateLimit.delete(key)
+  }
+
+  // SECURITY: Require ADMIN_DIAGNOSTIC_SECRET — endpoint is disabled without it
   const diagnosticSecret = process.env.ADMIN_DIAGNOSTIC_SECRET
   if (!diagnosticSecret) {
     return NextResponse.json(
@@ -26,7 +61,7 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  // Admin-only: verify dedicated secret using timing-safe comparison
+  // Admin-only: verify dedicated secret using Node.js crypto.timingSafeEqual
   const adminSecret = request.headers.get('x-admin-secret')
   if (!adminSecret) {
     return NextResponse.json({ error: 'Secret diperlukan' }, { status: 401 })
@@ -34,19 +69,19 @@ export async function POST(request: NextRequest) {
   try {
     const a = Buffer.from(adminSecret)
     const b = Buffer.from(diagnosticSecret)
-    if (a.length !== b.length || !crypto.subtle.timingSafeEqual?.(a, b)) {
-      // Fallback: manual timing-safe compare
-      let result = 0
-      for (let i = 0; i < Math.max(a.length, b.length); i++) {
-        result |= (a[i] || 0) ^ (b[i] || 0)
-      }
-      if (result !== 0 || a.length !== b.length) {
-        return NextResponse.json({ error: 'Secret tidak valid' }, { status: 401 })
-      }
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+      return NextResponse.json({ error: 'Secret tidak valid' }, { status: 401 })
     }
   } catch {
-    // If timingSafeEqual not available, use simple comparison (less secure but functional)
-    if (adminSecret !== diagnosticSecret) {
+    // Fallback: constant-time string comparison
+    if (adminSecret.length !== diagnosticSecret.length) {
+      return NextResponse.json({ error: 'Secret tidak valid' }, { status: 401 })
+    }
+    let result = 0
+    for (let i = 0; i < adminSecret.length; i++) {
+      result |= adminSecret.charCodeAt(i) ^ diagnosticSecret.charCodeAt(i)
+    }
+    if (result !== 0) {
       return NextResponse.json({ error: 'Secret tidak valid' }, { status: 401 })
     }
   }
@@ -55,94 +90,65 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { email } = body
 
-    if (!email) {
+    if (!email || typeof email !== 'string') {
       return NextResponse.json({ error: 'Email wajib diisi' }, { status: 400 })
     }
 
     const normalizedEmail = email.toLowerCase().trim()
 
-    // Find user
+    // Find user — only select fields needed for diagnostics
     const user = await db.user.findUnique({
       where: { email: normalizedEmail },
       select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
         isActive: true,
         isVerified: true,
         twoFactorEnabled: true,
-        phone: true,
-        password: true,
+        password: true, // Only to check if it EXISTS, never exposed
         failedLoginAttempts: true,
         lockedUntil: true,
-        tokenVersion: true,
       },
     })
 
     if (!user) {
       return NextResponse.json({
         found: false,
-        emailSearched: normalizedEmail,
         diagnosis: 'User tidak ditemukan dengan email ini',
       })
     }
 
-    // User found — return SAFE diagnostic info only
-    const passwordInfo = {
-      hasPassword: !!user.password,
-      looksLikeBcrypt: /^\$2[aby]\$\d{2}\$/.test(user.password || ''),
-      // SECURITY: Do NOT expose hash prefix or password length
-    }
-
-    // Test bcrypt compare if password provided (NO plaintext fallback, NO auto-fix)
-    let passwordCheck: { bcryptMatch: boolean } | null = null
-    if (body.password && user.password) {
-      try {
-        const bcryptResult = await bcrypt.compare(body.password, user.password) as unknown as boolean
-        passwordCheck = { bcryptMatch: bcryptResult }
-      } catch {
-        passwordCheck = { bcryptMatch: false }
-      }
-    }
-
-    // Determine diagnosis
+    // Determine diagnosis — only account status, NO password verification
     let diagnosis: string
     if (!user.isActive) {
       diagnosis = 'Akun diblokir'
     } else if (user.lockedUntil && new Date() < user.lockedUntil) {
-      diagnosis = `Akun dikunci sampai ${user.lockedUntil.toISOString()}`
+      const remainingMinutes = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60000)
+      diagnosis = `Akun dikunci karena terlalu banyak percobaan gagal. Coba lagi dalam ${remainingMinutes} menit.`
     } else if (!user.isVerified) {
-      diagnosis = 'Email belum diverifikasi'
-    } else if (!passwordInfo.hasPassword) {
-      diagnosis = 'Tidak ada password (akun OAuth)'
-    } else if (passwordCheck?.bcryptMatch) {
-      diagnosis = 'Login seharusnya berhasil'
-    } else if (passwordCheck && !passwordCheck.bcryptMatch) {
-      diagnosis = 'Password tidak cocok'
-    } else if (!passwordInfo.looksLikeBcrypt) {
-      diagnosis = 'Format password hash tidak valid — user harus reset password'
+      diagnosis = 'Email belum diverifikasi. Minta user cek email atau gunakan resend-verification.'
+    } else if (!user.password) {
+      diagnosis = 'Akun OAuth (tidak ada password). User harus login via Google atau atur password melalui forgot-password.'
+    } else if (user.failedLoginAttempts > 5) {
+      diagnosis = `Ada ${user.failedLoginAttempts} percobaan login gagal. Password mungkin salah, atau ada percobaan brute-force.`
     } else {
-      diagnosis = 'Periksa password atau coba reset'
+      diagnosis = 'Akun aktif dan terverifikasi. Jika login gagal, kemungkinan password salah — arahkan user ke forgot-password.'
     }
 
+    // SECURITY: Only return SAFE diagnostic info — no userId, no password details
     return NextResponse.json({
       found: true,
-      userId: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role,
       isActive: user.isActive,
       isVerified: user.isVerified,
       twoFactorEnabled: user.twoFactorEnabled,
-      phone: user.phone,
-      failedLoginAttempts: user.failedLoginAttempts,
+      hasPassword: !!user.password, // Boolean only, no hash details
       isLocked: !!(user.lockedUntil && new Date() < user.lockedUntil),
-      passwordInfo,
-      passwordCheck,
+      failedLoginAttempts: user.failedLoginAttempts,
       diagnosis,
     })
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (error: unknown) {
+    logger.error({ err: error }, 'Login diagnostic error')
+    return NextResponse.json(
+      { error: 'Terjadi kesalahan server' },
+      { status: 500 }
+    )
   }
 }

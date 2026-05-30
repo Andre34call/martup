@@ -52,7 +52,7 @@ function cleanupRateLimitStore() {
   }
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   // Lazy cleanup on each request instead of unreliable setInterval in Edge
   cleanupRateLimitStore()
 
@@ -202,8 +202,8 @@ export async function middleware(request: NextRequest) {
   return response
 }
 
-// Alias for forward compatibility
-export { middleware as proxy }
+// Alias for backward compatibility (Next.js 16 uses "proxy" convention)
+export { proxy as middleware }
 
 function generateRequestId(): string {
   const bytes = new Uint8Array(16)

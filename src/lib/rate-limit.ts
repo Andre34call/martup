@@ -2,6 +2,10 @@
 // Abstraction layer that supports both in-memory (dev/single-instance)
 // and Redis/Vercel KV (production/distributed) backends.
 //
+// AUTO-DETECTION: If KV_REST_API_URL and KV_REST_API_TOKEN are set
+// (Vercel KV), the Vercel KV backend is automatically used in production.
+// Otherwise, falls back to in-memory (works for dev, resets on serverless cold starts).
+//
 // Usage:
 //   const limiter = createRateLimiter({ windowMs: 60000, maxRequests: 10 })
 //   const result = await limiter.check('user:123')
@@ -96,13 +100,56 @@ class RedisBackend implements RateLimiterBackend {
   }
 }
 
+// ==================== VERCEL KV REST API BACKEND ====================
+// Uses the Vercel KV REST API directly — no @vercel/kv package needed.
+// Auto-detected from KV_REST_API_URL and KV_REST_API_TOKEN env vars.
+
+class VercelKVBackend implements RateLimiterBackend {
+  private url: string
+  private token: string
+
+  constructor(url: string, token: string) {
+    this.url = url.replace(/\/$/, '') // Remove trailing slash
+    this.token = token
+  }
+
+  private async fetch<T>(command: string, args: (string | number)[]): Promise<T> {
+    const response = await fetch(`${this.url}/${command}/${args.map(encodeURIComponent).join('/')}`, {
+      headers: {
+        'Authorization': `Bearer ${this.token}`,
+      },
+    })
+    if (!response.ok) {
+      throw new Error(`Vercel KV error: ${response.status} ${response.statusText}`)
+    }
+    return response.json() as Promise<T>
+  }
+
+  async increment(key: string, windowMs: number): Promise<{ count: number; ttl: number }> {
+    // INCR returns the new value
+    const count = await this.fetch<number>('incr', [key])
+    if (count === 1) {
+      // First request — set expiry
+      await this.fetch<number>('pexpire', [key, windowMs])
+      return { count: 1, ttl: windowMs }
+    }
+    const ttl = await this.fetch<number>('pttl', [key])
+    return { count, ttl: Math.max(ttl, 0) }
+  }
+
+  async reset(key: string): Promise<void> {
+    await this.fetch<number>('del', [key])
+  }
+}
+
 // ==================== RATE LIMITER FACTORY ====================
 
 let defaultBackend: RateLimiterBackend | null = null
+let backendInitialized = false
 
 /**
  * Initialize the rate limiter backend.
- * - Without arguments: uses in-memory backend (for dev / single-instance)
+ * - Without arguments: auto-detects Vercel KV (if env vars set) or falls back to in-memory
  * - With a Redis/KV client: uses distributed backend (for production)
  */
 export function initRateLimiterBackend(
@@ -117,22 +164,43 @@ export function initRateLimiterBackend(
   if (redisClient) {
     defaultBackend = new RedisBackend(redisClient)
   } else {
-    const inMemory = new InMemoryBackend()
-    inMemory.startCleanup()
-    defaultBackend = inMemory
+    // AUTO-DETECT: Use Vercel KV REST API if env vars are available
+    const kvUrl = process.env.KV_REST_API_URL
+    const kvToken = process.env.KV_REST_API_TOKEN
+    if (kvUrl && kvToken) {
+      defaultBackend = new VercelKVBackend(kvUrl, kvToken)
+      console.log('[rate-limit] Using Vercel KV backend (distributed)')
+    } else {
+      const inMemory = new InMemoryBackend()
+      inMemory.startCleanup()
+      defaultBackend = inMemory
+      if (process.env.NODE_ENV === 'production') {
+        console.warn('[rate-limit] WARNING: Using in-memory backend in production. Rate limits will NOT persist across serverless cold starts. Set up Vercel KV (KV_REST_API_URL + KV_REST_API_TOKEN) for distributed rate limiting.')
+      }
+    }
   }
+  backendInitialized = true
 }
 
 function getBackend(): RateLimiterBackend {
-  if (!defaultBackend) {
-    initRateLimiterBackend() // Auto-init in-memory
+  if (!defaultBackend || !backendInitialized) {
+    initRateLimiterBackend() // Auto-init with detection
   }
   return defaultBackend!
 }
 
 /**
+ * Check if the rate limiter is using a distributed (persistent) backend.
+ * Returns true if Vercel KV or Redis is configured.
+ */
+export function isDistributedBackend(): boolean {
+  const backend = getBackend()
+  return backend instanceof VercelKVBackend || backend instanceof RedisBackend
+}
+
+/**
  * Create a rate limiter with the given config.
- * Uses the global backend (in-memory or Redis).
+ * Uses the global backend (in-memory, Vercel KV, or Redis).
  */
 export function createRateLimiter(config: RateLimiterConfig): {
   check: (identifier: string) => Promise<RateLimitResult>
@@ -144,20 +212,36 @@ export function createRateLimiter(config: RateLimiterConfig): {
   return {
     async check(identifier: string): Promise<RateLimitResult> {
       const key = `${keyPrefix}${identifier}`
-      const { count, ttl } = await backend.increment(key, windowMs)
-      const resetAt = Date.now() + ttl
+      try {
+        const { count, ttl } = await backend.increment(key, windowMs)
+        const resetAt = Date.now() + ttl
 
-      return {
-        allowed: count <= maxRequests,
-        remaining: Math.max(0, maxRequests - count),
-        resetAt,
-        total: maxRequests,
+        return {
+          allowed: count <= maxRequests,
+          remaining: Math.max(0, maxRequests - count),
+          resetAt,
+          total: maxRequests,
+        }
+      } catch (error) {
+        // If distributed backend fails (KV down, network error), allow the request
+        // rather than blocking all users. Log the error for monitoring.
+        console.error('[rate-limit] Backend error, allowing request:', error)
+        return {
+          allowed: true,
+          remaining: maxRequests,
+          resetAt: Date.now() + windowMs,
+          total: maxRequests,
+        }
       }
     },
 
     async reset(identifier: string): Promise<void> {
       const key = `${keyPrefix}${identifier}`
-      await backend.reset(key)
+      try {
+        await backend.reset(key)
+      } catch (error) {
+        console.error('[rate-limit] Backend reset error:', error)
+      }
     },
   }
 }
