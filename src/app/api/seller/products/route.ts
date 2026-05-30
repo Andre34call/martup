@@ -108,25 +108,23 @@ export async function POST(request: NextRequest) {
     const name = sanitizeInput(body.name || '')
     const description = sanitizeInput(body.description || '')
 
-    // SECURITY: Verify the authenticated user is a seller and owns this store
+    // SECURITY: Verify the authenticated user is a seller
+    // Derive sellerId from the authenticated user, NOT from the request body.
+    // This prevents the client from sending an empty/wrong sellerId that causes 403 errors
+    // when the seller object hasn't loaded yet in the frontend Zustand store.
     const seller = await db.seller.findFirst({
       where: { userId: authResult.user.id },
     })
 
-    if (!seller || seller.id !== sellerId) {
+    if (!seller) {
       return NextResponse.json(
-        { success: false, error: 'Forbidden - You can only create products for your own store' },
+        { success: false, error: 'Akun seller tidak ditemukan. Silakan daftar sebagai seller terlebih dahulu.' },
         { status: 403 }
       )
     }
 
-    // Validate required fields
-    if (!sellerId) {
-      return NextResponse.json(
-        { success: false, error: 'sellerId is required' },
-        { status: 400 }
-      )
-    }
+    // Use the server-derived seller ID (authoritative), not the client-provided one
+    const verifiedSellerId = seller.id
     if (!categoryId) {
       return NextResponse.json(
         { success: false, error: 'categoryId is required' },
@@ -182,7 +180,7 @@ export async function POST(request: NextRequest) {
 
     const product = await db.product.create({
       data: {
-        sellerId,
+        sellerId: verifiedSellerId,
         categoryId,
         name,
         slug: productSlug,
@@ -226,7 +224,7 @@ export async function POST(request: NextRequest) {
 
     // Update seller total products count
     await db.seller.update({
-      where: { id: sellerId },
+      where: { id: verifiedSellerId },
       data: { totalProducts: { increment: 1 } },
     })
 
@@ -370,7 +368,7 @@ export async function PUT(request: NextRequest) {
 
     if (!seller || existingProduct.sellerId !== seller.id) {
       return NextResponse.json(
-        { success: false, error: 'Forbidden - You can only edit your own products' },
+        { success: false, error: 'Anda hanya dapat mengedit produk milik toko Anda sendiri' },
         { status: 403 }
       )
     }
@@ -590,7 +588,7 @@ export async function DELETE(request: NextRequest) {
 
     if (!seller || existingProduct.sellerId !== seller.id) {
       return NextResponse.json(
-        { success: false, error: 'Forbidden - You can only delete your own products' },
+        { success: false, error: 'Anda hanya dapat menghapus produk milik toko Anda sendiri' },
         { status: 403 }
       )
     }

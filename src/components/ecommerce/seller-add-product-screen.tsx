@@ -281,6 +281,11 @@ export function SellerAddProductScreen() {
 
   // Submit handler
   const handleSubmit = async () => {
+    // Guard: ensure seller data is loaded before submitting
+    if (!seller?.id) {
+      showToast("Data seller belum dimuat. Silakan tunggu sebentar atau muat ulang halaman.", "error")
+      return
+    }
     if (productImages.length === 0 && !editingProduct?.images?.length) {
       showToast("Upload minimal 1 foto produk", "error")
       return
@@ -1040,10 +1045,11 @@ export function SellerAddProductScreen() {
 
           <Button
             onClick={handleSubmit}
-            className="w-full h-12 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl text-sm font-bold shadow-lg shadow-emerald-500/25"
+            disabled={!seller?.id || isUploading}
+            className="w-full h-12 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl text-sm font-bold shadow-lg shadow-emerald-500/25 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Upload className="w-4 h-4 mr-2" />
-            Publikasikan Produk
+            {isUploading ? 'Mengupload...' : !seller?.id ? 'Memuat data seller...' : 'Publikasikan Produk'}
           </Button>
 
           <Button

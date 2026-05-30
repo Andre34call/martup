@@ -1626,3 +1626,24 @@ Stage Summary:
 - 7 dead files removed, 3 dead dependencies removed
 - Build passes ✅, lint passes ✅, TypeScript ✅
 - Deployed to GitHub → Vercel auto-build
+
+---
+Task ID: fix-publish-product
+Agent: main
+Task: Fix bug where clicking "Publikasikan Produk" returns "must own store or product" error
+
+Work Log:
+- Investigated the publish product flow: frontend (seller-add-product-screen.tsx) → API (POST /api/seller/products)
+- Root cause: The API route required `sellerId` from the request body and compared it to the server-looked-up seller (`seller.id !== sellerId`). On the frontend, `sellerId` comes from `seller?.id || ''` — which is empty string when the Zustand `seller` object hasn't loaded yet (not persisted in localStorage, only loaded via fetchUserData after login)
+- When `sellerId = ''`, the API check fails → 403 "Forbidden - You can only create products for your own store"
+- Fix 1 (API): Changed POST /api/seller/products to derive sellerId from the authenticated user (via `verifyAuth` + `db.seller.findFirst`), NOT from the request body. Created `verifiedSellerId = seller.id` and used it for product creation. Removed the redundant `sellerId` body validation.
+- Fix 2 (API): Translated error messages to Indonesian for better UX
+- Fix 3 (Frontend): Added guard in handleSubmit() to check `seller?.id` before making API call, showing "Data seller belum dimuat..." error toast
+- Fix 4 (Frontend): Disabled "Publikasikan Produk" button when `seller?.id` is null (shows "Memuat data seller..." label) or when uploading
+- Lint passes ✅
+
+Stage Summary:
+- Root cause: Empty client-provided sellerId vs server-derived seller ID mismatch
+- API now derives sellerId from auth token (more secure — client can't forge sellerId)
+- Button disabled with helpful label when seller data hasn't loaded yet
+- Error messages translated to Indonesian
