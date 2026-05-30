@@ -434,7 +434,30 @@ export function LoginScreen() {
 
   const handleGoogleLogin = async () => {
     setIsLoading(true)
-    await signIn('google', { callbackUrl: '/' })
+    try {
+      // Use redirect: false so we can handle errors ourselves
+      const result = await signIn('google', { callbackUrl: '/', redirect: false })
+      if (result?.error) {
+        const errorMessages: Record<string, string> = {
+          Configuration: 'Login Google belum dikonfigurasi. Hubungi admin.',
+          AccessDenied: 'Akses ditolak oleh Google.',
+          Verification: 'Verifikasi gagal. Coba lagi.',
+          OAuthSignin: 'Gagal terhubung ke Google. Coba lagi.',
+          OAuthCallback: 'Gagal memproses login Google. Coba lagi.',
+          OAuthCreateAccount: 'Gagal membuat akun dari Google.',
+          Default: 'Login gagal. Coba lagi nanti.',
+        }
+        showToast(errorMessages[result.error] || `Login gagal: ${result.error}`, 'error')
+        setIsLoading(false)
+      } else if (result?.ok) {
+        // Google login successful — NextAuth session is now active
+        // DataFetcher will detect the session and call /api/auth/me
+        showToast('Login Google berhasil!', 'success')
+      }
+    } catch (err) {
+      showToast('Gagal terhubung ke Google. Coba lagi.', 'error')
+      setIsLoading(false)
+    }
   }
 
   return (

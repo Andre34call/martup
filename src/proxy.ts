@@ -152,9 +152,17 @@ export async function proxy(request: NextRequest) {
   // For API mutating requests (POST, PUT, DELETE, PATCH): validate CSRF
   // SECURITY: CSRF is enforced by default. Set CSRF_ENFORCE=false to switch to monitoring mode.
   // EXEMPTION: Internal requests with x-internal-secret header are exempted (e.g., NextAuth sync-user)
+  // EXEMPTION: NextAuth built-in routes are exempted — NextAuth has its own CSRF protection
+  //   and uses a different mechanism (csrfToken body field + cookie). Our custom CSRF would
+  //   block NextAuth's signIn/signout POST requests, breaking Google OAuth login.
   const isInternalRequest = !!request.headers.get('x-internal-secret')
+  const isNextAuthRoute = pathname.startsWith('/api/auth/signin') ||
+    pathname.startsWith('/api/auth/callback') ||
+    pathname === '/api/auth/csrf' ||
+    pathname === '/api/auth/session' ||
+    pathname === '/api/auth/_log'
   let csrfResult: { valid: boolean; reason?: string } = { valid: true }
-  if (!isInternalRequest) {
+  if (!isInternalRequest && !isNextAuthRoute) {
     csrfResult = await validateCsrfRequest(request)
   }
   if (!csrfResult.valid) {
