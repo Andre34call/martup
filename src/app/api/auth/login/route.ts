@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { checkRateLimit, generateAuthToken, isSuperAdmin } from '@/lib/auth-middleware'
+import { generateAuthToken, isSuperAdmin } from '@/lib/auth-middleware'
 import { authLimiter } from '@/lib/rate-limit'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
@@ -42,19 +42,16 @@ const LOCKOUT_DURATION_MINUTES = 30  // Lock for 30 minutes
 // POST /api/auth/login - Login with email and password
 export async function POST(request: NextRequest) {
   try {
-    // Rate limit check - stricter for login (5 per minute per IP)
-    const clientIp = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
-    if (!checkRateLimit(`login:${clientIp}`)) {
-      return NextResponse.json(
-        { success: false, error: 'Terlalu banyak percobaan login. Coba lagi dalam 1 menit.' },
-        { status: 429 }
-      )
-    }
-    // Also use distributed rate limiter (persists across serverless cold starts)
+    // Rate limit check — single distributed layer (persists across serverless cold starts)
+    // NOTE: The edge middleware (proxy.ts) also enforces a 10 req/min limit per IP as a first line of defense.
+    // This distributed limiter provides the authoritative, persistent rate limit.
+    const clientIp = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || request.headers.get('x-real-ip') || 'unknown'
     const distributedLimit = await authLimiter.check(`login:${clientIp}`)
     if (!distributedLimit.allowed) {
+      const retrySeconds = Math.ceil((distributedLimit.resetAt - Date.now()) / 1000)
+      const retryMsg = retrySeconds > 60 ? `${Math.ceil(retrySeconds / 60)} menit` : `${retrySeconds} detik`
       return NextResponse.json(
-        { success: false, error: 'Terlalu banyak percobaan login. Coba lagi dalam beberapa menit.' },
+        { success: false, error: `Terlalu banyak percobaan login. Coba lagi dalam ${retryMsg}.` },
         { status: 429 }
       )
     }
@@ -286,6 +283,14 @@ export async function POST(request: NextRequest) {
         where: { id: user.id },
         data: { failedLoginAttempts: 0, lockedUntil: null },
       })
+    }
+
+    // Reset rate limit counter on successful login — a legitimate user who finally
+    // gets the password right should not be penalized for prior failed attempts.
+    try {
+      await authLimiter.reset(`login:${clientIp}`)
+    } catch (resetErr) {
+      logger.warn({ err: resetErr }, 'Failed to reset login rate limit counter')
     }
 
     // Return user data (without password)

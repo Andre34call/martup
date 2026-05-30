@@ -33,7 +33,7 @@ export { ELEVATED_ROLES, DIVISION_ROLES, MANAGER_ASSIGNABLE_ROLES }
 // both in-memory (dev) and Redis/Vercel KV (production) backends.
 
 const apiLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 60, keyPrefix: 'rl:api:' })
-const authLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 10, keyPrefix: 'rl:auth:' })
+const authLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 20, keyPrefix: 'rl:auth:' })
 const sensitiveLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 5, keyPrefix: 'rl:sensitive:' })
 
 /**

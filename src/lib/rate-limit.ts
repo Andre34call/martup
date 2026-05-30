@@ -92,6 +92,12 @@ class RedisBackend implements RateLimiterBackend {
       return { count: 1, ttl: windowMs }
     }
     const ttl = await this.client.pttl(key)
+    // SAFETY: If the key has no TTL (ttl = -1) or TTL is way too long, reset it.
+    // This prevents stale keys from persisting indefinitely and locking users out.
+    if (ttl === -1 || ttl > windowMs * 2) {
+      await this.client.pexpire(key, windowMs)
+      return { count, ttl: windowMs }
+    }
     return { count, ttl: Math.max(ttl, 0) }
   }
 
@@ -134,6 +140,12 @@ class VercelKVBackend implements RateLimiterBackend {
       return { count: 1, ttl: windowMs }
     }
     const ttl = await this.fetch<number>('pttl', [key])
+    // SAFETY: If the key has no TTL (ttl = -1) or TTL is way too long, reset it.
+    // This prevents stale keys from persisting indefinitely and locking users out.
+    if (ttl === -1 || ttl > windowMs * 2) {
+      await this.fetch<number>('pexpire', [key, windowMs])
+      return { count, ttl: windowMs }
+    }
     return { count, ttl: Math.max(ttl, 0) }
   }
 
@@ -251,8 +263,9 @@ export function createRateLimiter(config: RateLimiterConfig): {
 /** General API rate limiter: 60 req/min */
 export const apiLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 60, keyPrefix: 'rl:api:' })
 
-/** Auth rate limiter: 10 req/min */
-export const authLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 10, keyPrefix: 'rl:auth:' })
+/** Auth rate limiter: 20 req/min — generous enough for legitimate users who typo passwords,
+ *  while still blocking brute-force attacks (at 20 req/min, a 6-digit OTP has ~0.02% chance per minute) */
+export const authLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 20, keyPrefix: 'rl:auth:' })
 
 /** Payment rate limiter: 5 req/min */
 export const paymentLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 5, keyPrefix: 'rl:pay:' })
