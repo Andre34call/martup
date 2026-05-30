@@ -49,7 +49,12 @@ export async function POST(request: NextRequest) {
     const distributedLimit = await authLimiter.check(`login:${clientIp}`)
     if (!distributedLimit.allowed) {
       const retrySeconds = Math.ceil((distributedLimit.resetAt - Date.now()) / 1000)
-      const retryMsg = retrySeconds > 60 ? `${Math.ceil(retrySeconds / 60)} menit` : `${retrySeconds} detik`
+      // Safety: if retrySeconds is NaN or negative, show a generic message instead of "NaN detik"
+      const retryMsg = !Number.isFinite(retrySeconds) || retrySeconds <= 0
+        ? 'beberapa saat'
+        : retrySeconds > 60
+          ? `${Math.ceil(retrySeconds / 60)} menit`
+          : `${retrySeconds} detik`
       return NextResponse.json(
         { success: false, error: `Terlalu banyak percobaan login. Coba lagi dalam ${retryMsg}.` },
         { status: 429 }

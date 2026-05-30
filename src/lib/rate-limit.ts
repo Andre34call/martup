@@ -119,6 +119,11 @@ class VercelKVBackend implements RateLimiterBackend {
     this.token = token
   }
 
+  /**
+   * Execute a Vercel KV REST API command and extract the `result` field.
+   * The Vercel KV (Upstash) REST API returns: {"result": <value>}
+   * We must extract `.result` to get the actual value, not the wrapper object.
+   */
   private async fetch<T>(command: string, args: (string | number)[]): Promise<T> {
     const response = await fetch(`${this.url}/${command}/${args.map(encodeURIComponent).join('/')}`, {
       headers: {
@@ -128,7 +133,8 @@ class VercelKVBackend implements RateLimiterBackend {
     if (!response.ok) {
       throw new Error(`Vercel KV error: ${response.status} ${response.statusText}`)
     }
-    return response.json() as Promise<T>
+    const json = await response.json() as { result: T }
+    return json.result
   }
 
   async increment(key: string, windowMs: number): Promise<{ count: number; ttl: number }> {
