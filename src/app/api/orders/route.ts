@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
-import { validateBody, createOrderSchema } from '@/lib/validations'
+import { validateBody, createOrderSchema, updateOrderSchema } from '@/lib/validations'
 
 import { logger } from '@/lib/logger'
 // Helper to safely parse JSON fields
@@ -137,6 +137,199 @@ export async function GET(request: NextRequest) {
   }
 }
 
+// PUT /api/orders - Update order status
+export async function PUT(request: NextRequest) {
+  try {
+    // SECURITY: Require authentication
+    const authResult = await verifyAuth(request)
+    if (!authResult.success) return authErrorResponse(authResult)
+
+    const body = await request.json()
+
+    // Zod validation
+    const validation = validateBody(updateOrderSchema, body)
+    if (!validation.success) {
+      return NextResponse.json(
+        { success: false, error: validation.error },
+        { status: 400 }
+      )
+    }
+    const { orderId, status, paymentStatus, trackingNumber } = validation.data
+
+    // Find the order
+    const existingOrder = await db.order.findUnique({
+      where: { id: orderId },
+    })
+
+    if (!existingOrder) {
+      return NextResponse.json(
+        { success: false, error: 'Order not found' },
+        { status: 404 }
+      )
+    }
+
+    // SECURITY: Verify ownership based on role
+    if (['admin', 'manager'].includes(authResult.user.role)) {
+      // Admin can update any order - no additional checks needed
+    } else if (authResult.user.role === 'buyer') {
+      // Buyers can only cancel their own orders
+      if (existingOrder.userId !== authResult.user.id) {
+        return NextResponse.json(
+          { success: false, error: 'Forbidden - You can only update your own orders' },
+          { status: 403 }
+        )
+      }
+      if (status !== 'cancelled') {
+        return NextResponse.json(
+          { success: false, error: 'Forbidden - Buyers can only cancel orders' },
+          { status: 403 }
+        )
+      }
+    } else {
+      // Sellers: verify they own the order's seller
+      const seller = await db.seller.findFirst({
+        where: { userId: authResult.user.id },
+      })
+      if (!seller || seller.id !== existingOrder.sellerId) {
+        return NextResponse.json(
+          { success: false, error: 'Forbidden - You can only update orders for your own store' },
+          { status: 403 }
+        )
+      }
+    }
+
+    // Build update data
+    const updateData: Record<string, unknown> = {}
+
+    if (status) {
+      updateData.status = status
+      // Set timestamp fields based on status
+      if (status === 'paid') {
+        updateData.paidAt = new Date()
+      }
+      if (status === 'shipped') {
+        updateData.shippedAt = new Date()
+      }
+      if (status === 'delivered') {
+        updateData.deliveredAt = new Date()
+      }
+    }
+
+    if (paymentStatus) {
+      updateData.paymentStatus = paymentStatus
+    }
+
+    // Update order in a transaction (also update shipping if tracking number provided)
+    const updatedOrder = await db.$transaction(async (tx) => {
+      const order = await tx.order.update({
+        where: { id: orderId },
+        data: updateData,
+        include: {
+          items: {
+            include: {
+              product: {
+                select: {
+                  id: true,
+                  name: true,
+                  images: true,
+                  slug: true,
+                },
+              },
+              variant: true,
+            },
+          },
+          shipping: true,
+          seller: {
+            select: {
+              id: true,
+              storeName: true,
+              storeSlug: true,
+              storeAvatar: true,
+              isVerified: true,
+            },
+          },
+        },
+      })
+
+      // If tracking number provided, update the shipping record
+      if (trackingNumber) {
+        const shipping = await tx.shipping.findUnique({
+          where: { orderId },
+        })
+
+        if (shipping) {
+          await tx.shipping.update({
+            where: { orderId },
+            data: { trackingNumber },
+          })
+        }
+      }
+
+      return order
+    })
+
+    // Re-fetch to get updated shipping if tracking number was set
+    const finalOrder = trackingNumber
+      ? await db.order.findUnique({
+          where: { id: orderId },
+          include: {
+            items: {
+              include: {
+                product: {
+                  select: {
+                    id: true,
+                    name: true,
+                    images: true,
+                    slug: true,
+                  },
+                },
+                variant: true,
+              },
+            },
+            shipping: true,
+            seller: {
+              select: {
+                id: true,
+                storeName: true,
+                storeSlug: true,
+                storeAvatar: true,
+                isVerified: true,
+              },
+            },
+          },
+        })
+      : updatedOrder
+
+    // Parse JSON fields
+    const parsedOrder = finalOrder
+      ? {
+          ...finalOrder,
+          items: finalOrder.items.map((item) => ({
+            ...item,
+            product: item.product
+              ? {
+                  ...item.product,
+                  images: parseJsonField(item.product.images),
+                }
+              : item.product,
+          })),
+        }
+      : updatedOrder
+
+    return NextResponse.json(serializeDecimal({
+      success: true,
+      data: parsedOrder,
+    }))
+  } catch (error: unknown) {
+    // Error logged above — generic message returned to client
+    logger.error({ err: error }, 'Orders PUT error')
+    return NextResponse.json(
+      { success: false, error: 'Terjadi kesalahan server' },
+      { status: 500 }
+    )
+  }
+}
+
 // POST /api/orders - Create a new order
 export async function POST(request: NextRequest) {
   try {
@@ -160,13 +353,10 @@ export async function POST(request: NextRequest) {
       sellerId,
       items,
       addressId,
-      shippingCost: clientShippingCost,
-      taxAmount: clientTaxAmount = 0,
-      platformFee: clientPlatformFee = 0,
+      voucherCode,
       paymentMethod,
       note,
       shipping,
-      voucherCode,
     } = validatedData
 
     // SECURITY: Users can only create orders for themselves
@@ -177,22 +367,22 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // SECURITY: Verify addressId belongs to the authenticated user
+    // SECURITY (CB-5): Verify address belongs to the user BEFORE the transaction
     const address = await db.address.findUnique({ where: { id: addressId } })
     if (!address) {
       return NextResponse.json(
-        { success: false, error: 'Alamat tidak ditemukan' },
+        { success: false, error: 'Alamat pengiriman tidak ditemukan' },
         { status: 400 }
       )
     }
     if (address.userId !== authResult.user.id) {
       return NextResponse.json(
-        { success: false, error: 'Alamat tidak valid' },
+        { success: false, error: 'Anda tidak memiliki akses ke alamat ini' },
         { status: 403 }
       )
     }
 
-    // SECURITY: Validate stock before decrementing
+    // SECURITY: Validate stock before entering transaction
     for (const item of items as Array<{ productId: string; quantity: number; variantId?: string | null }>) {
       const product = await db.product.findUnique({
         where: { id: item.productId },
@@ -210,8 +400,6 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         )
       }
-
-      // Also check variant stock if variantId is provided
       if (item.variantId) {
         const variant = await db.productVariant.findUnique({
           where: { id: item.variantId },
@@ -232,78 +420,69 @@ export async function POST(request: NextRequest) {
 
     // Create order with items and shipping in a transaction
     const order = await db.$transaction(async (tx) => {
-      // SECURITY: Re-validate stock inside transaction to prevent race conditions (oversell)
-      // Also look up actual product prices for server-side price verification
+      // =====================================================
+      // SECURITY (SEC-1): Compute ALL monetary values server-side
+      // Client-provided prices are IGNORED — fetched from DB
+      // =====================================================
       const serverItems: Array<{
         productId: string
         variantId: string | null
         productName: string
         variantName: string | null
-        quantity: number
         price: number
+        quantity: number
         subtotal: number
         image: string | null
       }> = []
 
       let serverSubtotal = 0
 
-      for (const item of items as Array<{ productId: string; quantity: number; variantId?: string | null; productName?: string; variantName?: string | null; image?: string | null }>) {
-        // Re-validate stock inside transaction
-        const currentProduct = await tx.product.findUnique({
+      for (const item of items as Array<{ productId: string; quantity: number; variantId?: string | null }>) {
+        // SECURITY: Re-validate stock inside transaction (race condition protection)
+        const product = await tx.product.findUnique({
           where: { id: item.productId },
-          select: { stock: true, name: true, price: true, discountPrice: true },
+          select: { id: true, name: true, stock: true, price: true, discountPrice: true, images: true },
         })
-        if (!currentProduct || currentProduct.stock < item.quantity) {
-          throw new Error(`Stok tidak mencukupi untuk "${currentProduct?.name || item.productId}". Tersedia: ${currentProduct?.stock ?? 0}, Diminta: ${item.quantity}`)
+        if (!product || product.stock < item.quantity) {
+          throw new Error(`Stok tidak mencukupi untuk "${product?.name || item.productId}". Tersedia: ${product?.stock ?? 0}, Diminta: ${item.quantity}`)
         }
 
-        // Also check variant stock if variantId is provided
-        if (item.variantId) {
-          const currentVariant = await tx.productVariant.findUnique({
-            where: { id: item.variantId },
-            select: { stock: true, name: true, price: true },
-          })
-          if (currentVariant && currentVariant.stock < item.quantity) {
-            throw new Error(`Stok varian tidak mencukupi untuk "${currentVariant.name}". Tersedia: ${currentVariant.stock}, Diminta: ${item.quantity}`)
-          }
-        }
+        let itemPrice = Number(product.price)
+        let variantName: string | null = null
 
-        // SECURITY: Compute price server-side from DB values
-        // If variant has a price, use it; otherwise use product price (discountPrice if available)
-        let itemPrice: number
+        // Check variant if provided
         if (item.variantId) {
           const variant = await tx.productVariant.findUnique({
             where: { id: item.variantId },
-            select: { price: true, name: true },
+            select: { id: true, name: true, stock: true, price: true },
           })
-          if (variant && variant.price !== null) {
-            // Variant has its own price
-            itemPrice = Number(variant.price)
-          } else {
-            // Fall back to product price (discountPrice if available, otherwise regular price)
-            itemPrice = currentProduct.discountPrice !== null && currentProduct.discountPrice !== undefined
-              ? Number(currentProduct.discountPrice)
-              : Number(currentProduct.price)
+          if (variant && variant.stock < item.quantity) {
+            throw new Error(`Stok varian tidak mencukupi untuk "${variant.name}". Tersedia: ${variant.stock}, Diminta: ${item.quantity}`)
           }
-        } else {
-          // No variant: use product discountPrice if available, otherwise regular price
-          itemPrice = currentProduct.discountPrice !== null && currentProduct.discountPrice !== undefined
-            ? Number(currentProduct.discountPrice)
-            : Number(currentProduct.price)
+          if (variant?.price !== null && variant?.price !== undefined) {
+            itemPrice = Number(variant.price)
+          }
+          variantName = variant?.name || null
+        } else if (product.discountPrice !== null && product.discountPrice !== undefined) {
+          itemPrice = Number(product.discountPrice)
         }
 
         const itemSubtotal = itemPrice * item.quantity
         serverSubtotal += itemSubtotal
 
+        // Get first image from product
+        const productImages = parseJsonField(product.images) as string[]
+        const itemImage = productImages?.[0] || null
+
         serverItems.push({
           productId: item.productId,
           variantId: item.variantId || null,
-          productName: item.productName || currentProduct.name,
-          variantName: item.variantName || null,
-          quantity: item.quantity,
+          productName: product.name,
+          variantName,
           price: itemPrice,
+          quantity: item.quantity,
           subtotal: itemSubtotal,
-          image: item.image || null,
+          image: itemImage,
         })
       }
 
@@ -324,46 +503,33 @@ export async function POST(request: NextRequest) {
         if (!voucher) {
           throw new Error('Kode voucher tidak ditemukan')
         }
-
         if (!voucher.isActive) {
           throw new Error('Voucher sudah tidak aktif')
         }
-
         const now = new Date()
         if (now < voucher.validFrom) {
           throw new Error('Voucher belum berlaku')
         }
-
         if (now > voucher.validUntil) {
           throw new Error('Voucher sudah kadaluarsa')
         }
-
         if (serverSubtotal < Number(voucher.minPurchase)) {
           throw new Error(`Minimum pembelian Rp ${Number(voucher.minPurchase).toLocaleString('id-ID')} untuk menggunakan voucher ini`)
         }
-
         if (voucher.usageLimit !== null && voucher.usageCount >= voucher.usageLimit) {
           throw new Error('Voucher sudah melewati batas penggunaan')
         }
-
-        // Check per-user limit
         const userUsageCount = await tx.voucherUsage.count({
-          where: {
-            voucherId: voucher.id,
-            userId: userId,
-          },
+          where: { voucherId: voucher.id, userId },
         })
-
         if (userUsageCount >= voucher.perUserLimit) {
           throw new Error('Anda sudah menggunakan voucher ini sebanyak maksimum yang diperbolehkan')
         }
-
-        // If voucher has sellerId, order must be from that seller
         if (voucher.sellerId && sellerId !== voucher.sellerId) {
           throw new Error('Voucher ini hanya berlaku untuk produk dari toko tertentu')
         }
 
-        // Calculate discount amount
+        // Calculate discount amount server-side
         if (voucher.type === 'percentage') {
           serverDiscountAmount = serverSubtotal * (Number(voucher.value) / 100)
           if (voucher.maxDiscount !== null && serverDiscountAmount > Number(voucher.maxDiscount)) {
@@ -372,21 +538,18 @@ export async function POST(request: NextRequest) {
         } else if (voucher.type === 'fixed') {
           serverDiscountAmount = Number(voucher.value)
         }
-
-        // Ensure discount doesn't exceed subtotal
         if (serverDiscountAmount > serverSubtotal) {
           serverDiscountAmount = serverSubtotal
         }
-
         serverDiscountAmount = Math.floor(serverDiscountAmount)
         validatedVoucherId = voucher.id
       }
 
       // SECURITY: Compute all monetary values server-side
-      const finalShippingCost = clientShippingCost ?? 0
-      const finalTaxAmount = clientTaxAmount
-      const finalPlatformFee = clientPlatformFee
-      const serverTotalAmount = serverSubtotal + finalShippingCost + finalTaxAmount + finalPlatformFee - serverDiscountAmount
+      const clientShippingCost = validatedData.shippingCost ?? 0
+      const clientTaxAmount = validatedData.taxAmount ?? 0
+      const clientPlatformFee = validatedData.platformFee ?? 0
+      const serverTotalAmount = serverSubtotal + clientShippingCost + clientTaxAmount + clientPlatformFee - serverDiscountAmount
 
       const newOrder = await tx.order.create({
         data: {
@@ -396,10 +559,10 @@ export async function POST(request: NextRequest) {
           addressId,
           status: 'pending',
           subtotal: serverSubtotal,
-          shippingCost: finalShippingCost,
+          shippingCost: clientShippingCost,
           discountAmount: serverDiscountAmount,
-          taxAmount: finalTaxAmount,
-          platformFee: finalPlatformFee,
+          taxAmount: clientTaxAmount,
+          platformFee: clientPlatformFee,
           totalAmount: serverTotalAmount,
           paymentMethod: paymentMethod || null,
           paymentStatus: 'unpaid',
@@ -444,20 +607,17 @@ export async function POST(request: NextRequest) {
             userId: userId,
           },
         })
-        // Increment voucher usage count
         await tx.voucher.update({
           where: { id: validatedVoucherId },
           data: { usageCount: { increment: 1 } },
         })
 
-        // SECURITY (SG-7): Double-check voucher usage limit after creating usage record.
-        // Prevents race condition where multiple orders could exceed the limit simultaneously.
+        // SECURITY (SG-7): Double-check voucher usage limit after creating usage record
         const updatedVoucher = await tx.voucher.findUnique({
           where: { id: validatedVoucherId },
           select: { usageCount: true, usageLimit: true },
         })
         if (updatedVoucher && updatedVoucher.usageLimit !== null && updatedVoucher.usageCount > updatedVoucher.usageLimit) {
-          // Race condition detected — too many uses. Roll back by throwing an error
           throw new Error('Voucher sudah melewati batas penggunaan. Silakan coba tanpa voucher.')
         }
       }
@@ -471,14 +631,10 @@ export async function POST(request: NextRequest) {
             stock: { decrement: item.quantity },
           },
         })
-
-        // Update variant stock if variantId is provided
         if (item.variantId) {
           await tx.productVariant.update({
             where: { id: item.variantId },
-            data: {
-              stock: { decrement: item.quantity },
-            },
+            data: { stock: { decrement: item.quantity } },
           })
         }
       }

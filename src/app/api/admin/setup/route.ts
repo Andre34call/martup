@@ -1,8 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { checkRateLimit, verifyAuth, verifyAdmin, authErrorResponse, AuthResult } from '@/lib/auth-middleware'
+import crypto from 'crypto'
 
 import { logger } from '@/lib/logger'
+
+/** Timing-safe string comparison to prevent timing attacks */
+function safeCompare(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
+  try {
+    return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b))
+  } catch {
+    return false
+  }
+}
 // POST /api/admin/setup - Promote a user to admin role
 // SECURITY: Requires EITHER:
 // 1. An existing admin making the request (recommended for production), OR
@@ -53,7 +64,7 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      if (!secret || secret !== adminSecret) {
+      if (!secret || !adminSecret || !safeCompare(secret, adminSecret)) {
         logger.warn(`[SECURITY] Invalid admin setup attempt from IP: ${clientIp}`)
         return NextResponse.json(
           { success: false, error: 'Secret key tidak valid' },

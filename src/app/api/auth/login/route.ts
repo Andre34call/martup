@@ -274,7 +274,6 @@ export async function POST(request: NextRequest) {
         phone: maskPhone(user.phone),
         userId: user.id,
         message: `Verifikasi 2FA diperlukan. Kode OTP dikirim ke ${maskPhone(user.phone)}`,
-        ...(isDev ? { devOtp: otpCode } : {}),
       })
     }
 

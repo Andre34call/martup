@@ -2,8 +2,19 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { checkRateLimit, generateAuthToken } from '@/lib/auth-middleware'
 import bcrypt from 'bcryptjs'
+import crypto from 'crypto'
 import { logger } from '@/lib/logger'
 import { setSessionCookies } from '@/lib/session-cookie'
+
+/** Timing-safe string comparison to prevent timing attacks */
+function safeCompare(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
+  try {
+    return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b))
+  } catch {
+    return false
+  }
+}
 
 // POST /api/admin/init - Create the first admin user
 // SECURITY: This endpoint ONLY works when NO admin exists in the database.
@@ -42,7 +53,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!secret || secret !== adminSecret) {
+    if (!secret || !adminSecret || !safeCompare(secret, adminSecret)) {
       logger.warn(`[SECURITY] Invalid admin init attempt from IP: ${clientIp}`)
       return NextResponse.json(
         { success: false, error: 'Secret key tidak valid' },

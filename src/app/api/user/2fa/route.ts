@@ -127,7 +127,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         success: true,
         message: `Kode OTP telah dikirim ke ${maskPhone(user.phone)}`,
-        ...(isDev ? { devOtp: newOtpCode } : {}),
       })
     }
 

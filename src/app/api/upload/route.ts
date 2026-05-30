@@ -1,74 +1,77 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
-import { createClient } from '@supabase/supabase-js'
-import { logger } from '@/lib/logger'
 import { UPLOAD_LIMITS } from '@/lib/upload-limits'
+import { supabase, isSupabaseConfigured } from '@/lib/supabase'
+import { logger } from '@/lib/logger'
 
-const ALLOWED_MIME_TYPES = [...UPLOAD_LIMITS.ALLOWED_IMAGE_TYPES]
+// SECURITY: Only these buckets are allowed
 const ALLOWED_BUCKETS = ['products', 'avatars', 'banners'] as const
+type BucketId = typeof ALLOWED_BUCKETS[number]
 
-const MAX_FILE_SIZES: Record<string, number> = {
-  products: UPLOAD_LIMITS.mbToBytes(UPLOAD_LIMITS.MAX_PRODUCT_IMAGE_SIZE_MB),
-  avatars: UPLOAD_LIMITS.mbToBytes(UPLOAD_LIMITS.MAX_AVATAR_SIZE_MB),
-  banners: UPLOAD_LIMITS.mbToBytes(10), // 10MB default for banners
+// Map bucket to size limit
+const BUCKET_SIZE_MAP: Record<BucketId, number> = {
+  products: UPLOAD_LIMITS.MAX_PRODUCT_IMAGE_SIZE_MB,
+  avatars: UPLOAD_LIMITS.MAX_AVATAR_SIZE_MB,
+  banners: UPLOAD_LIMITS.MAX_IMAGE_SIZE_MB,
 }
 
-function getSupabaseClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
-
-  if (!supabaseUrl || !supabaseServiceKey) {
-    throw new Error('Supabase credentials not configured')
-  }
-
-  return createClient(supabaseUrl, supabaseServiceKey, {
-    auth: {
-      detectSessionInUrl: false,
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  })
-}
-
+/**
+ * POST /api/upload - Upload a file to Supabase Storage.
+ * Requires authentication. Validates bucket, MIME type, and file size.
+ */
 export async function POST(request: NextRequest) {
   try {
+    // SECURITY: Require authentication
     const authResult = await verifyAuth(request)
     if (!authResult.success) return authErrorResponse(authResult)
 
+    // Check Supabase is configured
+    if (!isSupabaseConfigured()) {
+      logger.error('Supabase not configured for file upload')
+      return NextResponse.json(
+        { success: false, error: 'Layanan upload belum dikonfigurasi' },
+        { status: 503 }
+      )
+    }
+
     const formData = await request.formData()
     const file = formData.get('file') as File | null
-    const bucket = (formData.get('bucket') as string) || 'products'
-    const folder = (formData.get('folder') as string) || 'images'
+    const bucket = formData.get('bucket') as string | null
+    const folder = formData.get('folder') as string | null
 
-    // Validate bucket
-    if (!ALLOWED_BUCKETS.includes(bucket as typeof ALLOWED_BUCKETS[number])) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid bucket' },
-        { status: 400 }
-      )
-    }
-
+    // Validate file exists
     if (!file) {
       return NextResponse.json(
-        { success: false, error: 'File wajib diisi' },
+        { success: false, error: 'File tidak ditemukan' },
         { status: 400 }
       )
     }
 
-    // Validate MIME type
-    if (!ALLOWED_MIME_TYPES.includes(file.type as typeof ALLOWED_MIME_TYPES[number])) {
+    // SECURITY: Validate bucket against allowlist
+    if (!bucket || !ALLOWED_BUCKETS.includes(bucket as BucketId)) {
       return NextResponse.json(
-        { success: false, error: `Tipe file tidak didukung. Tipe yang diizinkan: ${ALLOWED_MIME_TYPES.join(', ')}` },
+        { success: false, error: 'Bucket tidak valid. Hanya: products, avatars, banners' },
         { status: 400 }
       )
     }
 
-    // Validate file size
-    const maxSize = MAX_FILE_SIZES[bucket] || UPLOAD_LIMITS.mbToBytes(10)
-    if (file.size > maxSize) {
-      const maxSizeMB = Math.round(maxSize / 1024 / 1024)
+    const validBucket = bucket as BucketId
+
+    // SECURITY: Validate MIME type
+    const allAllowedTypes = [...UPLOAD_LIMITS.ALLOWED_IMAGE_TYPES, ...UPLOAD_LIMITS.ALLOWED_VIDEO_TYPES]
+    if (!allAllowedTypes.includes(file.type as any)) {
       return NextResponse.json(
-        { success: false, error: `Ukuran file terlalu besar. Maksimal ${maxSizeMB}MB untuk bucket ${bucket}` },
+        { success: false, error: `Tipe file tidak didukung: ${file.type}. Hanya gambar (JPEG, PNG, WebP, GIF) dan video (MP4, WebM, MOV)` },
+        { status: 400 }
+      )
+    }
+
+    // SECURITY: Validate file size
+    const maxSizeMB = BUCKET_SIZE_MAP[validBucket]
+    const maxSizeBytes = UPLOAD_LIMITS.mbToBytes(maxSizeMB)
+    if (file.size > maxSizeBytes) {
+      return NextResponse.json(
+        { success: false, error: `Ukuran file melebihi batas ${maxSizeMB}MB` },
         { status: 400 }
       )
     }
@@ -76,44 +79,47 @@ export async function POST(request: NextRequest) {
     // Generate unique filename
     const ext = file.name.split('.').pop() || 'jpg'
     const timestamp = Date.now()
-    const randomStr = Math.random().toString(36).substring(2, 8)
-    const fileName = `${timestamp}-${randomStr}.${ext}`
-    const filePath = `${folder}/${fileName}`
+    const randomSuffix = Math.random().toString(36).substring(2, 8)
+    const filename = `${timestamp}_${randomSuffix}.${ext}`
+    const filePath = folder ? `${folder}/${filename}` : filename
 
-    // Upload to Supabase Storage
-    const supabase = getSupabaseClient()
-    const buffer = Buffer.from(await file.arrayBuffer())
+    // Upload to Supabase Storage using service role key (bypasses RLS for server-side uploads)
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 
-    const { error: uploadError } = await supabase.storage
-      .from(bucket)
-      .upload(filePath, buffer, {
+    // Use the standard client for now (with anon key, RLS applies)
+    const { data, error } = await supabase.storage
+      .from(validBucket)
+      .upload(filePath, file, {
         contentType: file.type,
         upsert: false,
       })
 
-    if (uploadError) {
-      logger.error({ err: uploadError, bucket, filePath }, 'Supabase upload failed')
+    if (error) {
+      logger.error({ err: error, bucket: validBucket, path: filePath }, 'Supabase upload error')
       return NextResponse.json(
-        { success: false, error: 'Gagal mengupload file. Coba lagi.' },
+        { success: false, error: 'Gagal mengupload file. Coba lagi nanti.' },
         { status: 500 }
       )
     }
 
     // Get public URL
-    const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(filePath)
+    const { data: urlData } = supabase.storage
+      .from(validBucket)
+      .getPublicUrl(data.path)
 
     return NextResponse.json({
       success: true,
       data: {
         url: urlData.publicUrl,
-        path: filePath,
-        type: 'image' as const,
+        path: data.path,
+        type: validBucket === 'avatars' ? 'avatar' : validBucket === 'banners' ? 'banner' : 'product',
       },
     })
-  } catch (error) {
+  } catch (error: unknown) {
     logger.error({ err: error }, 'Upload POST error')
     return NextResponse.json(
-      { success: false, error: 'Terjadi kesalahan server' },
+      { success: false, error: 'Terjadi kesalahan server saat upload' },
       { status: 500 }
     )
   }

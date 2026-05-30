@@ -128,8 +128,6 @@ export async function POST(request: NextRequest) {
       success: true,
       message: `Kode OTP telah dikirim ke ${maskPhone(normalizedPhone)}`,
       requestId,
-      // Only include OTP in development for testing
-      ...(isDev ? { devOtp: otpCode } : {}),
     })
   } catch (error: unknown) {
     // Error logged above — generic message returned to client

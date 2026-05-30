@@ -3,6 +3,16 @@ import { db } from '@/lib/db'
 import crypto from 'crypto'
 
 import { logger } from '@/lib/logger'
+
+/** Timing-safe string comparison to prevent timing attacks */
+function safeCompare(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
+  try {
+    return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b))
+  } catch {
+    return false
+  }
+}
 // ==================== Midtrans Configuration ====================
 
 const MIDTRANS_SERVER_KEY = process.env.MIDTRANS_SERVER_KEY || ''
@@ -39,8 +49,8 @@ export async function POST(request: NextRequest) {
       .update(`${order_id}${status_code}${gross_amount}${MIDTRANS_SERVER_KEY}`)
       .digest('hex')
 
-    if (signature_key !== expectedSignature) {
-      logger.error({ orderId: order_id, receivedSignature: signature_key }, 'Midtrans notification signature mismatch')
+    if (!signature_key || !expectedSignature || !safeCompare(signature_key, expectedSignature)) {
+      logger.error({ orderId: order_id }, 'Midtrans notification signature mismatch')
       return NextResponse.json(
         { success: false, error: 'Invalid signature' },
         { status: 403 }
@@ -75,6 +85,20 @@ export async function POST(request: NextRequest) {
       logger.error({ err: order_id }, 'Midtrans notification: Order not found for orderNumber')
       // Return 200 so Midtrans doesn't retry indefinitely
       return NextResponse.json({ success: false, error: 'Order not found' })
+    }
+
+    // SEC-15: Verify the gross_amount matches the order's totalAmount to prevent amount manipulation
+    if (Number(gross_amount) !== Number(order.totalAmount)) {
+      logger.error({
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        expectedAmount: Number(order.totalAmount),
+        receivedAmount: Number(gross_amount),
+      }, 'Midtrans notification: gross_amount does not match order totalAmount')
+      return NextResponse.json(
+        { success: false, error: 'Amount mismatch' },
+        { status: 400 }
+      )
     }
 
     // IDEMPOTENCY CHECK: If the order is already in the target state, skip processing
