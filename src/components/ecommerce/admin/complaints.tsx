@@ -116,7 +116,7 @@ export function AdminComplaints() {
                           <Clock className="w-3 h-3 mr-0.5" /> Proses
                         </Button>
                       )}
-                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={() => {
+                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white" onClick={() => {
                         updateAdminComplaint(complaint.id, { status: "resolved" })
                         showToast("Keluhan diselesaikan", "success")
                       }}>

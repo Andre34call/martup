@@ -43,9 +43,9 @@ function MenuItem({
 }) {
   return (
     <motion.button
-      whileTap={{ scale: 0.99 }}
+      whileTap={{ scale: 0.97 }}
       onClick={onClick}
-      className="w-full flex items-center gap-3 py-3 px-1 rounded-lg hover:bg-muted/30 transition-colors"
+      className="w-full flex items-center gap-3 py-3 px-1 rounded-lg hover:bg-muted/50 active:bg-muted/70 transition-colors"
     >
       <div className={`w-8 h-8 rounded-lg bg-muted/50 flex items-center justify-center flex-shrink-0 ${iconColor}`}>
         {icon}
@@ -71,6 +71,7 @@ export function ProfileScreen() {
   const [avatarError, setAvatarError] = useState(false)
 
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
 
   // Reset avatar error when URL changes
   useEffect(() => { setAvatarError(false) }, [avatarUrl])
@@ -492,11 +493,26 @@ export function ProfileScreen() {
         <div className="px-4 pb-8">
           <Button
             variant="outline"
-            className="w-full h-12 rounded-xl text-red-500 border-red-200 dark:border-red-900/50 hover:bg-red-50 dark:hover:bg-red-950/20 hover:text-red-600"
-            onClick={logout}
+            className="w-full h-12 rounded-xl text-red-500 border-red-200 dark:border-red-900/50 hover:bg-red-50 dark:hover:bg-red-950/20 hover:text-red-600 active:bg-red-100 dark:active:bg-red-950/40 active:text-red-700"
+            onClick={async () => {
+              if (isLoggingOut) return
+              setIsLoggingOut(true)
+              try {
+                await logout()
+              } catch {
+                setIsLoggingOut(false)
+              }
+            }}
+            disabled={isLoggingOut}
           >
-            <LogOut className="w-4 h-4 mr-2" />
-            Keluar
+            {isLoggingOut ? (
+              <div className="w-5 h-5 border-2 border-red-300 border-t-red-500 rounded-full animate-spin" />
+            ) : (
+              <>
+                <LogOut className="w-4 h-4 mr-2" />
+                Keluar
+              </>
+            )}
           </Button>
         </div>
       </div>

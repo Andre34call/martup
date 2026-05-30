@@ -297,7 +297,7 @@ export function HomeScreen() {
                   setSearchQuery("Flash Sale")
                   navigate("search")
                 }}
-                className="flex items-center gap-0.5 text-xs font-medium text-emerald-600 hover:text-emerald-700 transition-colors"
+                className="flex items-center gap-0.5 text-xs font-medium text-emerald-600 hover:text-emerald-700 active:text-emerald-800 transition-colors"
               >
                 Lihat Semua
                 <ChevronRight className="w-3.5 h-3.5" />

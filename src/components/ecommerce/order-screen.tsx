@@ -180,7 +180,7 @@ function OrderCard({ order, onTap }: { order: Order; onTap: () => void }) {
             <Button
               size="sm"
               variant={primaryBtn.variant}
-              className="h-8 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white"
+              className="h-8 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white"
               onClick={async (e) => {
                 e.stopPropagation()
                 if (order.status === "pending") {
@@ -241,7 +241,7 @@ function OrderCard({ order, onTap }: { order: Order; onTap: () => void }) {
                 showToast("Pesanan berhasil dibatalkan", "success")
                 setShowCancelDialog(false)
               }}
-              className="bg-red-500 hover:bg-red-600 text-white rounded-xl h-10 flex-1"
+              className="bg-red-500 hover:bg-red-600 active:bg-red-700 text-white rounded-xl h-10 flex-1"
             >
               Ya, Batalkan
             </Button>
@@ -528,7 +528,7 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
           {order.status === "pending" && (
             <>
               <Button
-                className="w-full h-12 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold"
+                className="w-full h-12 rounded-xl bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white text-sm font-semibold"
                 onClick={async () => {
                   const result = await payForOrder(order.id)
                   if (result?.token) {
@@ -568,7 +568,7 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
           )}
           {order.status === "shipped" && (
             <Button
-              className="w-full h-12 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold"
+              className="w-full h-12 rounded-xl bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white text-sm font-semibold"
               onClick={() => { updateOrderStatus(order.id, "delivered"); showToast("Pesanan dikonfirmasi diterima!", "success") }}
             >
               <CheckCircle2 className="w-4 h-4 mr-2" />
@@ -592,7 +592,7 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
                 Beli Lagi
               </Button>
               <Button
-                className="flex-1 h-12 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold"
+                className="flex-1 h-12 rounded-xl bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white text-sm font-semibold"
                 onClick={() => { setSelectedOrder(order.id); navigate("review") }}
               >
                 <Star className="w-4 h-4 mr-2" />
@@ -620,7 +620,7 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
                 showToast("Pesanan berhasil dibatalkan", "success")
                 setShowCancelDialog(false)
               }}
-              className="bg-red-500 hover:bg-red-600 text-white rounded-xl h-10 flex-1"
+              className="bg-red-500 hover:bg-red-600 active:bg-red-700 text-white rounded-xl h-10 flex-1"
             >
               Ya, Batalkan
             </Button>

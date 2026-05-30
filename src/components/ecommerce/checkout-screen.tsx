@@ -1004,7 +1004,7 @@ export function CheckoutScreen() {
                 <p className="text-lg font-bold text-emerald-600">{formatPrice(Math.max(0, totalAmount))}</p>
               </div>
               <Button
-                className="h-11 px-8 text-sm font-bold rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white disabled:opacity-50 gap-1.5"
+                className="h-11 px-8 text-sm font-bold rounded-xl bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white disabled:opacity-50 gap-1.5"
                 disabled={!isReadyToPay || isProcessing}
                 onClick={handlePay}
               >

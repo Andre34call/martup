@@ -582,7 +582,7 @@ export function ProductDetailScreen() {
               <Button
                 variant="outline"
                 size="sm"
-                className="flex-1 h-9 text-xs rounded-lg border-emerald-500 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+                className="flex-1 h-9 text-xs rounded-lg border-emerald-500 text-emerald-600 hover:bg-emerald-50 active:bg-emerald-100 dark:hover:bg-emerald-950/30"
                 onClick={async () => {
                   const wasFollowing = isFollowingStore(product.sellerId)
                   await toggleFollowStore(product.sellerId)
@@ -873,14 +873,14 @@ export function ProductDetailScreen() {
 
           <Button
             variant="outline"
-            className="flex-1 h-11 text-sm font-bold rounded-xl border-emerald-500 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+            className="flex-1 h-11 text-sm font-bold rounded-xl border-emerald-500 text-emerald-600 hover:bg-emerald-50 active:bg-emerald-100 dark:hover:bg-emerald-950/30"
             onClick={handleAddToCart}
           >
             Keranjang
           </Button>
 
           <Button
-            className="flex-1 h-11 text-sm font-bold rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white"
+            className="flex-1 h-11 text-sm font-bold rounded-xl bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white"
             onClick={handleBuyNow}
           >
             Beli Sekarang

@@ -106,7 +106,7 @@ export function VoucherScreen() {
             placeholder="Masukkan Kode"
             className="flex-1 rounded-xl h-10"
           />
-          <Button onClick={handleUseCode} className="bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-10 px-5">
+          <Button onClick={handleUseCode} className="bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl h-10 px-5">
             Pakai
           </Button>
         </motion.div>
@@ -174,7 +174,7 @@ export function VoucherScreen() {
                         <span className="mx-1">·</span>
                         <span>s/d {new Date(voucher.validUntil).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}</span>
                       </div>
-                      <Button size="sm" onClick={() => handleUseVoucher(voucher)} className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white">
+                      <Button size="sm" onClick={() => handleUseVoucher(voucher)} className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white">
                         Gunakan
                       </Button>
                     </div>

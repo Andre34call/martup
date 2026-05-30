@@ -120,7 +120,7 @@ export function WithdrawScreen() {
           <Button
             disabled={!amount || Number(amount) <= 0}
             onClick={handleWithdraw}
-            className="w-full bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-11 disabled:opacity-40"
+            className="w-full bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl h-11 disabled:opacity-40"
           >
             <ArrowUpRight className="w-4 h-4 mr-2" /> Tarik Dana
           </Button>

@@ -238,3 +238,56 @@
 .image-zoom:hover {
   transform: scale(1.05);
 }
+
+/* ==================== BUTTON PRESS FEEDBACK ==================== */
+/* Global active/pressed states for ALL buttons so users feel their taps.
+ * - Scale down slightly on press (like a physical button)
+ * - Slightly darken/brighten to show the button is engaged
+ * - Smooth transitions so it feels responsive, not jarring
+ */
+
+/* Base button press effect — applies to ALL <button> and [data-slot="button"] */
+button:active:not(:disabled),
+[data-slot="button"]:active:not(:disabled) {
+  transform: scale(0.97);
+  transition: transform 0.1s ease, filter 0.1s ease;
+}
+
+/* Primary emerald CTA buttons — darken on press */
+button:active:not(:disabled).bg-emerald-500,
+[data-slot="button"]:active:not(:disabled).bg-emerald-500 {
+  filter: brightness(0.9);
+}
+
+/* Red/destructive buttons — darken on press */
+button:active:not(:disabled).bg-red-500,
+[data-slot="button"]:active:not(:disabled).bg-red-500,
+button:active:not(:disabled).bg-destructive,
+[data-slot="button"]:active:not(:disabled).bg-destructive {
+  filter: brightness(0.9);
+}
+
+/* Outline & ghost buttons — subtle bg on press */
+button:active:not(:disabled).bg-background,
+[data-slot="button"]:active:not(:disabled).bg-background {
+  filter: brightness(0.95);
+}
+
+/* Smooth hover transition for all buttons */
+button:not(:disabled),
+[data-slot="button"]:not(:disabled) {
+  transition: transform 0.15s ease, filter 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+}
+
+/* Text/link-style buttons — no scale, just color shift on press */
+button:active:not(:disabled).text-emerald-600 {
+  filter: brightness(0.8);
+  transform: none;
+}
+
+/* Icon-only buttons — smaller scale for subtlety */
+button:active:not(:disabled).size-9,
+button:active:not(:disabled).h-9.w-9,
+[data-slot="button"]:active:not(:disabled).size-9 {
+  transform: scale(0.93);
+}

@@ -205,7 +205,7 @@ export function BottomNav() {
                 <button
                   key={role}
                   onClick={() => handleRoleSwitch(role)}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
+                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors active:bg-muted/70 ${
                     (role === "superadmin" && userRole === "admin" && isSuperAdminUser)
                       ? "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300"
                       : userRole === role || (role === "admin" && userRole === "admin" && !isSuperAdminUser)

@@ -260,7 +260,7 @@ export function WalletScreen() {
         <div className="px-4 pt-4 pb-4">
           <div className="flex gap-3">
             <Button
-              className="flex-1 h-12 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold"
+              className="flex-1 h-12 rounded-xl bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white text-sm font-semibold"
               onClick={() => navigate("deposit")}
             >
               <Plus className="w-4 h-4 mr-2" />

@@ -1040,7 +1040,7 @@ export function SellerAddProductScreen() {
 
           <Button
             onClick={handleSubmit}
-            className="w-full h-12 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-emerald-500/25"
+            className="w-full h-12 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl text-sm font-bold shadow-lg shadow-emerald-500/25"
           >
             <Upload className="w-4 h-4 mr-2" />
             Publikasikan Produk

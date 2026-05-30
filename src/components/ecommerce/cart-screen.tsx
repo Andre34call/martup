@@ -180,7 +180,7 @@ function RemoveItemModal({
                 Batal
               </Button>
               <Button
-                className="flex-1 h-10 rounded-xl bg-red-500 hover:bg-red-600 text-white"
+                className="flex-1 h-10 rounded-xl bg-red-500 hover:bg-red-600 active:bg-red-700 text-white"
                 onClick={onConfirm}
               >
                 Hapus
@@ -488,7 +488,7 @@ export function CartScreen() {
                 <p className="text-lg font-bold text-emerald-600">{formatPrice(Math.max(0, totalAmount))}</p>
               </div>
               <Button
-                className="h-11 px-6 text-sm font-bold rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white disabled:opacity-50 gap-1.5"
+                className="h-11 px-6 text-sm font-bold rounded-xl bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white disabled:opacity-50 gap-1.5"
                 disabled={checkedCount === 0}
                 onClick={handleCheckout}
               >
@@ -535,7 +535,7 @@ export function CartScreen() {
                   Batal
                 </Button>
                 <Button
-                  className="flex-1 h-10 rounded-xl bg-red-500 hover:bg-red-600 text-white"
+                  className="flex-1 h-10 rounded-xl bg-red-500 hover:bg-red-600 active:bg-red-700 text-white"
                   onClick={handleDeleteSelected}
                 >
                   Hapus

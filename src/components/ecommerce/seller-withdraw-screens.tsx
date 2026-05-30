@@ -368,7 +368,7 @@ export function SellerWithdrawScreen() {
             </div>
 
             <Button
-              className="w-full h-12 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm gap-1.5"
+              className="w-full h-12 rounded-xl bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white font-bold text-sm gap-1.5"
               disabled={!canProceedToStep1}
               onClick={() => setCurrentStep(1)}
             >
@@ -437,7 +437,7 @@ export function SellerWithdrawScreen() {
                       className="rounded-xl h-10"
                     />
                     <Button
-                      className="w-full h-10 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-bold"
+                      className="w-full h-10 rounded-xl bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white text-sm font-bold"
                       onClick={handleAddBank}
                     >
                       Simpan Rekening
@@ -456,7 +456,7 @@ export function SellerWithdrawScreen() {
                 Kembali
               </Button>
               <Button
-                className="flex-1 h-12 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm gap-1.5"
+                className="flex-1 h-12 rounded-xl bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white font-bold text-sm gap-1.5"
                 disabled={!canProceedToStep2}
                 onClick={() => setCurrentStep(2)}
               >
@@ -541,7 +541,7 @@ export function SellerWithdrawScreen() {
                 Kembali
               </Button>
               <Button
-                className="flex-1 h-12 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm gap-1.5"
+                className="flex-1 h-12 rounded-xl bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white font-bold text-sm gap-1.5"
                 disabled={!canSubmit || isSubmitting}
                 onClick={handleSubmit}
               >

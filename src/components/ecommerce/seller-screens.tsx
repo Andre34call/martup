@@ -354,7 +354,7 @@ export function SellerProducts() {
       <PageHeader title="Kelola Produk" rightAction={
         <Button
           onClick={() => navigate("seller-add-product")}
-          className="bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-9 text-xs"
+          className="bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl h-9 text-xs"
         >
           <Plus className="w-3.5 h-3.5 mr-1" /> Tambah
         </Button>
@@ -545,7 +545,7 @@ export function SellerOrders() {
                     <p className="text-base font-bold text-foreground">{formatPrice(order.amount)}</p>
                     <div className="flex gap-2">
                       {order.status === "paid" && (
-                        <Button size="sm" className="h-8 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={async () => {
+                        <Button size="sm" className="h-8 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white" onClick={async () => {
                           try {
                             const res = await apiClient.rawPut(`/api/orders/${order.id}/status`, { status: 'processing' })
                             const data = await res.json()
@@ -563,7 +563,7 @@ export function SellerOrders() {
                         </Button>
                       )}
                       {order.status === "processing" && (
-                        <Button size="sm" className="h-8 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={() => {
+                        <Button size="sm" className="h-8 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white" onClick={() => {
                           setTrackingOrderId(order.id)
                           setTrackingNumber("")
                           setShowTrackingDialog(true)
@@ -647,7 +647,7 @@ export function SellerOrders() {
                 setTrackingOrderId(null)
                 setTrackingNumber("")
               }}
-              className="bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-10 flex-1"
+              className="bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl h-10 flex-1"
             >
               Kirim Pesanan
             </Button>
@@ -700,7 +700,7 @@ export function SellerOrders() {
                 setCancelOrderId(null)
                 setCancelReason("")
               }}
-              className="bg-red-500 hover:bg-red-600 text-white rounded-xl h-10 flex-1"
+              className="bg-red-500 hover:bg-red-600 active:bg-red-700 text-white rounded-xl h-10 flex-1"
             >
               Batalkan Pesanan
             </Button>
@@ -1420,7 +1420,7 @@ export function SellerSettings() {
 
         {/* Save Button */}
         <motion.div {...fadeIn}>
-          <Button className="w-full bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-11" onClick={handleSave} disabled={isSaving}>
+          <Button className="w-full bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl h-11" onClick={handleSave} disabled={isSaving}>
             {isSaving ? "Menyimpan..." : "Simpan Pengaturan"}
           </Button>
         </motion.div>
@@ -1467,7 +1467,7 @@ export function SellerSettings() {
                 handleDeleteAccount()
                 setShowDeleteDialog(false)
               }}
-              className="bg-red-500 hover:bg-red-600 text-white rounded-xl h-10 flex-1"
+              className="bg-red-500 hover:bg-red-600 active:bg-red-700 text-white rounded-xl h-10 flex-1"
             >
               Ya, Hapus Akun
             </Button>
@@ -1488,7 +1488,7 @@ export function SellerCampaign() {
       <PageHeader title="Kampanye & Promo" rightAction={
         <Button
           onClick={() => setShowCreate(!showCreate)}
-          className="bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-9 text-xs"
+          className="bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl h-9 text-xs"
         >
           <Plus className="w-3.5 h-3.5 mr-1" /> Buat Kampanye
         </Button>
@@ -1545,7 +1545,7 @@ export function SellerCampaign() {
                 </div>
               </div>
 
-              <Button className="w-full bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-10">
+              <Button className="w-full bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl h-10">
                 Buat Kampanye
               </Button>
             </Card>

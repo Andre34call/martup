@@ -603,7 +603,7 @@ export function SearchScreen() {
                                     variant={currentPage === pageNum ? "default" : "outline"}
                                     size="sm"
                                     className={`h-8 w-8 rounded-lg text-xs p-0 ${
-                                      currentPage === pageNum ? 'bg-emerald-500 hover:bg-emerald-600 text-white' : ''
+                                      currentPage === pageNum ? 'bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white' : ''
                                     }`}
                                     onClick={() => setCurrentPage(pageNum)}
                                   >

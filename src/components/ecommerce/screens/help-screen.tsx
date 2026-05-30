@@ -136,7 +136,7 @@ export function HelpScreen() {
           )}
         </div>
 
-        <Button onClick={handleContactCS} className="w-full bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-11">
+        <Button onClick={handleContactCS} className="w-full bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl h-11">
           <Phone className="w-4 h-4 mr-2" /> Hubungi CS
         </Button>
       </div>

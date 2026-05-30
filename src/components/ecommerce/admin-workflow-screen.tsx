@@ -245,7 +245,7 @@ function CreateWorkItemDialog({
             Batal
           </Button>
           <Button
-            className="bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg"
+            className="bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-lg"
             onClick={handleSubmit}
             disabled={!title.trim() || isSubmitting}
           >
@@ -300,7 +300,7 @@ function WorkItemDetailView({
 
   const getVariantStyle = (variant: string) => {
     switch (variant) {
-      case 'primary': return 'bg-emerald-500 hover:bg-emerald-600 text-white'
+      case 'primary': return 'bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white'
       case 'warning': return 'bg-amber-500 hover:bg-amber-600 text-white'
       default: return ''
     }
@@ -376,7 +376,7 @@ function WorkItemDetailView({
                 <p className="text-sm text-muted-foreground">Belum ditugaskan</p>
                 <Button
                   size="sm"
-                  className="h-8 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white"
+                  className="h-8 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white"
                   onClick={() => onAssignToMe(item.id)}
                   disabled={isUpdating}
                 >
@@ -831,7 +831,7 @@ export function AdminWorkflow() {
         rightAction={
           <Button
             size="sm"
-            className="h-8 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white"
+            className="h-8 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white"
             onClick={() => setShowCreateDialog(true)}
           >
             <Plus className="w-3.5 h-3.5 mr-1" /> Buat Tugas

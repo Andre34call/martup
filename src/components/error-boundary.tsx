@@ -58,7 +58,7 @@ export class ErrorBoundary extends Component<Props, State> {
           )}
           <Button
             onClick={() => this.setState({ hasError: false, error: undefined })}
-            className="bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-10 px-6"
+            className="bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl h-10 px-6"
           >
             <RefreshCw className="w-4 h-4 mr-2" />
             Coba Lagi

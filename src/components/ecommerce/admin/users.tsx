@@ -182,7 +182,7 @@ export function AdminUsers() {
                   </div>
                   <div className="flex gap-2 mt-3 pt-3 border-t border-border/50">
                     {user.status === "pending" && (
-                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={() => {
+                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white" onClick={() => {
                         handleUpdateUser(user.id, { isVerified: true })
                         showToast("User berhasil diverifikasi", "success")
                       }}>

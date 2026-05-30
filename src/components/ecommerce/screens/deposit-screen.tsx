@@ -131,7 +131,7 @@ export function DepositScreen() {
           <Button
             disabled={!selectedAmount && !customAmount}
             onClick={handleTopUp}
-            className="w-full bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-11 disabled:opacity-40"
+            className="w-full bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl h-11 disabled:opacity-40"
           >
             <Wallet className="w-4 h-4 mr-2" /> Top Up Sekarang
           </Button>

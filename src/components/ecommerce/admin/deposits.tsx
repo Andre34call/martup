@@ -263,7 +263,7 @@ export function AdminDeposits() {
                     <div className="flex gap-2 mt-3 pt-3 border-t border-border/50">
                       <Button
                         size="sm"
-                        className="flex-1 h-8 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white"
+                        className="flex-1 h-8 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white"
                         onClick={() => handleApprove(deposit.id)}
                       >
                         <Check className="w-3 h-3 mr-1" /> Setujui
@@ -324,7 +324,7 @@ export function AdminDeposits() {
                   Batal
                 </Button>
                 <Button
-                  className="flex-1 h-10 rounded-xl bg-red-500 hover:bg-red-600 text-white"
+                  className="flex-1 h-10 rounded-xl bg-red-500 hover:bg-red-600 active:bg-red-700 text-white"
                   onClick={handleReject}
                 >
                   Tolak

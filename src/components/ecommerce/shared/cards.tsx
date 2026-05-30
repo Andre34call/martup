@@ -109,7 +109,7 @@ export function VoucherCard({
             <Button
               size="sm"
               onClick={onClaim}
-              className="h-7 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white"
+              className="h-7 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white"
             >
               Pakai
             </Button>

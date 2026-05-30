@@ -97,7 +97,7 @@ function getOrderActions(status: AdminOrderStatus): { label: string; icon: React
   switch (status) {
     case "pending":
       return [
-        { label: "Approve", icon: <Check className="w-3 h-3 mr-1" />, variant: "default", className: "bg-emerald-500 hover:bg-emerald-600 text-white" },
+        { label: "Approve", icon: <Check className="w-3 h-3 mr-1" />, variant: "default", className: "bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white" },
         { label: "Batalkan", icon: <X className="w-3 h-3 mr-1" />, variant: "outline", className: "text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20" },
       ]
     case "processing":
@@ -106,7 +106,7 @@ function getOrderActions(status: AdminOrderStatus): { label: string; icon: React
       ]
     case "shipped":
       return [
-        { label: "Selesai", icon: <Check className="w-3 h-3 mr-1" />, variant: "default", className: "bg-emerald-500 hover:bg-emerald-600 text-white" },
+        { label: "Selesai", icon: <Check className="w-3 h-3 mr-1" />, variant: "default", className: "bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white" },
       ]
     case "delivered":
       return []

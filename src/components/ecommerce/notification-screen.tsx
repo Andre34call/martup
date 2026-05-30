@@ -88,7 +88,7 @@ export function NotificationScreen() {
             <motion.button
               whileTap={{ scale: 0.9 }}
               onClick={handleMarkAllRead}
-              className="flex items-center gap-1 text-xs font-medium text-emerald-600 hover:text-emerald-700 transition-colors px-2 py-1"
+              className="flex items-center gap-1 text-xs font-medium text-emerald-600 hover:text-emerald-700 active:text-emerald-800 transition-colors px-2 py-1"
             >
               <CheckCheck className="w-3.5 h-3.5" />
               Baca Semua

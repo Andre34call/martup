@@ -284,7 +284,7 @@ export function OnboardingScreen() {
         {/* Next / Start button */}
         <Button
           onClick={goToNext}
-          className="w-full h-12 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-semibold text-base"
+          className="w-full h-12 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl font-semibold text-base"
         >
           {currentSlide === onboardingSlides.length - 1 ? "Mulai Belanja" : "Next"}
         </Button>
@@ -548,7 +548,7 @@ export function LoginScreen() {
         <Button
           type="submit"
           disabled={isLoading || !isFormValid}
-          className="w-full h-12 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-semibold text-base disabled:opacity-50"
+          className="w-full h-12 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl font-semibold text-base disabled:opacity-50"
         >
           {isLoading ? (
             <motion.div
@@ -896,7 +896,7 @@ export function RegisterScreen() {
         <Button
           type="submit"
           disabled={isLoading || !isFormValid}
-          className="w-full h-12 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-semibold text-base disabled:opacity-50"
+          className="w-full h-12 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl font-semibold text-base disabled:opacity-50"
         >
           {isLoading ? (
             <motion.div
@@ -1034,7 +1034,7 @@ export function EmailVerificationScreen() {
             </p>
             <Button
               onClick={() => navigate('login')}
-              className="w-full max-w-[320px] h-12 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-semibold text-base"
+              className="w-full max-w-[320px] h-12 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl font-semibold text-base"
             >
               Masuk Sekarang
             </Button>
@@ -1289,7 +1289,7 @@ export function OTPScreen() {
             <Button
               onClick={handlePhoneSubmit}
               disabled={isSending || !phone || !isValidPhone(phone)}
-              className="w-full h-12 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-semibold text-base disabled:opacity-50"
+              className="w-full h-12 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl font-semibold text-base disabled:opacity-50"
             >
               {isSending ? (
                 <motion.div
@@ -1359,7 +1359,7 @@ export function OTPScreen() {
             <Button
               onClick={handleVerify}
               disabled={isVerifying || otp.length !== 6}
-              className="w-full h-12 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-semibold text-base disabled:opacity-50"
+              className="w-full h-12 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl font-semibold text-base disabled:opacity-50"
             >
               {isVerifying ? (
                 <motion.div
@@ -1479,7 +1479,7 @@ export function ForgotPasswordScreen() {
               <Button
                 type="submit"
                 disabled={isLoading || !isFormValid}
-                className="w-full h-12 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-semibold text-base disabled:opacity-50"
+                className="w-full h-12 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl font-semibold text-base disabled:opacity-50"
               >
                 {isLoading ? (
                   <motion.div
@@ -1519,7 +1519,7 @@ export function ForgotPasswordScreen() {
             </p>
             <Button
               onClick={() => navigate("login")}
-              className="mt-8 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-12 px-8 font-semibold"
+              className="mt-8 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl h-12 px-8 font-semibold"
             >
               Kembali ke Login
             </Button>
@@ -1636,7 +1636,7 @@ export function ResetPasswordScreen() {
           </p>
           <Button
             onClick={() => navigate("forgot-password")}
-            className="mt-8 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-12 px-8 font-semibold"
+            className="mt-8 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl h-12 px-8 font-semibold"
           >
             Minta Link Baru
           </Button>
@@ -1674,7 +1674,7 @@ export function ResetPasswordScreen() {
           </p>
           <Button
             onClick={() => navigate("login")}
-            className="mt-8 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-12 px-8 font-semibold"
+            className="mt-8 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl h-12 px-8 font-semibold"
           >
             Login Sekarang
           </Button>
@@ -1778,7 +1778,7 @@ export function ResetPasswordScreen() {
           <Button
             type="submit"
             disabled={isLoading || !isFormValid}
-            className="w-full h-12 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-semibold text-base disabled:opacity-50"
+            className="w-full h-12 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl font-semibold text-base disabled:opacity-50"
           >
             {isLoading ? (
               <motion.div

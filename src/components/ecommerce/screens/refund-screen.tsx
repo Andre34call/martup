@@ -125,7 +125,7 @@ export function RefundScreen() {
 
             <Button
               onClick={() => setShowForm(!showForm)}
-              className="w-full bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-10"
+              className="w-full bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl h-10"
             >
               <RotateCcw className="w-4 h-4 mr-2" /> Ajukan Pengembalian
             </Button>
@@ -197,7 +197,7 @@ export function RefundScreen() {
                       </div>
                       <p className="text-[10px] text-muted-foreground">Maks 4 foto · JPG, PNG · Maks 5MB/foto</p>
                     </div>
-                    <Button onClick={handleSubmitRefund} className="w-full bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-10">
+                    <Button onClick={handleSubmitRefund} className="w-full bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl h-10">
                       Kirim Pengajuan
                     </Button>
                   </Card>

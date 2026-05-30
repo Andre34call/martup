@@ -298,7 +298,7 @@ export function SettingsScreen() {
                       className="h-8 text-sm rounded-lg"
                       autoFocus
                     />
-                    <Button size="sm" onClick={handleSaveField} className="h-8 px-3 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-[11px]">
+                    <Button size="sm" onClick={handleSaveField} className="h-8 px-3 rounded-lg bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white text-[11px]">
                       Simpan
                     </Button>
                     <Button size="sm" variant="ghost" onClick={() => setEditField(null)} className="h-8 px-2 rounded-lg text-[11px]">
@@ -328,7 +328,7 @@ export function SettingsScreen() {
                       className="h-8 text-sm rounded-lg"
                       autoFocus
                     />
-                    <Button size="sm" onClick={handleSaveField} className="h-8 px-3 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-[11px]">
+                    <Button size="sm" onClick={handleSaveField} className="h-8 px-3 rounded-lg bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white text-[11px]">
                       Simpan
                     </Button>
                     <Button size="sm" variant="ghost" onClick={() => setEditField(null)} className="h-8 px-2 rounded-lg text-[11px]">
@@ -358,7 +358,7 @@ export function SettingsScreen() {
                       className="h-8 text-sm rounded-lg"
                       autoFocus
                     />
-                    <Button size="sm" onClick={handleSaveField} className="h-8 px-3 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-[11px]">
+                    <Button size="sm" onClick={handleSaveField} className="h-8 px-3 rounded-lg bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white text-[11px]">
                       Simpan
                     </Button>
                     <Button size="sm" variant="ghost" onClick={() => setEditField(null)} className="h-8 px-2 rounded-lg text-[11px]">
@@ -607,7 +607,7 @@ export function SettingsScreen() {
             <Button variant="outline" onClick={() => setShowPasswordDialog(false)} className="rounded-xl h-10 flex-1">
               Batal
             </Button>
-            <Button onClick={handleChangePassword} disabled={isChangingPassword} className="bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-10 flex-1">
+            <Button onClick={handleChangePassword} disabled={isChangingPassword} className="bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl h-10 flex-1">
               {isChangingPassword ? 'Menyimpan...' : 'Ubah Password'}
             </Button>
           </DialogFooter>
@@ -637,7 +637,7 @@ export function SettingsScreen() {
               <Button
                 onClick={handle2FASendOtp}
                 disabled={twoFASending}
-                className="w-full bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-10"
+                className="w-full bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl h-10"
               >
                 {twoFASending ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -704,7 +704,7 @@ export function SettingsScreen() {
               <Button
                 onClick={handle2FAVerify}
                 disabled={twoFAVerifying || twoFAOtp.length !== 6}
-                className="w-full bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-10"
+                className="w-full bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl h-10"
               >
                 {twoFAVerifying ? (
                   <Loader2 className="w-4 h-4 animate-spin" />

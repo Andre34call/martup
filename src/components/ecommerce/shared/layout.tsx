@@ -67,7 +67,7 @@ export function SectionHeader({
       {onAction && (
         <button
           onClick={onAction}
-          className="flex items-center gap-0.5 text-xs font-medium text-emerald-600 hover:text-emerald-700 transition-colors"
+          className="flex items-center gap-0.5 text-xs font-medium text-emerald-600 hover:text-emerald-700 active:text-emerald-800 transition-colors"
         >
           {actionLabel}
           <ChevronRight className="w-3.5 h-3.5" />
@@ -146,7 +146,7 @@ export function EmptyState({ icon, title, subtitle, actionLabel, onAction }: Emp
       {actionLabel && onAction && (
         <Button
           onClick={onAction}
-          className="mt-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl"
+          className="mt-4 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl"
           size="sm"
         >
           {actionLabel}

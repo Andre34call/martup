@@ -569,7 +569,7 @@ export function ReviewScreen() {
                       <Button
                         disabled={!rating}
                         onClick={() => handleSubmitReview(order.id)}
-                        className="w-full bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-10 disabled:opacity-40 text-sm font-semibold"
+                        className="w-full bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl h-10 disabled:opacity-40 text-sm font-semibold"
                       >
                         <Send className="w-4 h-4 mr-1.5" /> Kirim Ulasan
                       </Button>

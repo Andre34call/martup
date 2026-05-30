@@ -148,7 +148,7 @@ export function SellerShopScreen() {
               <Button
                 variant={isFollowingStore(selectedSellerId || '') ? "default" : "outline"}
                 size="sm"
-                className={isFollowingStore(selectedSellerId || '') ? "flex-1 h-9 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" : "flex-1 h-9 text-xs rounded-lg border-emerald-500 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"}
+                className={isFollowingStore(selectedSellerId || '') ? "flex-1 h-9 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white" : "flex-1 h-9 text-xs rounded-lg border-emerald-500 text-emerald-600 hover:bg-emerald-50 active:bg-emerald-100 dark:hover:bg-emerald-950/30"}
                 onClick={() => toggleFollowStore(selectedSellerId || '')}
               >
                 <Check className="w-3.5 h-3.5 mr-1" />

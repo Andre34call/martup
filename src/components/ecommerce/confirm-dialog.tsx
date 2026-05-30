@@ -17,7 +17,7 @@ interface ConfirmDialogProps {
 
 export function ConfirmDialog({ isOpen, onClose, onConfirm, title, message, confirmLabel = 'Konfirmasi', cancelLabel = 'Batal', variant = 'danger' }: ConfirmDialogProps) {
   const variantStyles = {
-    danger: 'bg-red-500 hover:bg-red-600 text-white',
+    danger: 'bg-red-500 hover:bg-red-600 active:bg-red-700 text-white',
     warning: 'bg-amber-500 hover:bg-amber-600 text-white',
     info: 'bg-blue-500 hover:bg-blue-600 text-white',
   }

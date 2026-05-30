@@ -136,7 +136,7 @@ export function AddressScreen() {
       <PageHeader title="Alamat" rightAction={
         <Button
           onClick={handleToggleAddForm}
-          className="bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-9 text-xs"
+          className="bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl h-9 text-xs"
         >
           <Plus className="w-3.5 h-3.5 mr-1" /> {editingId ? "Edit" : "Tambah"}
         </Button>
@@ -219,7 +219,7 @@ export function AddressScreen() {
                     <Input value={formPostalCode} onChange={(e) => setFormPostalCode(e.target.value)} placeholder="12345" className="rounded-xl h-9" />
                   </div>
                 </div>
-                <Button onClick={handleSaveAddress} className="w-full bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-10">
+                <Button onClick={handleSaveAddress} className="w-full bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl h-10">
                   Simpan Alamat
                 </Button>
               </Card>

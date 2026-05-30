@@ -182,7 +182,7 @@ export function AdminWithdraw() {
                   </div>
                   {withdrawal.status === 'pending' && (
                     <div className="flex gap-2 mt-3 pt-3 border-t border-border/50">
-                      <Button size="sm" className="flex-1 h-8 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={() => handleApprove(withdrawal.id)}>
+                      <Button size="sm" className="flex-1 h-8 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white" onClick={() => handleApprove(withdrawal.id)}>
                         <Check className="w-3 h-3 mr-1" /> Approve
                       </Button>
                       <Button variant="outline" size="sm" className="flex-1 h-8 text-xs rounded-lg text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20" onClick={() => setShowRejectModal(withdrawal.id)}>
@@ -243,7 +243,7 @@ export function AdminWithdraw() {
                   Batal
                 </Button>
                 <Button
-                  className="flex-1 h-10 rounded-xl bg-red-500 hover:bg-red-600 text-white"
+                  className="flex-1 h-10 rounded-xl bg-red-500 hover:bg-red-600 active:bg-red-700 text-white"
                   onClick={handleReject}
                 >
                   Tolak
