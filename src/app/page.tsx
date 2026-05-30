@@ -253,11 +253,21 @@ export default function Home() {
   const isAuthenticated = useAppStore((s) => s.isAuthenticated)
   useEffect(() => {
     if (typeof window === 'undefined') return
-    const params = new URLSearchParams(window.location.search)
-    const resetToken = params.get('reset-token')
+    // SECURITY: Read reset token from hash fragment (#) instead of query parameter (?)
+    // Hash fragments are NOT sent to the server, preventing token leakage in logs/referrers
+    let resetToken: string | null = null
+    const hash = window.location.hash
+    if (hash && hash.startsWith('#reset-token=')) {
+      resetToken = hash.substring('#reset-token='.length)
+    }
+    // Fallback: also check query param for backward compatibility with old email links
+    if (!resetToken) {
+      const params = new URLSearchParams(window.location.search)
+      resetToken = params.get('reset-token')
+    }
     if (resetToken) {
       // Clean URL immediately to prevent token from being bookmarked/shared
-      window.history.replaceState({}, '', '/')
+      window.history.replaceState({}, '', window.location.pathname)
 
       // Check if user is already authenticated — check Zustand state and session cookie
       // Zustand may not have hydrated yet on page load, so also check cookie flag

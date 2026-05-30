@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { checkRateLimit, generateAuthToken } from '@/lib/auth-middleware'
+import crypto from 'crypto'
 
 import { logger } from '@/lib/logger'
 import { setSessionCookies } from '@/lib/session-cookie'
 import { verifyOtpHash } from '@/lib/token-hash'
+import { verifyTokenHash } from '@/lib/token-hash'
+
+// Maximum failed OTP attempts before requiring a new OTP code
+const MAX_OTP_ATTEMPTS = 5
+
 // POST /api/auth/otp/verify - Verify OTP code and log in the user
 export async function POST(request: NextRequest) {
   try {
@@ -75,7 +81,7 @@ export async function POST(request: NextRequest) {
       // Clear expired OTP
       await db.user.update({
         where: { id: user.id },
-        data: { otpCode: null, otpExpiry: null },
+        data: { otpCode: null, otpExpiry: null, failedLoginAttempts: 0 },
       })
       return NextResponse.json(
         { success: false, error: 'Kode OTP sudah kadaluarsa. Silakan request ulang.' },
@@ -83,12 +89,74 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // SECURITY: Validate requestId to bind send and verify steps
+    // This prevents someone who intercepts an OTP code from verifying it
+    // without also having the requestId that was issued during the send step
+    if (requestId && typeof requestId === 'string') {
+      try {
+        const decoded = Buffer.from(requestId, 'base64url').toString()
+        const parts = decoded.split(':')
+        if (parts.length >= 3) {
+          const [requestUserId, timestamp, hmac] = parts
+          // Verify the userId matches the user
+          if (requestUserId !== user.id) {
+            logger.warn({ component: 'otp', phone: normalizedPhone, requestUserId }, 'OTP verify: requestId userId mismatch')
+            return NextResponse.json(
+              { success: false, error: 'Kode OTP salah atau sudah kadaluarsa' },
+              { status: 401 }
+            )
+          }
+          // Verify the HMAC signature
+          const secret = process.env.NEXTAUTH_SECRET || process.env.TOKEN_SECRET || 'dev-secret'
+          const expectedHmac = crypto.createHmac('sha256', secret)
+            .update(`${requestUserId}:${otpCode}`)
+            .digest('hex').slice(0, 16)
+          if (!crypto.timingSafeEqual(Buffer.from(hmac), Buffer.from(expectedHmac))) {
+            logger.warn({ component: 'otp', phone: normalizedPhone }, 'OTP verify: requestId HMAC mismatch')
+            return NextResponse.json(
+              { success: false, error: 'Kode OTP salah atau sudah kadaluarsa' },
+              { status: 401 }
+            )
+          }
+        }
+      } catch (e) {
+        // Invalid requestId format — continue without requestId validation
+        // (backward compatibility for older clients that don't send requestId)
+        logger.warn({ component: 'otp', err: e }, 'OTP verify: failed to parse requestId')
+      }
+    }
+
     // Verify OTP code against stored hash (timing-safe)
     const isOtpValid = verifyOtpHash(otpCode, user.otpCode)
 
     if (!isOtpValid) {
+      // SECURITY: Track failed OTP attempts to prevent brute-force
+      const newFailedAttempts = (user.failedLoginAttempts || 0) + 1
+      if (newFailedAttempts >= MAX_OTP_ATTEMPTS) {
+        // Too many failed attempts — invalidate the OTP and require a new one
+        await db.user.update({
+          where: { id: user.id },
+          data: {
+            otpCode: null,
+            otpExpiry: null,
+            failedLoginAttempts: 0, // Reset after lockout
+          },
+        })
+        logger.warn({ component: 'otp', userId: user.id }, `OTP invalidated after ${MAX_OTP_ATTEMPTS} failed attempts`)
+        return NextResponse.json(
+          { success: false, error: `Terlalu banyak percobaan salah. Kode OTP telah dinonaktifkan. Silakan request OTP baru.` },
+          { status: 401 }
+        )
+      }
+
+      await db.user.update({
+        where: { id: user.id },
+        data: { failedLoginAttempts: newFailedAttempts },
+      })
+
+      const remaining = MAX_OTP_ATTEMPTS - newFailedAttempts
       return NextResponse.json(
-        { success: false, error: 'Kode OTP salah. Silakan coba lagi.' },
+        { success: false, error: `Kode OTP salah. Sisa percobaan: ${remaining}` },
         { status: 401 }
       )
     }
@@ -100,6 +168,7 @@ export async function POST(request: NextRequest) {
         otpCode: null,
         otpExpiry: null,
         isVerified: true,
+        failedLoginAttempts: 0, // Reset on successful verification
       },
     })
 

@@ -70,10 +70,13 @@ export async function POST(request: NextRequest) {
     })
 
     // Build the reset URL
+    // SECURITY: Use hash fragment (#) instead of query parameter (?)
+    // Hash fragments are NOT sent to the server in HTTP requests, preventing
+    // the token from appearing in server logs, referrer headers, or browser history.
     const baseUrl = process.env.NEXTAUTH_URL || process.env.VERCEL_URL
       ? `https://${process.env.VERCEL_URL}`
       : 'http://localhost:3000'
-    const resetUrl = `${baseUrl}/?reset-token=${resetToken}`
+    const resetUrl = `${baseUrl}/#reset-token=${resetToken}`
 
     // Send the reset email
     try {

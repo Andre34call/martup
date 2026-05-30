@@ -206,17 +206,16 @@ export async function POST(request: NextRequest) {
     // Check if user has 2FA enabled
     if (user.twoFactorEnabled) {
       if (!user.phone) {
-        // Edge case: 2FA enabled but no phone — allow login anyway and suggest disabling 2FA
-        const token = generateAuthToken(user.id, user.tokenVersion ?? 0)
-        const { password: _, ...userWithoutPassword } = user
-        const resp = NextResponse.json({
-          success: true,
-          user: userWithoutPassword,
-          token,
-          message: 'Login berhasil (2FA tidak dapat diverifikasi karena nomor HP tidak tersedia)',
-        })
-        setSessionCookies(resp, token)
-        return resp
+        // SECURITY: Don't bypass 2FA silently — reject the login instead.
+        // The user must contact support or use password reset to regain access.
+        logger.warn({ email, userId: user.id }, 'Login rejected: 2FA enabled but no phone number on file')
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Akun Anda mengaktifkan 2FA tetapi nomor HP tidak tersedia. Silakan hubungi support atau reset password untuk menonaktifkan 2FA.',
+          },
+          { status: 403 }
+        )
       }
 
       // Generate OTP for 2FA verification

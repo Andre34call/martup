@@ -44,6 +44,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // SECURITY: Per-phone rate limit in addition to per-IP limit
+    // Prevents attackers using proxy rotation from spamming a victim's phone
+    if (!checkRateLimit(`otp-send-phone:${normalizedPhone}`, OTP_MAX_ATTEMPTS_PER_HOUR)) {
+      return NextResponse.json(
+        { success: false, error: 'Terlalu banyak permintaan OTP ke nomor ini. Coba lagi dalam 1 jam.' },
+        { status: 429 }
+      )
+    }
+
     // Generate 6-digit OTP
     const otpCode = crypto.randomInt(0, Math.pow(10, OTP_LENGTH)).toString().padStart(OTP_LENGTH, '0')
 
