@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { checkRateLimit, generateAuthToken, isSuperAdmin } from '@/lib/auth-middleware'
+import { authLimiter } from '@/lib/rate-limit'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
 
@@ -45,6 +46,14 @@ export async function POST(request: NextRequest) {
     if (!checkRateLimit(`login:${clientIp}`)) {
       return NextResponse.json(
         { success: false, error: 'Terlalu banyak percobaan login. Coba lagi dalam 1 menit.' },
+        { status: 429 }
+      )
+    }
+    // Also use distributed rate limiter (persists across serverless cold starts)
+    const distributedLimit = await authLimiter.check(`login:${clientIp}`)
+    if (!distributedLimit.allowed) {
+      return NextResponse.json(
+        { success: false, error: 'Terlalu banyak percobaan login. Coba lagi dalam beberapa menit.' },
         { status: 429 }
       )
     }

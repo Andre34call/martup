@@ -5,6 +5,7 @@ import { authLimiter } from '@/lib/rate-limit'
 import { logger } from '@/lib/logger'
 import crypto from 'crypto'
 import { hashToken } from '@/lib/token-hash'
+import { validateBody, forgotPasswordSchema } from '@/lib/validations'
 
 // POST /api/auth/forgot-password
 // Sends a password reset email to the user
@@ -21,16 +22,14 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { email } = body
-
-    if (!email || typeof email !== 'string') {
+    const validation = validateBody(forgotPasswordSchema, body)
+    if (!validation.success) {
       return NextResponse.json(
-        { success: false, error: 'Email wajib diisi' },
+        { success: false, error: validation.error },
         { status: 400 }
       )
     }
-
-    const normalizedEmail = email.toLowerCase().trim()
+    const { email: normalizedEmail } = validation.data
 
     // Find user by email
     const user = await db.user.findUnique({

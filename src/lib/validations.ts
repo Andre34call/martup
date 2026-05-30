@@ -23,6 +23,10 @@ export const forgotPasswordSchema = z.object({
   email: z.string().trim().toLowerCase().email('Email tidak valid'),
 })
 
+export const resendVerificationSchema = z.object({
+  email: z.string().trim().toLowerCase().email('Email tidak valid'),
+})
+
 // Note: resetPasswordSchema does not have an email field, so no .toLowerCase() needed
 export const resetPasswordSchema = z.object({
   token: z.string().min(1, 'Token wajib diisi'),

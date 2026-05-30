@@ -5,6 +5,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { isSuperAdmin } from '@/lib/auth-middleware'
 import { logger } from '@/lib/logger'
+import { authLimiter } from '@/lib/rate-limit'
 // GET /api/auth/me - Get current authenticated user
 // Supports two auth methods:
 // 1. NextAuth session (Google OAuth) — via verifyAuth
@@ -31,6 +32,17 @@ export async function GET(request: NextRequest) {
             })
 
             if (!existingUser) {
+              // SECURITY: Rate limit fallback user creation to prevent abuse
+              const fallbackIp = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
+              const fallbackRateLimit = await authLimiter.check(`me-create:${fallbackIp}`)
+              if (!fallbackRateLimit.allowed) {
+                logger.warn({ component: 'auth', email: userEmail, ip: fallbackIp }, 'Fallback user creation rate limited')
+                return NextResponse.json(
+                  { success: false, error: 'Terlalu banyak request. Coba lagi nanti.' },
+                  { status: 429 }
+                )
+              }
+
               // User has a valid NextAuth session but no DB record — create one
               logger.info({ component: 'auth', email: userEmail }, 'Creating missing user from NextAuth session fallback')
 

@@ -224,7 +224,7 @@ export async function POST(request: NextRequest) {
         email,
         emailSent: false,
         message: 'Registrasi berhasil, tetapi email verifikasi gagal dikirim. Gunakan fitur "Kirim Ulang" di halaman login.',
-        devVerifyUrl: emailResult.devUrl,
+        ...(process.env.NODE_ENV === 'development' ? { devVerifyUrl: emailResult.devUrl } : {}),
       })
     }
 
@@ -235,7 +235,7 @@ export async function POST(request: NextRequest) {
       email,
       emailSent: true,
       message: 'Registrasi berhasil! Silakan cek email Anda untuk verifikasi.',
-      devVerifyUrl: emailResult.devUrl, // For mock provider in development
+      ...(process.env.NODE_ENV === 'development' ? { devVerifyUrl: emailResult.devUrl } : {}),
     })
   } catch (error: unknown) {
     // Error logged above — generic message returned to client

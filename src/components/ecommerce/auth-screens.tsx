@@ -35,7 +35,33 @@ function isValidPhone(phone: string): boolean {
   return /^(0|\+62|62)\d{9,12}$/.test(phone.replace(/[\s-]/g, ''))
 }
 function isValidPassword(password: string): boolean {
-  return password.length >= 8 && /[a-zA-Z]/.test(password) && /\d/.test(password)
+  return password.length >= 8
+    && /[a-z]/.test(password)
+    && /[A-Z]/.test(password)
+    && /\d/.test(password)
+    && /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)
+}
+function getPasswordStrength(password: string): { score: number; label: string; color: string } {
+  let score = 0
+  if (password.length >= 8) score++
+  if (/[a-z]/.test(password)) score++
+  if (/[A-Z]/.test(password)) score++
+  if (/\d/.test(password)) score++
+  if (/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) score++
+
+  if (score <= 2) return { score, label: 'Lemah', color: 'bg-red-500' }
+  if (score <= 3) return { score, label: 'Sedang', color: 'bg-yellow-500' }
+  if (score <= 4) return { score, label: 'Kuat', color: 'bg-emerald-400' }
+  return { score, label: 'Sangat Kuat', color: 'bg-emerald-600' }
+}
+function getPasswordRules(password: string) {
+  return [
+    { label: 'Minimal 8 karakter', met: password.length >= 8 },
+    { label: 'Huruf kecil (a-z)', met: /[a-z]/.test(password) },
+    { label: 'Huruf besar (A-Z)', met: /[A-Z]/.test(password) },
+    { label: 'Angka (0-9)', met: /\d/.test(password) },
+    { label: 'Karakter khusus (!@#$% dll)', met: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password) },
+  ]
 }
 function isValidEmailOrPhone(value: string): boolean {
   return isValidEmail(value) || isValidPhone(value)
@@ -612,7 +638,7 @@ export function RegisterScreen() {
   const [touchedFields, setTouchedFields] = useState({ name: false, email: false, phone: false, password: false, confirmPassword: false })
 
   const nameError = touchedFields.name && name
-    ? (name.length < 3 ? "Nama minimal 3 karakter" : /^\d+$/.test(name) ? "Nama tidak boleh hanya angka" : "")
+    ? (name.length < 2 ? "Nama minimal 2 karakter" : /^\d+$/.test(name) ? "Nama tidak boleh hanya angka" : "")
     : touchedFields.name && !name
     ? "Nama wajib diisi"
     : ""
@@ -632,8 +658,10 @@ export function RegisterScreen() {
   const passwordError = touchedFields.password && password
     ? (!isValidPassword(password)
       ? (password.length < 8 ? "Password minimal 8 karakter"
-        : !/[a-zA-Z]/.test(password) ? "Password harus mengandung huruf"
+        : !/[a-z]/.test(password) ? "Password harus mengandung huruf kecil"
+        : !/[A-Z]/.test(password) ? "Password harus mengandung huruf besar"
         : !/\d/.test(password) ? "Password harus mengandung angka"
+        : !/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password) ? "Password harus mengandung karakter khusus"
         : "")
       : "")
     : touchedFields.password && !password
@@ -795,11 +823,17 @@ export function RegisterScreen() {
               <p className={`text-xs ${password.length >= 8 ? "text-emerald-500" : "text-muted-foreground"}`}>
                 {password.length >= 8 ? "✓" : "○"} Minimal 8 karakter
               </p>
-              <p className={`text-xs ${/[a-zA-Z]/.test(password) ? "text-emerald-500" : "text-muted-foreground"}`}>
-                {/[a-zA-Z]/.test(password) ? "✓" : "○"} Mengandung huruf
+              <p className={`text-xs ${/[a-z]/.test(password) ? "text-emerald-500" : "text-muted-foreground"}`}>
+                {/[a-z]/.test(password) ? "✓" : "○"} Huruf kecil (a-z)
+              </p>
+              <p className={`text-xs ${/[A-Z]/.test(password) ? "text-emerald-500" : "text-muted-foreground"}`}>
+                {/[A-Z]/.test(password) ? "✓" : "○"} Huruf besar (A-Z)
               </p>
               <p className={`text-xs ${/\d/.test(password) ? "text-emerald-500" : "text-muted-foreground"}`}>
                 {/\d/.test(password) ? "✓" : "○"} Mengandung angka
+              </p>
+              <p className={`text-xs ${/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password) ? "text-emerald-500" : "text-muted-foreground"}`}>
+                {/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password) ? "✓" : "○"} Karakter khusus (!@#$% dll)
               </p>
             </div>
           )}
@@ -1520,10 +1554,14 @@ export function ResetPasswordScreen() {
     ? "Password baru wajib diisi"
     : touchedPassword && password.length < 8
     ? "Password minimal 8 karakter"
-    : touchedPassword && password && !/[a-zA-Z]/.test(password)
-    ? "Password harus mengandung huruf"
+    : touchedPassword && password && !/[a-z]/.test(password)
+    ? "Password harus mengandung huruf kecil"
+    : touchedPassword && password && !/[A-Z]/.test(password)
+    ? "Password harus mengandung huruf besar"
     : touchedPassword && password && !/\d/.test(password)
     ? "Password harus mengandung angka"
+    : touchedPassword && password && !/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)
+    ? "Password harus mengandung karakter khusus"
     : ""
 
   const passwordsMatch = !confirmPassword || password === confirmPassword
@@ -1686,11 +1724,17 @@ export function ResetPasswordScreen() {
                 <p className={`text-xs ${password.length >= 8 ? "text-emerald-500" : "text-muted-foreground"}`}>
                   {password.length >= 8 ? "✓" : "○"} Minimal 8 karakter
                 </p>
-                <p className={`text-xs ${/[a-zA-Z]/.test(password) ? "text-emerald-500" : "text-muted-foreground"}`}>
-                  {/[a-zA-Z]/.test(password) ? "✓" : "○"} Mengandung huruf
+                <p className={`text-xs ${/[a-z]/.test(password) ? "text-emerald-500" : "text-muted-foreground"}`}>
+                  {/[a-z]/.test(password) ? "✓" : "○"} Huruf kecil (a-z)
+                </p>
+                <p className={`text-xs ${/[A-Z]/.test(password) ? "text-emerald-500" : "text-muted-foreground"}`}>
+                  {/[A-Z]/.test(password) ? "✓" : "○"} Huruf besar (A-Z)
                 </p>
                 <p className={`text-xs ${/\d/.test(password) ? "text-emerald-500" : "text-muted-foreground"}`}>
                   {/\d/.test(password) ? "✓" : "○"} Mengandung angka
+                </p>
+                <p className={`text-xs ${/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password) ? "text-emerald-500" : "text-muted-foreground"}`}>
+                  {/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password) ? "✓" : "○"} Karakter khusus (!@#$% dll)
                 </p>
               </div>
             )}

@@ -5,6 +5,7 @@ import crypto from 'crypto'
 import { sendEmail, emailVerificationTemplate } from '@/lib/email'
 import { logger } from '@/lib/logger'
 import { hashToken } from '@/lib/token-hash'
+import { validateBody, resendVerificationSchema } from '@/lib/validations'
 
 // POST /api/auth/resend-verification
 // Resends email verification to an unverified user
@@ -20,14 +21,14 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { email } = body
-
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    const validation = validateBody(resendVerificationSchema, body)
+    if (!validation.success) {
       return NextResponse.json(
-        { success: false, error: 'Format email tidak valid' },
+        { success: false, error: validation.error },
         { status: 400 }
       )
     }
+    const { email } = validation.data
 
     // Find user by email
     const user = await db.user.findUnique({ where: { email } })
@@ -89,7 +90,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: 'Link verifikasi telah dikirim ke email Anda.',
-      devVerifyUrl: emailResult.devUrl, // For mock provider
+      ...(process.env.NODE_ENV === 'development' ? { devVerifyUrl: emailResult.devUrl } : {}),
     })
   } catch (error: unknown) {
     // Error logged above — generic message returned to client

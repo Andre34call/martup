@@ -17,8 +17,15 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Handle dev/mock tokens
+    // Handle dev/mock tokens — ONLY in development mode
+    // In production, dev tokens must be rejected to prevent unauthorized email verification
     if (token.startsWith('dev-verify-')) {
+      if (process.env.NODE_ENV !== 'development') {
+        logger.warn({ component: 'auth', tokenPrefix: token.substring(0, 20) }, 'Dev verify token rejected in production')
+        return NextResponse.redirect(
+          new URL('/?verification=expired', request.url)
+        )
+      }
       try {
         const payload = JSON.parse(Buffer.from(token.replace('dev-verify-', ''), 'base64').toString())
         // In dev mode, find user by email from the mock token payload
