@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { checkRateLimit, generateAuthToken } from '@/lib/auth-middleware'
+import { authLimiter } from '@/lib/rate-limit'
 import crypto from 'crypto'
 
 import { logger } from '@/lib/logger'
@@ -22,6 +23,14 @@ export async function POST(request: NextRequest) {
         { status: 429 }
       )
     }
+    // Also use distributed rate limiter (persists across serverless cold starts)
+    const distLimit = await authLimiter.check(`otp-verify:${clientIp}`)
+    if (!distLimit.allowed) {
+      return NextResponse.json(
+        { success: false, error: 'Terlalu banyak percobaan verifikasi. Coba lagi dalam beberapa menit.' },
+        { status: 429 }
+      )
+    }
 
     const body = await request.json()
     const { phone, otpCode, requestId } = body
@@ -37,6 +46,16 @@ export async function POST(request: NextRequest) {
     if (!otpCode || typeof otpCode !== 'string' || !/^\d{6}$/.test(otpCode)) {
       return NextResponse.json(
         { success: false, error: 'Kode OTP harus 6 digit angka' },
+        { status: 400 }
+      )
+    }
+
+    // SECURITY: requestId is MANDATORY to bind the OTP send and verify steps.
+    // Without it, an attacker who intercepts the OTP code (e.g., via SMS)
+    // could verify it without having the requestId that was issued during send.
+    if (!requestId || typeof requestId !== 'string') {
+      return NextResponse.json(
+        { success: false, error: 'Request ID wajib diisi. Silakan request OTP ulang.' },
         { status: 400 }
       )
     }
@@ -92,38 +111,43 @@ export async function POST(request: NextRequest) {
     // SECURITY: Validate requestId to bind send and verify steps
     // This prevents someone who intercepts an OTP code from verifying it
     // without also having the requestId that was issued during the send step
-    if (requestId && typeof requestId === 'string') {
-      try {
-        const decoded = Buffer.from(requestId, 'base64url').toString()
-        const parts = decoded.split(':')
-        if (parts.length >= 3) {
-          const [requestUserId, timestamp, hmac] = parts
-          // Verify the userId matches the user
-          if (requestUserId !== user.id) {
-            logger.warn({ component: 'otp', phone: normalizedPhone, requestUserId }, 'OTP verify: requestId userId mismatch')
-            return NextResponse.json(
-              { success: false, error: 'Kode OTP salah atau sudah kadaluarsa' },
-              { status: 401 }
-            )
-          }
-          // Verify the HMAC signature
-          const secret = process.env.NEXTAUTH_SECRET || process.env.TOKEN_SECRET || 'dev-secret'
-          const expectedHmac = crypto.createHmac('sha256', secret)
-            .update(`${requestUserId}:${otpCode}`)
-            .digest('hex').slice(0, 16)
-          if (!crypto.timingSafeEqual(Buffer.from(hmac), Buffer.from(expectedHmac))) {
-            logger.warn({ component: 'otp', phone: normalizedPhone }, 'OTP verify: requestId HMAC mismatch')
-            return NextResponse.json(
-              { success: false, error: 'Kode OTP salah atau sudah kadaluarsa' },
-              { status: 401 }
-            )
-          }
-        }
-      } catch (e) {
-        // Invalid requestId format — continue without requestId validation
-        // (backward compatibility for older clients that don't send requestId)
-        logger.warn({ component: 'otp', err: e }, 'OTP verify: failed to parse requestId')
+    try {
+      const decoded = Buffer.from(requestId, 'base64url').toString()
+      const parts = decoded.split(':')
+      if (parts.length < 3) {
+        logger.warn({ component: 'otp', phone: normalizedPhone }, 'OTP verify: requestId has invalid format')
+        return NextResponse.json(
+          { success: false, error: 'Request ID tidak valid. Silakan request OTP ulang.' },
+          { status: 401 }
+        )
       }
+      const [requestUserId, timestamp, hmac] = parts
+      // Verify the userId matches the user
+      if (requestUserId !== user.id) {
+        logger.warn({ component: 'otp', phone: normalizedPhone, requestUserId }, 'OTP verify: requestId userId mismatch')
+        return NextResponse.json(
+          { success: false, error: 'Kode OTP salah atau sudah kadaluarsa' },
+          { status: 401 }
+        )
+      }
+      // Verify the HMAC signature
+      const secret = process.env.NEXTAUTH_SECRET || process.env.TOKEN_SECRET || 'dev-secret'
+      const expectedHmac = crypto.createHmac('sha256', secret)
+        .update(`${requestUserId}:${otpCode}`)
+        .digest('hex').slice(0, 16)
+      if (!crypto.timingSafeEqual(Buffer.from(hmac), Buffer.from(expectedHmac))) {
+        logger.warn({ component: 'otp', phone: normalizedPhone }, 'OTP verify: requestId HMAC mismatch')
+        return NextResponse.json(
+          { success: false, error: 'Kode OTP salah atau sudah kadaluarsa' },
+          { status: 401 }
+        )
+      }
+    } catch (e) {
+      logger.warn({ component: 'otp', err: e }, 'OTP verify: failed to parse requestId')
+      return NextResponse.json(
+        { success: false, error: 'Request ID tidak valid. Silakan request OTP ulang.' },
+        { status: 401 }
+      )
     }
 
     // Verify OTP code against stored hash (timing-safe)

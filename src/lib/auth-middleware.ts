@@ -99,6 +99,11 @@ const TOKEN_SECRET = (() => {
 })()
 const TOKEN_EXPIRY = 24 * 60 * 60 * 1000 // 24 hours
 
+// Token rotation threshold: if a token is older than this, issue a fresh one.
+// This limits the window of opportunity for stolen cookies (especially Remember Me)
+// without requiring users to re-authenticate frequently.
+const TOKEN_ROTATION_THRESHOLD = 60 * 60 * 1000 // 1 hour
+
 /**
  * Generate an HMAC-signed auth token.
  * Format: base64(userId:tokenVersion:timestamp:hmacSignature)
@@ -121,7 +126,7 @@ export function generateAuthToken(userId: string, tokenVersion: number = 0): str
  * The caller should check that the tokenVersion matches the user's current tokenVersion in the DB.
  * If they don't match, the token was issued before a password change and should be rejected.
  */
-export function verifyAuthToken(token: string): { userId: string; tokenVersion: number } | null {
+export function verifyAuthToken(token: string): { userId: string; tokenVersion: number; timestamp: number } | null {
   try {
     const decoded = Buffer.from(token, 'base64').toString()
     const parts = decoded.split(':')
@@ -162,10 +167,10 @@ export function verifyAuthToken(token: string): { userId: string; tokenVersion: 
         return null
       }
       // Old format signature matched — return with tokenVersion 0
-      return { userId, tokenVersion: 0 }
+      return { userId, tokenVersion: 0, timestamp: parseInt(timestamp) || 0 }
     }
 
-    return { userId, tokenVersion: parseInt(tokenVersion) || 0 }
+    return { userId, tokenVersion: parseInt(tokenVersion) || 0, timestamp: parseInt(timestamp) || 0 }
   } catch {
     return null
   }
@@ -184,6 +189,9 @@ export interface AuthResult {
     isActive: boolean
     tokenVersion: number
   }
+  /** If the token is older than TOKEN_ROTATION_THRESHOLD, a new token should be issued.
+   * This enables token rotation for Remember Me sessions without short session expiry. */
+  shouldRotateToken?: boolean
 }
 
 export interface AuthError {
@@ -237,7 +245,10 @@ export async function verifyAuth(request: NextRequest): Promise<AuthResult | Aut
           // Token was issued before password change — reject it
           return { success: false, error: 'Sesi telah berakhir. Silakan login kembali.', status: 401 }
         }
-        return { success: true, user: dbUser }
+        // Token rotation: if the token is older than the threshold, flag for rotation
+        const tokenAge = Date.now() - tokenResult.timestamp
+        const shouldRotate = tokenAge > TOKEN_ROTATION_THRESHOLD
+        return { success: true, user: dbUser, shouldRotateToken: shouldRotate }
       }
     }
   }

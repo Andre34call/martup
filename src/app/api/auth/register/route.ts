@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { checkRateLimit, generateAuthToken } from '@/lib/auth-middleware'
+import { authLimiter } from '@/lib/rate-limit'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
 import { sendEmail, emailVerificationTemplate } from '@/lib/email'
@@ -22,6 +23,14 @@ export async function POST(request: NextRequest) {
         { status: 429 }
       )
     }
+    // Also use distributed rate limiter (persists across serverless cold starts)
+    const distLimit = await authLimiter.check(`register:${clientIp}`)
+    if (!distLimit.allowed) {
+      return NextResponse.json(
+        { success: false, error: 'Terlalu banyak percobaan registrasi. Coba lagi dalam beberapa menit.' },
+        { status: 429 }
+      )
+    }
 
     const body = await request.json()
     const validation = validateBody(registerSchema, body)
@@ -33,6 +42,17 @@ export async function POST(request: NextRequest) {
     }
     const { name: rawName, email, phone, password } = validation.data
     const name = sanitizeInput(rawName)
+
+    // SECURITY: Check if phone number is already registered (unique constraint)
+    if (phone) {
+      const existingPhoneUser = await db.user.findUnique({ where: { phone } })
+      if (existingPhoneUser) {
+        return NextResponse.json(
+          { success: false, error: 'Nomor HP sudah terdaftar. Gunakan nomor lain atau login.' },
+          { status: 409 }
+        )
+      }
+    }
 
     // Check if email already exists
     const existingUser = await db.user.findUnique({

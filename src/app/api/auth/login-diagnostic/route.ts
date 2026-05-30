@@ -7,15 +7,48 @@ import { logger } from '@/lib/logger'
 /**
  * POST /api/auth/login-diagnostic - Diagnose login failures (admin-only).
  *
- * Requires x-admin-secret header matching TOKEN_SECRET.
- * Returns detailed diagnostic info about why a login is failing.
- * Also auto-fixes plain-text passwords if detected.
+ * SECURITY IMPROVEMENTS:
+ * - Uses a DEDICATED ADMIN_DIAGNOSTIC_SECRET (not TOKEN_SECRET)
+ * - Does NOT expose password hash prefixes
+ * - Does NOT perform plaintext password comparison
+ * - Does NOT auto-fix passwords
+ * - Returns only safe diagnostic info
+ *
+ * Set ADMIN_DIAGNOSTIC_SECRET in env vars. If not set, this endpoint is disabled.
  */
 export async function POST(request: NextRequest) {
-  // Admin-only: verify secret
+  // SECURITY: Require a dedicated diagnostic secret — NOT the same as TOKEN_SECRET
+  const diagnosticSecret = process.env.ADMIN_DIAGNOSTIC_SECRET
+  if (!diagnosticSecret) {
+    return NextResponse.json(
+      { error: 'Endpoint dinonaktifkan. Set ADMIN_DIAGNOSTIC_SECRET untuk mengaktifkan.' },
+      { status: 403 }
+    )
+  }
+
+  // Admin-only: verify dedicated secret using timing-safe comparison
   const adminSecret = request.headers.get('x-admin-secret')
-  if (!adminSecret || adminSecret !== env.TOKEN_SECRET) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!adminSecret) {
+    return NextResponse.json({ error: 'Secret diperlukan' }, { status: 401 })
+  }
+  try {
+    const a = Buffer.from(adminSecret)
+    const b = Buffer.from(diagnosticSecret)
+    if (a.length !== b.length || !crypto.subtle.timingSafeEqual?.(a, b)) {
+      // Fallback: manual timing-safe compare
+      let result = 0
+      for (let i = 0; i < Math.max(a.length, b.length); i++) {
+        result |= (a[i] || 0) ^ (b[i] || 0)
+      }
+      if (result !== 0 || a.length !== b.length) {
+        return NextResponse.json({ error: 'Secret tidak valid' }, { status: 401 })
+      }
+    }
+  } catch {
+    // If timingSafeEqual not available, use simple comparison (less secure but functional)
+    if (adminSecret !== diagnosticSecret) {
+      return NextResponse.json({ error: 'Secret tidak valid' }, { status: 401 })
+    }
   }
 
   try {
@@ -23,7 +56,7 @@ export async function POST(request: NextRequest) {
     const { email } = body
 
     if (!email) {
-      return NextResponse.json({ error: 'Email required' }, { status: 400 })
+      return NextResponse.json({ error: 'Email wajib diisi' }, { status: 400 })
     }
 
     const normalizedEmail = email.toLowerCase().trim()
@@ -31,64 +64,66 @@ export async function POST(request: NextRequest) {
     // Find user
     const user = await db.user.findUnique({
       where: { email: normalizedEmail },
-      include: { seller: true, wallet: true },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        isActive: true,
+        isVerified: true,
+        twoFactorEnabled: true,
+        phone: true,
+        password: true,
+        failedLoginAttempts: true,
+        lockedUntil: true,
+        tokenVersion: true,
+      },
     })
 
     if (!user) {
-      // Try case-insensitive
-      const userByInsensitive = await db.user.findFirst({
-        where: { email: { equals: normalizedEmail, mode: 'insensitive' } },
-      })
-
       return NextResponse.json({
         found: false,
         emailSearched: normalizedEmail,
-        caseInsensitiveMatch: userByInsensitive
-          ? { id: userByInsensitive.id, email: userByInsensitive.email, isVerified: userByInsensitive.isVerified }
-          : null,
-        diagnosis: 'User not found with this email',
+        diagnosis: 'User tidak ditemukan dengan email ini',
       })
     }
 
-    // User found — return diagnostic info
+    // User found — return SAFE diagnostic info only
     const passwordInfo = {
       hasPassword: !!user.password,
-      passwordLength: user.password?.length || 0,
-      hashPrefix: user.password?.substring(0, 7) || '',
       looksLikeBcrypt: /^\$2[aby]\$\d{2}\$/.test(user.password || ''),
+      // SECURITY: Do NOT expose hash prefix or password length
     }
 
-    // Try bcrypt compare with the provided password if given
-    let passwordCheck: { bcryptMatch: boolean; plainTextMatch: boolean; autoFixed: boolean } | null = null
-    if (body.password) {
-      const isBcryptHash = passwordInfo.looksLikeBcrypt
-      let bcryptResult = false
-      let plainTextResult = false
-
+    // Test bcrypt compare if password provided (NO plaintext fallback, NO auto-fix)
+    let passwordCheck: { bcryptMatch: boolean } | null = null
+    if (body.password && user.password) {
       try {
-        bcryptResult = await bcrypt.compare(body.password, user.password!) as unknown as boolean
+        const bcryptResult = await bcrypt.compare(body.password, user.password) as unknown as boolean
+        passwordCheck = { bcryptMatch: bcryptResult }
       } catch {
-        bcryptResult = false
+        passwordCheck = { bcryptMatch: false }
       }
+    }
 
-      if (!bcryptResult && !isBcryptHash) {
-        plainTextResult = user.password === body.password
-        if (plainTextResult) {
-          // Auto-fix: re-hash the plain-text password
-          const hashedPassword = await bcrypt.hash(body.password, 12)
-          await db.user.update({
-            where: { id: user.id },
-            data: { password: hashedPassword },
-          })
-          logger.info({ email: normalizedEmail, userId: user.id }, 'Auto-fixed plain-text password via diagnostic endpoint')
-        }
-      }
-
-      passwordCheck = {
-        bcryptMatch: bcryptResult,
-        plainTextMatch: plainTextResult,
-        autoFixed: plainTextResult && !isBcryptHash,
-      }
+    // Determine diagnosis
+    let diagnosis: string
+    if (!user.isActive) {
+      diagnosis = 'Akun diblokir'
+    } else if (user.lockedUntil && new Date() < user.lockedUntil) {
+      diagnosis = `Akun dikunci sampai ${user.lockedUntil.toISOString()}`
+    } else if (!user.isVerified) {
+      diagnosis = 'Email belum diverifikasi'
+    } else if (!passwordInfo.hasPassword) {
+      diagnosis = 'Tidak ada password (akun OAuth)'
+    } else if (passwordCheck?.bcryptMatch) {
+      diagnosis = 'Login seharusnya berhasil'
+    } else if (passwordCheck && !passwordCheck.bcryptMatch) {
+      diagnosis = 'Password tidak cocok'
+    } else if (!passwordInfo.looksLikeBcrypt) {
+      diagnosis = 'Format password hash tidak valid — user harus reset password'
+    } else {
+      diagnosis = 'Periksa password atau coba reset'
     }
 
     return NextResponse.json({
@@ -101,19 +136,11 @@ export async function POST(request: NextRequest) {
       isVerified: user.isVerified,
       twoFactorEnabled: user.twoFactorEnabled,
       phone: user.phone,
+      failedLoginAttempts: user.failedLoginAttempts,
+      isLocked: !!(user.lockedUntil && new Date() < user.lockedUntil),
       passwordInfo,
       passwordCheck,
-      diagnosis: !user.isActive
-        ? 'Account is blocked'
-        : !user.isVerified
-        ? 'Email not verified'
-        : passwordCheck?.bcryptMatch
-        ? 'Login should work'
-        : passwordCheck?.plainTextMatch
-        ? 'Plain-text password auto-fixed, try again'
-        : !passwordInfo.hasPassword
-        ? 'No password set (OAuth-only account)'
-        : 'Password mismatch — check if password is correct or if hash is corrupted',
+      diagnosis,
     })
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })

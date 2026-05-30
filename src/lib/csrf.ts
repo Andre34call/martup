@@ -103,8 +103,25 @@ function requiresCsrfCheck(request: NextRequest): boolean {
   const pathname = request.nextUrl.pathname
   // Check exact match
   if (CSRF_EXEMPT_PATHS.has(pathname)) return false
-  // Check prefix match for auth routes (NextAuth handles its own CSRF)
-  if (pathname.startsWith('/api/auth/')) return false
+  // SECURITY: Only exempt SPECIFIC unauthenticated auth routes from CSRF.
+  // Authenticated auth routes (change-password, logout, logout-all) MUST require CSRF
+  // to prevent CSRF attacks that exploit the user's existing session cookie.
+  const csrfExemptAuthRoutes = [
+    '/api/auth/login',              // No existing session
+    '/api/auth/register',           // No existing session
+    '/api/auth/forgot-password',    // No existing session
+    '/api/auth/reset-password',     // Uses token, not session
+    '/api/auth/verify-email',       // Uses token, not session (GET redirect)
+    '/api/auth/resend-verification', // No existing session
+    '/api/auth/otp/send',           // No existing session
+    '/api/auth/otp/verify',         // Uses OTP, not session
+    '/api/auth/sync-user',          // Internal (has x-internal-secret)
+    '/api/auth/diagnostic',         // Has own secret (x-admin-secret)
+    '/api/auth/login-diagnostic',   // Has own secret (x-admin-secret)
+  ]
+  if (csrfExemptAuthRoutes.includes(pathname)) return false
+  // NextAuth routes handle their own CSRF
+  if (pathname.startsWith('/api/auth/') && pathname.includes('nextauth')) return false
 
   return true
 }

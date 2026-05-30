@@ -92,10 +92,24 @@ async function fetchWithCsrfRetry(url: string, options: RequestInit): Promise<Re
     (options.method || 'GET').toUpperCase()
   )
 
-  // Auth routes are CSRF-exempt — skip all CSRF handling to avoid
-  // response body consumption issues on 403 (requiresVerification)
+  // Auth routes that are CSRF-exempt (unauthenticated or have own auth)
+  // Authenticated auth routes (change-password, logout, logout-all) REQUIRE CSRF
+  const csrfExemptAuthRoutes = [
+    '/api/auth/login',
+    '/api/auth/register',
+    '/api/auth/forgot-password',
+    '/api/auth/reset-password',
+    '/api/auth/verify-email',
+    '/api/auth/resend-verification',
+    '/api/auth/otp/send',
+    '/api/auth/otp/verify',
+    '/api/auth/sync-user',
+    '/api/auth/diagnostic',
+    '/api/auth/login-diagnostic',
+  ]
   const isAuthRoute = url.includes('/api/auth/')
-  if (isAuthRoute) {
+  const isCsrfExemptAuthRoute = csrfExemptAuthRoutes.some(route => url.includes(route))
+  if (isAuthRoute && isCsrfExemptAuthRoute) {
     return fetch(url, options)
   }
 

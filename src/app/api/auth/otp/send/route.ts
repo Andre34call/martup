@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { checkRateLimit } from '@/lib/auth-middleware'
+import { authLimiter } from '@/lib/rate-limit'
 import crypto from 'crypto'
 
 import { logger } from '@/lib/logger'
@@ -21,6 +22,14 @@ export async function POST(request: NextRequest) {
     if (!checkRateLimit(`otp-send:${clientIp}`, OTP_MAX_ATTEMPTS_PER_HOUR)) {
       return NextResponse.json(
         { success: false, error: 'Terlalu banyak permintaan OTP. Coba lagi dalam 1 jam.' },
+        { status: 429 }
+      )
+    }
+    // Also use distributed rate limiter (persists across serverless cold starts)
+    const distLimit = await authLimiter.check(`otp-send:${clientIp}`)
+    if (!distLimit.allowed) {
+      return NextResponse.json(
+        { success: false, error: 'Terlalu banyak permintaan OTP. Coba lagi dalam beberapa menit.' },
         { status: 429 }
       )
     }
@@ -88,23 +97,34 @@ export async function POST(request: NextRequest) {
       const phoneDigits = normalizedPhone.replace(/\D/g, '')
       const shortId = crypto.randomBytes(6).toString('hex')
       const internalEmail = `otp_${phoneDigits}_${shortId}@martup.internal`
-      user = await db.user.create({
-        data: {
-          email: internalEmail,
-          phone: normalizedPhone,
-          name: 'New Member',
-          role: 'buyer',
-          isVerified: false,
-          otpCode: hashOtp(otpCode),
-          otpExpiry,
-          wallet: {
-            create: {
-              balance: 0,
-              holdBalance: 0,
+      try {
+        user = await db.user.create({
+          data: {
+            email: internalEmail,
+            phone: normalizedPhone,
+            name: 'New Member',
+            role: 'buyer',
+            isVerified: false,
+            otpCode: hashOtp(otpCode),
+            otpExpiry,
+            wallet: {
+              create: {
+                balance: 0,
+                holdBalance: 0,
+              },
             },
           },
-        },
-      })
+        })
+      } catch (createError: any) {
+        // Handle unique constraint violation on phone field
+        if (createError?.code === 'P2002' && createError?.meta?.target?.includes('phone')) {
+          return NextResponse.json(
+            { success: false, error: 'Nomor HP sudah terdaftar. Silakan login dengan nomor HP tersebut.' },
+            { status: 409 }
+          )
+        }
+        throw createError
+      }
     }
 
     // Generate a verification request ID (HMAC-signed to prevent tampering)

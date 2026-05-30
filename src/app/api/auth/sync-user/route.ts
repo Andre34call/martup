@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { checkRateLimit, generateAuthToken } from '@/lib/auth-middleware'
+import { authLimiter } from '@/lib/rate-limit'
+import { generateAuthToken } from '@/lib/auth-middleware'
 import { sanitizeInput } from '@/lib/sanitize'
+import crypto from 'crypto'
 
 import { logger } from '@/lib/logger'
 // POST /api/auth/sync-user - Sync user from Google OAuth
@@ -11,11 +13,12 @@ import { logger } from '@/lib/logger'
 // SECURITY: Phone OTP login no longer goes through this endpoint.
 export async function POST(request: NextRequest) {
   try {
-    // Rate limit check
+    // Rate limit check (using distributed limiter)
     const clientIp = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
-    if (!checkRateLimit(`sync-user:${clientIp}`)) {
+    const rateLimit = await authLimiter.check(`sync-user:${clientIp}`)
+    if (!rateLimit.allowed) {
       return NextResponse.json(
-        { success: false, error: 'Too many requests. Please try again later.' },
+        { success: false, error: 'Terlalu banyak request. Coba lagi nanti.' },
         { status: 429 }
       )
     }
@@ -42,10 +45,27 @@ export async function POST(request: NextRequest) {
     }
 
     // SECURITY: For Google OAuth, verify internal secret (only NextAuth callback should call this)
+    // Use timing-safe comparison to prevent timing attacks
     const internalSecret = request.headers.get('x-internal-secret')
     const expectedSecret = process.env.NEXTAUTH_SECRET
-    if (!expectedSecret || internalSecret !== expectedSecret) {
+    if (!expectedSecret || !internalSecret) {
       logger.warn(`[SECURITY] sync-user called without valid internal secret from IP: ${clientIp}`)
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized - Invalid internal authentication' },
+        { status: 401 }
+      )
+    }
+    try {
+      const a = Buffer.from(internalSecret)
+      const b = Buffer.from(expectedSecret)
+      if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+        logger.warn(`[SECURITY] sync-user called with wrong internal secret from IP: ${clientIp}`)
+        return NextResponse.json(
+          { success: false, error: 'Unauthorized - Invalid internal authentication' },
+          { status: 401 }
+        )
+      }
+    } catch {
       return NextResponse.json(
         { success: false, error: 'Unauthorized - Invalid internal authentication' },
         { status: 401 }

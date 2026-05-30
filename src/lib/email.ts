@@ -4,6 +4,20 @@
 
 import { logger } from './logger'
 
+/**
+ * Escape HTML entities in a string to prevent XSS in email templates.
+ * User names are directly interpolated into HTML — if a user registers
+ * with a name like "<img src=x onerror=alert(1)>", it would inject HTML.
+ */
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+}
+
 export type EmailProvider = 'mock' | 'resend'
 
 interface EmailMessage {
@@ -140,7 +154,7 @@ export function emailVerificationTemplate(
     <!-- Body -->
     <tr>
       <td style="padding:32px">
-        <h2 style="margin:0 0 8px;color:#1f2937;font-size:20px;font-weight:700">Halo ${userName}! 👋</h2>
+        <h2 style="margin:0 0 8px;color:#1f2937;font-size:20px;font-weight:700">Halo ${escapeHtml(userName)}! 👋</h2>
         <p style="margin:0 0 24px;color:#6b7280;font-size:15px;line-height:1.6">
           Terima kasih telah mendaftar di MartUp. Untuk mulai belanja, silakan verifikasi email Anda terlebih dahulu:
         </p>
@@ -203,7 +217,7 @@ export function passwordResetTemplate(
     <!-- Body -->
     <tr>
       <td style="padding:32px">
-        <h2 style="margin:0 0 8px;color:#1f2937;font-size:20px;font-weight:700">Halo ${userName}! 🔐</h2>
+        <h2 style="margin:0 0 8px;color:#1f2937;font-size:20px;font-weight:700">Halo ${escapeHtml(userName)}! 🔐</h2>
         <p style="margin:0 0 24px;color:#6b7280;font-size:15px;line-height:1.6">
           Kami menerima permintaan untuk mereset password akun MartUp Anda. Klik tombol di bawah untuk membuat password baru:
         </p>
@@ -253,7 +267,7 @@ export function accountLockedTemplate(
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-n</head>
+</head>
 <body style="margin:0;padding:0;background:#f5f5f5;font-family:system-ui,-apple-system,sans-serif">
   <table width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;margin:40px auto;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08)">
     <!-- Header -->
@@ -266,7 +280,7 @@ n</head>
     <!-- Body -->
     <tr>
       <td style="padding:32px">
-        <h2 style="margin:0 0 8px;color:#1f2937;font-size:20px;font-weight:700">Halo ${userName} ⚠️</h2>
+        <h2 style="margin:0 0 8px;color:#1f2937;font-size:20px;font-weight:700">Halo ${escapeHtml(userName)} ⚠️</h2>
         <p style="margin:0 0 16px;color:#6b7280;font-size:15px;line-height:1.6">
           Akun MartUp Anda telah <strong style="color:#ef4444">sementara dikunci</strong> karena terlalu banyak percobaan login yang gagal.
         </p>
@@ -331,7 +345,7 @@ export function emailVerifiedTemplate(userName: string): { subject: string; html
         <div style="font-size:48px;margin-bottom:16px">🎉</div>
         <h2 style="margin:0 0 8px;color:#1f2937;font-size:20px;font-weight:700">Email Terverifikasi!</h2>
         <p style="margin:0 0 24px;color:#6b7280;font-size:15px;line-height:1.6">
-          Halo ${userName}, email Anda telah berhasil diverifikasi. Sekarang Anda bisa login dan mulai belanja di MartUp!
+          Halo ${escapeHtml(userName)}, email Anda telah berhasil diverifikasi. Sekarang Anda bisa login dan mulai belanja di MartUp!
         </p>
         <a href="${process.env.NEXTAUTH_URL || 'https://martup-seven.vercel.app'}" target="_blank" style="display:inline-block;background:linear-gradient(135deg,#10b981,#14b8a6);color:#ffffff;text-decoration:none;padding:14px 36px;border-radius:12px;font-size:16px;font-weight:700">
           Mulai Belanja

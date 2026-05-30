@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { checkRateLimit } from '@/lib/auth-middleware'
+import { authLimiter } from '@/lib/rate-limit'
 import crypto from 'crypto'
 import { sendEmail, emailVerificationTemplate } from '@/lib/email'
 import { logger } from '@/lib/logger'
@@ -16,6 +17,14 @@ export async function POST(request: NextRequest) {
     if (!checkRateLimit(`resend-verify:${clientIp}`, 3)) {
       return NextResponse.json(
         { success: false, error: 'Terlalu banyak request. Coba lagi dalam 1 menit.' },
+        { status: 429 }
+      )
+    }
+    // Also use distributed rate limiter (persists across serverless cold starts)
+    const distLimit = await authLimiter.check(`resend-verify:${clientIp}`)
+    if (!distLimit.allowed) {
+      return NextResponse.json(
+        { success: false, error: 'Terlalu banyak request. Coba lagi dalam beberapa menit.' },
         { status: 429 }
       )
     }

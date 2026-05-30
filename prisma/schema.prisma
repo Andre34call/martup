@@ -13,7 +13,7 @@ datasource db {
 model User {
   id            String    @id @default(cuid())
   email         String    @unique
-  phone         String?
+  phone         String?   @unique
   name          String
   avatar        String?
   role          String    @default("buyer") // buyer, seller, manager, admin, finance, pr, tech, cs, marketing, operations

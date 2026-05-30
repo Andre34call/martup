@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { verifyAuth } from '@/lib/auth-middleware'
+import { verifyAuth, generateAuthToken } from '@/lib/auth-middleware'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { isSuperAdmin } from '@/lib/auth-middleware'
 import { logger } from '@/lib/logger'
 import { authLimiter } from '@/lib/rate-limit'
+import { setSessionCookies, AUTH_FLAG_COOKIE_NAME } from '@/lib/session-cookie'
 // GET /api/auth/me - Get current authenticated user
 // Supports two auth methods:
 // 1. NextAuth session (Google OAuth) — via verifyAuth
@@ -130,11 +131,28 @@ export async function GET(request: NextRequest) {
     // not reveal additional privilege information beyond what role already shows.
     const userIsSuperAdmin = isSuperAdmin(user.role, user.email)
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       user: userWithoutPassword,
       isSuperAdmin: userIsSuperAdmin,
     })
+
+    // TOKEN ROTATION: If the token is older than the rotation threshold,
+    // issue a fresh token in the response cookies. This limits the window
+    // of opportunity for stolen cookies (especially with Remember Me).
+    // The old token continues to work until it expires, but the browser
+    // will use the new one for subsequent requests.
+    if (authResult.shouldRotateToken) {
+      const freshToken = generateAuthToken(user.id, user.tokenVersion ?? 0)
+      // Check if the current session cookie has maxAge (Remember Me)
+      const sessionCookie = request.cookies.get('martup_session')
+      const rememberMeCookie = request.cookies.get(AUTH_FLAG_COOKIE_NAME)
+      const isRememberMe = !!rememberMeCookie?.value
+      setSessionCookies(response, freshToken, isRememberMe)
+      logger.info({ component: 'auth', userId: user.id }, 'Token rotated (session cookie refreshed)')
+    }
+
+    return response
   } catch (error: any) {
     logger.error({ err: error, code: error?.code }, 'Get current user error')
     
