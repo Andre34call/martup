@@ -1,27 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
+import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 import { db } from '@/lib/db'
-
 import { logger } from '@/lib/logger'
+
+// SECURITY: Hardcoded bucket IDs — these are the ONLY valid bucket identifiers.
+// Never accept bucket IDs from user input to prevent SQL injection.
+const BUCKET_IDS = ['products', 'avatars', 'banners', 'streams'] as const
+
 /**
  * Setup Supabase Storage buckets for the application.
  * Creates all required buckets (products, avatars, banners, streams) with public read access and upload policies.
  * Called during app initialization.
  *
- * SECURITY: Requires authentication. Any authenticated user can trigger this
- * because it's idempotent (ON CONFLICT DO NOTHING) and safe to run multiple times.
+ * SECURITY: Admin-only endpoint. Only admin/manager users can trigger storage setup.
+ * This endpoint executes raw SQL (DROP/CREATE POLICY), so it MUST be restricted.
+ * The bucket IDs are hardcoded (not from user input) to prevent SQL injection.
  */
 export async function POST(request: NextRequest) {
   try {
-    // Require authentication (any authenticated user can trigger setup — it's idempotent)
-    const authResult = await verifyAuth(request)
+    // SECURITY: Only allow admin access — this route executes raw SQL
+    const authResult = await verifyAdmin(request)
     if (!authResult.success) {
       return authErrorResponse(authResult)
     }
 
-    // Use Prisma's raw query instead of pg Pool to avoid dependency issues
     try {
       // Create all required buckets if they don't exist
+      // Bucket IDs are hardcoded — never from user input
       await db.$executeRawUnsafe(`
         INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
         VALUES
@@ -33,10 +38,8 @@ export async function POST(request: NextRequest) {
       `)
 
       // Create RLS policies for all buckets
-      // Each bucket gets: public read, upload, update, delete policies
-      const bucketIds = ['products', 'avatars', 'banners', 'streams']
-
-      for (const bucketId of bucketIds) {
+      // SECURITY: bucketId is from hardcoded array only — safe from injection
+      for (const bucketId of BUCKET_IDS) {
         const policies = [
           `DROP POLICY IF EXISTS "${bucketId}_public_read" ON storage.objects`,
           `DROP POLICY IF EXISTS "${bucketId}_public_upload" ON storage.objects`,
@@ -70,18 +73,18 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({
         success: true,
-        message: 'Storage buckets (products, avatars, banners) created with public access policies',
+        message: 'Storage buckets (products, avatars, banners, streams) created with public access policies',
       })
     } catch (dbError: unknown) {
       const errorMsg = dbError instanceof Error ? dbError.message : 'Unknown error'
       logger.error({ err: errorMsg }, 'Storage setup DB error')
+      // Don't leak DB error details to client
       return NextResponse.json(
-        { success: false, error: `Storage setup failed: ${errorMsg}` },
+        { success: false, error: 'Storage setup failed. Hubungi admin.' },
         { status: 500 }
       )
     }
   } catch (error: unknown) {
-    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'Storage setup error')
     return NextResponse.json(
       { success: false, error: 'Terjadi kesalahan server' },

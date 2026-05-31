@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
+import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middleware'
+import { createRateLimiter } from '@/lib/rate-limit'
 import { UPLOAD_LIMITS } from '@/lib/upload-limits'
 import { supabase, isSupabaseConfigured } from '@/lib/supabase'
 import { createClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
+import crypto from 'crypto'
 
 /**
  * Create a Supabase admin client with the service role key.
@@ -27,6 +29,14 @@ function getAdminClient() {
 const ALLOWED_BUCKETS = ['products', 'avatars', 'banners', 'streams'] as const
 type BucketId = typeof ALLOWED_BUCKETS[number]
 
+// SECURITY: Only these folder names are allowed (prevents path traversal)
+const ALLOWED_FOLDERS: Record<BucketId, string[]> = {
+  products: ['images', 'reviews'],
+  avatars: ['profile', ''],
+  banners: ['home', 'promo', ''],
+  streams: ['images', 'videos', ''],
+}
+
 // Map bucket to default size limit (streams uses video limit as max, but images get image limit)
 const BUCKET_SIZE_MAP: Record<BucketId, number> = {
   products: UPLOAD_LIMITS.MAX_PRODUCT_IMAGE_SIZE_MB,
@@ -35,15 +45,50 @@ const BUCKET_SIZE_MAP: Record<BucketId, number> = {
   streams: UPLOAD_LIMITS.MAX_VIDEO_SIZE_MB, // 50MB max for streams (video), images get 10MB
 }
 
+// Rate limiter: 20 uploads per minute per user
+const uploadLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  maxRequests: 20,
+  keyPrefix: 'rl:upload:',
+})
+
 /**
  * POST /api/upload - Upload a file to Supabase Storage.
- * Requires authentication. Validates bucket, MIME type, and file size.
+ * Requires authentication. Validates bucket, folder, MIME type, and file size.
  */
 export async function POST(request: NextRequest) {
   try {
     // SECURITY: Require authentication
     const authResult = await verifyAuth(request)
     if (!authResult.success) return authErrorResponse(authResult)
+
+    // SECURITY: Rate limit uploads — 20 per minute per user
+    const rateLimitResult = await uploadLimiter.check(authResult.user.id)
+    if (!rateLimitResult.allowed) {
+      return NextResponse.json(
+        { success: false, error: 'Terlalu banyak upload. Coba lagi dalam beberapa menit.' },
+        {
+          status: 429,
+          headers: {
+            'X-RateLimit-Limit': String(rateLimitResult.total),
+            'X-RateLimit-Remaining': String(rateLimitResult.remaining),
+            'X-RateLimit-Reset': String(Math.ceil(rateLimitResult.resetAt / 1000)),
+          },
+        }
+      )
+    }
+
+    // Additional burst protection
+    const clientIp =
+      request.headers.get('x-forwarded-for') ||
+      request.headers.get('x-real-ip') ||
+      'unknown'
+    if (!checkRateLimit(`upload-burst:${authResult.user.id}:${clientIp}`, 10)) {
+      return NextResponse.json(
+        { success: false, error: 'Terlalu banyak request. Coba lagi nanti.' },
+        { status: 429 }
+      )
+    }
 
     // Check Supabase is configured
     if (!isSupabaseConfigured()) {
@@ -70,18 +115,28 @@ export async function POST(request: NextRequest) {
     // SECURITY: Validate bucket against allowlist
     if (!bucket || !ALLOWED_BUCKETS.includes(bucket as BucketId)) {
       return NextResponse.json(
-        { success: false, error: 'Bucket tidak valid. Hanya: products, avatars, banners, streams' },
+        { success: false, error: 'Bucket tidak valid' },
         { status: 400 }
       )
     }
 
     const validBucket = bucket as BucketId
 
+    // SECURITY: Validate folder against allowlist (prevents path traversal)
+    const folderStr = folder || ''
+    const allowedFolders = ALLOWED_FOLDERS[validBucket]
+    if (!allowedFolders.includes(folderStr)) {
+      return NextResponse.json(
+        { success: false, error: 'Folder tidak valid' },
+        { status: 400 }
+      )
+    }
+
     // SECURITY: Validate MIME type
     const allAllowedTypes = [...UPLOAD_LIMITS.ALLOWED_IMAGE_TYPES, ...UPLOAD_LIMITS.ALLOWED_VIDEO_TYPES]
-    if (!allAllowedTypes.includes(file.type as any)) {
+    if (!allAllowedTypes.includes(file.type as typeof allAllowedTypes[number])) {
       return NextResponse.json(
-        { success: false, error: `Tipe file tidak didukung: ${file.type}. Hanya gambar (JPEG, PNG, WebP, GIF) dan video (MP4, WebM, MOV)` },
+        { success: false, error: `Tipe file tidak didukung: ${file.type}` },
         { status: 400 }
       )
     }
@@ -90,7 +145,7 @@ export async function POST(request: NextRequest) {
     // For streams bucket, use different limits based on file type
     let maxSizeMB = BUCKET_SIZE_MAP[validBucket]
     if (validBucket === 'streams') {
-      const isVideo = UPLOAD_LIMITS.ALLOWED_VIDEO_TYPES.includes(file.type as any)
+      const isVideo = UPLOAD_LIMITS.ALLOWED_VIDEO_TYPES.includes(file.type as typeof UPLOAD_LIMITS.ALLOWED_VIDEO_TYPES[number])
       maxSizeMB = isVideo ? UPLOAD_LIMITS.MAX_VIDEO_SIZE_MB : UPLOAD_LIMITS.MAX_IMAGE_SIZE_MB
     }
     const maxSizeBytes = UPLOAD_LIMITS.mbToBytes(maxSizeMB)
@@ -101,12 +156,20 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Generate unique filename
-    const ext = file.name.split('.').pop() || 'jpg'
-    const timestamp = Date.now()
-    const randomSuffix = Math.random().toString(36).substring(2, 8)
-    const filename = `${timestamp}_${randomSuffix}.${ext}`
-    const filePath = folder ? `${folder}/${filename}` : filename
+    // SECURITY: Use crypto.randomBytes for filename generation (not Math.random)
+    // Validate file extension against allowlist
+    const ext = file.name.split('.').pop()?.toLowerCase() || ''
+    const allowedExtensions = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'mp4', 'webm', 'mov']
+    if (!allowedExtensions.includes(ext)) {
+      return NextResponse.json(
+        { success: false, error: 'Ekstensi file tidak didukung' },
+        { status: 400 }
+      )
+    }
+
+    const randomSuffix = crypto.randomBytes(4).toString('hex')
+    const filename = `${Date.now()}_${randomSuffix}.${ext}`
+    const filePath = folderStr ? `${folderStr}/${filename}` : filename
 
     // Upload to Supabase Storage using service role key (bypasses RLS for server-side uploads)
     const adminClient = getAdminClient()
@@ -120,7 +183,7 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       logger.error({ err: error, bucket: validBucket, path: filePath, errorMsg: error.message, errorCode: error.statusCode }, 'Supabase upload error')
-      // Provide more specific error messages for common issues
+      // Provide specific but safe error messages
       if (error.message?.includes('not found') || error.statusCode === '404') {
         return NextResponse.json(
           { success: false, error: `Bucket "${validBucket}" belum dikonfigurasi. Hubungi admin.` },
@@ -135,12 +198,16 @@ export async function POST(request: NextRequest) {
       }
       if (error.message?.includes('size') || error.message?.includes('limit') || error.message?.includes('too large')) {
         return NextResponse.json(
-          { success: false, error: `Ukuran file melebihi batas upload.` },
+          { success: false, error: 'Ukuran file melebihi batas upload.' },
           { status: 400 }
         )
       }
+      // Generic error in production, specific in development
+      const errorMsg = process.env.NODE_ENV === 'development'
+        ? `Gagal mengupload file: ${error.message}`
+        : 'Gagal mengupload file. Coba lagi nanti.'
       return NextResponse.json(
-        { success: false, error: `Gagal mengupload file: ${error.message || 'Unknown error'}` },
+        { success: false, error: errorMsg },
         { status: 500 }
       )
     }

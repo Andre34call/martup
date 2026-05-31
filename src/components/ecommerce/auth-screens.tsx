@@ -725,7 +725,7 @@ export function RegisterScreen() {
         showToast(data.message || 'Cek email Anda untuk verifikasi!', "success")
 
         // In dev mode, show the verification link
-        if (data.devVerifyUrl) {
+        if (data.devVerifyUrl && process.env.NODE_ENV === 'development') {
           console.log('[DEV] Verification URL:', data.devVerifyUrl)
         }
       } else if (data.user) {
@@ -998,7 +998,7 @@ export function EmailVerificationScreen() {
         setCountdown(60)
         showToast('Link verifikasi telah dikirim ulang!', 'success')
         // In dev mode, log the URL
-        if (data.devVerifyUrl) {
+        if (data.devVerifyUrl && process.env.NODE_ENV === 'development') {
           console.log('[DEV] Verification URL:', data.devVerifyUrl)
         }
       }

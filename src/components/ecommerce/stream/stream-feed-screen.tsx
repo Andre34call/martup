@@ -260,7 +260,7 @@ export function StreamFeedScreen() {
       navigate("login")
       return
     }
-    navigate("stream-create" as any)
+    navigate("stream-create")
   }, [isAuthenticated, navigate, showToast])
 
   // ==================== LOADING SKELETON ====================

@@ -85,11 +85,11 @@ export function StreamCreateScreen() {
       setShowExitConfirm(true)
       return
     }
-    navigate("stream" as any)
+    navigate("stream")
   }, [content, mediaFile, selectedProductId, navigate])
 
   const handleConfirmExit = useCallback(() => {
-    navigate("stream" as any)
+    navigate("stream")
   }, [navigate])
 
   // ==================== MEDIA HANDLING ====================
@@ -252,7 +252,7 @@ export function StreamCreateScreen() {
       await apiClient.post<CreatePostResponse>("/api/stream", payload)
 
       showToast("Postingan berhasil dibuat!", "success")
-      navigate("stream" as any)
+      navigate("stream")
     } catch (error) {
       if (error instanceof ApiClientError) {
         showToast(error.message, "error")

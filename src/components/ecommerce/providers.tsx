@@ -56,23 +56,12 @@ function DataFetcher({ children }: { children: React.ReactNode }) {
   const initialFetchDone = useRef(false)
   const tokenRecoveryDone = useRef(false)
 
-  // Fetch global data (products, categories) on mount & setup storage
+  // Fetch global data (products, categories) on mount
   useEffect(() => {
     if (!initialFetchDone.current) {
       initialFetchDone.current = true
       fetchProducts()
       fetchCategories()
-      // Setup Supabase Storage bucket (idempotent - safe to call multiple times)
-      apiClient.rawPost('/api/setup/storage', undefined)
-        .then(res => res.json())
-        .then(data => {
-          if (data.success) {
-
-          } else {
-
-          }
-        })
-        .catch(() => {/* dev-only */})
     }
   }, [fetchProducts, fetchCategories])
 

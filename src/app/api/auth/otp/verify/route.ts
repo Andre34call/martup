@@ -131,7 +131,14 @@ export async function POST(request: NextRequest) {
         )
       }
       // Verify the HMAC signature
-      const secret = process.env.NEXTAUTH_SECRET || process.env.TOKEN_SECRET || 'dev-secret'
+      const secret = process.env.NEXTAUTH_SECRET || process.env.TOKEN_SECRET
+      if (!secret) {
+        logger.error({ component: 'otp' }, 'No NEXTAUTH_SECRET or TOKEN_SECRET configured — cannot verify requestId')
+        return NextResponse.json(
+          { success: false, error: 'Server configuration error' },
+          { status: 500 }
+        )
+      }
       const expectedHmac = crypto.createHmac('sha256', secret)
         .update(`${requestUserId}:${otpCode}`)
         .digest('hex').slice(0, 16)

@@ -324,30 +324,38 @@ export async function POST(request: NextRequest) {
     return response
   } catch (error: any) {
     logger.error({ err: error, code: error?.code }, 'Login error')
-    
-    // Provide more specific error messages for common issues
+
+    // In production, return generic messages to avoid leaking internal details
+    // (Prisma codes, DB host names, config hints). Detailed messages are only
+    // shown in development where they aid debugging.
+    const isDev = process.env.NODE_ENV === 'development'
+    const isDatabaseError = ['P1001', 'P1002', 'ENOTFOUND'].includes(error?.code)
+
     let errorMessage: string
     let statusCode = 500
-    
-    if (error?.code === 'P1001') {
-      errorMessage = 'Database tidak dapat diakses. Pastikan SUPABASE_DATABASE_URL sudah dikonfigurasi di Vercel Dashboard → Settings → Environment Variables.'
+
+    if (isDatabaseError) {
+      // Database connectivity issues — always 503, but message depends on env
       statusCode = 503
-    } else if (error?.code === 'P1002') {
-      errorMessage = 'Database connection timeout. Coba lagi dalam beberapa detik.'
-      statusCode = 503
-    } else if (error?.code === 'ENOTFOUND') {
-      errorMessage = 'Database host tidak ditemukan. Pastikan SUPABASE_DATABASE_URL benar.'
-      statusCode = 503
+      if (isDev && error?.code === 'P1001') {
+        errorMessage = 'Database tidak dapat diakses. Pastikan SUPABASE_DATABASE_URL sudah dikonfigurasi di Vercel Dashboard → Settings → Environment Variables.'
+      } else if (isDev && error?.code === 'P1002') {
+        errorMessage = 'Database connection timeout. Coba lagi dalam beberapa detik.'
+      } else if (isDev && error?.code === 'ENOTFOUND') {
+        errorMessage = 'Database host tidak ditemukan. Pastikan SUPABASE_DATABASE_URL benar.'
+      } else {
+        errorMessage = 'Layanan sedang tidak tersedia. Coba lagi dalam beberapa saat.'
+      }
     } else {
       errorMessage = 'Terjadi kesalahan server. Coba lagi nanti.'
     }
-    
+
     return NextResponse.json(
-      { 
-        success: false, 
-        error: errorMessage, 
-        // Always include error code for diagnostics (safe to expose)
-        errorCode: error?.code || 'UNKNOWN',
+      {
+        success: false,
+        error: errorMessage,
+        // Only expose internal error codes in development
+        ...(isDev ? { errorCode: error?.code || 'UNKNOWN' } : {}),
       },
       { status: statusCode }
     )

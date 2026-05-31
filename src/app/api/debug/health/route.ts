@@ -3,14 +3,12 @@ import { db } from '@/lib/db'
 import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 
 // GET /api/debug/health - Diagnostic endpoint to check Vercel deployment health
-// SECURITY: Only available in development OR with admin authentication
+// SECURITY: Always requires admin authentication
 export async function GET(request: NextRequest) {
-  // SECURITY: Block this endpoint in production unless admin-authenticated
-  if (process.env.NODE_ENV === 'production') {
-    const authResult = await verifyAdmin(request)
-    if (!authResult.success) {
-      return authErrorResponse(authResult)
-    }
+  // SECURITY: Always require admin auth — even in non-production
+  const authResult = await verifyAdmin(request)
+  if (!authResult.success) {
+    return authErrorResponse(authResult)
   }
 
   const diagnostics: Record<string, { status: string; detail?: string }> = {}

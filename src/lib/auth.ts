@@ -14,7 +14,7 @@ if (process.env.VERCEL) {
   
   if (!currentUrl || currentUrl.includes('localhost') || currentUrl.includes('127.0.0.1')) {
     process.env.NEXTAUTH_URL = correctUrl
-    console.log(`[AUTH FIX] NEXTAUTH_URL auto-corrected: ${currentUrl || '(not set)'} → ${correctUrl}`)
+    logger.info({ component: 'auth', from: currentUrl || '(not set)', to: correctUrl }, 'NEXTAUTH_URL auto-corrected')
   }
 }
 
@@ -32,7 +32,7 @@ if (process.env.NODE_ENV === 'production' || process.env.VERCEL) {
       'Google login will NOT work without these.'
     )
   } else {
-    console.log('[AUTH] Google OAuth configured ✅')
+    logger.info({ component: 'auth' }, 'Google OAuth configured')
   }
   if (!nextauthSecret) {
     console.error(

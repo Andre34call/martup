@@ -104,8 +104,16 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate a verification request ID (HMAC-signed to prevent tampering)
+    const secret = process.env.NEXTAUTH_SECRET || process.env.TOKEN_SECRET
+    if (!secret) {
+      logger.error({ component: 'otp' }, 'No NEXTAUTH_SECRET or TOKEN_SECRET configured — cannot sign requestId')
+      return NextResponse.json(
+        { success: false, error: 'Server configuration error' },
+        { status: 500 }
+      )
+    }
     const requestId = Buffer.from(
-      `${user.id}:${Date.now()}:${crypto.createHmac('sha256', process.env.NEXTAUTH_SECRET || 'dev-secret').update(`${user.id}:${otpCode}`).digest('hex').slice(0, 16)}`
+      `${user.id}:${Date.now()}:${crypto.createHmac('sha256', secret).update(`${user.id}:${otpCode}`).digest('hex').slice(0, 16)}`
     ).toString('base64url')
 
     // Send OTP via configured SMS gateway (mock/twilio/fonnte)

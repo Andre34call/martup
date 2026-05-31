@@ -138,7 +138,7 @@ export async function POST(request: NextRequest) {
           requiresVerification: true,
           email,
           message: 'Email verifikasi telah dikirim ulang. Silakan cek email Anda.',
-          devVerifyUrl: emailResult.devUrl,
+          ...(process.env.NODE_ENV === 'development' ? { devVerifyUrl: emailResult.devUrl } : {}),
         })
       }
 
