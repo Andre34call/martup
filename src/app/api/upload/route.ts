@@ -121,13 +121,13 @@ export async function POST(request: NextRequest) {
     if (error) {
       logger.error({ err: error, bucket: validBucket, path: filePath, errorMsg: error.message, errorCode: error.statusCode }, 'Supabase upload error')
       // Provide more specific error messages for common issues
-      if (error.message?.includes('not found') || error.statusCode === 404) {
+      if (error.message?.includes('not found') || error.statusCode === '404') {
         return NextResponse.json(
           { success: false, error: `Bucket "${validBucket}" belum dikonfigurasi. Hubungi admin.` },
           { status: 500 }
         )
       }
-      if (error.message?.includes('policy') || error.message?.includes('permission') || error.statusCode === 403) {
+      if (error.message?.includes('policy') || error.message?.includes('permission') || error.statusCode === '403') {
         return NextResponse.json(
           { success: false, error: 'Izin upload ditolak. Coba lagi nanti.' },
           { status: 500 }
