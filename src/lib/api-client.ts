@@ -131,9 +131,13 @@ async function fetchWithCsrfRetry(url: string, options: RequestInit): Promise<Re
   const response = await fetch(url, options)
 
   // If CSRF validation failed, the server returns 403 with a fresh CSRF cookie
+  // The server error message contains 'CSRF' and/or has code: 'CSRF_ERROR'
   if (response.status === 403 && isMutating) {
     const data = await response.clone().json().catch(() => null)
-    if (data?.error?.includes('CSRF') || data?.error?.includes('csrf')) {
+    const isCsrfError = data?.error?.toLowerCase().includes('csrf') ||
+      data?.code === 'CSRF_ERROR' ||
+      data?.error?.includes('Validasi keamanan') // Indonesian CSRF error message
+    if (isCsrfError) {
       // Fetch a fresh CSRF token from the dedicated endpoint
       const freshToken = await fetchFreshCsrfToken()
       if (freshToken) {

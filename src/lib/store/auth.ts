@@ -102,6 +102,7 @@ export const createAuthSlice: StateCreator<AppStore, [], [], AuthSlice> = (set, 
     if (role === 'seller' && state.currentUser && !state.seller) {
       const userId = state.currentUser.id
       const storeName = state.currentUser.name ? `${state.currentUser.name}'s Store` : 'My Store'
+      let lastError: string | null = null
 
       try {
         // Try to register as seller — rawPost to check data.success and status code
@@ -153,23 +154,35 @@ export const createAuthSlice: StateCreator<AppStore, [], [], AuthSlice> = (set, 
             }
           }
         } else {
-          // Registration failed with a non-409 error
+          // Registration failed with a non-409 error (could be 403 CSRF, 401 auth, etc.)
+          lastError = registerData.error || `Registration failed (status ${registerRes.status})`
           logger.warn({ component: 'auth', status: registerRes.status, error: registerData.error }, 'Seller registration returned non-success')
         }
       } catch (err) {
         logger.warn({ component: 'auth', err }, 'Auto seller register via rawPost failed — trying fetchUserData fallback')
-        // If rawPost fails (e.g., CSRF issues), try fetching existing seller data directly
+        // If rawPost fails (e.g., CSRF issues that retry couldn't fix), try fetching existing seller data
         // This handles the case where the user is already a seller but the POST fails
         try {
           await get().fetchUserData(userId)
         } catch (fetchErr) {
           logger.warn({ component: 'auth', err: fetchErr }, 'fetchUserData fallback also failed')
         }
-        // Don't navigate to seller dashboard if registration failed
-        if (!get().seller) {
-          set({ isLoading: false })
-          throw new Error('Gagal mendaftar sebagai seller. Silakan coba lagi.')
+        if (err instanceof Error) {
+          lastError = err.message
         }
+      }
+
+      // Don't navigate to seller dashboard if registration failed
+      if (!get().seller) {
+        set({ isLoading: false })
+        // Show a helpful error message based on the actual failure
+        if (lastError?.toLowerCase().includes('csrf')) {
+          throw new Error('Validasi keamanan gagal. Silakan refresh halaman dan coba lagi.')
+        }
+        if (lastError?.includes('401') || lastError?.includes('autentikasi') || lastError?.includes('login')) {
+          throw new Error('Sesi Anda telah berakhir. Silakan login kembali.')
+        }
+        throw new Error(lastError || 'Gagal mendaftar sebagai seller. Silakan coba lagi.')
       }
     }
 

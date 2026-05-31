@@ -181,8 +181,11 @@ export async function proxy(request: NextRequest) {
 
     if (isEnforce) {
       // ENFORCEMENT MODE: Block the request
+      // IMPORTANT: The error message MUST contain 'CSRF' (case-insensitive) so that
+      // the client-side fetchWithCsrfRetry can detect CSRF failures and auto-retry
+      // with a fresh token. Without this keyword, the retry mechanism never triggers.
       const errorResponse = NextResponse.json(
-        { success: false, error: 'Validasi keamanan gagal. Silakan refresh halaman dan coba lagi.' },
+        { success: false, error: 'CSRF validation failed. Silakan refresh halaman dan coba lagi.', code: 'CSRF_ERROR' },
         { status: 403 }
       )
       const { response: securedResponse } = await issueCsrfToken(errorResponse)

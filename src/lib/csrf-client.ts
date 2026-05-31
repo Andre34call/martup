@@ -130,7 +130,10 @@ export async function fetchWithCsrf(
   // If CSRF validation failed (403), fetch a fresh token and retry once
   if (response.status === 403 && isMutating) {
     const data = await response.clone().json().catch(() => null)
-    if (data?.error?.includes('CSRF') || data?.error?.includes('csrf')) {
+    const isCsrfError = data?.error?.toLowerCase().includes('csrf') ||
+      data?.code === 'CSRF_ERROR' ||
+      data?.error?.includes('Validasi keamanan')
+    if (isCsrfError) {
       // Fetch a fresh CSRF token from the dedicated endpoint
       const freshToken = await fetchFreshCsrfToken()
       if (freshToken) {
