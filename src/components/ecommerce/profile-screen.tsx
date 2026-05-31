@@ -129,8 +129,9 @@ export function ProfileScreen() {
     showToast(role === 'seller' ? "Mempersiapkan mode Seller..." : `Beralih ke mode ${role}`, "info")
     try {
       await switchRole(role as import('@/lib/types').UserRole)
-    } catch {
-      showToast("Gagal beralih role", "error")
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Gagal beralih role"
+      showToast(message, "error")
     }
   }
 

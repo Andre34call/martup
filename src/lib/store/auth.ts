@@ -137,14 +137,31 @@ export const createAuthSlice: StateCreator<AppStore, [], [], AuthSlice> = (set, 
                   }
                 })
               }
+            } else {
+              // Seller record exists in DB but data not returned — retry registration
+              logger.warn({ component: 'auth' }, 'Seller 409 but no seller data in user-data response')
             }
           } catch (fetchErr) {
             logger.warn({ component: 'auth', err: fetchErr }, 'Failed to fetch existing seller data')
           }
+        } else {
+          // Registration failed with a non-409 error
+          logger.warn({ component: 'auth', status: registerRes.status, error: registerData.error }, 'Seller registration returned non-success')
         }
       } catch (err) {
         logger.warn({ component: 'auth', err }, 'Auto seller register failed')
+        // Don't navigate to seller dashboard if registration failed
+        if (!get().seller) {
+          set({ isLoading: false })
+          throw new Error('Gagal mendaftar sebagai seller. Silakan coba lagi.')
+        }
       }
+    }
+
+    // If seller registration was supposed to happen but still no seller record, don't navigate
+    if (role === 'seller' && !get().seller) {
+      set({ isLoading: false })
+      throw new Error('Gagal mendaftar sebagai seller. Silakan coba lagi.')
     }
 
     // Determine the target screen based on the role

@@ -1647,3 +1647,27 @@ Stage Summary:
 - API now derives sellerId from auth token (more secure — client can't forge sellerId)
 - Button disabled with helpful label when seller data hasn't loaded yet
 - Error messages translated to Indonesian
+
+---
+Task ID: 1
+Agent: main
+Task: Fix "Post Product button can't be clicked" - seller registration flow
+
+Work Log:
+- Investigated the seller-add-product-screen.tsx and found the "Publikasikan Produk" button was disabled when `!seller?.id`
+- Found that the user doesn't know they need to register as seller first via "Jual di MartUp" button on profile screen
+- Added `ensureSellerRegistered()` function that auto-registers the user as seller when they try to post a product
+- Replaced the disabled button with a clear "Belum Terdaftar sebagai Seller" prompt + "Daftar Jadi Seller" orange button when seller is null
+- After seller registration succeeds, the "Publikasikan Produk" button appears automatically
+- Updated `handleSubmit()` to auto-register seller first if needed, then re-read seller from store
+- Fixed `switchRole()` in auth.ts to throw error instead of silently swallowing when seller registration fails
+- Updated profile-screen.tsx `handleRoleSwitch` to show actual error message from switchRole
+- Added TOKEN_SECRET to .env file to fix auth token validation
+- Added Store icon import to seller-add-product-screen.tsx
+
+Stage Summary:
+- Key fix: Users who navigate to add-product without being a seller now see a clear "Daftar Jadi Seller" button
+- After clicking, they're auto-registered as seller and can immediately publish products
+- The "Publikasikan Produk" button is no longer disabled — instead, a friendly registration prompt is shown
+- Error handling improved: switchRole now throws when seller registration fails, with proper toast messages
+- TOKEN_SECRET added to .env so auth works in development

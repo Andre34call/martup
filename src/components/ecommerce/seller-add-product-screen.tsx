@@ -1,7 +1,7 @@
 "use client"
 
 import { motion, AnimatePresence } from "framer-motion"
-import { Plus, Minus, X, Camera, ChevronDown, Tag, Package, DollarSign, Upload, Image as ImageIcon, Video } from "lucide-react"
+import { Plus, Minus, X, Camera, ChevronDown, Tag, Package, DollarSign, Upload, Image as ImageIcon, Video, Store } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
@@ -29,10 +29,10 @@ interface VariantGroup {
 
 // ==================== SELLER ADD PRODUCT SCREEN ====================
 export function SellerAddProductScreen() {
-  const { navigate, showToast, addProduct, updateProduct, selectedProductId, products, currentUser, categories } = useAppStore()
+  const { navigate, showToast, addProduct, updateProduct, selectedProductId, products, currentUser, categories, switchRole, seller: storeSeller } = useAppStore()
 
   // Derive sellerId and seller info from store's seller object (real data from database)
-  const { seller } = useAppStore()
+  const seller = storeSeller
   const sellerId = seller?.id || ''
   const sellerInfo = seller ? {
     id: seller.id,
@@ -279,13 +279,37 @@ export function SellerAddProductScreen() {
     })
   }
 
+  // Auto-register as seller if not already registered
+  const ensureSellerRegistered = async (): Promise<boolean> => {
+    if (seller?.id) return true
+    if (!currentUser?.id) {
+      showToast("Anda harus login terlebih dahulu", "error")
+      return false
+    }
+    showToast("Mendaftarkan akun seller Anda...", "info")
+    try {
+      await switchRole('seller')
+      // Re-check seller state after switchRole
+      const updatedSeller = useAppStore.getState().seller
+      if (updatedSeller?.id) return true
+      showToast("Gagal mendaftar sebagai seller. Silakan coba lagi.", "error")
+      return false
+    } catch {
+      showToast("Gagal mendaftar sebagai seller. Silakan coba lagi.", "error")
+      return false
+    }
+  }
+
   // Submit handler
   const handleSubmit = async () => {
-    // Guard: ensure seller data is loaded before submitting
+    // Guard: ensure seller data is loaded — auto-register if needed
     if (!seller?.id) {
-      showToast("Data seller belum dimuat. Silakan tunggu sebentar atau muat ulang halaman.", "error")
-      return
+      const registered = await ensureSellerRegistered()
+      if (!registered) return
     }
+    // Re-read seller from store (might have been set by ensureSellerRegistered)
+    const currentSeller = useAppStore.getState().seller
+    const currentSellerId = currentSeller?.id || sellerId
     if (productImages.length === 0 && !editingProduct?.images?.length) {
       showToast("Upload minimal 1 foto produk", "error")
       return
@@ -396,7 +420,7 @@ export function SellerAddProductScreen() {
       } else {
         // Create new product via API
         const res = await apiClient.rawPost('/api/seller/products', {
-            sellerId,
+            sellerId: currentSellerId,
             categoryId: category,
             name: productName.trim(),
             slug: productName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
@@ -431,7 +455,7 @@ export function SellerAddProductScreen() {
         }))
         const newProduct: Product = {
           id: apiProduct.id,
-          sellerId,
+          sellerId: currentSellerId,
           categoryId: category,
           name: productName.trim(),
           slug: apiProduct.slug,
@@ -1044,14 +1068,36 @@ export function SellerAddProductScreen() {
             </motion.div>
           )}
 
-          <Button
-            onClick={handleSubmit}
-            disabled={!seller?.id || isUploading}
-            className="w-full h-12 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl text-sm font-bold shadow-lg shadow-emerald-500/25 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Upload className="w-4 h-4 mr-2" />
-            {isUploading ? 'Mengupload...' : !seller?.id ? 'Memuat data seller...' : 'Publikasikan Produk'}
-          </Button>
+          {!seller?.id ? (
+            <div className="space-y-3">
+              <div className="rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-4 text-center">
+                <Store className="w-8 h-8 text-amber-500 mx-auto mb-2" />
+                <p className="text-sm font-medium text-foreground">Belum Terdaftar sebagai Seller</p>
+                <p className="text-xs text-muted-foreground mt-1">Daftar sebagai seller untuk mulai menjual produk</p>
+              </div>
+              <Button
+                onClick={async () => {
+                  const registered = await ensureSellerRegistered()
+                  if (!registered) return
+                  showToast("Selamat! Akun seller Anda sudah aktif 🎉", "success")
+                }}
+                disabled={isUploading}
+                className="w-full h-12 bg-orange-500 hover:bg-orange-600 active:bg-orange-700 text-white rounded-xl text-sm font-bold shadow-lg shadow-orange-500/25"
+              >
+                <Store className="w-4 h-4 mr-2" />
+                Daftar Jadi Seller
+              </Button>
+            </div>
+          ) : (
+            <Button
+              onClick={handleSubmit}
+              disabled={isUploading}
+              className="w-full h-12 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl text-sm font-bold shadow-lg shadow-emerald-500/25 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Upload className="w-4 h-4 mr-2" />
+              {isUploading ? 'Mengupload...' : 'Publikasikan Produk'}
+            </Button>
+          )}
 
           <Button
             variant="outline"
