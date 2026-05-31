@@ -1810,3 +1810,36 @@ Stage Summary:
 - Seller registration now works — wallet constraint violation fixed
 - Role switching simplified: "Jual di MartUp" to become seller, "Buyer" button to go back
 - Cart accessible from header with notification badge instead of bottom nav
+
+---
+Task ID: stream-feature
+Agent: Main Coordinator
+Task: Build Stream social feed feature for MartUp marketplace
+
+Work Log:
+- Designed Stream feature as social commerce feed (like TikTok Shop / Shopee Video)
+- Created Prisma schema: StreamPost, StreamComment, StreamLike models
+- Built 4 API routes:
+  - GET/POST /api/stream - feed with cursor pagination + create post
+  - GET/DELETE /api/stream/[id] - single post detail + soft delete
+  - POST /api/stream/[id]/like - toggle like (atomic transaction)
+  - GET/POST /api/stream/[id]/comments - comments with nested replies
+- Built 3 frontend screens:
+  - StreamFeedScreen - vertical feed with post cards, like/comment/share actions
+  - StreamCreateScreen - create text/image/video posts with upload
+  - StreamCommentSheet - bottom sheet with comments and reply support
+- Added Stream tab to BottomNav (5 tabs: Home, Category, Stream, Chat, Profile)
+- Added "stream" and "stream-create" to ScreenName type
+- Added screen renderers in page.tsx
+- Lint passes ✅
+- Pushed to production (commit 4ad0f32)
+
+Stage Summary:
+- Full Stream social feed feature deployed
+- Users can post text, image, or video content
+- Comments with 1-level nested replies
+- Like/unlike toggle with optimistic UI
+- View counting on posts
+- Optional product linking in posts
+- Rate limiting: 10 posts/hour, 20 comments/min
+- Content sanitization on all user inputs
