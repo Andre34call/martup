@@ -5,7 +5,7 @@ import { supabase, isSupabaseConfigured } from '@/lib/supabase'
 import { logger } from '@/lib/logger'
 
 // SECURITY: Only these buckets are allowed
-const ALLOWED_BUCKETS = ['products', 'avatars', 'banners'] as const
+const ALLOWED_BUCKETS = ['products', 'avatars', 'banners', 'streams'] as const
 type BucketId = typeof ALLOWED_BUCKETS[number]
 
 // Map bucket to size limit
@@ -13,6 +13,7 @@ const BUCKET_SIZE_MAP: Record<BucketId, number> = {
   products: UPLOAD_LIMITS.MAX_PRODUCT_IMAGE_SIZE_MB,
   avatars: UPLOAD_LIMITS.MAX_AVATAR_SIZE_MB,
   banners: UPLOAD_LIMITS.MAX_IMAGE_SIZE_MB,
+  streams: UPLOAD_LIMITS.MAX_VIDEO_SIZE_MB,
 }
 
 /**
@@ -50,7 +51,7 @@ export async function POST(request: NextRequest) {
     // SECURITY: Validate bucket against allowlist
     if (!bucket || !ALLOWED_BUCKETS.includes(bucket as BucketId)) {
       return NextResponse.json(
-        { success: false, error: 'Bucket tidak valid. Hanya: products, avatars, banners' },
+        { success: false, error: 'Bucket tidak valid. Hanya: products, avatars, banners, streams' },
         { status: 400 }
       )
     }
@@ -113,7 +114,7 @@ export async function POST(request: NextRequest) {
       data: {
         url: urlData.publicUrl,
         path: data.path,
-        type: validBucket === 'avatars' ? 'avatar' : validBucket === 'banners' ? 'banner' : 'product',
+        type: validBucket === 'avatars' ? 'avatar' : validBucket === 'banners' ? 'banner' : validBucket === 'streams' ? 'stream' : 'product',
       },
     })
   } catch (error: unknown) {

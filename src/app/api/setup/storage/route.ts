@@ -26,13 +26,14 @@ export async function POST(request: NextRequest) {
         VALUES
           ('products', 'products', true, 31457280, NULL),
           ('avatars', 'avatars', true, 10485760, NULL),
-          ('banners', 'banners', true, 10485760, NULL)
+          ('banners', 'banners', true, 10485760, NULL),
+          ('streams', 'streams', true, 52428800, NULL)
         ON CONFLICT (id) DO NOTHING
       `)
 
       // Create RLS policies for all buckets
       // Each bucket gets: public read, upload, update, delete policies
-      const bucketIds = ['products', 'avatars', 'banners']
+      const bucketIds = ['products', 'avatars', 'banners', 'streams']
 
       for (const bucketId of bucketIds) {
         const policies = [

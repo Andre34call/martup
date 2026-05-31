@@ -18,6 +18,7 @@ import { useAppStore } from "@/lib/store"
 import { apiClient, ApiClientError } from "@/lib/api-client"
 import { uploadFile } from "@/lib/upload"
 import { PageHeader } from "../shared"
+import { ConfirmDialog } from "../confirm-dialog"
 import { formatPrice } from "@/lib/utils"
 import { fadeIn } from "@/lib/animations"
 
@@ -70,6 +71,9 @@ export function StreamCreateScreen() {
   const [isPosting, setIsPosting] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<string>("")
 
+  // Confirm dialog state
+  const [showExitConfirm, setShowExitConfirm] = useState(false)
+
   // File input refs
   const imageInputRef = useRef<HTMLInputElement>(null)
   const videoInputRef = useRef<HTMLInputElement>(null)
@@ -78,12 +82,15 @@ export function StreamCreateScreen() {
   const handleGoBack = useCallback(() => {
     // Warn if there's unsaved content
     if (content || mediaFile || selectedProductId) {
-      if (!window.confirm("Postingan belum dikirim. Yakin ingin keluar?")) {
-        return
-      }
+      setShowExitConfirm(true)
+      return
     }
     navigate("stream" as any)
   }, [content, mediaFile, selectedProductId, navigate])
+
+  const handleConfirmExit = useCallback(() => {
+    navigate("stream" as any)
+  }, [navigate])
 
   // ==================== MEDIA HANDLING ====================
   const handleImageSelect = useCallback(
@@ -215,7 +222,7 @@ export function StreamCreateScreen() {
         setUploadProgress(
           postType === "video" ? "Mengupload video..." : "Mengupload gambar..."
         )
-        const bucket = postType === "video" ? "stream" : "stream"
+        const bucket = "streams"
         const folder = postType === "video" ? "videos" : "images"
         const result = await uploadFile(mediaFile, bucket, folder)
         mediaUrl = result.url
@@ -609,6 +616,18 @@ export function StreamCreateScreen() {
           )}
         </AnimatePresence>
       </div>
+
+      {/* Exit confirmation dialog */}
+      <ConfirmDialog
+        isOpen={showExitConfirm}
+        onClose={() => setShowExitConfirm(false)}
+        onConfirm={handleConfirmExit}
+        title="Buang Postingan?"
+        message="Postingan belum dikirim. Perubahan yang belum disimpan akan hilang."
+        confirmLabel="Keluar"
+        cancelLabel="Tetap Di Sini"
+        variant="warning"
+      />
     </div>
   )
 }

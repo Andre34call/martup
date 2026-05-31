@@ -2,10 +2,9 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Heart, MessageCircle, Share2, Play, Pause, Plus, Package, RefreshCw } from "lucide-react"
-import { useAppStore } from "@/lib/store"
+import { Heart, MessageCircle, Share2, Play, Pause, Plus, Package, Search, Bell, ShoppingCart, RefreshCw } from "lucide-react"
+import { useAppStore, useCartStore } from "@/lib/store"
 import { apiClient } from "@/lib/api-client"
-import { PageHeader } from "../shared"
 import { StreamCommentSheet } from "./stream-comment-sheet"
 import { formatRelativeTime, formatPrice, truncateText } from "@/lib/utils"
 import { fadeIn } from "@/lib/animations"
@@ -69,7 +68,9 @@ function formatStreamTime(dateStr: string): string {
 
 // ==================== STREAM FEED SCREEN ====================
 export function StreamFeedScreen() {
-  const { navigate, showToast, isAuthenticated } = useAppStore()
+  const { navigate, showToast, isAuthenticated, unreadNotificationCount } = useAppStore()
+  const { getTotalItemCount } = useCartStore()
+  const cartCount = getTotalItemCount()
 
   // Feed state
   const [posts, setPosts] = useState<StreamPost[]>([])
@@ -270,7 +271,7 @@ export function StreamFeedScreen() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background pb-20">
-        <PageHeader title="Stream" showBack={false} />
+        <StreamNavTop onRefresh={handleRefresh} isRefreshing={isRefreshing} navigate={navigate} unreadNotificationCount={unreadNotificationCount} cartCount={cartCount} />
         <div className="px-4 pt-4 space-y-4">
           {[1, 2, 3].map((i) => (
             <div key={i} className="bg-card rounded-2xl border border-border/50 p-4 space-y-3 animate-pulse">
@@ -302,7 +303,7 @@ export function StreamFeedScreen() {
   if (posts.length === 0 && !isLoading) {
     return (
       <div className="min-h-screen bg-background pb-20">
-        <PageHeader title="Stream" showBack={false} />
+        <StreamNavTop onRefresh={handleRefresh} isRefreshing={isRefreshing} navigate={navigate} unreadNotificationCount={unreadNotificationCount} cartCount={cartCount} />
         <motion.div
           {...fadeIn}
           className="flex flex-col items-center justify-center py-20 px-6 text-center"
@@ -333,22 +334,7 @@ export function StreamFeedScreen() {
   // ==================== MAIN FEED ====================
   return (
     <div className="min-h-screen bg-background pb-20">
-      <PageHeader
-        title="Stream"
-        showBack={false}
-        rightAction={
-          <motion.button
-            whileTap={{ scale: 0.9, rotate: 180 }}
-            onClick={handleRefresh}
-            disabled={isRefreshing}
-            className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-muted transition-colors"
-          >
-            <RefreshCw
-              className={`w-5 h-5 text-foreground ${isRefreshing ? "animate-spin" : ""}`}
-            />
-          </motion.button>
-        }
-      />
+      <StreamNavTop onRefresh={handleRefresh} isRefreshing={isRefreshing} navigate={navigate} unreadNotificationCount={unreadNotificationCount} cartCount={cartCount} />
 
       <div className="px-4 pt-2 space-y-4">
         <AnimatePresence mode="popLayout">
@@ -419,6 +405,86 @@ export function StreamFeedScreen() {
           )
         }}
       />
+    </div>
+  )
+}
+
+// ==================== STREAM NAV TOP ====================
+interface StreamNavTopProps {
+  onRefresh: () => void
+  isRefreshing: boolean
+  navigate: (screen: string) => void
+  unreadNotificationCount: number
+  cartCount: number
+}
+
+function StreamNavTop({ onRefresh, isRefreshing, navigate, unreadNotificationCount, cartCount }: StreamNavTopProps) {
+  return (
+    <div className="sticky top-0 z-40 glass">
+      <div className="flex items-center gap-2 px-4 h-14">
+        {/* Logo / Title */}
+        <span className="text-xl font-extrabold bg-gradient-to-r from-emerald-600 to-teal-400 bg-clip-text text-transparent flex-shrink-0">
+          Stream
+        </span>
+
+        {/* Search bar */}
+        <motion.button
+          whileTap={{ scale: 0.98 }}
+          onClick={() => navigate("search")}
+          className="flex-1 flex items-center gap-2 h-9 px-3 rounded-xl bg-muted/60 border border-border/50 text-muted-foreground text-sm"
+        >
+          <Search className="w-4 h-4" />
+          <span>Cari postingan...</span>
+        </motion.button>
+
+        {/* Refresh button */}
+        <motion.button
+          whileTap={{ scale: 0.9, rotate: 180 }}
+          onClick={onRefresh}
+          disabled={isRefreshing}
+          className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-muted transition-colors"
+        >
+          <RefreshCw
+            className={`w-[18px] h-[18px] text-foreground ${isRefreshing ? "animate-spin" : ""}`}
+          />
+        </motion.button>
+
+        {/* Notification bell */}
+        <motion.button
+          whileTap={{ scale: 0.9 }}
+          onClick={() => navigate("notification")}
+          className="relative w-9 h-9 flex items-center justify-center rounded-xl hover:bg-muted transition-colors"
+        >
+          <Bell className="w-[18px] h-[18px] text-foreground" />
+          {unreadNotificationCount > 0 && (
+            <motion.span
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 flex items-center justify-center rounded-full bg-red-500 text-white text-[9px] font-bold px-1"
+            >
+              {unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}
+            </motion.span>
+          )}
+        </motion.button>
+
+        {/* Cart icon */}
+        <motion.button
+          whileTap={{ scale: 0.9 }}
+          onClick={() => navigate("cart")}
+          className="relative w-9 h-9 flex items-center justify-center rounded-xl hover:bg-muted transition-colors"
+        >
+          <ShoppingCart className="w-[18px] h-[18px] text-foreground" />
+          {cartCount > 0 && (
+            <motion.span
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 flex items-center justify-center rounded-full bg-orange-500 text-white text-[9px] font-bold px-1"
+            >
+              {cartCount > 99 ? "99+" : cartCount}
+            </motion.span>
+          )}
+        </motion.button>
+      </div>
     </div>
   )
 }
