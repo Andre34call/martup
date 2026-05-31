@@ -1788,3 +1788,25 @@ Stage Summary:
 - Login no longer blocks legacy users with short passwords
 - Seller registration must go through proper flow (no more auto-create bypass)
 - Banking details no longer exposed in login response
+
+---
+Task ID: fix-3issues
+Agent: Main Coordinator
+Task: Fix 3 user-reported issues: seller registration error, role switcher removal, cart icon
+
+Work Log:
+- Investigated seller registration flow completely (button → switchRole → API → database)
+- ROOT CAUSE: Wallet.userId @unique constraint violation in seller registration. User already has a wallet from registration (sellerId=null). Seller registration searched by sellerId (not found), then tried creating a second wallet → violated userId @unique → entire $transaction rolled back → 500 error.
+- Fix: Changed wallet lookup from `findUnique({ where: { sellerId } })` to `findUnique({ where: { userId } })` and UPDATE existing wallet to link sellerId instead of creating a new one.
+- Removed role switcher popup from BottomNav (profile tab role dot + popup menu)
+- Replaced "Switch" tab in SellerBottomNav and AdminBottomNav with "Buyer" back button (ArrowLeftCircle icon)
+- Removed Cart tab from BottomNav (5 tabs → 4 tabs: Home, Category, Chat, Profile)
+- Added cart icon with orange badge to home screen header (between search bar and notification bell)
+- Profile screen now shows "Seller Dashboard" card when user is already a seller, "Jual di MartUp" for buyers
+- Lint passes ✅
+- Pushed to production (commit cc21a84)
+
+Stage Summary:
+- Seller registration now works — wallet constraint violation fixed
+- Role switching simplified: "Jual di MartUp" to become seller, "Buyer" button to go back
+- Cart accessible from header with notification badge instead of bottom nav
