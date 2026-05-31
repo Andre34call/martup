@@ -6,10 +6,8 @@ import { ELEVATED_ROLES } from '../types'
 import { apiClient } from '@/lib/api-client'
 import { mapUser, mapSeller, mapWalletMutation, mapOrder, mapNotification, mapAddress, mapReview, mapBanner } from '../mappers'
 import { useWishlistStore } from './wishlist'
-
-// API response types
-type UserDataApiResponse = { data?: any; [key: string]: any }
-type BannersApiResponse = { success?: boolean; data?: any[]; [key: string]: any }
+import { mapSellerWalletToBalance } from '@/lib/store-helpers'
+import type { UserDataResponse, BannersResponse, SellerWithWallet } from '@/lib/api-types'
 
 export const createDataFetchSlice: StateCreator<AppStore, [], [], DataFetchSlice> = (set, get) => ({
   isDataLoaded: false,
@@ -17,8 +15,8 @@ export const createDataFetchSlice: StateCreator<AppStore, [], [], DataFetchSlice
 
   fetchUserData: async (userId: string) => {
     try {
-      const raw = await apiClient.get<UserDataApiResponse>('/api/user-data', { userId })
-      const data = raw.data || raw  // Unwrap { success, data } response
+      const raw = await apiClient.get<UserDataResponse>('/api/user-data', { userId })
+      const data = raw.data  // Unwrap { success, data } response
 
       const state = get()
 
@@ -35,22 +33,14 @@ export const createDataFetchSlice: StateCreator<AppStore, [], [], DataFetchSlice
 
       // Update seller
       if (data.seller) {
-        const seller = mapSeller(data.seller)
+        const seller = mapSeller(data.seller as unknown as Record<string, unknown>)
         set({ seller })
 
         // Update seller balance from seller wallet
-        if (data.seller.wallet) {
-          const walletBal = data.seller.wallet.balance || 0
-          const walletHold = data.seller.wallet.holdBalance || 0
-          const walletPending = data.seller.wallet.pendingBalance || 0
+        const sellerWithWallet = data.seller as unknown as SellerWithWallet
+        if (sellerWithWallet.wallet) {
           set({
-            sellerBalance: {
-              availableBalance: walletBal,
-              pendingBalance: walletPending,
-              holdBalance: walletHold,
-              totalBalance: walletBal + walletHold + walletPending,
-              totalWithdrawn: 0,
-            }
+            sellerBalance: mapSellerWalletToBalance(sellerWithWallet.wallet),
           })
         }
       }
@@ -58,16 +48,16 @@ export const createDataFetchSlice: StateCreator<AppStore, [], [], DataFetchSlice
       // Update wallet
       if (data.wallet) {
         set({
-          walletBalance: data.wallet.balance || 0,
-          walletHoldBalance: data.wallet.holdBalance || 0,
-          walletMutations: (data.wallet.mutations || []).map(mapWalletMutation),
+          walletBalance: Number(data.wallet.balance) || 0,
+          walletHoldBalance: Number(data.wallet.holdBalance) || 0,
+          walletMutations: (data.wallet.mutations || []).map((m) => mapWalletMutation(m as unknown as Record<string, unknown>)),
         })
       }
 
       // Update orders
       if (data.orders) {
         set({
-          orders: data.orders.map((o: any) => mapOrder(o, state.currentUser)),
+          orders: data.orders.map((o: Record<string, unknown>) => mapOrder(o, state.currentUser)),
         })
       }
 
@@ -81,9 +71,10 @@ export const createDataFetchSlice: StateCreator<AppStore, [], [], DataFetchSlice
 
       // Update addresses
       if (data.addresses) {
+        const addressList = data.addresses.map(mapAddress)
         set({
-          addresses: data.addresses.map(mapAddress),
-          selectedAddressId: data.addresses.find((a: any) => a.isDefault)?.id || data.addresses[0]?.id || null,
+          addresses: addressList,
+          selectedAddressId: addressList.find((a) => a.isDefault)?.id || addressList[0]?.id || null,
         })
       }
 
@@ -122,10 +113,10 @@ export const createDataFetchSlice: StateCreator<AppStore, [], [], DataFetchSlice
 
   fetchHomeBanners: async () => {
     try {
-      const data = await apiClient.get<BannersApiResponse>('/api/banners', { position: 'home_top' })
+      const data = await apiClient.get<BannersResponse>('/api/banners', { position: 'home_top' })
       if (data.success && data.data) {
         set({
-          homeBanners: data.data.map(mapBanner)
+          homeBanners: data.data.map(mapBanner),
         })
       }
     } catch (error) {

@@ -1,18 +1,18 @@
 import type { StateCreator } from 'zustand'
 import { logger } from '@/lib/logger'
-import type { AdminSlice, AppStore } from './types'
-import type { AdminStats, WithdrawStatus, Order } from '../types'
+import type { AdminSlice, AppStore, AdminUserItem, AdminBannerItem, AdminComplaintItem } from './types'
+import type { AdminStats, WithdrawStatus, Order, Division, WithdrawRequest } from '../types'
 import { apiClient } from '@/lib/api-client'
-
-// Type aliases for API responses
-type DivisionsResponse = { success: boolean; divisions: any[] }
-type AdminUsersResponse = { success: boolean; data?: any[]; users?: any[] }
-type AdminOrdersResponse = { success: boolean; data: Order[] }
-type AdminStatsResponse = { success: boolean; data: AdminStats }
-type AdminWithdrawalsResponse = { success: boolean; data: any[] }
-type AdminBannersResponse = { success: boolean; data: any[] }
-type AdminComplaintsResponse = { success: boolean; data: any[] }
-type PlatformSettingsResponse = { success: boolean; data: Record<string, number | boolean | string> }
+import type {
+  AdminDivisionsResponse,
+  AdminUsersResponse as AdminUsersApiResponse,
+  AdminOrdersResponse as AdminOrdersApiResponse,
+  AdminStatsResponse as AdminStatsApiResponse,
+  AdminWithdrawalsResponse as AdminWithdrawalsApiResponse,
+  AdminBannersResponse as AdminBannersApiResponse,
+  AdminComplaintsResponse as AdminComplaintsApiResponse,
+  PlatformSettingsResponse as PlatformSettingsApiResponse,
+} from '@/lib/api-types'
 
 export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set, get) => ({
   adminUsers: [],
@@ -42,9 +42,9 @@ export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set
   divisions: [],
   fetchDivisions: async () => {
     try {
-      const data = await apiClient.get<DivisionsResponse>('/api/admin/divisions')
+      const data = await apiClient.get<AdminDivisionsResponse>('/api/admin/divisions')
       if (data.success) {
-        set({ divisions: data.divisions })
+        set({ divisions: data.divisions as unknown as Division[] })
       }
     } catch (error) {
       logger.warn({ component: 'admin', err: error }, 'Fetch divisions error')
@@ -52,22 +52,22 @@ export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set
   },
   fetchAdminUsers: async () => {
     try {
-      const data = await apiClient.get<AdminUsersResponse>('/api/admin/users')
+      const data = await apiClient.get<AdminUsersApiResponse>('/api/admin/users')
       if (data.success) {
         const users = data.data || data.users || []
         set({
-          adminUsers: users.map((u: any) => ({
-            id: u.id,
-            name: u.name,
-            email: u.email,
-            phone: u.phone || '',
-            role: u.role,
-            isVerified: u.isVerified,
-            isBlocked: u.isBlocked,
-            joinDate: u.joinDate,
-            totalSpent: u.totalSpent || 0,
-            totalOrders: u.totalOrders || 0,
-            divisionId: u.divisionId || null,
+          adminUsers: users.map((u: Record<string, unknown>): AdminUserItem => ({
+            id: u.id as string,
+            name: u.name as string,
+            email: u.email as string,
+            phone: (u.phone as string) || '',
+            role: u.role as string,
+            isVerified: u.isVerified as boolean,
+            isBlocked: u.isBlocked as boolean,
+            joinDate: u.joinDate as string,
+            totalSpent: (u.totalSpent as number) || 0,
+            totalOrders: (u.totalOrders as number) || 0,
+            divisionId: (u.divisionId as string) || null,
           })),
         })
       }
@@ -99,9 +99,9 @@ export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set
   adminOrders: [],
   fetchAdminOrders: async () => {
     try {
-      const data = await apiClient.get<AdminOrdersResponse>('/api/admin/orders')
+      const data = await apiClient.get<AdminOrdersApiResponse>('/api/admin/orders')
       if (data.success && data.data) {
-        set({ adminOrders: data.data as Order[] })
+        set({ adminOrders: data.data as unknown as Order[] })
       }
     } catch (error) {
       logger.warn({ component: 'admin', err: error }, 'Fetch admin orders error')
@@ -109,9 +109,9 @@ export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set
   },
   fetchAdminStats: async () => {
     try {
-      const data = await apiClient.get<AdminStatsResponse>('/api/admin/stats')
+      const data = await apiClient.get<AdminStatsApiResponse>('/api/admin/stats')
       if (data.success && data.data) {
-        set({ adminStats: data.data as AdminStats })
+        set({ adminStats: data.data as unknown as AdminStats })
       }
     } catch (error) {
       logger.warn({ component: 'admin', err: error }, 'Fetch admin stats error')
@@ -119,28 +119,28 @@ export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set
   },
   fetchAdminWithdrawals: async () => {
     try {
-      const data = await apiClient.get<AdminWithdrawalsResponse>('/api/admin/withdrawals')
+      const data = await apiClient.get<AdminWithdrawalsApiResponse>('/api/admin/withdrawals')
       if (data.success && data.data) {
         // Map withdrawals to store's WithdrawRequest format
-        const withdrawals = data.data.map((w: any) => ({
-          id: w.id,
-          sellerId: w.sellerId,
-          sellerName: w.sellerName || w.storeName || 'Unknown',
-          amount: w.amount,
+        const withdrawals: WithdrawRequest[] = data.data.map((w: Record<string, unknown>) => ({
+          id: w.id as string,
+          sellerId: w.sellerId as string,
+          sellerName: (w.sellerName as string) || (w.storeName as string) || 'Unknown',
+          amount: w.amount as number,
           adminFee: 0,
-          netAmount: w.amount,
+          netAmount: w.amount as number,
           bankAccount: {
-            id: `ba-wd-${w.id}`,
-            bankName: w.bankName || '',
-            accountNumber: w.bankAccount || '',
-            accountHolder: w.bankHolder || '',
+            id: `ba-wd-${w.id as string}`,
+            bankName: (w.bankName as string) || '',
+            accountNumber: (w.bankAccount as string) || '',
+            accountHolder: (w.bankHolder as string) || '',
             isDefault: false,
           },
-          status: w.status === 'processed' ? 'completed' : (w.status as WithdrawStatus),
-          requestDate: w.createdAt ? new Date(w.createdAt).toISOString() : new Date().toISOString(),
+          status: (w.status === 'processed' ? 'completed' : w.status) as WithdrawStatus,
+          requestDate: w.createdAt ? new Date(w.createdAt as string).toISOString() : new Date().toISOString(),
           estimatedArrival: '1-2 hari kerja',
-          processedDate: w.processedAt ? new Date(w.processedAt).toISOString() : undefined,
-          adminNote: w.adminNote,
+          processedDate: w.processedAt ? new Date(w.processedAt as string).toISOString() : undefined,
+          adminNote: w.adminNote as string | undefined,
         }))
         set({ withdrawRequests: withdrawals })
       }
@@ -150,19 +150,19 @@ export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set
   },
   fetchAdminBanners: async () => {
     try {
-      const data = await apiClient.get<AdminBannersResponse>('/api/admin/banners')
+      const data = await apiClient.get<AdminBannersApiResponse>('/api/admin/banners')
       if (data.success && data.data) {
         set({
-          adminBanners: data.data.map((b: any) => ({
-            id: b.id,
-            title: b.title,
-            image: b.image,
-            link: b.link || '',
-            position: b.position || 'home_top',
-            isActive: b.isActive ?? true,
-            sortOrder: b.sortOrder ?? 0,
-            startDate: b.startDate || null,
-            endDate: b.endDate || null,
+          adminBanners: data.data.map((b: Record<string, unknown>): AdminBannerItem => ({
+            id: b.id as string,
+            title: b.title as string,
+            image: b.image as string,
+            link: (b.link as string) || '',
+            position: (b.position as string) || 'home_top',
+            isActive: (b.isActive as boolean) ?? true,
+            sortOrder: (b.sortOrder as number) ?? 0,
+            startDate: (b.startDate as string) || null,
+            endDate: (b.endDate as string) || null,
           }))
         })
       }
@@ -172,21 +172,21 @@ export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set
   },
   fetchAdminComplaints: async () => {
     try {
-      const data = await apiClient.get<AdminComplaintsResponse>('/api/admin/complaints')
+      const data = await apiClient.get<AdminComplaintsApiResponse>('/api/admin/complaints')
       if (data.success && data.data) {
         set({
-          adminComplaints: data.data.map((c: any) => ({
-            id: c.id,
-            userId: c.userId || '',
-            userName: c.userName || c.buyer || '',
-            type: c.type || 'complaint',
-            description: c.description || '',
-            status: c.status || 'open',
-            createdAt: c.createdAt ? new Date(c.createdAt).toISOString() : new Date().toISOString(),
-            response: c.resolution || c.response,
-            orderId: c.orderId || '',
-            buyer: c.buyer || '',
-            seller: c.seller || '',
+          adminComplaints: data.data.map((c: Record<string, unknown>): AdminComplaintItem => ({
+            id: c.id as string,
+            userId: (c.userId as string) || '',
+            userName: (c.userName as string) || (c.buyer as string) || '',
+            type: (c.type as string) || 'complaint',
+            description: (c.description as string) || '',
+            status: (c.status as string) || 'open',
+            createdAt: c.createdAt ? new Date(c.createdAt as string).toISOString() : new Date().toISOString(),
+            response: (c.resolution as string) || (c.response as string),
+            orderId: (c.orderId as string) || '',
+            buyer: (c.buyer as string) || '',
+            seller: (c.seller as string) || '',
           }))
         })
       }
@@ -198,9 +198,9 @@ export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set
   platformSettings: null,
   fetchPlatformSettings: async () => {
     try {
-      const data = await apiClient.get<PlatformSettingsResponse>('/api/admin/settings')
+      const data = await apiClient.get<PlatformSettingsApiResponse>('/api/admin/settings')
       if (data.success && data.data) {
-        set({ platformSettings: data.data as Record<string, number | boolean | string> })
+        set({ platformSettings: data.data as unknown as Record<string, number | boolean | string> })
       }
     } catch (error) {
       logger.warn({ component: 'admin', err: error }, 'Fetch platform settings error')

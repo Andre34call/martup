@@ -1,10 +1,8 @@
 import type { StateCreator } from 'zustand'
 import type { SettingsSlice, AppStore } from './types'
+import type { UserSettingsResponse } from '../api-types'
 import { apiClient } from '@/lib/api-client'
 import { logger } from '@/lib/logger'
-
-// API response types
-type UserSettingsResponse = { data?: any; [key: string]: any }
 
 export const createSettingsSlice: StateCreator<AppStore, [], [], SettingsSlice> = (set, get) => ({
   settings: {
@@ -18,13 +16,14 @@ export const createSettingsSlice: StateCreator<AppStore, [], [], SettingsSlice> 
   fetchSettings: async () => {
     try {
       const json = await apiClient.get<UserSettingsResponse>('/api/user/settings')
-      const data = json.data || json
+      const rawData = json.data || json
+      const data = rawData as Record<string, unknown>
       set({
         settings: {
-          twoFactor: data.twoFactor ?? false,
-          pushNotif: data.pushNotif ?? true,
-          emailNotif: data.emailNotif ?? true,
-          dataSharing: data.dataSharing ?? false,
+          twoFactor: (data.twoFactor as boolean) ?? false,
+          pushNotif: (data.pushNotif as boolean) ?? true,
+          emailNotif: (data.emailNotif as boolean) ?? true,
+          dataSharing: (data.dataSharing as boolean) ?? false,
         },
         isSettingsLoaded: true,
       })

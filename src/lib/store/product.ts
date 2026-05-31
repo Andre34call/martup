@@ -3,10 +3,11 @@ import { logger } from '@/lib/logger'
 import type { ProductSlice, AppStore } from './types'
 import type { Product } from '../types'
 import { apiClient } from '@/lib/api-client'
+import type { ProductsResponse, CategoriesResponse, ProductRawData, ProductVariantRawData, CategoryRawData } from '@/lib/api-types'
+import { safeJsonParse } from '@/lib/store-helpers'
 
-// API response types
-type ProductsApiResponse = { data?: any[]; products?: any[]; [key: string]: any }
-type CategoriesApiResponse = { data?: any[]; categories?: any[]; [key: string]: any }
+/** Mapped category shape matching ProductSlice['categories'][number] */
+type MappedCategory = ProductSlice['categories'][number]
 
 export const createProductSlice: StateCreator<AppStore, [], [], ProductSlice> = (set, get) => ({
   products: [],
@@ -22,9 +23,9 @@ export const createProductSlice: StateCreator<AppStore, [], [], ProductSlice> = 
   categories: [],
   fetchProducts: async () => {
     try {
-      const data = await apiClient.get<ProductsApiResponse>('/api/products', { limit: '100' })
+      const data = await apiClient.get<ProductsResponse>('/api/products', { limit: '100' })
 
-      const products: Product[] = (data.data || data.products || []).map((p: any) => ({
+      const products: Product[] = (data.data || data.products || []).map((p: ProductRawData) => ({
         id: p.id,
         sellerId: p.sellerId,
         categoryId: p.categoryId,
@@ -33,7 +34,7 @@ export const createProductSlice: StateCreator<AppStore, [], [], ProductSlice> = 
         description: p.description,
         price: p.price,
         discountPrice: p.discountPrice || undefined,
-        images: Array.isArray(p.images) ? p.images : (typeof p.images === 'string' ? JSON.parse(p.images) : []),
+        images: safeJsonParse<string[]>(p.images, []),
         stock: p.stock,
         sold: p.sold,
         minOrder: p.minOrder || 1,
@@ -45,8 +46,8 @@ export const createProductSlice: StateCreator<AppStore, [], [], ProductSlice> = 
         isFeatured: p.isFeatured,
         isFlashSale: p.isFlashSale,
         flashSaleEnd: p.flashSaleEnd || undefined,
-        tags: Array.isArray(p.tags) ? p.tags : (typeof p.tags === 'string' ? JSON.parse(p.tags) : undefined),
-        variants: (p.variants || []).map((v: any) => ({
+        tags: safeJsonParse<string[] | undefined>(p.tags, undefined),
+        variants: (p.variants || []).map((v: ProductVariantRawData) => ({
           id: v.id,
           productId: v.productId,
           name: v.name,
@@ -57,22 +58,22 @@ export const createProductSlice: StateCreator<AppStore, [], [], ProductSlice> = 
           image: v.image || undefined,
         })),
         seller: p.seller ? {
-          id: p.seller.id,
-          userId: p.seller.userId,
-          storeName: p.seller.storeName,
-          storeSlug: p.seller.storeSlug,
-          storeAvatar: p.seller.storeAvatar || undefined,
-          storeDesc: p.seller.storeDesc || undefined,
-          isVerified: p.seller.isVerified,
-          isPremium: p.seller.isPremium,
-          rating: p.seller.rating,
-          totalSales: p.seller.totalSales,
-          totalProducts: p.seller.totalProducts,
-          responseTime: p.seller.responseTime || undefined,
-          bankName: p.seller.bankName || undefined,
-          bankAccount: p.seller.bankAccount || undefined,
-          bankHolder: p.seller.bankHolder || undefined,
-          autoReply: p.seller.autoReply || undefined,
+          id: p.seller.id as string,
+          userId: p.seller.userId as string,
+          storeName: p.seller.storeName as string,
+          storeSlug: p.seller.storeSlug as string,
+          storeAvatar: (p.seller.storeAvatar as string) || undefined,
+          storeDesc: (p.seller.storeDesc as string) || undefined,
+          isVerified: p.seller.isVerified as boolean,
+          isPremium: p.seller.isPremium as boolean,
+          rating: p.seller.rating as number,
+          totalSales: p.seller.totalSales as number,
+          totalProducts: p.seller.totalProducts as number,
+          responseTime: (p.seller.responseTime as number) || undefined,
+          bankName: (p.seller.bankName as string) || undefined,
+          bankAccount: (p.seller.bankAccount as string) || undefined,
+          bankHolder: (p.seller.bankHolder as string) || undefined,
+          autoReply: (p.seller.autoReply as string) || undefined,
         } : {
           id: '',
           userId: '',
@@ -85,11 +86,11 @@ export const createProductSlice: StateCreator<AppStore, [], [], ProductSlice> = 
           totalProducts: 0,
         },
         category: p.category ? {
-          id: p.category.id,
-          name: p.category.name,
-          slug: p.category.slug,
-          icon: p.category.icon || undefined,
-          image: p.category.image || undefined,
+          id: p.category.id as string,
+          name: p.category.name as string,
+          slug: p.category.slug as string,
+          icon: (p.category.icon as string) || undefined,
+          image: (p.category.image as string) || undefined,
         } : {
           id: '',
           name: 'Uncategorized',
@@ -104,9 +105,9 @@ export const createProductSlice: StateCreator<AppStore, [], [], ProductSlice> = 
   },
   fetchCategories: async () => {
     try {
-      const data = await apiClient.get<CategoriesApiResponse>('/api/categories')
+      const data = await apiClient.get<CategoriesResponse>('/api/categories')
 
-      const mapCategory = (c: any): any => ({
+      const mapCategory = (c: CategoryRawData): MappedCategory => ({
         id: c.id,
         name: c.name,
         slug: c.slug,

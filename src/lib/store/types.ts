@@ -21,7 +21,7 @@ export interface AuthSlice {
   login: (user: User & { isSuperAdmin?: boolean }) => void
   logout: () => Promise<void>
   switchRole: (role: UserRole) => Promise<void>
-  deleteAccount: () => void
+  deleteAccount: () => Promise<void>
 }
 
 export interface SelectionSlice {
@@ -165,6 +165,17 @@ export interface SellerSlice {
   fetchWithdrawHistory: (sellerId: string) => Promise<void>
 }
 
+/** Category children type — recursive structure */
+interface CategoryChild {
+  id: string
+  name: string
+  slug: string
+  icon?: string
+  parentId?: string | null
+  productCount?: number
+  children?: CategoryChild[]
+}
+
 export interface ProductSlice {
   products: Product[]
   addProduct: (product: Product) => void
@@ -178,14 +189,7 @@ export interface ProductSlice {
     image?: string
     parentId?: string | null
     productCount?: number
-    children?: Array<{
-      id: string
-      name: string
-      slug: string
-      icon?: string
-      parentId?: string | null
-      productCount?: number
-    }>
+    children?: CategoryChild[]
   }>
   fetchProducts: () => Promise<void>
   fetchCategories: () => Promise<void>
@@ -200,59 +204,64 @@ export interface ReviewSlice {
   fetchProductReviews: (productId: string) => Promise<void>
 }
 
+/** Admin user shape — matches the store's display model */
+export interface AdminUserItem {
+  id: string
+  name: string
+  email: string
+  phone: string
+  role: string
+  isVerified: boolean
+  isBlocked: boolean
+  joinDate: string
+  totalSpent: number
+  totalOrders: number
+  divisionId?: string | null
+}
+
+/** Admin banner shape — matches the store's display model */
+export interface AdminBannerItem {
+  id: string
+  title: string
+  image: string
+  link: string
+  position: string
+  isActive: boolean
+  sortOrder: number
+  startDate?: string | null
+  endDate?: string | null
+}
+
+/** Admin complaint shape — matches the store's display model */
+export interface AdminComplaintItem {
+  id: string
+  userId: string
+  userName: string
+  type: string
+  description: string
+  status: string
+  createdAt: string
+  response?: string
+  orderId?: string
+  buyer?: string
+  seller?: string
+}
+
 export interface AdminSlice {
-  adminUsers: Array<{
-    id: string
-    name: string
-    email: string
-    phone: string
-    role: string
-    isVerified: boolean
-    isBlocked: boolean
-    joinDate: string
-    totalSpent: number
-    totalOrders: number
-    divisionId?: string | null
-  }>
-  updateAdminUser: (userId: string, updates: Record<string, unknown>) => void
+  adminUsers: AdminUserItem[]
+  updateAdminUser: (userId: string, updates: Partial<AdminUserItem>) => void
   deleteAdminUser: (userId: string) => void
-  adminBanners: Array<{
-    id: string
-    title: string
-    image: string
-    link: string
-    position: string
-    isActive: boolean
-    sortOrder: number
-    startDate?: string | null
-    endDate?: string | null
-  }>
-  addAdminBanner: (banner: {
-    id: string; title: string; image: string; link: string;
-    position: string; isActive: boolean; sortOrder: number;
-    startDate?: string | null; endDate?: string | null;
-  }) => void
-  updateAdminBanner: (bannerId: string, updates: Record<string, unknown>) => void
+  adminBanners: AdminBannerItem[]
+  addAdminBanner: (banner: AdminBannerItem) => void
+  updateAdminBanner: (bannerId: string, updates: Partial<AdminBannerItem>) => void
   deleteAdminBanner: (bannerId: string) => void
-  adminComplaints: Array<{
-    id: string
-    userId: string
-    userName: string
-    type: string
-    description: string
-    status: string
-    createdAt: string
-    response?: string
-    orderId?: string
-    buyer?: string
-    seller?: string
-  }>
-  updateAdminComplaint: (complaintId: string, updates: Record<string, unknown>) => void
+  adminComplaints: AdminComplaintItem[]
+  updateAdminComplaint: (complaintId: string, updates: Partial<AdminComplaintItem>) => void
   divisions: Division[]
   fetchDivisions: () => Promise<void>
   fetchAdminUsers: () => Promise<void>
   assignUserToDivision: (userId: string, divisionId: string | null) => Promise<void>
-  updateDivision: (divisionId: string, updates: Record<string, unknown>) => Promise<void>
+  updateDivision: (divisionId: string, updates: Record<string, string | number | boolean | null>) => Promise<void>
   adminStats: AdminStats | null
   fetchAdminStats: () => Promise<void>
   adminOrders: Order[]

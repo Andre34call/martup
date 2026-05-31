@@ -254,6 +254,7 @@ model Product {
   orderItems    OrderItem[]
   reviews       Review[]
   wishlists     Wishlist[]
+  streamPosts   StreamPost[]
 
   @@index([categoryId, status])
   @@index([sellerId, status])
@@ -657,63 +658,66 @@ model UserSetting {
   @@index([userId])
 }
 
-// ==================== STREAM (Social Feed) ====================
+// ==================== STREAM / SOCIAL FEED ====================
 
 model StreamPost {
-  id          String    @id @default(cuid())
-  userId      String
-  type        String    @default("text") // text, video, image
-  content     String    // text content / caption
-  mediaUrl    String?   // video or image URL
-  mediaType   String?   // video/mp4, image/jpeg, etc.
-  thumbnailUrl String?  // video thumbnail
-  productId   String?   // optional: link to a product
-  viewCount   Int       @default(0)
-  likeCount   Int       @default(0)
+  id           String   @id @default(cuid())
+  userId       String
+  type         String   @default("text") // text, image, video
+  content      String?
+  mediaUrl     String?
+  mediaType    String?  // image/jpeg, video/mp4, etc.
+  thumbnailUrl String?
+  productId    String?  // linked product
+  viewCount    Int      @default(0)
+  likeCount    Int      @default(0)
   commentCount Int      @default(0)
-  isActive    Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  isActive     Boolean  @default(true)
+  isHidden     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  user        User      @relation(fields: [userId], references: [id])
-  comments    StreamComment[]
-  likes       StreamLike[]
+  user       User            @relation(fields: [userId], references: [id])
+  product    Product?        @relation(fields: [productId], references: [id])
+  likes      StreamLike[]
+  comments   StreamComment[]
 
   @@index([userId, createdAt])
   @@index([isActive, createdAt])
+  @@index([isHidden, createdAt])
   @@index([createdAt])
+}
+
+model StreamLike {
+  id     String   @id @default(cuid())
+  postId String
+  userId String
+  createdAt DateTime @default(now())
+
+  post StreamPost @relation(fields: [postId], references: [id])
+  user User       @relation(fields: [userId], references: [id])
+
+  @@unique([postId, userId])
+  @@index([postId])
+  @@index([userId])
 }
 
 model StreamComment {
   id        String   @id @default(cuid())
   postId    String
   userId    String
-  parentId  String?  // null = top-level comment, non-null = reply
+  parentId  String?
   content   String
-  likeCount Int      @default(0)
+  isHidden  Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user      User           @relation(fields: [userId], references: [id])
-  post      StreamPost     @relation(fields: [postId], references: [id])
-  parent    StreamComment? @relation("CommentReplies", fields: [parentId], references: [id])
-  replies   StreamComment[] @relation("CommentReplies")
+  post       StreamPost       @relation(fields: [postId], references: [id])
+  user       User             @relation(fields: [userId], references: [id])
+  parent     StreamComment?   @relation("CommentReplies", fields: [parentId], references: [id])
+  replies    StreamComment[]  @relation("CommentReplies")
 
   @@index([postId, createdAt])
-  @@index([parentId, createdAt])
   @@index([userId])
-}
-
-model StreamLike {
-  id        String   @id @default(cuid())
-  postId    String
-  userId    String
-  createdAt DateTime @default(now())
-
-  post      StreamPost @relation(fields: [postId], references: [id])
-  user      User       @relation(fields: [userId], references: [id])
-
-  @@unique([postId, userId])
-  @@index([postId])
-  @@index([userId])
+  @@index([parentId])
 }

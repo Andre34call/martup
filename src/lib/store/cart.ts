@@ -2,12 +2,10 @@ import { create } from 'zustand'
 import { logger } from '@/lib/logger'
 import { persist } from 'zustand/middleware'
 import type { CartItem, Product, ProductVariant } from '../types'
+import type { CartSyncResponse } from '../api-types'
 import { apiClient } from '@/lib/api-client'
 
 // ==================== TYPES ====================
-
-// Type alias for API response (avoids TSX generic parsing issues)
-type CartSyncResponse = { success: boolean; data?: any[]; error?: string }
 
 interface CartState {
   items: CartItem[]

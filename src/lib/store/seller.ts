@@ -3,10 +3,7 @@ import { logger } from '@/lib/logger'
 import type { SellerSlice, AppStore } from './types'
 import type { WithdrawRequest, WithdrawStatus, SellerStats } from '../types'
 import { apiClient } from '@/lib/api-client'
-
-// API response types
-type SellerStatsResponse = { success?: boolean; data?: any; [key: string]: any }
-type WithdrawHistoryResponse = { data?: any; [key: string]: any }
+import type { SellerStatsResponse, WithdrawHistoryResponse } from '@/lib/api-types'
 
 export const createSellerSlice: StateCreator<AppStore, [], [], SellerSlice> = (set, get) => ({
   sellerBalance: {
@@ -107,7 +104,7 @@ export const createSellerSlice: StateCreator<AppStore, [], [], SellerSlice> = (s
     try {
       const data = await apiClient.get<SellerStatsResponse>('/api/seller/stats', { sellerId })
       if (data.success && data.data) {
-        const update: Partial<SellerSlice> = { sellerStats: data.data as SellerStats }
+        const update: Partial<SellerSlice> = { sellerStats: data.data as unknown as SellerStats }
         if (typeof data.data.commissionRate === 'number') {
           update.commissionRate = data.data.commissionRate
         }
@@ -120,7 +117,8 @@ export const createSellerSlice: StateCreator<AppStore, [], [], SellerSlice> = (s
   fetchWithdrawHistory: async (sellerId) => {
     try {
       const data = await apiClient.get<WithdrawHistoryResponse>('/api/seller/withdraw', { sellerId })
-      const serverWithdrawals: WithdrawRequest[] = data.data?.withdrawals || data.data || []
+      const responseData = data.data
+      const serverWithdrawals: WithdrawRequest[] = (Array.isArray(responseData) ? responseData : (responseData as Record<string, unknown>)?.withdrawals) as WithdrawRequest[] || []
       set({ withdrawRequests: serverWithdrawals })
     } catch (error) {
       logger.warn({ component: 'seller', err: error }, 'fetchWithdrawHistory error')

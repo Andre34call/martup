@@ -1,13 +1,12 @@
 import type { StateCreator } from 'zustand'
 import { logger } from '@/lib/logger'
 import type { ChatSlice, AppStore } from './types'
-import type { ChatRoom, ChatMessage } from '../types'
+import type { ChatRoom, ChatMessage, Product } from '../types'
 import { apiClient } from '@/lib/api-client'
 import { io, Socket } from 'socket.io-client'
 import { hasAuthFlagCookie } from '@/lib/session-cookie'
-
-type ChatRoomsResponse = { success: boolean; data?: Array<Record<string, unknown>> }
-type ChatMessagesResponse = { success: boolean; data?: Array<Record<string, unknown>> }
+import type { ChatRoomsResponse, ChatMessagesResponse } from '@/lib/api-types'
+import { mapChatProductPreview, mapChatSeller } from '@/lib/store-helpers'
 
 // Module-level socket reference so it persists across zustand calls
 let socket: Socket | null = null
@@ -83,31 +82,14 @@ export const createChatSlice: StateCreator<AppStore, [], [], ChatSlice> = (set, 
       if (data.success && data.data) {
         const rooms: ChatRoom[] = (data.data as Array<Record<string, unknown>>).map((r: Record<string, unknown>) => {
           const otherUser = r.otherUser as Record<string, unknown> | undefined
-          const sellerData = (otherUser?.seller as Record<string, unknown>) || {}
           const productData = r.product as Record<string, unknown> | undefined
           return {
             id: r.id as string,
-            seller: {
-              id: sellerData.id as string || otherUser?.id as string || '',
-              userId: otherUser?.id as string || '',
-              storeName: (otherUser?.name as string) || (sellerData.storeName as string) || 'Seller',
-              storeSlug: (sellerData.storeSlug as string) || '',
-              storeAvatar: (otherUser?.avatar as string) || (sellerData.storeAvatar as string) || undefined,
-              isVerified: (sellerData.isVerified as boolean) || false,
-              isPremium: (sellerData.isPremium as boolean) || false,
-              rating: (sellerData.rating as number) || 0,
-              totalSales: (sellerData.totalSales as number) || 0,
-              totalProducts: (sellerData.totalProducts as number) || 0,
-            },
+            seller: mapChatSeller(otherUser),
             lastMessage: (r.lastMessage as string) || '',
             lastMessageTime: (r.lastMessageTime as string) || (r.updatedAt as string) || new Date().toISOString(),
             unreadCount: (r.unreadCount as number) || 0,
-            product: productData ? {
-              id: productData.id as string,
-              name: productData.name as string,
-              price: productData.price as number,
-              images: typeof productData.images === 'string' ? JSON.parse(productData.images) : (productData.images as string[]) || [],
-            } as any : undefined,
+            product: productData ? mapChatProductPreview(productData) as unknown as Product : undefined,
           }
         })
         const totalUnreadChats = rooms.reduce((sum, r) => sum + r.unreadCount, 0)
@@ -209,31 +191,14 @@ export const createChatSlice: StateCreator<AppStore, [], [], ChatSlice> = (set, 
       if (data.success && data.data) {
         const r = data.data as Record<string, unknown>
         const otherUser = r.otherUser as Record<string, unknown> | undefined
-        const sellerData = (otherUser?.seller as Record<string, unknown>) || {}
         const productData = r.product as Record<string, unknown> | undefined
         const room: ChatRoom = {
           id: r.id as string,
-          seller: {
-            id: sellerData.id as string || otherUser?.id as string || '',
-            userId: otherUser?.id as string || '',
-            storeName: (otherUser?.name as string) || (sellerData.storeName as string) || 'Seller',
-            storeSlug: (sellerData.storeSlug as string) || '',
-            storeAvatar: (otherUser?.avatar as string) || (sellerData.storeAvatar as string) || undefined,
-            isVerified: (sellerData.isVerified as boolean) || false,
-            isPremium: (sellerData.isPremium as boolean) || false,
-            rating: (sellerData.rating as number) || 0,
-            totalSales: (sellerData.totalSales as number) || 0,
-            totalProducts: (sellerData.totalProducts as number) || 0,
-          },
+          seller: mapChatSeller(otherUser),
           lastMessage: (r.lastMessage as string) || '',
           lastMessageTime: (r.lastMessageTime as string) || (r.updatedAt as string) || new Date().toISOString(),
           unreadCount: 0,
-          product: productData ? {
-            id: productData.id as string,
-            name: productData.name as string,
-            price: productData.price as number,
-            images: typeof productData.images === 'string' ? JSON.parse(productData.images) : (productData.images as string[]) || [],
-          } as any : undefined,
+          product: productData ? mapChatProductPreview(productData) as unknown as Product : undefined,
         }
         // Add to local state if not already present
         if (!get().chatRooms.find(cr => cr.id === room.id)) {

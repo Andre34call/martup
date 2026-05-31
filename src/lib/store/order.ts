@@ -2,9 +2,7 @@ import type { StateCreator } from 'zustand'
 import type { OrderSlice, AppStore } from './types'
 import type { Order, OrderStatus } from '../types'
 import { apiClient } from '@/lib/api-client'
-
-// Type alias for API response (avoids TSX generic parsing issues)
-type OrdersResponse = { success: boolean; data?: any[]; error?: string }
+import type { OrdersResponse } from '@/lib/api-types'
 
 /**
  * Helper: take a snapshot of the current orders array for rollback.

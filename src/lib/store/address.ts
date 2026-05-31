@@ -2,18 +2,8 @@ import type { StateCreator } from 'zustand'
 import { logger } from '@/lib/logger'
 import type { AddressSlice, AppStore } from './types'
 import type { Address } from '../types'
+import type { AddressMutationResponse, AddressesListResponse } from '../api-types'
 import { apiClient } from '@/lib/api-client'
-
-interface AddressMutationResponse {
-  data?: Address
-  error?: string
-}
-
-interface AddressesResponse {
-  success?: boolean
-  data?: Address[]
-  error?: string
-}
 
 export const createAddressSlice: StateCreator<AppStore, [], [], AddressSlice> = (set, get) => ({
   addresses: [],
@@ -36,7 +26,10 @@ export const createAddressSlice: StateCreator<AppStore, [], [], AddressSlice> = 
         throw new Error(message)
       }
       const data: AddressMutationResponse = await res.json()
-      const serverAddress: Address = data.data!
+      if (!data.data) {
+        throw new Error('No address data returned from server')
+      }
+      const serverAddress = data.data as unknown as Address
       set((state) => {
         const addresses = serverAddress.isDefault
           ? state.addresses.map(a => ({ ...a, isDefault: false })).concat(serverAddress)
@@ -70,7 +63,10 @@ export const createAddressSlice: StateCreator<AppStore, [], [], AddressSlice> = 
         throw new Error(message)
       }
       const data: AddressMutationResponse = await res.json()
-      const serverAddress: Address = data.data!
+      if (!data.data) {
+        throw new Error('No address data returned from server')
+      }
+      const serverAddress = data.data as unknown as Address
       set((state) => {
         const updatedAddresses = state.addresses.map(a => a.id === serverAddress.id ? serverAddress : a)
         // If the updated address is now default, unset default on others
@@ -134,8 +130,8 @@ export const createAddressSlice: StateCreator<AppStore, [], [], AddressSlice> = 
   },
   fetchAddresses: async (userId) => {
     try {
-      const data = await apiClient.get<AddressesResponse>('/api/addresses', { userId })
-      const serverAddresses: Address[] = data.data || []
+      const data = await apiClient.get<AddressesListResponse>('/api/addresses', { userId })
+      const serverAddresses = (data.data || []) as unknown as Address[]
       const defaultAddr = serverAddresses.find(a => a.isDefault)
       set({
         addresses: serverAddresses,

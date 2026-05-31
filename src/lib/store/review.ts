@@ -2,10 +2,8 @@ import type { StateCreator } from 'zustand'
 import { logger } from '@/lib/logger'
 import type { ReviewSlice, AppStore } from './types'
 import type { Review } from '../types'
+import type { ProductReviewsResponse } from '../api-types'
 import { apiClient } from '@/lib/api-client'
-
-// API response types
-type ProductReviewsResponse = { success?: boolean; data?: any[]; [key: string]: any }
 
 export const createReviewSlice: StateCreator<AppStore, [], [], ReviewSlice> = (set, get) => ({
   reviews: [],
