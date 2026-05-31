@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import {
   Heart, MessageCircle, Share2, Play, Pause, Plus, Package,
-  Search, Bell, ShoppingCart, RefreshCw, TrendingUp, Flame,
+  Search, Bell, ShoppingCart, RefreshCw, Flame,
   Bookmark, MoreHorizontal, Verified, Sparkles, Camera
 } from "lucide-react"
 import { useAppStore, useCartStore } from "@/lib/store"

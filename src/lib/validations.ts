@@ -163,8 +163,8 @@ export const createOrderSchema = z.object({
 
 export const updateOrderSchema = z.object({
   orderId: z.string().min(1, 'orderId wajib diisi'),
-  status: z.string().optional(),
-  paymentStatus: z.string().optional(),
+  status: z.enum(['pending', 'paid', 'processing', 'shipped', 'delivered', 'cancelled', 'refunded']).optional(),
+  paymentStatus: z.enum(['unpaid', 'paid', 'failed', 'refunded', 'pending']).optional(),
   trackingNumber: z.string().optional(),
 })
 

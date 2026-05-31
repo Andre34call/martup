@@ -7,76 +7,7 @@ import { useEffect } from 'react'
 import { BottomNav, AdminBottomNav, SellerBottomNav } from '@/components/ecommerce/shared'
 import { ErrorBoundary } from '@/components/error-boundary'
 import { ELEVATED_ROLES, type UserRole } from '@/lib/types'
-
-// Auth screens
-import { SplashScreen, OnboardingScreen, LoginScreen, RegisterScreen, OTPScreen, ForgotPasswordScreen, ResetPasswordScreen, EmailVerificationScreen } from '@/components/ecommerce/auth-screens'
-
-// Buyer screens
-import { HomeScreen } from '@/components/ecommerce/home-screen'
-import { SearchScreen } from '@/components/ecommerce/search-screen'
-import { CategoryScreen, CategoryDetailScreen } from '@/components/ecommerce/category-screen'
-import { ProductDetailScreen } from '@/components/ecommerce/product-detail-screen'
-import { CartScreen } from '@/components/ecommerce/cart-screen'
-import { CheckoutScreen } from '@/components/ecommerce/checkout-screen'
-import { OrderScreen } from '@/components/ecommerce/order-screen'
-import { WalletScreen } from '@/components/ecommerce/wallet-screen'
-import { ChatScreen, ChatRoomScreen } from '@/components/ecommerce/chat-screen'
-import { NotificationScreen } from '@/components/ecommerce/notification-screen'
-import { ProfileScreen } from '@/components/ecommerce/profile-screen'
-import { WishlistScreen } from '@/components/ecommerce/wishlist-screen'
-
-// Missing buyer screens
-import { SettingsScreen, VoucherScreen, AddressScreen, ReviewScreen, RefundScreen, HelpScreen, FollowedStoresScreen, DepositScreen, WithdrawScreen } from '@/components/ecommerce/missing-screens'
-import { SellerShopScreen } from '@/components/ecommerce/seller-shop-screen'
-import { SellerAddProductScreen } from '@/components/ecommerce/seller-add-product-screen'
-
-// Seller screens
-import {
-  SellerDashboard,
-  SellerProducts,
-  SellerOrders,
-  SellerAnalytics,
-  SellerWallet,
-  SellerChat,
-  SellerSettings,
-  SellerCampaign,
-} from '@/components/ecommerce/seller-screens'
-import { SellerWithdrawScreen, SellerWithdrawHistoryScreen } from '@/components/ecommerce/seller-withdraw-screens'
-
-// Admin screens
-import {
-  AdminDashboard,
-  AdminUsers,
-  AdminProducts,
-  AdminWithdraw,
-  AdminBanner,
-  AdminAnalytics,
-  AdminComplaints,
-  AdminReviews,
-} from '@/components/ecommerce/admin-screens'
-import { AdminOrdersScreen } from '@/components/ecommerce/admin-orders-screen'
-import { AdminDivisions } from '@/components/ecommerce/admin-divisions-screen'
-import { AdminWorkflow } from '@/components/ecommerce/admin-workflow-screen'
-import { AdminCategories, AdminVouchers, AdminDeposits, AdminCampaigns, AdminSettings } from '@/components/ecommerce/admin-new-screens'
-
-// Legal screens
-import { PrivacyPolicyScreen, TermsOfServiceScreen, RefundPolicyScreen } from '@/components/ecommerce/legal/legal-screens'
-
-// Stream screens
-import { StreamFeedScreen, StreamCreateScreen } from '@/components/ecommerce/stream'
-
-const AUTH_SCREENS = ['splash', 'onboarding', 'login', 'register', 'otp', 'forgot-password', 'reset-password', 'email-verification']
-const SELLER_SCREENS = ['seller-dashboard', 'seller-products', 'seller-add-product', 'seller-orders', 'seller-analytics', 'seller-wallet', 'seller-chat', 'seller-settings', 'seller-campaign', 'seller-withdraw', 'seller-withdraw-history']
-const ADMIN_SCREENS = ['admin-dashboard', 'admin-users', 'admin-products', 'admin-orders', 'admin-withdraw', 'admin-banner', 'admin-analytics', 'admin-complaints', 'admin-divisions', 'admin-workflow', 'admin-categories', 'admin-vouchers', 'admin-deposits', 'admin-campaigns', 'admin-reviews', 'admin-settings']
-
-// Sub-screens that should hide the bottom nav (they have their own back navigation headers)
-const SUB_SCREENS = [
-  'product-detail', 'seller-shop', 'checkout', 'review', 'refund',
-  'address', 'help', 'followed-stores', 'deposit', 'withdraw',
-  'settings', 'voucher', 'order-tracking', 'seller-add-product',
-  'chat-room', 'category-detail', 'seller-withdraw', 'seller-withdraw-history',
-  'privacy-policy', 'terms-of-service', 'refund-policy', 'stream-create',
-]
+import { LazyScreenRenderer, AUTH_SCREENS, SELLER_SCREENS, ADMIN_SCREENS, SUB_SCREENS } from '@/components/ecommerce/screen-registry'
 
 // ==================== GLOBAL TOAST ====================
 function GlobalToast() {
@@ -122,12 +53,11 @@ function ScreenRenderer() {
 
   // Security: If currentScreen is an admin screen but user is not actually an admin/manager, redirect to home
   // Use originalRole (DB role) instead of currentUser.role which may be overwritten by switchRole
-  const isAdminScreen = ADMIN_SCREENS.includes(currentScreen)
+  const isAdminScreen = (ADMIN_SCREENS as readonly string[]).includes(currentScreen)
   const isActualAdmin = ELEVATED_ROLES.includes((originalRole || currentUser?.role || '') as UserRole)
 
   // Redirect non-admin users away from admin screens
   // SECURITY: Use useEffect to avoid calling navigate during render
-  // This prevents the state from being out of sync with the rendered screen
   useEffect(() => {
     if (isAdminScreen && !isActualAdmin) {
       navigate('home')
@@ -145,89 +75,6 @@ function ScreenRenderer() {
     exit: { opacity: 0, x: -20 },
   }
 
-  const renderScreen = () => {
-    switch (currentScreen) {
-      // Auth
-      case 'splash': return <SplashScreen />
-      case 'onboarding': return <OnboardingScreen />
-      case 'login': return <LoginScreen />
-      case 'register': return <RegisterScreen />
-      case 'otp': return <OTPScreen />
-      case 'forgot-password': return <ForgotPasswordScreen />
-      case 'reset-password': return <ResetPasswordScreen />
-      case 'email-verification': return <EmailVerificationScreen />
-
-      // Buyer
-      case 'home': return <HomeScreen />
-      case 'search': return <SearchScreen />
-      case 'category': return <CategoryScreen />
-      case 'category-detail': return <CategoryDetailScreen />
-      case 'product-detail': return <ProductDetailScreen />
-      case 'cart': return <CartScreen />
-      case 'checkout': return <CheckoutScreen />
-      case 'orders': return <OrderScreen />
-      case 'order-tracking': return <OrderScreen />
-      case 'wallet': return <WalletScreen />
-      case 'deposit': return <DepositScreen />
-      case 'withdraw': return <WithdrawScreen />
-      case 'chat': return <ChatScreen />
-      case 'chat-room': return <ChatRoomScreen />
-      case 'notification': return <NotificationScreen />
-      case 'profile': return <ProfileScreen />
-      case 'settings': return <SettingsScreen />
-      case 'voucher': return <VoucherScreen />
-      case 'review': return <ReviewScreen />
-      case 'refund': return <RefundScreen />
-      case 'help': return <HelpScreen />
-      case 'address': return <AddressScreen />
-      case 'followed-stores': return <FollowedStoresScreen />
-      case 'seller-shop': return <SellerShopScreen />
-      case 'wishlist': return <WishlistScreen />
-
-      // Stream
-      case 'stream': return <StreamFeedScreen />
-      case 'stream-create': return <StreamCreateScreen />
-
-      // Legal
-      case 'privacy-policy': return <PrivacyPolicyScreen onBack={() => navigate('settings')} />
-      case 'terms-of-service': return <TermsOfServiceScreen onBack={() => navigate('settings')} />
-      case 'refund-policy': return <RefundPolicyScreen onBack={() => navigate('settings')} />
-
-      // Seller
-      case 'seller-dashboard': return <SellerDashboard />
-      case 'seller-products': return <SellerProducts />
-      case 'seller-add-product': return <SellerAddProductScreen />
-      case 'seller-orders': return <SellerOrders />
-      case 'seller-analytics': return <SellerAnalytics />
-      case 'seller-wallet': return <SellerWallet />
-      case 'seller-chat': return <SellerChat />
-      case 'seller-settings': return <SellerSettings />
-      case 'seller-campaign': return <SellerCampaign />
-      case 'seller-withdraw': return <SellerWithdrawScreen />
-      case 'seller-withdraw-history': return <SellerWithdrawHistoryScreen />
-
-      // Admin
-      case 'admin-dashboard': return <AdminDashboard />
-      case 'admin-users': return <AdminUsers />
-      case 'admin-products': return <AdminProducts />
-      case 'admin-orders': return <AdminOrdersScreen />
-      case 'admin-withdraw': return <AdminWithdraw />
-      case 'admin-banner': return <AdminBanner />
-      case 'admin-analytics': return <AdminAnalytics />
-      case 'admin-complaints': return <AdminComplaints />
-      case 'admin-divisions': return <AdminDivisions />
-      case 'admin-workflow': return <AdminWorkflow />
-      case 'admin-categories': return <AdminCategories />
-      case 'admin-vouchers': return <AdminVouchers />
-      case 'admin-deposits': return <AdminDeposits />
-      case 'admin-campaigns': return <AdminCampaigns />
-      case 'admin-reviews': return <AdminReviews />
-      case 'admin-settings': return <AdminSettings />
-
-      default: return <HomeScreen />
-    }
-  }
-
   return (
     <AnimatePresence mode="wait">
       <motion.div
@@ -239,7 +86,7 @@ function ScreenRenderer() {
         transition={{ duration: 0.2, ease: 'easeInOut' }}
         className="flex-1 overflow-y-auto no-scrollbar"
       >
-        {renderScreen()}
+        <LazyScreenRenderer screen={currentScreen} navigate={navigate} />
       </motion.div>
     </AnimatePresence>
   )
@@ -248,15 +95,12 @@ function ScreenRenderer() {
 export default function Home() {
   const currentScreen = useAppStore((s) => s.currentScreen)
   const navigate = useAppStore((s) => s.navigate)
-  const isAuthScreen = AUTH_SCREENS.includes(currentScreen)
-  const isSellerScreen = SELLER_SCREENS.includes(currentScreen)
-  const isAdminScreen = ADMIN_SCREENS.includes(currentScreen)
-  const isSubScreen = SUB_SCREENS.includes(currentScreen)
+  const isAuthScreen = (AUTH_SCREENS as readonly string[]).includes(currentScreen)
+  const isSellerScreen = (SELLER_SCREENS as readonly string[]).includes(currentScreen)
+  const isAdminScreen = (ADMIN_SCREENS as readonly string[]).includes(currentScreen)
+  const isSubScreen = (SUB_SCREENS as readonly string[]).includes(currentScreen)
 
   // Detect password reset token in URL on mount
-  // SECURITY: Only redirect to reset-password if user is NOT already authenticated
-  // Check BOTH Zustand state AND localStorage to prevent race conditions where
-  // Zustand hasn't hydrated yet but the user has a valid auth token stored.
   const isAuthenticated = useAppStore((s) => s.isAuthenticated)
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -277,11 +121,8 @@ export default function Home() {
       window.history.replaceState({}, '', window.location.pathname)
 
       // Check if user is already authenticated — check Zustand state and session cookie
-      // Zustand may not have hydrated yet on page load, so also check cookie flag
       const hasAuthToken = typeof document !== 'undefined' && document.cookie.split(';').some(c => c.trim().startsWith('martup_auth='))
       if (isAuthenticated || hasAuthToken) {
-        // User is authenticated — ignore the reset token
-        // They can use "Ubah Password" in settings if needed
         return
       }
 

@@ -214,7 +214,7 @@ export async function verifyAuth(request: NextRequest): Promise<AuthResult | Aut
     // Method 1: Check NextAuth session (for Google OAuth)
     const session = await getServerSession(authOptions)
     if (session?.user) {
-      const userEmail = (session.user as any).email
+      const userEmail = (session.user as Record<string, unknown>).email as string | undefined
       if (userEmail) {
         const dbUser = await db.user.findUnique({
           where: { email: userEmail },

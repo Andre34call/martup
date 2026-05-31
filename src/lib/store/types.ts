@@ -185,7 +185,6 @@ export interface ProductSlice {
       icon?: string
       parentId?: string | null
       productCount?: number
-      children?: any[]
     }>
   }>
   fetchProducts: () => Promise<void>
@@ -215,7 +214,7 @@ export interface AdminSlice {
     totalOrders: number
     divisionId?: string | null
   }>
-  updateAdminUser: (userId: string, updates: Record<string, any>) => void
+  updateAdminUser: (userId: string, updates: Record<string, unknown>) => void
   deleteAdminUser: (userId: string) => void
   adminBanners: Array<{
     id: string
@@ -228,8 +227,12 @@ export interface AdminSlice {
     startDate?: string | null
     endDate?: string | null
   }>
-  addAdminBanner: (banner: any) => void
-  updateAdminBanner: (bannerId: string, updates: Record<string, any>) => void
+  addAdminBanner: (banner: {
+    id: string; title: string; image: string; link: string;
+    position: string; isActive: boolean; sortOrder: number;
+    startDate?: string | null; endDate?: string | null;
+  }) => void
+  updateAdminBanner: (bannerId: string, updates: Record<string, unknown>) => void
   deleteAdminBanner: (bannerId: string) => void
   adminComplaints: Array<{
     id: string
@@ -244,12 +247,12 @@ export interface AdminSlice {
     buyer?: string
     seller?: string
   }>
-  updateAdminComplaint: (complaintId: string, updates: Record<string, any>) => void
+  updateAdminComplaint: (complaintId: string, updates: Record<string, unknown>) => void
   divisions: Division[]
   fetchDivisions: () => Promise<void>
   fetchAdminUsers: () => Promise<void>
   assignUserToDivision: (userId: string, divisionId: string | null) => Promise<void>
-  updateDivision: (divisionId: string, updates: Record<string, any>) => Promise<void>
+  updateDivision: (divisionId: string, updates: Record<string, unknown>) => Promise<void>
   adminStats: AdminStats | null
   fetchAdminStats: () => Promise<void>
   adminOrders: Order[]

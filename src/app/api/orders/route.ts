@@ -545,11 +545,27 @@ export async function POST(request: NextRequest) {
         validatedVoucherId = voucher.id
       }
 
-      // SECURITY: Compute all monetary values server-side
+      // SECURITY: Compute monetary values server-side where possible
+      // NOTE: shippingCost and taxAmount are client-provided because the shipping
+      // calculator runs client-side. We validate they are non-negative and within
+      // reasonable bounds. Platform fee is computed server-side.
       const clientShippingCost = validatedData.shippingCost ?? 0
       const clientTaxAmount = validatedData.taxAmount ?? 0
-      const clientPlatformFee = validatedData.platformFee ?? 0
-      const serverTotalAmount = serverSubtotal + clientShippingCost + clientTaxAmount + clientPlatformFee - serverDiscountAmount
+
+      // Validate client-provided costs are non-negative and within reasonable bounds
+      if (clientShippingCost < 0 || clientShippingCost > 10_000_000) {
+        throw new Error('Biaya pengiriman tidak valid')
+      }
+      if (clientTaxAmount < 0 || clientTaxAmount > serverSubtotal * 0.5) {
+        throw new Error('Biaya pajak tidak valid')
+      }
+
+      // SECURITY: Compute platform fee server-side (typically 1-5% of subtotal)
+      // Client should not control this value — it directly affects revenue
+      const PLATFORM_FEE_RATE = 0.03 // 3% platform fee
+      const serverPlatformFee = Math.floor(serverSubtotal * PLATFORM_FEE_RATE)
+
+      const serverTotalAmount = serverSubtotal + clientShippingCost + clientTaxAmount + serverPlatformFee - serverDiscountAmount
 
       const newOrder = await tx.order.create({
         data: {
@@ -562,7 +578,7 @@ export async function POST(request: NextRequest) {
           shippingCost: clientShippingCost,
           discountAmount: serverDiscountAmount,
           taxAmount: clientTaxAmount,
-          platformFee: clientPlatformFee,
+          platformFee: serverPlatformFee,
           totalAmount: serverTotalAmount,
           paymentMethod: paymentMethod || null,
           paymentStatus: 'unpaid',
