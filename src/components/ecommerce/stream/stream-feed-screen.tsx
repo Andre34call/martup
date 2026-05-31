@@ -663,6 +663,7 @@ function StreamPostCard({
   videoRef,
 }: StreamPostCardProps) {
   const [isBookmarked, setIsBookmarked] = useState(false)
+  const [isContentExpanded, setIsContentExpanded] = useState(false)
 
   return (
     <motion.div
@@ -730,9 +731,14 @@ function StreamPostCard({
           <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
             {post.content.length > 500 ? (
               <>
-                {post.content.slice(0, 500)}
-                <span className="text-muted-foreground">... </span>
-                <button className="text-emerald-600 font-semibold text-xs hover:text-emerald-700">Baca selengkapnya</button>
+                {isContentExpanded ? post.content : post.content.slice(0, 500)}
+                {!isContentExpanded && <span className="text-muted-foreground">... </span>}
+                <button
+                  onClick={() => setIsContentExpanded(!isContentExpanded)}
+                  className="text-emerald-600 font-semibold text-xs hover:text-emerald-700"
+                >
+                  {isContentExpanded ? " Tampilkan lebih sedikit" : "Baca selengkapnya"}
+                </button>
               </>
             ) : (
               post.content

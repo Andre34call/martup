@@ -318,9 +318,15 @@ export function StreamCommentSheet({
 
   // ==================== REPLY HANDLER ====================
   const handleReply = useCallback((comment: StreamComment) => {
-    setReplyingTo(comment)
+    if (comment.parentId) {
+      // This is a reply — find the top-level parent comment
+      const parent = comments.find((c) => c.id === comment.parentId)
+      setReplyingTo(parent || comment)
+    } else {
+      setReplyingTo(comment)
+    }
     inputRef.current?.focus()
-  }, [])
+  }, [comments])
 
   const handleCancelReply = useCallback(() => {
     setReplyingTo(null)

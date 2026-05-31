@@ -6,6 +6,10 @@ import { logger } from '@/lib/logger'
 // GET /api/auth/diagnostic - Check auth configuration status
 // Only accessible by Super Admin to prevent information disclosure
 export async function GET(request: NextRequest) {
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ success: false, error: 'Not available in production' }, { status: 404 })
+  }
+
   try {
     const authResult = await verifySuperAdmin(request)
     if (!authResult.success) return authErrorResponse(authResult)

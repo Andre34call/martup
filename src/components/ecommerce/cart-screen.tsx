@@ -195,7 +195,7 @@ function RemoveItemModal({
 
 // ==================== MAIN COMPONENT ====================
 export function CartScreen() {
-  const { navigate, setSelectedProduct, setSelectedSeller, selectedVoucher, showToast } = useAppStore()
+  const { navigate, setSelectedProduct, setSelectedSeller, selectedVoucher, showToast, platformSettings } = useAppStore()
   const {
     items, removeItem, updateQuantity, toggleCheck, checkAll,
     getCheckedTotal, getCheckedCount
@@ -224,7 +224,7 @@ export function CartScreen() {
   const checkedCount = getCheckedCount()
   const allChecked = items.length > 0 && items.every(i => i.isChecked)
   const someChecked = items.some(i => i.isChecked)
-  const platformFee = 1000
+  const platformFee = (platformSettings?.platformFee as number) ?? 1000
 
   // Voucher discount calculation
   const voucherDiscount = useMemo(() => {

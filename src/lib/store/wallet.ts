@@ -1,6 +1,7 @@
 import type { StateCreator } from 'zustand'
 import type { WalletSlice, AppStore } from './types'
 import { apiClient } from '@/lib/api-client'
+import { logger } from '@/lib/logger'
 
 interface WalletBalanceResponse {
   success: boolean
@@ -137,8 +138,9 @@ export const createWalletSlice: StateCreator<AppStore, [], [], WalletSlice> = (s
           })),
         } : {}),
       })
-    } catch {
-      // Silently fail — local state remains
+    } catch (error: unknown) {
+      logger.error({ component: 'wallet', err: error }, 'Failed to fetch wallet balance')
+      get().showToast('Gagal memuat saldo wallet. Data mungkin tidak akurat.', 'error')
     }
   },
 
@@ -162,8 +164,9 @@ export const createWalletSlice: StateCreator<AppStore, [], [], WalletSlice> = (s
           })),
         })
       }
-    } catch {
-      // Silently fail — local state remains
+    } catch (error: unknown) {
+      logger.error({ component: 'wallet', err: error }, 'Failed to fetch wallet mutations')
+      get().showToast('Gagal memuat riwayat mutasi wallet.', 'error')
     }
   },
 })

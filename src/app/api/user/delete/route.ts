@@ -23,10 +23,10 @@ export async function DELETE(request: NextRequest) {
     const body = await request.json()
     const { password } = body as { password?: string }
 
-    // Get user with password for verification
+    // Get user with password and email for verification
     const userWithPassword = await db.user.findUnique({
       where: { id: userId },
-      select: { password: true },
+      select: { password: true, email: true },
     })
 
     if (userWithPassword?.password) {
@@ -39,9 +39,9 @@ export async function DELETE(request: NextRequest) {
         return NextResponse.json({ success: false, error: 'Password salah' }, { status: 401 })
       }
     } else {
-      // OAuth-only user - require confirmation phrase
-      if (password !== 'DELETE') {
-        return NextResponse.json({ success: false, error: 'Ketik "DELETE" untuk mengkonfirmasi penghapusan akun' }, { status: 400 })
+      // OAuth-only user - require email confirmation to prevent accidental deletion
+      if (password !== userWithPassword?.email) {
+        return NextResponse.json({ success: false, error: 'Ketik email Anda untuk mengkonfirmasi penghapusan akun' }, { status: 400 })
       }
     }
 

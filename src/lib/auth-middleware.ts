@@ -20,9 +20,11 @@ import { SESSION_COOKIE_NAME } from '@/lib/session-cookie'
 //                       └── Buyer (role='buyer') — Shopping only
 
 // All roles that have admin/staff-level access (above seller/buyer)
-const ELEVATED_ROLES = ['admin', 'manager', 'finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr'] as const
+// SINGLE SOURCE OF TRUTH: Defined in @/lib/types.ts, re-exported here for backward compatibility
+import { ELEVATED_ROLES as ELEVATED_ROLES_BASE, STAFF_ROLES } from '@/lib/types'
+const ELEVATED_ROLES = ELEVATED_ROLES_BASE as unknown as readonly ['admin', 'manager', 'finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr']
 // Division-specific roles (below manager, above regular admin in division scope)
-const DIVISION_ROLES = ['finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr'] as const
+const DIVISION_ROLES = STAFF_ROLES.filter(r => r !== 'manager') as unknown as readonly ['finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr']
 // Roles that a Manager can assign (division admins + regular admin)
 const MANAGER_ASSIGNABLE_ROLES = ['admin', ...DIVISION_ROLES] as const
 

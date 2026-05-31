@@ -13,6 +13,10 @@ import { logger } from '@/lib/logger'
  * - Only returns basic diagnostic info: found, isActive, isVerified, twoFactorEnabled, diagnosis
  */
 export async function POST(request: NextRequest) {
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ success: false, error: 'Not available in production' }, { status: 404 })
+  }
+
   // Super-admin-only: verify via auth middleware
   const authResult = await verifySuperAdmin(request)
   if (!authResult.success) {

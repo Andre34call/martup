@@ -10,20 +10,9 @@ type ProductReviewsResponse = { success?: boolean; data?: any[]; [key: string]: 
 export const createReviewSlice: StateCreator<AppStore, [], [], ReviewSlice> = (set, get) => ({
   reviews: [],
   reviewedOrderIds: [],
-  addReview: (review, orderId, orderItemId) => {
-    // Call the API to persist the review (fire-and-forget)
-    apiClient.post('/api/reviews', {
-      productId: review.productId,
-      orderItemId: orderItemId || undefined,
-      rating: review.rating,
-      content: review.content,
-      images: review.images,
-    }).catch((error) => {
-      logger.warn({ component: 'review', err: error }, 'Create review API error')
-    })
-
-    // Also update local state for immediate UI feedback
-    return set((state) => {
+  addReview: async (review, orderId, orderItemId) => {
+    // Optimistic update: apply immediately for responsive UI
+    set((state) => {
       const updatedProducts = state.products.map(p => {
         if (p.id !== review.productId) return p
         const productReviews = [...state.reviews.filter(r => r.productId === p.id), review]
@@ -36,6 +25,43 @@ export const createReviewSlice: StateCreator<AppStore, [], [], ReviewSlice> = (s
         products: updatedProducts,
       }
     })
+
+    try {
+      await apiClient.post('/api/reviews', {
+        productId: review.productId,
+        orderItemId: orderItemId || undefined,
+        rating: review.rating,
+        content: review.content,
+        images: review.images,
+      })
+    } catch (error) {
+      logger.warn({ component: 'review', err: error }, 'Create review API error — reverting optimistic update')
+
+      // Revert the optimistic update: remove the review and recalculate product rating
+      set((state) => {
+        const remainingReviews = state.reviews.filter(r => r.id !== review.id)
+        const updatedProducts = state.products.map(p => {
+          if (p.id !== review.productId) return p
+          const productReviews = remainingReviews.filter(r => r.productId === p.id)
+          const avgRating = productReviews.length > 0
+            ? productReviews.reduce((sum, r) => sum + r.rating, 0) / productReviews.length
+            : 0
+          return {
+            ...p,
+            rating: Math.round(avgRating * 10) / 10,
+            reviewCount: Math.max(0, p.reviewCount - 1),
+          }
+        })
+        return {
+          reviews: remainingReviews,
+          reviewedOrderIds: orderId ? state.reviewedOrderIds.filter(id => id !== orderId) : state.reviewedOrderIds,
+          products: updatedProducts,
+        }
+      })
+
+      get().showToast('Gagal mengirim review. Silakan coba lagi.', 'error')
+      throw error
+    }
   },
   deleteReview: (reviewId) => set((state) => {
     const review = state.reviews.find(r => r.id === reviewId)

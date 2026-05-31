@@ -167,10 +167,11 @@ export const createAuthSlice: StateCreator<AppStore, [], [], AuthSlice> = (set, 
                 set({ seller })
 
                 // Also update seller balance from wallet
-                if (userData.seller.wallet) {
-                  const walletBal = (userData.seller.wallet as Record<string, number>).balance || 0
-                  const walletHold = (userData.seller.wallet as Record<string, number>).holdBalance || 0
-                  const walletPending = (userData.seller.wallet as Record<string, number>).pendingBalance || 0
+                const sellerWallet = (userData.seller as Record<string, unknown>)?.wallet as Record<string, number> | undefined
+                if (sellerWallet) {
+                  const walletBal = sellerWallet.balance || 0
+                  const walletHold = sellerWallet.holdBalance || 0
+                  const walletPending = sellerWallet.pendingBalance || 0
                   set({
                     sellerBalance: {
                       availableBalance: walletBal,

@@ -1,17 +1,46 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
 
 import { logger } from '@/lib/logger'
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url)
-    const sellerId = searchParams.get('sellerId')
+    // SECURITY: Verify authentication
+    const authResult = await verifyAuth(request)
+    if (!authResult.success) {
+      return authErrorResponse(authResult)
+    }
 
-    if (!sellerId) {
+    // SECURITY: Verify the authenticated user is a seller
+    const authenticatedSeller = await db.seller.findFirst({
+      where: { userId: authResult.user.id },
+      select: { id: true },
+    })
+
+    if (!authenticatedSeller) {
       return NextResponse.json(
-        { error: 'SellerId wajib diisi' },
-        { status: 400 }
+        { success: false, error: 'Forbidden - Seller account required' },
+        { status: 403 }
       )
+    }
+
+    const { searchParams } = new URL(request.url)
+    const requestedSellerId = searchParams.get('sellerId')
+
+    // SECURITY: Determine which seller's dashboard to return
+    let sellerId: string
+    if (requestedSellerId) {
+      // If sellerId param provided, verify ownership or admin role
+      if (authenticatedSeller.id !== requestedSellerId && authResult.user.role !== 'admin') {
+        return NextResponse.json(
+          { success: false, error: 'Forbidden - You can only view your own dashboard' },
+          { status: 403 }
+        )
+      }
+      sellerId = requestedSellerId
+    } else {
+      // No sellerId param, use the authenticated seller's ID
+      sellerId = authenticatedSeller.id
     }
 
     const seller = await db.seller.findUnique({

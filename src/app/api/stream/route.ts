@@ -69,6 +69,16 @@ export async function GET(request: NextRequest) {
             avatar: true,
           },
         },
+        product: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            price: true,
+            discountPrice: true,
+            images: true,
+          },
+        },
         _count: {
           select: {
             likes: true,
@@ -90,13 +100,33 @@ export async function GET(request: NextRequest) {
     const hasMore = posts.length > limit
     const items = hasMore ? posts.slice(0, limit) : posts
 
-    // Format response
-    const formattedPosts = items.map((post) => {
-      const { _count, likes, ...postData } = post
+    // Format response — use `any` to avoid Prisma include/select type inference issues
+    const formattedPosts = items.map((post: any) => {
+      const { _count, likes, product: rawProduct, ...postData } = post
+      // Map product.images (JSON string) to product.image (first URL)
+      let product: { id: string; name: string; slug: string; price: any; discountPrice: any; image: string | undefined } | null = null
+      if (rawProduct) {
+        let image: string | undefined
+        try {
+          const parsed = JSON.parse(rawProduct.images as string)
+          image = Array.isArray(parsed) ? parsed[0] : undefined
+        } catch {
+          image = undefined
+        }
+        product = {
+          id: rawProduct.id,
+          name: rawProduct.name,
+          slug: rawProduct.slug,
+          price: rawProduct.price,
+          discountPrice: rawProduct.discountPrice,
+          image,
+        }
+      }
       return {
         ...postData,
-        likeCount: _count.likes,
-        commentCount: _count.comments,
+        product,
+        likeCount: _count?.likes ?? 0,
+        commentCount: _count?.comments ?? 0,
         isLiked: authedUserId ? (likes?.length ?? 0) > 0 : false,
       }
     })
@@ -173,11 +203,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Sanitize and validate content
+    // Sanitize and validate content — content is optional if media is provided
     const content = sanitizeInput(body.content || '')
-    if (!content) {
+    if (!content && !mediaUrl) {
       return NextResponse.json(
-        { success: false, error: 'Content is required' },
+        { success: false, error: 'Content or media is required' },
         { status: 400 }
       )
     }

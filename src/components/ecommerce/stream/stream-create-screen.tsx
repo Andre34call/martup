@@ -244,6 +244,7 @@ export function StreamCreateScreen() {
 
       if (mediaUrl) {
         payload.mediaUrl = mediaUrl
+        payload.mediaType = mediaFile?.type || (postType === 'video' ? 'video/mp4' : 'image/jpeg')
       }
       if (thumbnailUrl) {
         payload.thumbnailUrl = thumbnailUrl

@@ -47,7 +47,20 @@ export async function GET(request: NextRequest) {
     const users = await db.user.findMany({
       where,
       include: {
-        seller: true,
+        seller: {
+          select: {
+            id: true,
+            storeName: true,
+            storeSlug: true,
+            storeAvatar: true,
+            storeBanner: true,
+            isVerified: true,
+            isPremium: true,
+            rating: true,
+            totalSales: true,
+            totalProducts: true,
+          },
+        },
         orders: {
           select: { totalAmount: true },
         },

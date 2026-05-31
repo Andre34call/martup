@@ -162,8 +162,10 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     logger.error({ err: error, code: error?.code }, 'Get current user error')
     
-    // Provide specific error for database connection issues
-    const errorMessage = error?.code === 'P1001' || error?.code === 'P1002'
+    // SECURITY: Only expose specific database error details in development.
+    // In production, return a generic message to avoid leaking infrastructure info.
+    const isDev = process.env.NODE_ENV === 'development'
+    const errorMessage = isDev && (error?.code === 'P1001' || error?.code === 'P1002')
       ? 'Database tidak dapat diakses. Pastikan SUPABASE_DATABASE_URL sudah dikonfigurasi.'
       : 'Terjadi kesalahan server'
     

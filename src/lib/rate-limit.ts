@@ -165,6 +165,13 @@ class VercelKVBackend implements RateLimiterBackend {
 let defaultBackend: RateLimiterBackend | null = null
 let backendInitialized = false
 
+// Track consecutive backend failures for restrictive fallback
+let consecutiveBackendFailures = 0
+const FALLBACK_FAILURE_THRESHOLD = 3
+const FALLBACK_WINDOW_MS = 60_000 // 1 minute
+const FALLBACK_MAX_REQUESTS = 5
+const fallbackStore = new Map<string, { count: number; expiresAt: number }>()
+
 /**
  * Initialize the rate limiter backend.
  * - Without arguments: auto-detects Vercel KV (if env vars set) or falls back to in-memory
@@ -234,6 +241,9 @@ export function createRateLimiter(config: RateLimiterConfig): {
         const { count, ttl } = await backend.increment(key, windowMs)
         const resetAt = Date.now() + ttl
 
+        // Backend call succeeded — reset failure counter
+        consecutiveBackendFailures = 0
+
         return {
           allowed: count <= maxRequests,
           remaining: Math.max(0, maxRequests - count),
@@ -241,9 +251,35 @@ export function createRateLimiter(config: RateLimiterConfig): {
           total: maxRequests,
         }
       } catch (error) {
-        // If distributed backend fails (KV down, network error), allow the request
-        // rather than blocking all users. Log the error for monitoring.
-        console.error('[rate-limit] Backend error, allowing request:', error)
+        consecutiveBackendFailures++
+        console.error(`[rate-limit] Backend error (${consecutiveBackendFailures} consecutive):`, error)
+
+        if (consecutiveBackendFailures > FALLBACK_FAILURE_THRESHOLD) {
+          // Restrictive in-memory fallback: 5 req/min per key
+          const now = Date.now()
+          const fallbackKey = `fb:${keyPrefix}${identifier}`
+          const entry = fallbackStore.get(fallbackKey)
+
+          if (!entry || now > entry.expiresAt) {
+            fallbackStore.set(fallbackKey, { count: 1, expiresAt: now + FALLBACK_WINDOW_MS })
+            return {
+              allowed: true,
+              remaining: FALLBACK_MAX_REQUESTS - 1,
+              resetAt: now + FALLBACK_WINDOW_MS,
+              total: FALLBACK_MAX_REQUESTS,
+            }
+          }
+
+          entry.count++
+          return {
+            allowed: entry.count <= FALLBACK_MAX_REQUESTS,
+            remaining: Math.max(0, FALLBACK_MAX_REQUESTS - entry.count),
+            resetAt: entry.expiresAt,
+            total: FALLBACK_MAX_REQUESTS,
+          }
+        }
+
+        // Under threshold — still allow the request (backend may be temporarily down)
         return {
           allowed: true,
           remaining: maxRequests,

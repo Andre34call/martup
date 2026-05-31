@@ -6,6 +6,10 @@ import { logger } from '@/lib/logger'
 // GET /api/test-db - Test database connection (ADMIN ONLY)
 // SECURITY: Previously had NO auth — exposed DB info to anyone
 export async function GET(request: NextRequest) {
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ success: false, error: 'Not available in production' }, { status: 404 })
+  }
+
   try {
     // SECURITY: Admin-only access — database info is sensitive
     const authResult = await verifyAdmin(request)

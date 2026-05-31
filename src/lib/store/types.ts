@@ -194,7 +194,7 @@ export interface ProductSlice {
 export interface ReviewSlice {
   reviews: Review[]
   reviewedOrderIds: string[]
-  addReview: (review: Review, orderId: string, orderItemId?: string) => void
+  addReview: (review: Review, orderId: string, orderItemId?: string) => Promise<void>
   deleteReview: (reviewId: string) => void
   updateReview: (reviewId: string, updates: Partial<Review>) => void
   fetchProductReviews: (productId: string) => Promise<void>

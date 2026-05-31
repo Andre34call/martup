@@ -45,10 +45,12 @@ export async function POST(request: NextRequest) {
     const { secret, email, password, name } = body
 
     // Check ADMIN_SETUP_SECRET
-    const adminSecret = process.env.ADMIN_SETUP_SECRET || process.env.NEXTAUTH_SECRET
+    // SECURITY: Do NOT fall back to NEXTAUTH_SECRET — that would allow anyone
+    // with knowledge of NEXTAUTH_SECRET (e.g. OAuth flows) to create admin accounts.
+    const adminSecret = process.env.ADMIN_SETUP_SECRET
     if (!adminSecret) {
       return NextResponse.json(
-        { success: false, error: 'ADMIN_SETUP_SECRET atau NEXTAUTH_SECRET harus diset di environment variables.' },
+        { success: false, error: 'ADMIN_SETUP_SECRET harus diset di environment variables.' },
         { status: 500 }
       )
     }

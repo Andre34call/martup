@@ -1,5 +1,26 @@
 import type { ShippingOption } from './types'
 
+// ==================== PLATFORM CONFIGURATION ====================
+// Centralized constants — single source of truth for all magic numbers
+
+// Platform fees
+export const DEFAULT_PLATFORM_FEE = 1000          // Rp 1,000
+export const DEFAULT_ADMIN_FEE = 1000             // Rp 1,000 (withdrawal admin fee)
+export const MIN_WITHDRAW_AMOUNT = 10000          // Rp 10,000 minimum withdrawal
+export const DEFAULT_COMMISSION_RATE = 0.05       // 5% commission
+
+// Product defaults
+export const DEFAULT_PRODUCT_WEIGHT = 500         // grams — fallback when product weight not set
+export const DEFAULT_SHIPPING_ORIGIN_CITY = 'Jakarta' // fallback origin city for shipping calc
+
+// OTP & Auth timing
+export const OTP_RESEND_COOLDOWN_SECONDS = 60     // seconds before OTP resend
+export const OTP_MAX_ATTEMPTS = 5                 // max OTP verification attempts
+
+// UI timing
+export const BANNER_CAROUSEL_INTERVAL_MS = 3500   // banner auto-rotate interval
+export const SPLASH_DURATION_MS = 2000            // splash screen duration
+
 // ==================== SHIPPING OPTIONS ====================
 // Default hardcoded shipping options for fallback when API is unavailable
 export const SHIPPING_OPTIONS: ShippingOption[] = [
