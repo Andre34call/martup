@@ -1,7 +1,7 @@
 "use client"
 
 import { motion, AnimatePresence } from "framer-motion"
-import { Plus, Minus, X, Camera, ChevronDown, Tag, Package, DollarSign, Upload, Image as ImageIcon, Video, Store } from "lucide-react"
+import { Plus, Minus, X, Camera, ChevronDown, Tag, Package, DollarSign, Upload, Image as ImageIcon, Video, Store, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
@@ -13,6 +13,7 @@ import { fadeIn } from '@/lib/animations'
 import { PageHeader } from "./shared"
 import type { Product } from "@/lib/types"
 import { logger } from '@/lib/logger'
+import { mapSeller } from '@/lib/mappers'
 import { useState, useRef } from "react"
 
 // ==================== CONSTANTS ====================
@@ -29,7 +30,7 @@ interface VariantGroup {
 
 // ==================== SELLER ADD PRODUCT SCREEN ====================
 export function SellerAddProductScreen() {
-  const { navigate, showToast, addProduct, updateProduct, selectedProductId, products, currentUser, categories, switchRole, seller: storeSeller } = useAppStore()
+  const { navigate, showToast, addProduct, updateProduct, selectedProductId, products, currentUser, categories, seller: storeSeller } = useAppStore()
 
   // Derive sellerId and seller info from store's seller object (real data from database)
   const seller = storeSeller
@@ -279,37 +280,68 @@ export function SellerAddProductScreen() {
     })
   }
 
-  // Auto-register as seller if not already registered
+  const [isRegisteringSeller, setIsRegisteringSeller] = useState(false)
+
+  // Auto-register as seller if not already registered — calls API directly
+  // instead of going through switchRole() which can fail due to CSRF/auth issues
   const ensureSellerRegistered = async (): Promise<boolean> => {
     if (seller?.id) return true
     if (!currentUser?.id) {
       showToast("Anda harus login terlebih dahulu", "error")
       return false
     }
+
+    setIsRegisteringSeller(true)
     showToast("Mendaftarkan akun seller Anda...", "info")
+
     try {
-      await switchRole('seller')
-      // Re-check seller state after switchRole
-      const updatedSeller = useAppStore.getState().seller
-      if (updatedSeller?.id) return true
+      // Try to register as seller directly via API
+      const registerRes = await apiClient.rawPost('/api/seller/register', {
+        userId: currentUser.id,
+        storeName: currentUser.name ? `${currentUser.name}'s Store` : 'My Store',
+      })
+      const registerData = await registerRes.json()
+
+      if (registerData.success && registerData.data) {
+        // New seller registered successfully
+        const newSeller = mapSeller(registerData.data)
+        useAppStore.setState({ seller: newSeller, userRole: 'seller' })
+        showToast("Selamat! Akun seller Anda sudah aktif 🎉", "success")
+        return true
+      }
+
+      if (registerRes.status === 409) {
+        // Already a seller — fetch existing seller data
+        try {
+          const userDataRaw = await apiClient.get<{ data?: any; seller?: any }>('/api/user-data', { userId: currentUser.id })
+          const userData = userDataRaw.data || userDataRaw
+          if (userData.seller) {
+            const newSeller = mapSeller(userData.seller)
+            useAppStore.setState({ seller: newSeller, userRole: 'seller' })
+            showToast("Akun seller Anda sudah aktif!", "success")
+            return true
+          }
+        } catch (fetchErr) {
+          logger.warn({ component: 'seller-product', err: fetchErr }, 'Failed to fetch existing seller data')
+        }
+      }
+
+      // Registration failed with a non-409 error
+      showToast(registerData.error || "Gagal mendaftar sebagai seller. Silakan coba lagi.", "error")
+      return false
+    } catch (err) {
+      logger.warn({ component: 'seller-product', err }, 'Auto seller register failed')
       showToast("Gagal mendaftar sebagai seller. Silakan coba lagi.", "error")
       return false
-    } catch {
-      showToast("Gagal mendaftar sebagai seller. Silakan coba lagi.", "error")
-      return false
+    } finally {
+      setIsRegisteringSeller(false)
     }
   }
 
   // Submit handler
   const handleSubmit = async () => {
-    // Guard: ensure seller data is loaded — auto-register if needed
-    if (!seller?.id) {
-      const registered = await ensureSellerRegistered()
-      if (!registered) return
-    }
-    // Re-read seller from store (might have been set by ensureSellerRegistered)
-    const currentSeller = useAppStore.getState().seller
-    const currentSellerId = currentSeller?.id || sellerId
+    // Validate form first, then auto-register seller if needed
+    // This way user sees form validation errors before the registration attempt
     if (productImages.length === 0 && !editingProduct?.images?.length) {
       showToast("Upload minimal 1 foto produk", "error")
       return
@@ -339,6 +371,14 @@ export function SellerAddProductScreen() {
       return
     }
 
+    // Auto-register as seller if needed (after form validation)
+    if (!seller?.id) {
+      const registered = await ensureSellerRegistered()
+      if (!registered) return
+    }
+    // Re-read seller from store (might have been set by ensureSellerRegistered)
+    const currentSeller = useAppStore.getState().seller
+    const currentSellerId = currentSeller?.id || sellerId
     const selectedCategoryObj = categories.find(c => c.id === category)
     const productImages2 = productImages.length > 0
       ? productImages.map(img => img.url).filter(url => !url.startsWith('blob:'))
@@ -482,6 +522,14 @@ export function SellerAddProductScreen() {
         addProduct(newProduct)
       }
       showToast(editingProduct ? "Produk berhasil diperbarui! 🎉" : "Produk berhasil dipublikasikan! 🎉", "success")
+      // Refresh user data to populate seller object if it was just auto-created
+      if (!seller?.id && currentUser?.id) {
+        try {
+          await useAppStore.getState().fetchUserData(currentUser.id)
+        } catch {
+          // Non-critical — seller data will load on next page refresh
+        }
+      }
       setTimeout(() => navigate("seller-products"), 1500)
     } catch (error) {
       logger.warn({ component: 'seller-product', err: error }, 'Product save failed')
@@ -1068,36 +1116,36 @@ export function SellerAddProductScreen() {
             </motion.div>
           )}
 
-          {!seller?.id ? (
-            <div className="space-y-3">
-              <div className="rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-4 text-center">
-                <Store className="w-8 h-8 text-amber-500 mx-auto mb-2" />
-                <p className="text-sm font-medium text-foreground">Belum Terdaftar sebagai Seller</p>
-                <p className="text-xs text-muted-foreground mt-1">Daftar sebagai seller untuk mulai menjual produk</p>
+          {!seller?.id && (
+            <div className="rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3 text-center">
+              <div className="flex items-center justify-center gap-2">
+                <Store className="w-4 h-4 text-amber-500" />
+                <p className="text-xs font-medium text-foreground">Akun seller akan dibuat otomatis saat publikasi produk pertama</p>
               </div>
-              <Button
-                onClick={async () => {
-                  const registered = await ensureSellerRegistered()
-                  if (!registered) return
-                  showToast("Selamat! Akun seller Anda sudah aktif 🎉", "success")
-                }}
-                disabled={isUploading}
-                className="w-full h-12 bg-orange-500 hover:bg-orange-600 active:bg-orange-700 text-white rounded-xl text-sm font-bold shadow-lg shadow-orange-500/25"
-              >
-                <Store className="w-4 h-4 mr-2" />
-                Daftar Jadi Seller
-              </Button>
             </div>
-          ) : (
-            <Button
-              onClick={handleSubmit}
-              disabled={isUploading}
-              className="w-full h-12 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl text-sm font-bold shadow-lg shadow-emerald-500/25 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Upload className="w-4 h-4 mr-2" />
-              {isUploading ? 'Mengupload...' : 'Publikasikan Produk'}
-            </Button>
           )}
+          <Button
+            onClick={handleSubmit}
+            disabled={isUploading || isRegisteringSeller}
+            className="w-full h-12 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl text-sm font-bold shadow-lg shadow-emerald-500/25 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isRegisteringSeller ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Mendaftar sebagai Seller...
+              </>
+            ) : isUploading ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Mengupload...
+              </>
+            ) : (
+              <>
+                <Upload className="w-4 h-4 mr-2" />
+                Publikasikan Produk
+              </>
+            )}
+          </Button>
 
           <Button
             variant="outline"

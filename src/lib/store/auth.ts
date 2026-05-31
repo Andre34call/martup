@@ -138,18 +138,33 @@ export const createAuthSlice: StateCreator<AppStore, [], [], AuthSlice> = (set, 
                 })
               }
             } else {
-              // Seller record exists in DB but data not returned — retry registration
-              logger.warn({ component: 'auth' }, 'Seller 409 but no seller data in user-data response')
+              // Seller 409 but no seller data in user-data response
+              // Try re-fetching via fetchUserData which is more comprehensive
+              logger.warn({ component: 'auth' }, 'Seller 409 but no seller data in user-data response — trying fetchUserData')
+              await get().fetchUserData(userId)
             }
           } catch (fetchErr) {
-            logger.warn({ component: 'auth', err: fetchErr }, 'Failed to fetch existing seller data')
+            logger.warn({ component: 'auth', err: fetchErr }, 'Failed to fetch existing seller data — trying fetchUserData')
+            // Last resort: try fetchUserData which handles all data including seller
+            try {
+              await get().fetchUserData(userId)
+            } catch (retryErr) {
+              logger.warn({ component: 'auth', err: retryErr }, 'fetchUserData also failed')
+            }
           }
         } else {
           // Registration failed with a non-409 error
           logger.warn({ component: 'auth', status: registerRes.status, error: registerData.error }, 'Seller registration returned non-success')
         }
       } catch (err) {
-        logger.warn({ component: 'auth', err }, 'Auto seller register failed')
+        logger.warn({ component: 'auth', err }, 'Auto seller register via rawPost failed — trying fetchUserData fallback')
+        // If rawPost fails (e.g., CSRF issues), try fetching existing seller data directly
+        // This handles the case where the user is already a seller but the POST fails
+        try {
+          await get().fetchUserData(userId)
+        } catch (fetchErr) {
+          logger.warn({ component: 'auth', err: fetchErr }, 'fetchUserData fallback also failed')
+        }
         // Don't navigate to seller dashboard if registration failed
         if (!get().seller) {
           set({ isLoading: false })
