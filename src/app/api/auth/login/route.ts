@@ -304,8 +304,9 @@ export async function POST(request: NextRequest) {
     // SECURITY: Redact sensitive banking details from seller object in login response.
     // Banking info should only be accessible via dedicated seller profile endpoints.
     if (userWithoutPassword.seller) {
-      const { bankAccount, bankHolder, bankName, ...safeSeller } = userWithoutPassword.seller
-      userWithoutPassword.seller = safeSeller
+      userWithoutPassword.seller.bankAccount = null
+      userWithoutPassword.seller.bankHolder = null
+      userWithoutPassword.seller.bankName = null
     }
 
     logger.info({ email, userId: user.id }, 'Login successful')
