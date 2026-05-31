@@ -1671,3 +1671,26 @@ Stage Summary:
 - The "Publikasikan Produk" button is no longer disabled — instead, a friendly registration prompt is shown
 - Error handling improved: switchRole now throws when seller registration fails, with proper toast messages
 - TOKEN_SECRET added to .env so auth works in development
+
+---
+Task ID: 6
+Agent: main
+Task: Fix seller onboarding - "Post Product button can't be clicked" / "How do I become a seller?"
+
+Work Log:
+- Investigated full seller data flow: Zustand store (seller not persisted), data-fetch.ts (fetchUserData populates seller), auth.ts (switchRole registers seller), seller-add-product-screen.tsx (form with conditional rendering)
+- Root cause: The "Publikasikan Produk" button was HIDDEN when `seller?.id` was null, replaced with a "Daftar Jadi Seller" button that called `switchRole('seller')` which could fail due to CSRF/auth issues
+- The backend POST /api/seller/products already auto-creates seller records, but the frontend guard prevented reaching that point
+- Fix 1: seller-add-product-screen.tsx — Removed conditional rendering; always show "Publikasikan Produk" button
+- Fix 2: seller-add-product-screen.tsx — `ensureSellerRegistered()` now calls `/api/seller/register` directly via `apiClient.rawPost()` instead of going through `switchRole()`
+- Fix 3: seller-add-product-screen.tsx — Added loading states (isRegisteringSeller) with Loader2 spinner
+- Fix 4: seller-add-product-screen.tsx — After successful product creation, refreshes user data via fetchUserData()
+- Fix 5: auth.ts switchRole — Added fetchUserData fallback when registration POST fails (CSRF issues) and when 409 response doesn't include seller data
+- Fix 6: Reordered validation in handleSubmit() — form validation happens BEFORE seller registration attempt
+- Pushed to production (commit 8831508)
+
+Stage Summary:
+- "Publikasikan Produk" button is now always visible and clickable
+- Auto-registration happens automatically on first product submission
+- Multiple fallback paths ensure seller registration succeeds
+- Deployed to Vercel via git push
