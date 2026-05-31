@@ -17,6 +17,8 @@ function parseJsonField(value: string | null | undefined): unknown[] {
 }
 
 // GET /api/seller/products - Fetch products for a specific seller
+// SECURITY: Only the seller themselves (or admins) can see all products including drafts.
+// Unauthenticated or non-owner requests only see active products.
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
@@ -29,8 +31,25 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // Check if the request is from the seller themselves or an admin
+    let isOwnerOrAdmin = false
+    const authResult = await verifyAuth(request)
+    if (authResult.success) {
+      const seller = await db.seller.findFirst({
+        where: { userId: authResult.user.id },
+        select: { id: true },
+      })
+      if (seller?.id === sellerId || ['admin', 'manager'].includes(authResult.user.role)) {
+        isOwnerOrAdmin = true
+      }
+    }
+
     const products = await db.product.findMany({
-      where: { sellerId },
+      where: {
+        sellerId,
+        // Non-owners only see active products (no drafts or blocked items)
+        ...(isOwnerOrAdmin ? {} : { status: 'active' }),
+      },
       include: {
         category: {
           select: {
@@ -56,7 +75,6 @@ export async function GET(request: NextRequest) {
       data: parsedProducts,
     }))
   } catch (error: unknown) {
-    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'Seller Products GET error')
     return NextResponse.json(
       { success: false, error: 'Terjadi kesalahan server' },
@@ -84,7 +102,6 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    console.log('[DEBUG] POST /api/seller/products - authResult.user:', { id: authResult.user.id, email: authResult.user.email, role: authResult.user.role })
     const {
       sellerId,
       categoryId,
@@ -117,78 +134,14 @@ export async function POST(request: NextRequest) {
       where: { userId: authResult.user.id },
     })
 
-    console.log('[DEBUG] POST /api/seller/products - seller lookup:', { 
-      authUserId: authResult.user.id, 
-      clientSellerId: sellerId, 
-      foundSeller: seller ? { id: seller.id, userId: seller.userId, storeName: seller.storeName } : null 
-    })
-
-    // AUTO-CREATE: If the user doesn't have a seller record yet but is authenticated
-    // and trying to create a product, auto-create the seller record.
-    // This handles the case where switchRole auto-registration failed silently.
+    // If the user doesn't have a seller record, they must register as seller first.
+    // Auto-creation has been removed — it bypasses proper registration flow and
+    // results in incomplete seller records (no bank info, no store description, etc.).
     if (!seller) {
-      const userName = authResult.user.name || 'Seller'
-      const storeName = `${userName}'s Store`
-      const storeSlug = storeName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
-      
-      // Ensure slug uniqueness
-      let uniqueSlug = storeSlug
-      let slugCounter = 1
-      while (await db.seller.findUnique({ where: { storeSlug: uniqueSlug } })) {
-        uniqueSlug = `${storeSlug}-${slugCounter}`
-        slugCounter++
-      }
-
-      try {
-        seller = await db.$transaction(async (tx) => {
-          // Only update role to 'seller' if user is currently a 'buyer'
-          const user = await tx.user.findUnique({ where: { id: authResult.user.id } })
-          const isElevatedUser = user && ['admin', 'manager', 'finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr'].includes(user.role)
-          
-          if (user && !isElevatedUser) {
-            await tx.user.update({
-              where: { id: authResult.user.id },
-              data: { role: 'seller' },
-            })
-          }
-
-          const newSeller = await tx.seller.create({
-            data: {
-              userId: authResult.user.id,
-              storeName,
-              storeSlug: uniqueSlug,
-              isVerified: false,
-              isPremium: false,
-              rating: 0,
-              totalSales: 0,
-              totalProducts: 0,
-              commissionRate: 0.05,
-            },
-          })
-
-          // Create seller wallet
-          const existingWallet = await tx.wallet.findUnique({ where: { sellerId: newSeller.id } })
-          if (!existingWallet) {
-            await tx.wallet.create({
-              data: {
-                userId: authResult.user.id,
-                sellerId: newSeller.id,
-                balance: 0,
-                holdBalance: 0,
-              },
-            })
-          }
-
-          return newSeller
-        })
-        console.log('[DEBUG] POST /api/seller/products - auto-created seller:', { id: seller.id, storeName: seller.storeName })
-      } catch (createErr) {
-        logger.error({ err: createErr }, 'Auto-create seller failed in POST /api/seller/products')
-        return NextResponse.json(
-          { success: false, error: 'Gagal membuat akun seller secara otomatis. Silakan daftar sebagai seller terlebih dahulu.' },
-          { status: 403 }
-        )
-      }
+      return NextResponse.json(
+        { success: false, error: 'Akun seller belum terdaftar. Silakan daftar sebagai seller terlebih dahulu melalui menu profil.' },
+        { status: 403 }
+      )
     }
 
     // Use the server-derived seller ID (authoritative), not the client-provided one
@@ -254,7 +207,7 @@ export async function POST(request: NextRequest) {
         slug: productSlug,
         description,
         price,
-        discountPrice: discountPrice || null,
+        discountPrice: discountPrice != null && discountPrice !== '' ? discountPrice : null,
         images: imagesStr,
         videoUrl: safeVideoUrl || null,
         stock: stock || 0,
@@ -460,7 +413,7 @@ export async function PUT(request: NextRequest) {
     if (slug !== undefined) updateData.slug = slug
     if (description !== undefined) updateData.description = description
     if (price !== undefined) updateData.price = price
-    if (discountPrice !== undefined) updateData.discountPrice = discountPrice || null
+    if (discountPrice !== undefined) updateData.discountPrice = discountPrice != null && discountPrice !== '' ? discountPrice : null
     // SECURITY: Block blob: video URLs
     if (videoUrl !== undefined) updateData.videoUrl = (typeof videoUrl === 'string' && !videoUrl.startsWith('blob:')) ? videoUrl : null
     if (stock !== undefined) updateData.stock = stock

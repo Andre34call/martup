@@ -298,8 +298,15 @@ export async function POST(request: NextRequest) {
       logger.warn({ err: resetErr }, 'Failed to reset login rate limit counter')
     }
 
-    // Return user data (without password)
+    // Return user data (without password and sensitive banking details)
     const { password: _, ...userWithoutPassword } = user
+
+    // SECURITY: Redact sensitive banking details from seller object in login response.
+    // Banking info should only be accessible via dedicated seller profile endpoints.
+    if (userWithoutPassword.seller) {
+      const { bankAccount, bankHolder, bankName, ...safeSeller } = userWithoutPassword.seller
+      userWithoutPassword.seller = safeSeller
+    }
 
     logger.info({ email, userId: user.id }, 'Login successful')
 
