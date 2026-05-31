@@ -1761,3 +1761,30 @@ Stage Summary:
 - Product creation VERIFIED: auto-create seller in products API as safety net
 - All marketplace flows VERIFIED: login, browse, search, cart, checkout work correctly
 - Deployed to production
+
+---
+Task ID: deploy-audit
+Agent: Main Coordinator
+Task: Comprehensive audit + deploy critical fixes to production
+
+Work Log:
+- Ran comprehensive audit of all critical marketplace flows (login, seller registration, product creation, upload)
+- Identified 3 CRITICAL, 8 MEDIUM, 6 LOW issues across the codebase
+- Fixed all CRITICAL issues and key MEDIUM issues:
+  1. Removed all console.log('[DEBUG]') statements that leaked auth data (user IDs, emails, seller details) in seller-add-product-screen.tsx and seller/products/route.ts
+  2. Added auth verification to GET /api/seller/products — non-owners only see active products (drafts/blocked hidden)
+  3. Replaced raw fetch in upload.ts with apiClient.upload for automatic CSRF retry on 403 errors
+  4. Removed auto-create seller from POST /api/seller/products (was bypassing proper registration flow, creating incomplete seller records)
+  5. Fixed client-side login password validation blocking legacy users (removed min 6 chars requirement on login form)
+  6. Redacted banking details (bankAccount, bankHolder, bankName) from login API response
+  7. Fixed discountPrice=0 treated as null (changed `discountPrice || null` to proper null check)
+- Lint passes ✅
+- Pushed to production (commit 353547e)
+
+Stage Summary:
+- 3 critical security issues fixed + 4 medium issues
+- Debug logging removed → no more auth data leaks
+- Upload now has CSRF retry protection
+- Login no longer blocks legacy users with short passwords
+- Seller registration must go through proper flow (no more auto-create bypass)
+- Banking details no longer exposed in login response
