@@ -1694,3 +1694,25 @@ Stage Summary:
 - Auto-registration happens automatically on first product submission
 - Multiple fallback paths ensure seller registration succeeds
 - Deployed to Vercel via git push
+
+---
+Task ID: 7
+Agent: main
+Task: Fix "Jual di MartUp" seller registration - CSRF retry detection bug
+
+Work Log:
+- User reported clicking "Jual di MartUp" gives "Gagal mendaftar sebagai seller, coba lagi"
+- Investigated the full request flow: profile screen → switchRole('seller') → apiClient.rawPost('/api/seller/register') → middleware CSRF validation
+- Found ROOT CAUSE: The middleware returns "Validasi keamanan gagal" (Indonesian) for CSRF 403 errors, but the client-side `fetchWithCsrfRetry` checks for `data?.error?.includes('CSRF')` or `data?.error?.includes('csrf')` to trigger auto-retry
+- Since the Indonesian error message doesn't contain "CSRF", the retry mechanism NEVER triggers
+- This causes ALL mutating POST requests to permanently fail when CSRF token is stale/missing
+- Fix 1: proxy.ts — Changed CSRF error message to "CSRF validation failed" + added `code: 'CSRF_ERROR'` field
+- Fix 2: api-client.ts — Enhanced CSRF detection: checks lowercase 'csrf', code field 'CSRF_ERROR', and Indonesian text 'Validasi keamanan'
+- Fix 3: csrf-client.ts — Same enhanced detection for the fetchWithCsrf utility
+- Fix 4: auth.ts switchRole — Shows actual API error instead of generic message, with specific handling for CSRF and auth errors
+- Deployed to production (commit ae6b63f)
+
+Stage Summary:
+- CSRF auto-retry now works — when a POST gets 403 CSRF error, client fetches fresh token and retries
+- Seller registration should now succeed when clicking "Jual di MartUp"
+- Better error messages shown to users based on actual failure type
