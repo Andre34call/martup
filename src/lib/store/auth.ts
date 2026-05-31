@@ -21,13 +21,19 @@ export const createAuthSlice: StateCreator<AppStore, [], [], AuthSlice> = (set, 
   login: (user) => {
     // Clear any stale reset token on login (both Zustand and sessionStorage)
     try { if (typeof window !== 'undefined') sessionStorage.removeItem('martup_reset_token') } catch { /* ignore */ }
+    // Only redirect to Home if the user is on an auth/splash screen.
+    // Preserve currentScreen if the user is already on an authenticated screen
+    // (e.g., session refresh while on Stream, Category, etc.)
+    const AUTH_SCREENS = ['splash', 'onboarding', 'login', 'register', 'otp', 'forgot-password', 'reset-password', 'email-verification']
+    const currentScreen = get().currentScreen
+    const shouldRedirectHome = AUTH_SCREENS.includes(currentScreen)
     set({
       isAuthenticated: true,
       currentUser: user,
       userRole: user.role,
       originalRole: user.role, // Preserve the original DB role for role switching
       isSuperAdminUser: user.isSuperAdmin ?? false, // Set from API response
-      currentScreen: 'home',
+      currentScreen: shouldRedirectHome ? 'home' : currentScreen,
       avatarUrl: user.avatar || null,
       resetPasswordToken: '', // Clear any stale reset token on login
     })
