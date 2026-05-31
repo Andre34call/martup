@@ -1843,3 +1843,40 @@ Stage Summary:
 - Optional product linking in posts
 - Rate limiting: 10 posts/hour, 20 comments/min
 - Content sanitization on all user inputs
+---
+Task ID: 1
+Agent: Main Agent
+Task: Comprehensive refactoring of MartUp codebase
+
+Work Log:
+- Created lazy-loaded screen registry (screen-registry.tsx) with React.lazy + Suspense for all 40+ screens
+- Refactored page.tsx to use LazyScreenRenderer instead of monolithic switch statement
+- Extracted screen categorization (AUTH_SCREENS, SELLER_SCREENS, etc.) to screen-registry.tsx
+- Extracted shared auth reset state (getAuthResetState) to eliminate duplication in logout/deleteAccount
+- Extracted clearClientAuthState shared function for client-side cleanup
+- Fixed (session.user as any) → (session.user as Record<string, unknown>) in auth-middleware.ts
+- Fixed children?: any[] → proper typed array in store types
+- Fixed Record<string, any> → Record<string, unknown> in AdminSlice types (5 instances)
+- Fixed addAdminBanner: (banner: any) → properly typed parameter
+- Fixed currentScreen: targetScreen as any → typed cast in auth store
+- Removed unused TrendingUp import from stream-feed-screen.tsx
+- Secured /api/health-check: added admin auth + production gate (was PUBLIC, exposed secrets!)
+- Secured order creation: server-side platform fee calculation (was client-controlled)
+- Added validation for client-provided shippingCost and taxAmount (non-negative, bounded)
+- Added rate limiting to /api/stream/[id]/like (30/min + burst protection)
+- Fixed updateOrderSchema: z.string() → z.enum() for status/paymentStatus
+- Secured storage setup: changed RLS from public upload/update/delete to authenticated-only
+- Added production gate to /api/seed endpoint (ENABLE_SEED env flag required)
+- Fixed error: any → error: unknown in seed route
+- Added non-production gate to health-check diagnostic endpoint
+
+Stage Summary:
+- **Code Splitting**: All 40+ screens now lazy-loaded → massive bundle size reduction
+- **DRY**: Store reset state extracted to single function (was duplicated in 2 places, 60+ lines each)
+- **Type Safety**: Removed all `as any` casts from store types and auth middleware
+- **Security Critical**: health-check endpoint was PUBLIC and exposing partial secrets - now admin-only + production-gated
+- **Security Critical**: Order platformFee is now server-computed (was client-controllable)
+- **Security**: Stream like endpoint now rate-limited (was unlimited, spam risk)
+- **Security**: Storage RLS policies now require auth.uid() for uploads (was fully public)
+- **Security**: Order status validation now uses z.enum() (was z.string())
+- **Security**: Seed endpoint disabled in production by default

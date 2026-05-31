@@ -1,11 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
+import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middleware'
+import { createRateLimiter } from '@/lib/rate-limit'
 import { logger } from '@/lib/logger'
+
+// Rate limiter: 30 like toggles per minute per user
+const likeLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  maxRequests: 30,
+  keyPrefix: 'rl:stream-like:',
+})
 
 // ==================== POST /api/stream/[id]/like ====================
 // Toggle like — like if not liked, unlike if already liked
-// Requires authentication
+// Requires authentication + rate limiting
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -17,6 +25,23 @@ export async function POST(
     const authResult = await verifyAuth(request)
     if (!authResult.success) {
       return authErrorResponse(authResult)
+    }
+
+    // SECURITY: Rate limit like toggles to prevent spam
+    const rateLimitResult = await likeLimiter.check(authResult.user.id)
+    if (!rateLimitResult.allowed) {
+      return NextResponse.json(
+        { success: false, error: 'Terlalu banyak request. Coba lagi nanti.' },
+        { status: 429 }
+      )
+    }
+
+    // Additional burst protection
+    if (!checkRateLimit(`like-burst:${authResult.user.id}`, 10)) {
+      return NextResponse.json(
+        { success: false, error: 'Terlalu banyak request. Coba lagi nanti.' },
+        { status: 429 }
+      )
     }
 
     // Verify the post exists and is active

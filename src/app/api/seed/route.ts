@@ -13,7 +13,13 @@ export async function POST(request: NextRequest) {
       return authErrorResponse(authResult)
     }
 
-    // Legacy secret check removed - admin auth is now required
+    // SECURITY: Disable in production — seed should only run in development/staging
+    if (process.env.NODE_ENV === 'production' && process.env.ENABLE_SEED !== 'true') {
+      return NextResponse.json(
+        { success: false, error: 'Seed endpoint dinonaktifkan di production' },
+        { status: 403 }
+      )
+    }
 
     // 1. Create demo seller users
     const sellerUsers: Array<{ userId: string; sellerId: string; storeName: string }> = []
@@ -434,7 +440,7 @@ export async function POST(request: NextRequest) {
         vouchersCreated,
       },
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error({ err: error }, 'Seed error')
     return NextResponse.json(
       { success: false, error: 'Terjadi kesalahan server' },
