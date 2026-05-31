@@ -12,6 +12,7 @@ import { apiClient } from "@/lib/api-client"
 import { StreamCommentSheet } from "./stream-comment-sheet"
 import { formatRelativeTime, formatPrice, truncateText } from "@/lib/utils"
 import { fadeIn } from "@/lib/animations"
+import type { ScreenName } from "@/lib/types"
 
 // ==================== LOCAL TYPES ====================
 interface StreamPost {
@@ -552,7 +553,7 @@ export function StreamFeedScreen() {
 interface StreamNavTopProps {
   onRefresh: () => void
   isRefreshing: boolean
-  navigate: (screen: string) => void
+  navigate: (screen: ScreenName) => void
   unreadNotificationCount: number
   cartCount: number
 }
