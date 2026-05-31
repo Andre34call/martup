@@ -57,6 +57,9 @@ model User {
   userSettings  UserSetting[]
   workAssignments WorkItem[] @relation("WorkAssignments")
   followedStores FollowedStore[]
+  streamPosts    StreamPost[]
+  streamComments StreamComment[]
+  streamLikes    StreamLike[]
 }
 
 model Seller {
@@ -651,5 +654,66 @@ model UserSetting {
   user   User   @relation(fields: [userId], references: [id])
 
   @@unique([userId, key])
+  @@index([userId])
+}
+
+// ==================== STREAM (Social Feed) ====================
+
+model StreamPost {
+  id          String    @id @default(cuid())
+  userId      String
+  type        String    @default("text") // text, video, image
+  content     String    // text content / caption
+  mediaUrl    String?   // video or image URL
+  mediaType   String?   // video/mp4, image/jpeg, etc.
+  thumbnailUrl String?  // video thumbnail
+  productId   String?   // optional: link to a product
+  viewCount   Int       @default(0)
+  likeCount   Int       @default(0)
+  commentCount Int      @default(0)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user        User      @relation(fields: [userId], references: [id])
+  comments    StreamComment[]
+  likes       StreamLike[]
+
+  @@index([userId, createdAt])
+  @@index([isActive, createdAt])
+  @@index([createdAt])
+}
+
+model StreamComment {
+  id        String   @id @default(cuid())
+  postId    String
+  userId    String
+  parentId  String?  // null = top-level comment, non-null = reply
+  content   String
+  likeCount Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User           @relation(fields: [userId], references: [id])
+  post      StreamPost     @relation(fields: [postId], references: [id])
+  parent    StreamComment? @relation("CommentReplies", fields: [parentId], references: [id])
+  replies   StreamComment[] @relation("CommentReplies")
+
+  @@index([postId, createdAt])
+  @@index([parentId, createdAt])
+  @@index([userId])
+}
+
+model StreamLike {
+  id        String   @id @default(cuid())
+  postId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  post      StreamPost @relation(fields: [postId], references: [id])
+  user      User       @relation(fields: [userId], references: [id])
+
+  @@unique([postId, userId])
+  @@index([postId])
   @@index([userId])
 }

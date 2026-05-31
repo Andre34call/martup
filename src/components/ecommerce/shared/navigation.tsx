@@ -1,7 +1,7 @@
 "use client"
 
 import { motion, AnimatePresence } from "framer-motion"
-import { Heart, ShoppingCart, MessageCircle, User, Home, Grid3X3, Check, BarChart3, Users, Package, TrendingUp, ArrowLeftCircle } from "lucide-react"
+import { Heart, ShoppingCart, MessageCircle, User, Home, Grid3X3, Check, BarChart3, Users, Package, TrendingUp, ArrowLeftCircle, Play } from "lucide-react"
 import { useAppStore, useCartStore } from "@/lib/store"
 import type { ScreenName } from "@/lib/types"
 import { useState, useEffect, useRef } from "react"
@@ -10,6 +10,7 @@ import { useState, useEffect, useRef } from "react"
 const navItems = [
   { key: "home" as const, label: "Home", icon: Home, screens: ["home", "splash", "onboarding", "login", "register", "otp", "forgot-password"] },
   { key: "category" as const, label: "Category", icon: Grid3X3, screens: ["category", "search"] },
+  { key: "stream" as const, label: "Stream", icon: Play, screens: ["stream", "stream-create"] },
   { key: "chat" as const, label: "Chat", icon: MessageCircle, screens: ["chat", "chat-room"] },
   { key: "profile" as const, label: "Profile", icon: User, screens: ["profile", "settings", "orders", "wallet", "deposit", "withdraw", "notification", "voucher", "address", "followed-stores", "wishlist", "review", "refund", "help", "seller-dashboard", "seller-products", "seller-add-product", "seller-orders", "seller-analytics", "seller-chat", "seller-settings", "seller-campaign", "seller-wallet", "admin-dashboard", "admin-users", "admin-products", "admin-orders", "admin-withdraw", "admin-banner", "admin-analytics", "admin-complaints"] },
 ]
@@ -28,13 +29,14 @@ export function BottomNav() {
   const activeTab = getActiveTab()
 
   const handleTabPress = (idx: number) => {
-    if (idx === 3) {
+    if (idx === 4) {
       navigate("profile")
       return
     }
     const screenMap: Record<string, ScreenName> = {
       home: "home",
       category: "category",
+      stream: "stream",
       chat: "chat",
     }
     navigate(screenMap[navItems[idx].key] || "home")
@@ -50,7 +52,7 @@ export function BottomNav() {
               className="absolute top-0 h-0.5 bg-emerald-500 rounded-full"
               initial={false}
               animate={{
-                left: `calc(${activeTab * 25}% + 12.5% - 20px)`,
+                left: `calc(${activeTab * 20}% + 10% - 20px)`,
                 width: '40px',
               }}
               transition={{ type: "spring", stiffness: 500, damping: 30 }}

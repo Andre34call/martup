@@ -62,6 +62,9 @@ import { AdminCategories, AdminVouchers, AdminDeposits, AdminCampaigns, AdminSet
 // Legal screens
 import { PrivacyPolicyScreen, TermsOfServiceScreen, RefundPolicyScreen } from '@/components/ecommerce/legal/legal-screens'
 
+// Stream screens
+import { StreamFeedScreen, StreamCreateScreen } from '@/components/ecommerce/stream'
+
 const AUTH_SCREENS = ['splash', 'onboarding', 'login', 'register', 'otp', 'forgot-password', 'reset-password', 'email-verification']
 const SELLER_SCREENS = ['seller-dashboard', 'seller-products', 'seller-add-product', 'seller-orders', 'seller-analytics', 'seller-wallet', 'seller-chat', 'seller-settings', 'seller-campaign', 'seller-withdraw', 'seller-withdraw-history']
 const ADMIN_SCREENS = ['admin-dashboard', 'admin-users', 'admin-products', 'admin-orders', 'admin-withdraw', 'admin-banner', 'admin-analytics', 'admin-complaints', 'admin-divisions', 'admin-workflow', 'admin-categories', 'admin-vouchers', 'admin-deposits', 'admin-campaigns', 'admin-reviews', 'admin-settings']
@@ -72,7 +75,7 @@ const SUB_SCREENS = [
   'address', 'help', 'followed-stores', 'deposit', 'withdraw',
   'settings', 'voucher', 'order-tracking', 'seller-add-product',
   'chat-room', 'category-detail', 'seller-withdraw', 'seller-withdraw-history',
-  'privacy-policy', 'terms-of-service', 'refund-policy',
+  'privacy-policy', 'terms-of-service', 'refund-policy', 'stream-create',
 ]
 
 // ==================== GLOBAL TOAST ====================
@@ -180,6 +183,10 @@ function ScreenRenderer() {
       case 'followed-stores': return <FollowedStoresScreen />
       case 'seller-shop': return <SellerShopScreen />
       case 'wishlist': return <WishlistScreen />
+
+      // Stream
+      case 'stream': return <StreamFeedScreen />
+      case 'stream-create': return <StreamCreateScreen />
 
       // Legal
       case 'privacy-policy': return <PrivacyPolicyScreen onBack={() => navigate('settings')} />
