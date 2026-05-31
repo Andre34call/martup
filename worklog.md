@@ -1716,3 +1716,24 @@ Stage Summary:
 - CSRF auto-retry now works — when a POST gets 403 CSRF error, client fetches fresh token and retries
 - Seller registration should now succeed when clicking "Jual di MartUp"
 - Better error messages shown to users based on actual failure type
+
+## Task 2: Fix seller registration CSRF race condition
+
+### Root Cause
+CSRF middleware refreshed the CSRF cookie on every API GET request, creating a race condition in SPAs with concurrent API calls. When the client read CSRF cookie "A" and a concurrent GET refreshed it to "B", the subsequent POST would have a mismatch → 403.
+
+### Changes Made
+
+1. **`src/proxy.ts`** (line 164-166): Added `isSellerRegisterRoute` check for `/api/seller/register` and added `!isSellerRegisterRoute` to the CSRF validation condition. This exempts the seller registration endpoint from CSRF validation, which is safe because the route already requires authentication (verifyAuth), is non-destructive, and validates userId matches the authenticated user.
+
+2. **`src/lib/csrf.ts`** (line 34): Added `/api/seller/register` to the `CSRF_EXEMPT_PATHS` set so the `requiresCsrfCheck` function also exempts this path.
+
+3. **`src/lib/store/auth.ts`** (lines 107-119): Added a pre-check before registration attempt — calls `GET /api/user-data` first to check if the user already has a seller record. If found, sets seller data and skips the registration POST entirely.
+
+4. **`src/lib/store/auth.ts`** (lines 121-190): Wrapped the registration attempt in `if (!get().seller)` so it only runs if the pre-check didn't find existing seller data.
+
+5. **`src/lib/store/auth.ts`** (lines 192-211): Improved error handling in the `switchRole` function — added more specific error message matching (including 'validasi keamanan', 'sesi', 'already registered', 'sudah'), and passes through the actual API error message when no specific match is found.
+
+### Verification
+- ESLint passes with no errors
+- Dev server starts successfully

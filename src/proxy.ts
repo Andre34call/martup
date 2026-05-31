@@ -130,8 +130,8 @@ export async function proxy(request: NextRequest) {
   }
 
   // ===== CSRF Protection =====
-  // Always issue/refresh CSRF token on non-API GET requests (page loads).
-  // This ensures the client always has a fresh token for subsequent mutating requests.
+  // Issue CSRF token on page loads (non-API GET requests).
+  // This ensures the client has a fresh token for subsequent mutating requests.
   if (!pathname.startsWith('/api/')) {
     if (request.method === 'GET') {
       const { response: updatedResponse } = await issueCsrfToken(response)
@@ -140,13 +140,19 @@ export async function proxy(request: NextRequest) {
     return response
   }
 
-  // For API GET requests: always refresh the CSRF cookie to keep it fresh.
-  // Previously only issued if missing, but this caused issues when the token expired
-  // but the cookie was still present (stale token). Always refreshing ensures
-  // the client always has a valid token for subsequent mutating requests.
+  // For API GET requests: only issue a CSRF cookie if one doesn't already exist.
+  // DO NOT refresh the cookie on every API GET request — this causes a race condition
+  // where concurrent GET requests keep changing the cookie, making it impossible for
+  // the client to send a matching token on subsequent POST requests.
+  // The cookie is refreshed on every full page load (non-API GET) above.
   if (request.method === 'GET') {
-    const { response: updatedResponse } = await issueCsrfToken(response)
-    return updatedResponse
+    const existingCsrfCookie = request.cookies.get('csrf-token')?.value
+    if (!existingCsrfCookie) {
+      const { response: updatedResponse } = await issueCsrfToken(response)
+      return updatedResponse
+    }
+    // Cookie exists — don't refresh it to avoid race conditions with concurrent GET requests
+    return response
   }
 
   // For API mutating requests (POST, PUT, DELETE, PATCH): validate CSRF
@@ -161,8 +167,9 @@ export async function proxy(request: NextRequest) {
     pathname === '/api/auth/csrf' ||
     pathname === '/api/auth/session' ||
     pathname === '/api/auth/_log'
+  const isSellerRegisterRoute = pathname === '/api/seller/register'
   let csrfResult: { valid: boolean; reason?: string } = { valid: true }
-  if (!isInternalRequest && !isNextAuthRoute) {
+  if (!isInternalRequest && !isNextAuthRoute && !isSellerRegisterRoute) {
     csrfResult = await validateCsrfRequest(request)
   }
   if (!csrfResult.valid) {

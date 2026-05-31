@@ -295,7 +295,21 @@ export function SellerAddProductScreen() {
     showToast("Mendaftarkan akun seller Anda...", "info")
 
     try {
-      // Try to register as seller directly via API
+      // Pre-check: try to fetch existing seller data first (avoids unnecessary registration attempt)
+      try {
+        const userDataRaw = await apiClient.get<{ data?: any; seller?: any }>('/api/user-data', { userId: currentUser.id })
+        const userData = userDataRaw.data || userDataRaw
+        if (userData.seller) {
+          const newSeller = mapSeller(userData.seller)
+          useAppStore.setState({ seller: newSeller, userRole: 'seller' })
+          showToast("Akun seller Anda sudah aktif!", "success")
+          return true
+        }
+      } catch (preCheckErr) {
+        logger.warn({ component: 'seller-product', err: preCheckErr }, 'Pre-check for existing seller data failed')
+      }
+
+      // No existing seller record — try to register as seller
       const registerRes = await apiClient.rawPost('/api/seller/register', {
         userId: currentUser.id,
         storeName: currentUser.name ? `${currentUser.name}'s Store` : 'My Store',
@@ -326,12 +340,24 @@ export function SellerAddProductScreen() {
         }
       }
 
-      // Registration failed with a non-409 error
-      showToast(registerData.error || "Gagal mendaftar sebagai seller. Silakan coba lagi.", "error")
+      // Registration failed with a non-409 error — show the actual error from the API
+      const errorMsg = registerData.error || "Gagal mendaftar sebagai seller. Silakan coba lagi."
+      showToast(errorMsg, "error")
       return false
     } catch (err) {
       logger.warn({ component: 'seller-product', err }, 'Auto seller register failed')
-      showToast("Gagal mendaftar sebagai seller. Silakan coba lagi.", "error")
+      // Show more specific error messages
+      if (err instanceof Error) {
+        if (err.message.toLowerCase().includes('csrf') || err.message.toLowerCase().includes('validasi keamanan')) {
+          showToast("Validasi keamanan gagal. Refresh halaman dan coba lagi.", "error")
+        } else if (err.message.toLowerCase().includes('autentikasi') || err.message.toLowerCase().includes('login') || err.message.toLowerCase().includes('sesi')) {
+          showToast("Sesi Anda telah berakhir. Silakan login kembali.", "error")
+        } else {
+          showToast(err.message, "error")
+        }
+      } else {
+        showToast("Gagal mendaftar sebagai seller. Silakan coba lagi.", "error")
+      }
       return false
     } finally {
       setIsRegisteringSeller(false)

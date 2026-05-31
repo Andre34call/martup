@@ -104,85 +104,110 @@ export const createAuthSlice: StateCreator<AppStore, [], [], AuthSlice> = (set, 
       const storeName = state.currentUser.name ? `${state.currentUser.name}'s Store` : 'My Store'
       let lastError: string | null = null
 
+      // Pre-check: try to fetch existing seller data first before attempting registration
       try {
-        // Try to register as seller — rawPost to check data.success and status code
-        const registerRes = await apiClient.rawPost('/api/seller/register', { userId, storeName })
-        const registerData = await registerRes.json()
-
-        if (registerData.success && registerData.data) {
-          // New seller registered successfully
-          const seller = mapSeller(registerData.data)
+        const userDataRaw = await apiClient.get<{ data?: any; seller?: any }>('/api/user-data', { userId })
+        const userData = userDataRaw.data || userDataRaw
+        if (userData.seller) {
+          const seller = mapSeller(userData.seller)
           set({ seller })
-        } else if (registerRes.status === 409) {
-          // Already a seller — fetch existing seller data
-          try {
-            const userDataRaw = await apiClient.get<UserDataApiResponse>('/api/user-data', { userId })
-            const userData = userDataRaw.data || userDataRaw
-
-            if (userData.seller) {
-              const seller = mapSeller(userData.seller)
-              set({ seller })
-
-              // Also update seller balance from wallet
-              if (userData.seller.wallet) {
-                const walletBal = userData.seller.wallet.balance || 0
-                const walletHold = userData.seller.wallet.holdBalance || 0
-                const walletPending = userData.seller.wallet.pendingBalance || 0
-                set({
-                  sellerBalance: {
-                    availableBalance: walletBal,
-                    pendingBalance: walletPending,
-                    holdBalance: walletHold,
-                    totalBalance: walletBal + walletHold + walletPending,
-                    totalWithdrawn: 0,
-                  }
-                })
-              }
-            } else {
-              // Seller 409 but no seller data in user-data response
-              // Try re-fetching via fetchUserData which is more comprehensive
-              logger.warn({ component: 'auth' }, 'Seller 409 but no seller data in user-data response — trying fetchUserData')
-              await get().fetchUserData(userId)
-            }
-          } catch (fetchErr) {
-            logger.warn({ component: 'auth', err: fetchErr }, 'Failed to fetch existing seller data — trying fetchUserData')
-            // Last resort: try fetchUserData which handles all data including seller
-            try {
-              await get().fetchUserData(userId)
-            } catch (retryErr) {
-              logger.warn({ component: 'auth', err: retryErr }, 'fetchUserData also failed')
-            }
-          }
-        } else {
-          // Registration failed with a non-409 error (could be 403 CSRF, 401 auth, etc.)
-          lastError = registerData.error || `Registration failed (status ${registerRes.status})`
-          logger.warn({ component: 'auth', status: registerRes.status, error: registerData.error }, 'Seller registration returned non-success')
+          // Seller data found — skip registration
+          // Fall through to the navigation logic below
         }
-      } catch (err) {
-        logger.warn({ component: 'auth', err }, 'Auto seller register via rawPost failed — trying fetchUserData fallback')
-        // If rawPost fails (e.g., CSRF issues that retry couldn't fix), try fetching existing seller data
-        // This handles the case where the user is already a seller but the POST fails
-        try {
-          await get().fetchUserData(userId)
-        } catch (fetchErr) {
-          logger.warn({ component: 'auth', err: fetchErr }, 'fetchUserData fallback also failed')
-        }
-        if (err instanceof Error) {
-          lastError = err.message
-        }
+      } catch (preCheckErr) {
+        logger.warn({ component: 'auth', err: preCheckErr }, 'Pre-check for existing seller data failed')
       }
+
+      // Only attempt registration if pre-check didn't find existing seller data
+      if (!get().seller) {
+        try {
+          // Try to register as seller — rawPost to check data.success and status code
+          const registerRes = await apiClient.rawPost('/api/seller/register', { userId, storeName })
+          const registerData = await registerRes.json()
+
+          if (registerData.success && registerData.data) {
+            // New seller registered successfully
+            const seller = mapSeller(registerData.data)
+            set({ seller })
+          } else if (registerRes.status === 409) {
+            // Already a seller — fetch existing seller data
+            try {
+              const userDataRaw = await apiClient.get<UserDataApiResponse>('/api/user-data', { userId })
+              const userData = userDataRaw.data || userDataRaw
+
+              if (userData.seller) {
+                const seller = mapSeller(userData.seller)
+                set({ seller })
+
+                // Also update seller balance from wallet
+                if (userData.seller.wallet) {
+                  const walletBal = userData.seller.wallet.balance || 0
+                  const walletHold = userData.seller.wallet.holdBalance || 0
+                  const walletPending = userData.seller.wallet.pendingBalance || 0
+                  set({
+                    sellerBalance: {
+                      availableBalance: walletBal,
+                      pendingBalance: walletPending,
+                      holdBalance: walletHold,
+                      totalBalance: walletBal + walletHold + walletPending,
+                      totalWithdrawn: 0,
+                    }
+                  })
+                }
+              } else {
+                // Seller 409 but no seller data in user-data response
+                // Try re-fetching via fetchUserData which is more comprehensive
+                logger.warn({ component: 'auth' }, 'Seller 409 but no seller data in user-data response — trying fetchUserData')
+                await get().fetchUserData(userId)
+              }
+            } catch (fetchErr) {
+              logger.warn({ component: 'auth', err: fetchErr }, 'Failed to fetch existing seller data — trying fetchUserData')
+              // Last resort: try fetchUserData which handles all data including seller
+              try {
+                await get().fetchUserData(userId)
+              } catch (retryErr) {
+                logger.warn({ component: 'auth', err: retryErr }, 'fetchUserData also failed')
+              }
+            }
+          } else {
+            // Registration failed with a non-409 error (could be 403 CSRF, 401 auth, etc.)
+            lastError = registerData.error || `Registration failed (status ${registerRes.status})`
+            logger.warn({ component: 'auth', status: registerRes.status, error: registerData.error }, 'Seller registration returned non-success')
+          }
+        } catch (err) {
+          logger.warn({ component: 'auth', err }, 'Auto seller register via rawPost failed — trying fetchUserData fallback')
+          // If rawPost fails (e.g., CSRF issues that retry couldn't fix), try fetching existing seller data
+          // This handles the case where the user is already a seller but the POST fails
+          try {
+            await get().fetchUserData(userId)
+          } catch (fetchErr) {
+            logger.warn({ component: 'auth', err: fetchErr }, 'fetchUserData fallback also failed')
+          }
+          if (err instanceof Error) {
+            lastError = err.message
+          }
+        }
+      } // end of if (!get().seller) registration block
 
       // Don't navigate to seller dashboard if registration failed
       if (!get().seller) {
         set({ isLoading: false })
         // Show a helpful error message based on the actual failure
-        if (lastError?.toLowerCase().includes('csrf')) {
-          throw new Error('Validasi keamanan gagal. Silakan refresh halaman dan coba lagi.')
+        if (lastError) {
+          // Provide specific error messages based on the actual API error
+          if (lastError.toLowerCase().includes('csrf') || lastError.toLowerCase().includes('validasi keamanan')) {
+            throw new Error('Validasi keamanan gagal. Silakan refresh halaman dan coba lagi.')
+          }
+          if (lastError.includes('401') || lastError.toLowerCase().includes('autentikasi') || lastError.toLowerCase().includes('login') || lastError.toLowerCase().includes('sesi')) {
+            throw new Error('Sesi Anda telah berakhir. Silakan login kembali.')
+          }
+          if (lastError.toLowerCase().includes('already registered') || lastError.toLowerCase().includes('sudah')) {
+            throw new Error('Anda sudah terdaftar sebagai seller. Muat ulang halaman.')
+          }
+          // Pass through the actual API error message
+          throw new Error(lastError)
         }
-        if (lastError?.includes('401') || lastError?.includes('autentikasi') || lastError?.includes('login')) {
-          throw new Error('Sesi Anda telah berakhir. Silakan login kembali.')
-        }
-        throw new Error(lastError || 'Gagal mendaftar sebagai seller. Silakan coba lagi.')
+        throw new Error('Gagal mendaftar sebagai seller. Silakan coba lagi.')
       }
     }
 
