@@ -414,6 +414,7 @@ export function SellerAddProductScreen() {
             videoUrl: (productVideo?.url && !productVideo.url.startsWith('blob:')) ? productVideo.url : null,
           })
         const data = await res.json()
+        console.log('[DEBUG] Create product API response:', { status: res.status, success: data.success, error: data.error, sellerIdSent: sellerId })
         if (!data.success) {
           showToast(data.error || "Gagal membuat produk", "error")
           setIsUploading(false)

@@ -84,6 +84,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
+    console.log('[DEBUG] POST /api/seller/products - authResult.user:', { id: authResult.user.id, email: authResult.user.email, role: authResult.user.role })
     const {
       sellerId,
       categoryId,
@@ -112,15 +113,82 @@ export async function POST(request: NextRequest) {
     // Derive sellerId from the authenticated user, NOT from the request body.
     // This prevents the client from sending an empty/wrong sellerId that causes 403 errors
     // when the seller object hasn't loaded yet in the frontend Zustand store.
-    const seller = await db.seller.findFirst({
+    let seller = await db.seller.findFirst({
       where: { userId: authResult.user.id },
     })
 
+    console.log('[DEBUG] POST /api/seller/products - seller lookup:', { 
+      authUserId: authResult.user.id, 
+      clientSellerId: sellerId, 
+      foundSeller: seller ? { id: seller.id, userId: seller.userId, storeName: seller.storeName } : null 
+    })
+
+    // AUTO-CREATE: If the user doesn't have a seller record yet but is authenticated
+    // and trying to create a product, auto-create the seller record.
+    // This handles the case where switchRole auto-registration failed silently.
     if (!seller) {
-      return NextResponse.json(
-        { success: false, error: 'Akun seller tidak ditemukan. Silakan daftar sebagai seller terlebih dahulu.' },
-        { status: 403 }
-      )
+      const userName = authResult.user.name || 'Seller'
+      const storeName = `${userName}'s Store`
+      const storeSlug = storeName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+      
+      // Ensure slug uniqueness
+      let uniqueSlug = storeSlug
+      let slugCounter = 1
+      while (await db.seller.findUnique({ where: { storeSlug: uniqueSlug } })) {
+        uniqueSlug = `${storeSlug}-${slugCounter}`
+        slugCounter++
+      }
+
+      try {
+        seller = await db.$transaction(async (tx) => {
+          // Only update role to 'seller' if user is currently a 'buyer'
+          const user = await tx.user.findUnique({ where: { id: authResult.user.id } })
+          const isElevatedUser = user && ['admin', 'manager', 'finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr'].includes(user.role)
+          
+          if (user && !isElevatedUser) {
+            await tx.user.update({
+              where: { id: authResult.user.id },
+              data: { role: 'seller' },
+            })
+          }
+
+          const newSeller = await tx.seller.create({
+            data: {
+              userId: authResult.user.id,
+              storeName,
+              storeSlug: uniqueSlug,
+              isVerified: false,
+              isPremium: false,
+              rating: 0,
+              totalSales: 0,
+              totalProducts: 0,
+              commissionRate: 0.05,
+            },
+          })
+
+          // Create seller wallet
+          const existingWallet = await tx.wallet.findUnique({ where: { sellerId: newSeller.id } })
+          if (!existingWallet) {
+            await tx.wallet.create({
+              data: {
+                userId: authResult.user.id,
+                sellerId: newSeller.id,
+                balance: 0,
+                holdBalance: 0,
+              },
+            })
+          }
+
+          return newSeller
+        })
+        console.log('[DEBUG] POST /api/seller/products - auto-created seller:', { id: seller.id, storeName: seller.storeName })
+      } catch (createErr) {
+        logger.error({ err: createErr }, 'Auto-create seller failed in POST /api/seller/products')
+        return NextResponse.json(
+          { success: false, error: 'Gagal membuat akun seller secara otomatis. Silakan daftar sebagai seller terlebih dahulu.' },
+          { status: 403 }
+        )
+      }
     }
 
     // Use the server-derived seller ID (authoritative), not the client-provided one
