@@ -132,9 +132,19 @@ export async function POST(request: NextRequest) {
         },
       })
 
-      // Create seller wallet if doesn't exist
-      const existingWallet = await tx.wallet.findUnique({ where: { sellerId: newSeller.id } })
-      if (!existingWallet) {
+      // Link or create seller wallet
+      // Users already have a wallet from registration (with sellerId: null).
+      // We must UPDATE the existing wallet to link it to the seller,
+      // NOT create a new one (would violate Wallet.userId @unique constraint).
+      const existingWallet = await tx.wallet.findUnique({ where: { userId } })
+      if (existingWallet) {
+        // Link existing wallet to the new seller
+        await tx.wallet.update({
+          where: { id: existingWallet.id },
+          data: { sellerId: newSeller.id },
+        })
+      } else {
+        // No wallet exists — create one linked to both user and seller
         await tx.wallet.create({
           data: {
             userId,

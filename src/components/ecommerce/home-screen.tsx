@@ -1,7 +1,7 @@
 "use client"
 
 import { motion, AnimatePresence } from "framer-motion"
-import { Search, Bell, MessageCircle, ChevronRight, Zap, Package } from "lucide-react"
+import { Search, Bell, MessageCircle, ChevronRight, Zap, Package, ShoppingCart } from "lucide-react"
 import { useAppStore, useCartStore } from "@/lib/store"
 import { ProductCard, FlashSaleTimer, CategoryPill, SectionHeader, EmptyState } from "./shared"
 import type { Product } from "@/lib/types"
@@ -29,6 +29,8 @@ const quickActionsRow2 = [
 // ==================== HOME SCREEN ====================
 export function HomeScreen() {
   const { navigate, unreadNotificationCount, totalUnreadChats, setSelectedProduct, setSelectedCategory, setSearchQuery, showToast, products, categories, isAuthenticated, homeBanners, fetchHomeBanners } = useAppStore()
+  const { getTotalItemCount } = useCartStore()
+  const cartCount = getTotalItemCount()
   const [currentBanner, setCurrentBanner] = useState(0)
   const [showLoadingMore, setShowLoadingMore] = useState(false)
 
@@ -139,6 +141,24 @@ export function HomeScreen() {
           >
             <Search className="w-4 h-4" />
             <span>Cari produk...</span>
+          </motion.button>
+
+          {/* Cart icon */}
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            onClick={() => navigate("cart")}
+            className="relative w-9 h-9 flex items-center justify-center rounded-xl hover:bg-muted transition-colors"
+          >
+            <ShoppingCart className="w-5 h-5 text-foreground" />
+            {cartCount > 0 && (
+              <motion.span
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 flex items-center justify-center rounded-full bg-orange-500 text-white text-[9px] font-bold px-1"
+              >
+                {cartCount > 99 ? "99+" : cartCount}
+              </motion.span>
+            )}
           </motion.button>
 
           {/* Notification bell */}

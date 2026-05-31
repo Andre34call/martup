@@ -408,26 +408,47 @@ export function ProfileScreen() {
           </div>
         </div>
 
-        {/* Bisnis Section */}
+        {/* Bisnis Section — Show "Jual di MartUp" for buyers, "Seller Dashboard" for sellers */}
         <div className="px-4 pb-4">
-          <motion.button
-            whileTap={{ scale: 0.98 }}
-            onClick={() => handleRoleSwitch("seller")}
-            className="w-full"
-          >
-            <div className="bg-gradient-to-r from-orange-500 to-amber-500 rounded-xl p-4 text-white text-left shadow-sm">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
-                  <StoreIcon className="w-5 h-5" />
+          {userRole === 'seller' ? (
+            <motion.button
+              whileTap={{ scale: 0.98 }}
+              onClick={() => navigate("seller-dashboard")}
+              className="w-full"
+            >
+              <div className="bg-gradient-to-r from-orange-500 to-amber-500 rounded-xl p-4 text-white text-left shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
+                    <StoreIcon className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-bold">Seller Dashboard</p>
+                    <p className="text-xs opacity-90 mt-0.5">Kelola toko dan produk Anda</p>
+                  </div>
+                  <ChevronRight className="w-5 h-5 opacity-70" />
                 </div>
-                <div className="flex-1">
-                  <p className="text-sm font-bold">Jual di MartUp</p>
-                  <p className="text-xs opacity-90 mt-0.5">Mulai berjualan dan raih penghasilan</p>
-                </div>
-                <ChevronRight className="w-5 h-5 opacity-70" />
               </div>
-            </div>
-          </motion.button>
+            </motion.button>
+          ) : (
+            <motion.button
+              whileTap={{ scale: 0.98 }}
+              onClick={() => handleRoleSwitch("seller")}
+              className="w-full"
+            >
+              <div className="bg-gradient-to-r from-orange-500 to-amber-500 rounded-xl p-4 text-white text-left shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
+                    <StoreIcon className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-bold">Jual di MartUp</p>
+                    <p className="text-xs opacity-90 mt-0.5">Mulai berjualan dan raih penghasilan</p>
+                  </div>
+                  <ChevronRight className="w-5 h-5 opacity-70" />
+                </div>
+              </div>
+            </motion.button>
+          )}
         </div>
 
         {/* Admin Panel - Show if user has admin/manager access */}
