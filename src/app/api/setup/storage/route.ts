@@ -1,19 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
+import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
 import { db } from '@/lib/db'
 
 import { logger } from '@/lib/logger'
 /**
  * Setup Supabase Storage buckets for the application.
- * Creates all required buckets (products, avatars, banners) with public read access and upload policies.
+ * Creates all required buckets (products, avatars, banners, streams) with public read access and upload policies.
  * Called during app initialization.
  *
- * SECURITY (SEC-12): Admin-only endpoint. Only admin users can trigger storage setup.
+ * SECURITY: Requires authentication. Any authenticated user can trigger this
+ * because it's idempotent (ON CONFLICT DO NOTHING) and safe to run multiple times.
  */
 export async function POST(request: NextRequest) {
   try {
-    // SEC-12: Only allow admin access — no fallback to regular auth
-    const authResult = await verifyAdmin(request)
+    // Require authentication (any authenticated user can trigger setup — it's idempotent)
+    const authResult = await verifyAuth(request)
     if (!authResult.success) {
       return authErrorResponse(authResult)
     }

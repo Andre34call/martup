@@ -126,8 +126,8 @@ export function StreamCreateScreen() {
         return
       }
 
-      if (file.size > 100 * 1024 * 1024) {
-        showToast("Ukuran video maksimal 100MB", "error")
+      if (file.size > 50 * 1024 * 1024) {
+        showToast("Ukuran video maksimal 50MB", "error")
         return
       }
 
@@ -434,7 +434,7 @@ export function StreamCreateScreen() {
                   Pilih Video
                 </span>
                 <span className="text-[10px] text-muted-foreground">
-                  MP4, WebM (maks. 100MB)
+                  MP4, WebM (maks. 50MB)
                 </span>
               </button>
             )}
