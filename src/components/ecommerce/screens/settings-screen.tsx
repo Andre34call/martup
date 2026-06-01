@@ -5,8 +5,8 @@ import { useAppStore } from "@/lib/store"
 import { apiClient, ApiClientError } from '@/lib/api-client'
 import { fadeIn } from '@/lib/animations'
 import { PageHeader, SectionHeader } from "../shared"
-import { useState, useRef, useEffect } from "react"
-import { Settings as SettingsIcon, Shield, Bell, Globe, Lock, Trash2, MapPin, Camera, RotateCcw, ChevronRight, Phone, MessageSquare, Edit, FileText, Eye, EyeOff, Loader2 } from "lucide-react"
+import { useState, useRef, useEffect, useCallback } from "react"
+import { Settings as SettingsIcon, Shield, Bell, Globe, Lock, Trash2, MapPin, Camera, RotateCcw, ChevronRight, Phone, MessageSquare, Edit, FileText, Eye, EyeOff, Loader2, AtSign, Clock, AlertCircle, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -18,6 +18,8 @@ export function SettingsScreen() {
   const { currentUser, showToast, logout, avatarUrl, uploadAvatar, updateProfile, settings, updateSettings, deleteAccount, navigate } = useAppStore()
   const [editField, setEditField] = useState<string | null>(null)
   const [editValue, setEditValue] = useState("")
+  const [usernameCheckStatus, setUsernameCheckStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid'>('idle')
+  const [usernameCheckDebounce, setUsernameCheckDebounce] = useState<NodeJS.Timeout | null>(null)
   const [showPasswordDialog, setShowPasswordDialog] = useState(false)
   const [currentPassword, setCurrentPassword] = useState("")
   const [newPassword, setNewPassword] = useState("")
@@ -167,6 +169,60 @@ export function SettingsScreen() {
       showToast("Gagal menyimpan profil", "error")
     }
   }
+
+  // Check username availability (debounced)
+  const checkUsernameAvailability = useCallback((value: string) => {
+    if (usernameCheckDebounce) clearTimeout(usernameCheckDebounce)
+
+    const trimmed = value.trim().toLowerCase()
+    const usernameRegex = /^[a-z0-9_-]{3,20}$/
+
+    if (!trimmed) {
+      setUsernameCheckStatus('idle')
+      return
+    }
+
+    if (!usernameRegex.test(trimmed)) {
+      setUsernameCheckStatus('invalid')
+      return
+    }
+
+    // Same as current username
+    if (trimmed === currentUser?.username) {
+      setUsernameCheckStatus('available')
+      return
+    }
+
+    setUsernameCheckStatus('checking')
+    const timer = setTimeout(async () => {
+      try {
+        const data = await apiClient.get<{ success: boolean; data: Array<{ id: string }> }>(
+          "/api/user/search",
+          { q: trimmed, limit: "1" }
+        )
+        if (data.success && data.data) {
+          const exactMatch = data.data.find(u => u.id !== currentUser?.id)
+          setUsernameCheckStatus(exactMatch ? 'taken' : 'available')
+        } else {
+          setUsernameCheckStatus('available')
+        }
+      } catch {
+        setUsernameCheckStatus('idle')
+      }
+    }, 400)
+    setUsernameCheckDebounce(timer)
+  }, [currentUser, usernameCheckDebounce])
+
+  // Calculate remaining cooldown days for username change
+  const getUsernameCooldownDays = useCallback(() => {
+    if (!currentUser?.usernameChangedAt) return 0
+    const lastChange = new Date(currentUser.usernameChangedAt)
+    const now = new Date()
+    const daysSinceLastChange = (now.getTime() - lastChange.getTime()) / (1000 * 60 * 60 * 24)
+    return Math.max(0, Math.ceil(30 - daysSinceLastChange))
+  }, [currentUser?.usernameChangedAt])
+
+  const isUsernameOnCooldown = getUsernameCooldownDays() > 0
 
   const [isSavingEmailHidden, setIsSavingEmailHidden] = useState(false)
 
@@ -327,6 +383,122 @@ export function SettingsScreen() {
                   <div className="flex items-center justify-between">
                     <p className="text-sm font-medium text-foreground">{currentUser?.name || "Ahmad Fauzi"}</p>
                     <Button variant="ghost" size="sm" className="h-7 text-[11px] rounded-lg text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20" onClick={() => handleEditField("name", currentUser?.name || "Ahmad Fauzi")}>
+                      <Edit className="w-3 h-3 mr-1" /> Edit
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+            <Separator />
+            {/* Username Field */}
+            <div className="flex items-center justify-between">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <AtSign className="w-3 h-3 text-emerald-500" />
+                  <p className="text-xs text-muted-foreground">Username</p>
+                  {isUsernameOnCooldown && editField !== "username" && (
+                    <span className="flex items-center gap-0.5 text-[9px] text-amber-600 bg-amber-50 dark:bg-amber-900/30 px-1.5 py-0.5 rounded-md font-medium">
+                      <Clock className="w-2.5 h-2.5" />
+                      {getUsernameCooldownDays()}h lagi
+                    </span>
+                  )}
+                </div>
+                {editField === "username" ? (
+                  <div className="space-y-1.5 mt-1">
+                    <div className="relative">
+                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">@</span>
+                      <Input
+                        value={editValue}
+                        onChange={(e) => {
+                          const val = e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, '')
+                          setEditValue(val)
+                          checkUsernameAvailability(val)
+                        }}
+                        className="h-8 text-sm rounded-lg pl-7 pr-8"
+                        placeholder="kholis"
+                        maxLength={20}
+                        autoFocus
+                        disabled={isUsernameOnCooldown}
+                      />
+                      {/* Status indicator */}
+                      <div className="absolute right-2.5 top-1/2 -translate-y-1/2">
+                        {usernameCheckStatus === 'checking' && (
+                          <Loader2 className="w-3.5 h-3.5 text-muted-foreground animate-spin" />
+                        )}
+                        {usernameCheckStatus === 'available' && (
+                          <Check className="w-3.5 h-3.5 text-emerald-500" />
+                        )}
+                        {usernameCheckStatus === 'taken' && (
+                          <AlertCircle className="w-3.5 h-3.5 text-red-500" />
+                        )}
+                        {usernameCheckStatus === 'invalid' && (
+                          <AlertCircle className="w-3.5 h-3.5 text-amber-500" />
+                        )}
+                      </div>
+                    </div>
+                    {/* Validation messages */}
+                    {usernameCheckStatus === 'available' && (
+                      <p className="text-[10px] text-emerald-600 font-medium">Username tersedia!</p>
+                    )}
+                    {usernameCheckStatus === 'taken' && (
+                      <p className="text-[10px] text-red-500 font-medium">Username sudah dipakai orang lain</p>
+                    )}
+                    {usernameCheckStatus === 'invalid' && (
+                      <p className="text-[10px] text-amber-600 font-medium">3-20 karakter, huruf kecil, angka, _ atau -</p>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        onClick={async () => {
+                          if (usernameCheckStatus !== 'available') {
+                            showToast("Username tidak tersedia atau tidak valid", "error")
+                            return
+                          }
+                          try {
+                            await updateProfile({ username: editValue.trim().toLowerCase() })
+                            showToast("Username berhasil diperbarui!", "success")
+                            setEditField(null)
+                            setEditValue("")
+                            setUsernameCheckStatus('idle')
+                          } catch (err) {
+                            const msg = err instanceof Error ? err.message : "Gagal menyimpan username"
+                            showToast(msg, "error")
+                          }
+                        }}
+                        disabled={usernameCheckStatus !== 'available'}
+                        className="h-8 px-3 rounded-lg bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white text-[11px]"
+                      >
+                        Simpan
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => { setEditField(null); setEditValue(""); setUsernameCheckStatus('idle') }} className="h-8 px-2 rounded-lg text-[11px]">
+                        Batal
+                      </Button>
+                    </div>
+                    <p className="text-[9px] text-muted-foreground flex items-center gap-1">
+                      <Clock className="w-2.5 h-2.5" />
+                      Username hanya bisa diganti setiap 30 hari
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium text-foreground">
+                      {currentUser?.username ? `@${currentUser.username}` : (
+                        <span className="text-muted-foreground italic text-xs">Belum diatur</span>
+                      )}
+                    </p>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-[11px] rounded-lg text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
+                      onClick={() => {
+                        if (isUsernameOnCooldown) {
+                          showToast(`Username hanya bisa diganti setiap 30 hari. Tunggu ${getUsernameCooldownDays()} hari lagi.`, "warning")
+                          return
+                        }
+                        handleEditField("username", currentUser?.username || "")
+                        setUsernameCheckStatus('idle')
+                      }}
+                    >
                       <Edit className="w-3 h-3 mr-1" /> Edit
                     </Button>
                   </div>

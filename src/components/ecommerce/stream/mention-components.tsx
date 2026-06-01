@@ -9,6 +9,7 @@ import { parseMentionSegments } from "@/lib/mention"
 interface MentionUser {
   id: string
   name: string
+  username?: string
   avatar?: string
 }
 
@@ -179,13 +180,15 @@ export function MentionTextarea({
     detectMention(newValue, cursorPos)
   }, [onChange, detectMention])
 
+  // Insert mention using username (preferred) or name as fallback
   const insertMention = useCallback((user: MentionUser) => {
     if (mentionStartIndex < 0) return
 
-    // Remove the @query and replace with @name
+    // Use username if available, otherwise use name (lowercase, spaces replaced with underscores)
+    const mentionHandle = user.username || user.name.toLowerCase().replace(/\s+/g, '_')
     const beforeMention = value.slice(0, mentionStartIndex)
     const afterMention = value.slice(mentionStartIndex + 1 + mentionQuery.length)
-    const newValue = `${beforeMention}@${user.name} ${afterMention}`
+    const newValue = `${beforeMention}@${mentionHandle} ${afterMention}`
     onChange(newValue)
     setShowSuggestions(false)
     setMentionStartIndex(-1)
@@ -193,7 +196,7 @@ export function MentionTextarea({
     // Focus back on textarea and set cursor after the inserted mention
     requestAnimationFrame(() => {
       if (textareaRef.current) {
-        const newCursorPos = beforeMention.length + user.name.length + 2 // +2 for @ and space
+        const newCursorPos = beforeMention.length + mentionHandle.length + 2 // +2 for @ and space
         textareaRef.current.focus()
         textareaRef.current.setSelectionRange(newCursorPos, newCursorPos)
       }
@@ -300,10 +303,17 @@ export function MentionTextarea({
                       </div>
                     </div>
 
-                    {/* Name */}
-                    <span className="text-sm font-medium text-foreground truncate">
-                      {user.name}
-                    </span>
+                    {/* Name & Username */}
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-medium text-foreground truncate block">
+                        {user.name}
+                      </span>
+                      {user.username && (
+                        <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                          @{user.username}
+                        </span>
+                      )}
+                    </div>
 
                     {/* Selected indicator */}
                     {idx === selectedIndex && (
@@ -423,19 +433,21 @@ export function MentionInput({
     detectMention(newValue, cursorPos)
   }, [onChange, detectMention])
 
+  // Insert mention using username (preferred) or name as fallback
   const insertMention = useCallback((user: MentionUser) => {
     if (mentionStartIndex < 0) return
 
+    const mentionHandle = user.username || user.name.toLowerCase().replace(/\s+/g, '_')
     const beforeMention = value.slice(0, mentionStartIndex)
     const afterMention = value.slice(mentionStartIndex + 1 + mentionQuery.length)
-    const newValue = `${beforeMention}@${user.name} ${afterMention}`
+    const newValue = `${beforeMention}@${mentionHandle} ${afterMention}`
     onChange(newValue)
     setShowSuggestions(false)
     setMentionStartIndex(-1)
 
     requestAnimationFrame(() => {
       if (inputRef.current) {
-        const newCursorPos = beforeMention.length + user.name.length + 2
+        const newCursorPos = beforeMention.length + mentionHandle.length + 2
         inputRef.current.focus()
         inputRef.current.setSelectionRange(newCursorPos, newCursorPos)
       }
@@ -549,9 +561,16 @@ export function MentionInput({
                       </div>
                     </div>
 
-                    <span className="text-sm font-medium text-foreground truncate">
-                      {user.name}
-                    </span>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-medium text-foreground truncate block">
+                        {user.name}
+                      </span>
+                      {user.username && (
+                        <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                          @{user.username}
+                        </span>
+                      )}
+                    </div>
 
                     {idx === selectedIndex && (
                       <span className="ml-auto text-xs text-emerald-600 font-medium">Enter ↵</span>

@@ -21,6 +21,7 @@ export function extractMentions(content: string): string[] {
 
 /**
  * Parse @mentions in content, resolve them to users, and create notifications.
+ * Resolves mentions by username first (preferred), then falls back to name.
  * Skips the author user and non-existent usernames.
  */
 export async function createMentionNotifications(params: {
@@ -36,23 +37,34 @@ export async function createMentionNotifications(params: {
   const mentionNames = extractMentions(content)
   if (mentionNames.length === 0) return 0
   
-  // Find users matching any of the mention names (case-insensitive)
+  // Find users matching any of the mention names by username (preferred) or name
   const mentionedUsers = await db.user.findMany({
     where: {
       isActive: true,
       id: { not: authorUserId },
-      name: { in: mentionNames.map(n => n), mode: 'insensitive' },
+      OR: [
+        { username: { in: mentionNames, mode: 'insensitive' } },
+        { name: { in: mentionNames, mode: 'insensitive' } },
+      ],
     },
-    select: { id: true, name: true },
+    select: { id: true, name: true, username: true },
+  })
+
+  // Deduplicate: if a user matches both by username and name, only notify once
+  const seenIds = new Set<string>()
+  const uniqueUsers = mentionedUsers.filter(user => {
+    if (seenIds.has(user.id)) return false
+    seenIds.add(user.id)
+    return true
   })
   
-  if (mentionedUsers.length === 0) return 0
+  if (uniqueUsers.length === 0) return 0
   
   const refLabel = refType === 'stream_post' ? 'postingan' : 'komentar'
   
   // Create notifications in parallel
   await Promise.all(
-    mentionedUsers.map(user =>
+    uniqueUsers.map(user =>
       db.notification.create({
         data: {
           userId: user.id,
@@ -66,7 +78,7 @@ export async function createMentionNotifications(params: {
     )
   )
   
-  return mentionedUsers.length
+  return uniqueUsers.length
 }
 
 /**

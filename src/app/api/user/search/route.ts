@@ -1,26 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middleware'
-import { createRateLimiter } from '@/lib/rate-limit'
 import { logger } from '@/lib/logger'
-
-const searchLimiter = createRateLimiter({
-  windowMs: 60 * 1000, // 1 minute
-  maxRequests: 30,
-  keyPrefix: 'rl:user-search:',
-})
 
 export async function GET(request: NextRequest) {
   try {
     // Auth required
     const authResult = await verifyAuth(request)
-    if (!authResult.authorized) {
+    if (!authResult.success) {
       return authErrorResponse(authResult)
     }
 
-    // Rate limit
-    const rateLimitResult = await checkRateLimit(request, searchLimiter, authResult.user.id)
-    if (!rateLimitResult.allowed) {
+    // Rate limit: 30 searches per minute per user
+    const clientIp =
+      request.headers.get('x-forwarded-for') ||
+      request.headers.get('x-real-ip') ||
+      'unknown'
+    if (!checkRateLimit(`user-search:${authResult.user.id}:${clientIp}`, 30)) {
       return NextResponse.json(
         { success: false, error: 'Terlalu banyak permintaan. Coba lagi nanti.' },
         { status: 429 }
@@ -43,15 +39,22 @@ export async function GET(request: NextRequest) {
       where: {
         isActive: true,
         id: { not: authResult.user.id },
-        name: { contains: query, mode: 'insensitive' },
+        OR: [
+          { name: { contains: query, mode: 'insensitive' } },
+          { username: { contains: query, mode: 'insensitive' } },
+        ],
       },
       select: {
         id: true,
         name: true,
+        username: true,
         avatar: true,
       },
       take: limit,
-      orderBy: { name: 'asc' },
+      orderBy: [
+        { username: { sort: 'asc', nulls: 'last' } },
+        { name: 'asc' },
+      ],
     })
 
     return NextResponse.json({ success: true, data: users }, { status: 200 })

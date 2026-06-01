@@ -76,6 +76,7 @@ export async function GET(request: NextRequest) {
           select: {
             id: true,
             name: true,
+            username: true,
             avatar: true,
           },
         },
@@ -265,6 +266,7 @@ export async function POST(request: NextRequest) {
           select: {
             id: true,
             name: true,
+            username: true,
             avatar: true,
           },
         },
@@ -277,16 +279,18 @@ export async function POST(request: NextRequest) {
     )
 
     // Create mention notifications (non-blocking, don't await to avoid slowing response)
-    createMentionNotifications({
-      content,
-      authorUserId: authResult.user.id,
-      authorName: post.user.name,
-      refType: 'stream_post',
-      refId: post.id,
-      db,
-    }).catch((err) => {
-      logger.error({ err }, 'Failed to create mention notifications for stream post')
-    })
+    if (content) {
+      createMentionNotifications({
+        content,
+        authorUserId: authResult.user.id,
+        authorName: post.user.name,
+        refType: 'stream_post',
+        refId: post.id,
+        db,
+      }).catch((err) => {
+        logger.error({ err }, 'Failed to create mention notifications for stream post')
+      })
+    }
 
     return NextResponse.json(
       {

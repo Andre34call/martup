@@ -24,6 +24,8 @@ export interface User {
   email: string
   phone?: string
   name: string
+  username?: string
+  usernameChangedAt?: string
   avatar?: string
   role: UserRole
   isVerified: boolean
@@ -227,7 +229,7 @@ export interface Notification {
   id: string
   title: string
   content: string
-  type: 'order' | 'promo' | 'system' | 'chat'
+  type: 'order' | 'promo' | 'system' | 'chat' | 'mention'
   isRead: boolean
   createdAt: string
 }

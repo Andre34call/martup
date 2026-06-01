@@ -22,6 +22,7 @@ interface StreamPost {
   user: {
     id: string
     name: string
+    username?: string
     avatar?: string
   }
   type: "text" | "image" | "video"
@@ -720,6 +721,9 @@ function StreamPostCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
             <p className="text-sm font-bold text-foreground truncate">{userName}</p>
+            {post.user?.username && (
+              <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium truncate">@{post.user.username}</span>
+            )}
             {post.likeCount > 50 && (
               <Verified className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" fill="currentColor" />
             )}
