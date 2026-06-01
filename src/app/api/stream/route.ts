@@ -206,14 +206,15 @@ export async function POST(request: NextRequest) {
 
     // Sanitize and validate content — content is optional if media is provided
     // Store null instead of empty string for media-only posts
-    const content = sanitizeInput(body.content || '') || null
+    const rawContent = body.content ? String(body.content) : ''
+    const content = sanitizeInput(rawContent) || null
     if (!content && !mediaUrl) {
       return NextResponse.json(
         { success: false, error: 'Content or media is required' },
         { status: 400 }
       )
     }
-    if (content.length > 2000) {
+    if (content && content.length > 2000) {
       return NextResponse.json(
         { success: false, error: 'Content must be at most 2000 characters' },
         { status: 400 }
@@ -279,9 +280,17 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     )
   } catch (error: unknown) {
+    // Log full error for debugging
     logger.error({ err: error }, 'Stream POST create error')
+    
+    // Return specific error message for validation errors, generic for everything else
+    const isDev = process.env.NODE_ENV === 'development'
+    const errorMessage = error instanceof Error && isDev
+      ? `Server error: ${error.message}`
+      : 'Terjadi kesalahan server'
+    
     return NextResponse.json(
-      { success: false, error: 'Terjadi kesalahan server' },
+      { success: false, error: errorMessage },
       { status: 500 }
     )
   }

@@ -589,10 +589,9 @@ function StreamNavTop({ onRefresh, isRefreshing, navigate, unreadNotificationCou
           <motion.button
             whileTap={{ scale: 0.98 }}
             onClick={() => navigate("search")}
-            className="flex-1 flex items-center gap-2 h-9 px-3 rounded-xl bg-muted/60 border border-border/50 text-muted-foreground text-sm"
+            className="flex-1 flex items-center h-9 px-3 rounded-xl bg-muted/60 border border-border/50 text-muted-foreground"
           >
             <Search className="w-4 h-4" />
-            <span>Cari postingan...</span>
           </motion.button>
 
           {/* Refresh button */}
