@@ -80,6 +80,7 @@ const AdminSettings = lazy(() => import('@/components/ecommerce/admin-new-screen
 // --- Stream Screens ---
 const StreamFeedScreen = lazy(() => import('@/components/ecommerce/stream').then(m => ({ default: m.StreamFeedScreen })))
 const StreamCreateScreen = lazy(() => import('@/components/ecommerce/stream').then(m => ({ default: m.StreamCreateScreen })))
+const StreamSearchScreen = lazy(() => import('@/components/ecommerce/stream').then(m => ({ default: m.StreamSearchScreen })))
 
 // --- Legal Screens ---
 const PrivacyPolicyScreen = lazy(() => import('@/components/ecommerce/legal/legal-screens').then(m => ({ default: m.PrivacyPolicyScreen })))
@@ -137,6 +138,7 @@ const screenMap: Record<ScreenName, ScreenEntry> = {
   // Stream
   stream: { component: StreamFeedScreen },
   'stream-create': { component: StreamCreateScreen },
+  'stream-search': { component: StreamSearchScreen },
 
   // Legal (props will be injected at render time)
   'privacy-policy': { component: PrivacyPolicyScreen },
@@ -205,7 +207,7 @@ export const SUB_SCREENS: readonly ScreenName[] = [
   'address', 'help', 'followed-stores', 'deposit', 'withdraw',
   'settings', 'voucher', 'order-tracking', 'seller-add-product',
   'chat-room', 'category-detail', 'seller-withdraw', 'seller-withdraw-history',
-  'privacy-policy', 'terms-of-service', 'refund-policy', 'stream-create',
+  'privacy-policy', 'terms-of-service', 'refund-policy', 'stream-create', 'stream-search',
 ] as const
 
 // ==================== LOADING FALLBACK ====================

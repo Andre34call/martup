@@ -17,7 +17,7 @@ export type ScreenName =
   | 'admin-withdraw' | 'admin-banner' | 'admin-analytics' | 'admin-complaints'
   | 'admin-divisions' | 'admin-workflow'
   | 'admin-categories' | 'admin-vouchers' | 'admin-deposits' | 'admin-campaigns' | 'admin-reviews' | 'admin-settings'
-  | 'stream' | 'stream-create'
+  | 'stream' | 'stream-create' | 'stream-search'
 
 export interface User {
   id: string

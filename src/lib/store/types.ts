@@ -135,9 +135,12 @@ export interface FollowedStoresSlice {
 export interface SearchSlice {
   searchQuery: string
   searchHistory: string[]
+  streamSearchHistory: string[]
   setSearchQuery: (q: string) => void
   addSearchHistory: (q: string) => void
   clearSearchHistory: () => void
+  addStreamSearchHistory: (q: string) => void
+  clearStreamSearchHistory: () => void
 }
 
 export interface ProfileSlice {

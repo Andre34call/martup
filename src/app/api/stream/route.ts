@@ -32,6 +32,7 @@ export async function GET(request: NextRequest) {
     const cursor = searchParams.get('cursor')
     const limitParam = searchParams.get('limit')
     const userId = searchParams.get('userId')
+    const searchQuery = searchParams.get('search')
 
     // Parse and clamp limit
     let limit = parseInt(limitParam || '10', 10)
@@ -53,6 +54,13 @@ export async function GET(request: NextRequest) {
     const where: Record<string, unknown> = { isActive: true, isHidden: false }
     if (userId) {
       where.userId = userId
+    }
+    if (searchQuery && searchQuery.trim().length >= 2) {
+      // Search in post content and user name
+      where.OR = [
+        { content: { contains: searchQuery.trim(), mode: 'insensitive' } },
+        { user: { name: { contains: searchQuery.trim(), mode: 'insensitive' } } },
+      ]
     }
     if (cursor) {
       where.createdAt = { lt: new Date(cursor) }

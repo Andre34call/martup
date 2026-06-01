@@ -588,7 +588,7 @@ function StreamNavTop({ onRefresh, isRefreshing, navigate, unreadNotificationCou
           {/* Search bar */}
           <motion.button
             whileTap={{ scale: 0.98 }}
-            onClick={() => navigate("search")}
+            onClick={() => navigate("stream-search")}
             className="flex-1 flex items-center h-9 px-3 rounded-xl bg-muted/60 border border-border/50 text-muted-foreground"
           >
             <Search className="w-4 h-4" />
