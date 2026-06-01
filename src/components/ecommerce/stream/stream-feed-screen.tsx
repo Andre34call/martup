@@ -768,7 +768,7 @@ function StreamPostCard({
                 ref={videoRef}
                 src={post.mediaUrl}
                 poster={post.thumbnailUrl}
-                className="w-full max-h-80 object-contain bg-black"
+                className="w-full max-h-[500px] object-contain bg-black"
                 playsInline
                 loop
                 onClick={() => onVideoToggle(post.id)}
@@ -812,7 +812,7 @@ function StreamPostCard({
               <img
                 src={post.mediaUrl}
                 alt="Post image"
-                className="w-full max-h-96 object-cover rounded-xl"
+                className="w-full max-h-[500px] object-cover rounded-xl"
                 loading="lazy"
                 onError={(e) => {
                   const target = e.target as HTMLImageElement
@@ -898,7 +898,7 @@ function StreamPostCard({
           className="mx-4 mb-3 flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-emerald-50/80 to-teal-50/50 dark:from-emerald-950/30 dark:to-teal-950/20 border border-emerald-200/50 dark:border-emerald-800/30 hover:shadow-md transition-all"
         >
           {/* Product image */}
-          <div className="w-14 h-14 rounded-xl bg-muted flex items-center justify-center overflow-hidden flex-shrink-0 border border-border/30">
+          <div className="w-16 h-16 rounded-xl bg-muted flex items-center justify-center overflow-hidden flex-shrink-0 border border-border/30">
             {post.product.image ? (
               <img
                 src={post.product.image}

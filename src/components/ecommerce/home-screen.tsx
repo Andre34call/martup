@@ -225,7 +225,7 @@ export function HomeScreen() {
 
       {/* ===== BANNER CAROUSEL ===== */}
       <div className="px-4 pt-3">
-        <div className="relative h-36 rounded-2xl overflow-hidden">
+        <div className="relative h-44 rounded-2xl overflow-hidden">
           {homeBanners.length > 0 ? (
             <>
               <AnimatePresence mode="wait">
@@ -358,7 +358,7 @@ export function HomeScreen() {
                 key={product.id}
                 whileTap={{ scale: 0.97 }}
                 onClick={() => handleProductClick(product)}
-                className="flex-shrink-0 w-[130px] bg-card rounded-xl border border-border/50 shadow-sm overflow-hidden cursor-pointer"
+                className="flex-shrink-0 w-[155px] bg-card rounded-xl border border-border/50 shadow-sm overflow-hidden cursor-pointer"
               >
                 {/* Image */}
                 <div className="relative aspect-square overflow-hidden">

@@ -754,7 +754,7 @@ export function SearchScreen() {
                       key={product.id}
                       whileTap={{ scale: 0.97 }}
                       onClick={() => handleProductClick(product)}
-                      className="flex-shrink-0 w-32 cursor-pointer"
+                      className="flex-shrink-0 w-36 cursor-pointer"
                     >
                       <div className="aspect-square rounded-xl overflow-hidden bg-muted mb-1.5">
                         {product.images?.[0] ? (

@@ -82,7 +82,7 @@ export function ProductCard({ product, onClick, layout = "grid", showShareToStre
         onClick={onClick}
         className="flex gap-3 p-3 bg-card rounded-xl border border-border/50 shadow-sm cursor-pointer"
       >
-        <div className="relative w-24 h-24 flex-shrink-0 rounded-lg overflow-hidden">
+        <div className="relative w-28 h-28 flex-shrink-0 rounded-lg overflow-hidden">
           {product.images && product.images.length > 0 && !product.images[0].startsWith('blob:') ? (
             <SafeImage
               src={product.images[0]}
@@ -135,7 +135,7 @@ export function ProductCard({ product, onClick, layout = "grid", showShareToStre
       className="group relative bg-card rounded-xl border border-border/50 shadow-sm overflow-hidden cursor-pointer"
     >
       {/* Image */}
-      <div className="relative aspect-square overflow-hidden">
+      <div className="relative aspect-[4/3] overflow-hidden">
         {product.images && product.images.length > 0 && !product.images[0].startsWith('blob:') ? (
           <SafeImage
             src={product.images[0]}
@@ -285,7 +285,7 @@ export function ProductGuarantees() {
 export function ProductCardSkeleton() {
   return (
     <div className="bg-card rounded-xl border border-border/50 overflow-hidden animate-pulse">
-      <div className="aspect-square bg-muted" />
+      <div className="aspect-[4/3] bg-muted" />
       <div className="p-3 space-y-2">
         <div className="h-3 bg-muted rounded w-full" />
         <div className="h-3 bg-muted rounded w-3/4" />

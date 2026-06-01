@@ -393,7 +393,7 @@ function StreamSearchResultCard({ post, index, onLike, onComment, onProductClick
         <div className="relative">
           {post.type === "video" ? (
             <div className="relative bg-black/5 dark:bg-black/20">
-              <video src={post.mediaUrl} poster={post.thumbnailUrl} className="w-full max-h-52 object-contain bg-black" playsInline muted />
+              <video src={post.mediaUrl} poster={post.thumbnailUrl} className="w-full max-h-80 object-contain bg-black" playsInline muted />
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="w-12 h-12 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center">
                   <Play className="w-5 h-5 text-white ml-0.5" fill="white" />
@@ -402,7 +402,7 @@ function StreamSearchResultCard({ post, index, onLike, onComment, onProductClick
             </div>
           ) : post.type === "image" ? (
             <div className="px-4 pb-2">
-              <img src={post.mediaUrl} alt="Post image" className="w-full max-h-52 object-cover rounded-xl" loading="lazy"
+              <img src={post.mediaUrl} alt="Post image" className="w-full max-h-80 object-cover rounded-xl" loading="lazy"
                 onError={(e) => { (e.target as HTMLImageElement).style.display = "none" }} />
             </div>
           ) : null}
@@ -427,7 +427,7 @@ function StreamSearchResultCard({ post, index, onLike, onComment, onProductClick
       {post.product && (
         <motion.button whileTap={{ scale: 0.98 }} onClick={() => onProductClick(post.product!.id)}
           className="mx-4 mb-3 flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-emerald-50/80 to-teal-50/50 dark:from-emerald-950/30 dark:to-teal-950/20 border border-emerald-200/50 dark:border-emerald-800/30">
-          <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
+          <div className="w-14 h-14 rounded-xl bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
             {post.product.image ? <img src={post.product.image} alt={post.product.name} className="w-full h-full object-cover" /> : <Package className="w-5 h-5 text-muted-foreground" />}
           </div>
           <div className="flex-1 min-w-0 text-left">

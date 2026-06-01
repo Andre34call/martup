@@ -387,7 +387,7 @@ export function StreamCreateScreen() {
               {postType === "video" ? (
                 <video
                   src={mediaPreview}
-                  className="w-full max-h-64 object-contain bg-black"
+                  className="w-full max-h-96 object-contain bg-black"
                   controls
                   playsInline
                 />
@@ -395,7 +395,7 @@ export function StreamCreateScreen() {
                 <img
                   src={mediaPreview}
                   alt="Preview"
-                  className="w-full max-h-64 object-cover"
+                  className="w-full max-h-96 object-cover"
                 />
               )}
 

@@ -71,7 +71,7 @@ function ImageGallery({ images, videoUrl, isFlashSale }: { images: string[]; vid
     <div className="relative">
       <div
         ref={containerRef}
-        className="relative w-full aspect-square overflow-hidden bg-muted"
+        className="relative w-full aspect-[4/3] overflow-hidden bg-muted"
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
@@ -790,7 +790,7 @@ export function ProductDetailScreen() {
               <h3 className="text-sm font-bold">Produk Serupa</h3>
               <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2">
                 {relatedProducts.map((rp) => (
-                  <div key={rp.id} className="flex-shrink-0 w-[150px]">
+                  <div key={rp.id} className="flex-shrink-0 w-[165px]">
                     <ProductCard
                       product={rp}
                       onClick={() => handleRelatedClick(rp)}
