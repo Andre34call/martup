@@ -100,10 +100,10 @@ const trendingTopics = [
 
 // ==================== STREAM FEED SCREEN ====================
 export function StreamFeedScreen() {
-  const { navigate, showToast, isAuthenticated, unreadNotificationCount, user } = useAppStore()
+  const { navigate, showToast, isAuthenticated, unreadNotificationCount, currentUser } = useAppStore()
   const { getTotalItemCount } = useCartStore()
   const cartCount = getTotalItemCount()
-  const currentUserId = user?.id || null
+  const currentUserId = currentUser?.id || null
 
   // Feed state
   const [posts, setPosts] = useState<StreamPost[]>([])
