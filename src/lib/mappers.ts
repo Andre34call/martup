@@ -16,6 +16,7 @@ export function mapUser(raw: any): User {
     coins: raw.coins || 0,
     referralCode: raw.referralCode || undefined,
     twoFactorEnabled: raw.twoFactorEnabled || false,
+    emailHidden: raw.emailHidden || false,
   }
 }
 

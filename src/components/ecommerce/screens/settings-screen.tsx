@@ -153,15 +153,33 @@ export function SettingsScreen() {
     setEditValue(value)
   }
 
-  const handleSaveField = () => {
+  const handleSaveField = async () => {
     if (!editValue.trim()) {
       showToast("Field tidak boleh kosong", "error")
       return
     }
-    updateProfile({ [editField!]: editValue.trim() })
-    showToast("Profil berhasil diperbarui!", "success")
-    setEditField(null)
-    setEditValue("")
+    try {
+      await updateProfile({ [editField!]: editValue.trim() })
+      showToast("Profil berhasil diperbarui!", "success")
+      setEditField(null)
+      setEditValue("")
+    } catch {
+      showToast("Gagal menyimpan profil", "error")
+    }
+  }
+
+  const [isSavingEmailHidden, setIsSavingEmailHidden] = useState(false)
+
+  const handleToggleEmailHidden = async (checked: boolean) => {
+    setIsSavingEmailHidden(true)
+    try {
+      await updateProfile({ emailHidden: checked })
+      showToast(checked ? "Email disembunyikan" : "Email ditampilkan", "success")
+    } catch {
+      showToast("Gagal mengubah pengaturan email", "error")
+    } finally {
+      setIsSavingEmailHidden(false)
+    }
   }
 
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
@@ -319,7 +337,12 @@ export function SettingsScreen() {
             {/* Email Field */}
             <div className="flex items-center justify-between">
               <div className="flex-1 min-w-0">
-                <p className="text-xs text-muted-foreground">Email</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-xs text-muted-foreground">Email</p>
+                  {currentUser?.emailHidden && (
+                    <span className="text-[9px] font-bold text-amber-600 bg-amber-100 dark:bg-amber-900/30 px-1.5 py-0.5 rounded-md">TERSEMBUNYI</span>
+                  )}
+                </div>
                 {editField === "email" ? (
                   <div className="flex items-center gap-2 mt-1">
                     <Input
@@ -344,6 +367,27 @@ export function SettingsScreen() {
                   </div>
                 )}
               </div>
+            </div>
+            <Separator />
+            {/* Hide Email Toggle */}
+            <div className="flex items-center justify-between py-1">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-violet-50 dark:bg-violet-900/30 flex items-center justify-center">
+                  {currentUser?.emailHidden ? <EyeOff className="w-4 h-4 text-violet-600" /> : <Eye className="w-4 h-4 text-violet-600" />}
+                </div>
+                <div>
+                  <span className="text-sm font-medium text-foreground">Sembunyikan Email</span>
+                  <p className="text-xs text-muted-foreground">Email tidak terlihat oleh pengguna lain</p>
+                </div>
+              </div>
+              {isSavingEmailHidden ? (
+                <Loader2 className="w-4 h-4 text-muted-foreground animate-spin" />
+              ) : (
+                <Switch
+                  checked={currentUser?.emailHidden ?? false}
+                  onCheckedChange={handleToggleEmailHidden}
+                />
+              )}
             </div>
             <Separator />
             {/* Phone Field */}

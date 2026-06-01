@@ -149,7 +149,7 @@ export interface SearchSlice {
 export interface ProfileSlice {
   avatarUrl: string | null
   updateAvatar: (url: string | null) => void
-  updateProfile: (data: { name?: string; email?: string; phone?: string }) => void
+  updateProfile: (data: { name?: string; email?: string; phone?: string; emailHidden?: boolean }) => Promise<void>
   uploadAvatar: (file: File) => Promise<void>
   removeAvatar: () => Promise<void>
 }

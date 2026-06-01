@@ -31,6 +31,7 @@ export interface User {
   coins: number
   referralCode?: string
   twoFactorEnabled?: boolean
+  emailHidden?: boolean
 }
 
 export interface Seller {

@@ -23,6 +23,7 @@ model User {
   otpExpiry          DateTime?
   twoFactorEnabled   Boolean   @default(false)
   isVerified         Boolean   @default(false)
+  emailHidden        Boolean   @default(false) // Hide email from other users
   emailVerificationToken    String?
   emailVerificationExpiry   DateTime?
   resetPasswordToken        String?

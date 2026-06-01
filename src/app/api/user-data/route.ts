@@ -79,6 +79,7 @@ export async function GET(request: NextRequest) {
           isVerified: true,
           isActive: true,
           twoFactorEnabled: true,
+          emailHidden: true,
           loyaltyPoints: true,
           coins: true,
           referralCode: true,

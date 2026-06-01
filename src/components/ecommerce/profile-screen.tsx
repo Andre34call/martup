@@ -103,6 +103,11 @@ export function ProfileScreen() {
 
   const userName = currentUser?.name || DEFAULT_USER_VALUES.name
   const userEmail = currentUser?.email || DEFAULT_USER_VALUES.email
+
+  // Mask email if user has hidden it: "john@example.com" → "j***@example.com"
+  const displayEmail = currentUser?.emailHidden && currentUser?.email
+    ? currentUser.email.replace(/^(.{1})(.*)(@.*)$/, '$1***$3')
+    : userEmail
   const memberSince = currentUser?.id
     ? new Date().toLocaleDateString('id-ID', { month: 'short', year: 'numeric' })
     : DEFAULT_USER_VALUES.memberSince
@@ -199,7 +204,7 @@ export function ProfileScreen() {
               </div>
               <div className="flex-1 min-w-0">
                 <h2 className="text-lg font-bold text-foreground">{userName}</h2>
-                <p className="text-xs text-muted-foreground">{userEmail}</p>
+                <p className="text-xs text-muted-foreground">{displayEmail}</p>
                 <p className="text-[10px] text-muted-foreground mt-0.5">
                   Member sejak {memberSince}
                 </p>
