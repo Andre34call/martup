@@ -2,6 +2,7 @@ import type { NextAuthOptions } from 'next-auth'
 import { logger } from '@/lib/logger'
 import { env } from '@/lib/env'
 import GoogleProvider from 'next-auth/providers/google'
+import { db } from '@/lib/db'
 
 // ==================== NEXTAUTH_URL AUTO-FIX ====================
 // NextAuth v4 reads NEXTAUTH_URL from process.env for OAuth callbacks.
@@ -83,11 +84,47 @@ export const authOptions: NextAuthOptions = {
       if (account && user) {
         token.accessToken = account.access_token
         token.provider = account.provider
+        // SECURITY: Store tokenVersion from DB at sign-in time so we can
+        // detect password changes on subsequent JWT refreshes.
+        if (user.email) {
+          const dbUser = await db.user.findUnique({
+            where: { email: user.email },
+            select: { tokenVersion: true },
+          })
+          token.tokenVersion = dbUser?.tokenVersion ?? 0
+        }
+      }
+
+      // SECURITY: On every JWT refresh, check if tokenVersion has changed.
+      // If the user changed their password (incrementing tokenVersion),
+      // this session should be invalidated — return an empty token to force re-auth.
+      if (token.email) {
+        const dbUser = await db.user.findUnique({
+          where: { email: token.email as string },
+          select: { tokenVersion: true, isActive: true },
+        })
+        if (!dbUser || !dbUser.isActive) {
+          // User deactivated or deleted — force re-auth by clearing identifying fields
+          // Returning a stripped token (no email) causes the session callback to return null
+          return { ...token, email: undefined, sub: undefined } as any
+        }
+        if (dbUser.tokenVersion !== (token.tokenVersion as number)) {
+          // tokenVersion changed since last sign-in/refresh — password was changed
+          // Force re-auth by clearing identifying fields
+          logger.info({ component: 'auth', email: token.email }, 'NextAuth JWT invalidated — tokenVersion mismatch (password changed)')
+          return { ...token, email: undefined, sub: undefined } as any
+        }
+        // Keep tokenVersion in sync (in case it was missing from older tokens)
+        token.tokenVersion = dbUser.tokenVersion
       }
       return token
     },
     async session({ session, token }) {
       // Send properties to the client
+      // If token is empty (session invalidated), return null to force re-auth
+      if (!token.email) {
+        return { ...session, user: null } as any
+      }
       if (session.user) {
         (session.user as any).id = token.sub
       }

@@ -25,6 +25,7 @@ function isValidPostType(value: string): value is PostType {
 // ==================== GET /api/stream ====================
 // Fetch stream feed — public endpoint (no auth required)
 // Supports cursor-based pagination and optional userId filter
+// Filters out hidden posts (isHidden: true)
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
@@ -48,8 +49,8 @@ export async function GET(request: NextRequest) {
       // Auth check is optional for GET — continue without auth
     }
 
-    // Build where clause
-    const where: Record<string, unknown> = { isActive: true }
+    // Build where clause — filter out hidden and inactive posts
+    const where: Record<string, unknown> = { isActive: true, isHidden: false }
     if (userId) {
       where.userId = userId
     }

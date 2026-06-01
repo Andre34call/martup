@@ -13,6 +13,7 @@ const likeLimiter = createRateLimiter({
 
 // ==================== POST /api/stream/[id]/like ====================
 // Toggle like — like if not liked, unlike if already liked
+// Uses interactive transaction with authoritative count to prevent race conditions
 // Requires authentication + rate limiting
 export async function POST(
   request: NextRequest,
@@ -47,7 +48,7 @@ export async function POST(
     // Verify the post exists and is active
     const post = await db.streamPost.findUnique({
       where: { id: postId, isActive: true },
-      select: { id: true, likeCount: true },
+      select: { id: true },
     })
 
     if (!post) {
@@ -57,58 +58,57 @@ export async function POST(
       )
     }
 
-    // Check if user already liked this post
-    const existingLike = await db.streamLike.findUnique({
-      where: {
-        postId_userId: {
-          postId,
-          userId: authResult.user.id,
-        },
-      },
-    })
-
+    // Use interactive transaction with authoritative count
+    // This prevents race conditions where concurrent toggles could cause likeCount drift
     let isLiked: boolean
 
-    if (existingLike) {
-      // Unlike: remove the like and decrement likeCount
-      await db.$transaction([
-        db.streamLike.delete({
-          where: { id: existingLike.id },
-        }),
-        db.streamPost.update({
-          where: { id: postId },
-          data: { likeCount: { decrement: 1 } },
-        }),
-      ])
-      isLiked = false
+    await db.$transaction(async (tx) => {
+      // Check if user already liked this post (inside transaction for consistency)
+      const existingLike = await tx.streamLike.findUnique({
+        where: {
+          postId_userId: {
+            postId,
+            userId: authResult.user.id,
+          },
+        },
+      })
 
-      logger.info(
-        { userId: authResult.user.id, postId, action: 'unlike' },
-        'Stream post unliked'
-      )
-    } else {
-      // Like: create the like and increment likeCount
-      await db.$transaction([
-        db.streamLike.create({
+      if (existingLike) {
+        // Unlike: remove the like
+        await tx.streamLike.delete({
+          where: { id: existingLike.id },
+        })
+        isLiked = false
+      } else {
+        // Like: create the like
+        await tx.streamLike.create({
           data: {
             postId,
             userId: authResult.user.id,
           },
-        }),
-        db.streamPost.update({
-          where: { id: postId },
-          data: { likeCount: { increment: 1 } },
-        }),
-      ])
-      isLiked = true
+        })
+        isLiked = true
+      }
 
-      logger.info(
-        { userId: authResult.user.id, postId, action: 'like' },
-        'Stream post liked'
-      )
-    }
+      // After mutation, query the ACTUAL count from the likes table (authoritative)
+      // This makes the likeCount consistent regardless of concurrent operations
+      const actualCount = await tx.streamLike.count({
+        where: { postId },
+      })
 
-    // Fetch the updated likeCount
+      // Update likeCount to match the authoritative count
+      await tx.streamPost.update({
+        where: { id: postId },
+        data: { likeCount: actualCount },
+      })
+    })
+
+    logger.info(
+      { userId: authResult.user.id, postId, action: isLiked! ? 'like' : 'unlike' },
+      'Stream post like toggled'
+    )
+
+    // Fetch the final authoritative likeCount
     const updatedPost = await db.streamPost.findUnique({
       where: { id: postId },
       select: { likeCount: true },
@@ -118,7 +118,7 @@ export async function POST(
       success: true,
       data: {
         postId,
-        isLiked,
+        isLiked: isLiked!,
         likeCount: updatedPost?.likeCount ?? 0,
       },
     })

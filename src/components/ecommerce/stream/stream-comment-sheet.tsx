@@ -17,8 +17,11 @@ import { formatRelativeTime, truncateText } from "@/lib/utils"
 interface StreamPost {
   id: string
   userId: string
-  userName: string
-  userAvatar?: string
+  user: {
+    id: string
+    name: string
+    avatar?: string
+  }
   type: "text" | "image" | "video"
   content: string
   mediaUrl?: string
@@ -31,8 +34,11 @@ interface StreamPost {
 interface StreamComment {
   id: string
   userId: string
-  userName: string
-  userAvatar?: string
+  user: {
+    id: string
+    name: string
+    avatar?: string
+  }
   content: string
   likeCount: number
   isLiked: boolean
@@ -45,7 +51,11 @@ interface StreamComment {
 interface CommentsResponse {
   success: boolean
   data: StreamComment[]
-  hasMore?: boolean
+  pagination?: {
+    nextCursor?: string | null
+    hasMore: boolean
+    limit: number
+  }
 }
 
 interface CommentMutationResponse {
@@ -343,6 +353,10 @@ export function StreamCommentSheet({
     [handleSendComment]
   )
 
+  // Derive post user info
+  const postUserName = post?.user?.name || 'User'
+  const postUserAvatar = post?.user?.avatar
+
   // ==================== RENDER ====================
   return (
     <AnimatePresence>
@@ -376,10 +390,10 @@ export function StreamCommentSheet({
               <div className="flex items-center gap-3 flex-1 min-w-0">
                 {/* Post user avatar */}
                 <div className="relative flex-shrink-0">
-                  {post.userAvatar ? (
+                  {postUserAvatar ? (
                     <img
-                      src={post.userAvatar}
-                      alt={post.userName}
+                      src={postUserAvatar}
+                      alt={postUserName}
                       className="w-8 h-8 rounded-full object-cover"
                       onError={(e) => {
                         const img = e.currentTarget as HTMLImageElement
@@ -390,17 +404,17 @@ export function StreamCommentSheet({
                     />
                   ) : null}
                   <div
-                    className={`w-8 h-8 rounded-full ${getAvatarColor(post.userName)} text-white font-bold items-center justify-center text-xs`}
-                    style={{ display: post.userAvatar ? "none" : "flex" }}
+                    className={`w-8 h-8 rounded-full ${getAvatarColor(postUserName)} text-white font-bold items-center justify-center text-xs`}
+                    style={{ display: postUserAvatar ? "none" : "flex" }}
                   >
-                    {post.userName.charAt(0).toUpperCase()}
+                    {postUserName.charAt(0).toUpperCase()}
                   </div>
                 </div>
 
                 {/* Post info */}
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-foreground truncate">
-                    {post.userName}
+                    {postUserName}
                   </p>
                   {post.content && (
                     <p className="text-xs text-muted-foreground line-clamp-1">
@@ -479,7 +493,7 @@ export function StreamCommentSheet({
                   <span className="text-xs text-muted-foreground flex-1">
                     Membalas{" "}
                     <span className="font-medium text-foreground">
-                      {replyingTo.userName}
+                      {replyingTo.user?.name || 'User'}
                     </span>
                   </span>
                   <motion.button
@@ -503,7 +517,7 @@ export function StreamCommentSheet({
                 onKeyDown={handleKeyDown}
                 placeholder={
                   replyingTo
-                    ? `Balas ${replyingTo.userName}...`
+                    ? `Balas ${replyingTo.user?.name || 'User'}...`
                     : "Tulis komentar..."
                 }
                 className="flex-1 h-10 px-4 rounded-xl bg-muted/50 border border-border/50 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/50 transition-all"
@@ -552,16 +566,19 @@ function CommentItem({
   onLoadReplies,
   onLikeReply,
 }: CommentItemProps) {
+  const commentUserName = comment.user?.name || 'User'
+  const commentUserAvatar = comment.user?.avatar
+
   return (
     <div className="px-4 py-3">
       {/* Comment content */}
       <div className="flex gap-2.5">
         {/* Avatar */}
         <div className="relative flex-shrink-0">
-          {comment.userAvatar ? (
+          {commentUserAvatar ? (
             <img
-              src={comment.userAvatar}
-              alt={comment.userName}
+              src={commentUserAvatar}
+              alt={commentUserName}
               className="w-8 h-8 rounded-full object-cover"
               onError={(e) => {
                 const img = e.currentTarget as HTMLImageElement
@@ -572,10 +589,10 @@ function CommentItem({
             />
           ) : null}
           <div
-            className={`w-8 h-8 rounded-full ${getAvatarColor(comment.userName)} text-white font-bold items-center justify-center text-[10px]`}
-            style={{ display: comment.userAvatar ? "none" : "flex" }}
+            className={`w-8 h-8 rounded-full ${getAvatarColor(commentUserName)} text-white font-bold items-center justify-center text-[10px]`}
+            style={{ display: commentUserAvatar ? "none" : "flex" }}
           >
-            {comment.userName.charAt(0).toUpperCase()}
+            {commentUserName.charAt(0).toUpperCase()}
           </div>
         </div>
 
@@ -583,7 +600,7 @@ function CommentItem({
         <div className="flex-1 min-w-0">
           <div className="flex items-baseline gap-2">
             <span className="text-xs font-semibold text-foreground">
-              {comment.userName}
+              {commentUserName}
             </span>
             <span className="text-[10px] text-muted-foreground">
               {formatRelativeTime(comment.createdAt)}
@@ -661,79 +678,83 @@ function CommentItem({
                 exit={{ opacity: 0, height: 0 }}
                 className="mt-2 space-y-3 pl-0"
               >
-                {comment.replies.map((reply) => (
-                  <div key={reply.id} className="flex gap-2.5">
-                    {/* Reply avatar */}
-                    <div className="relative flex-shrink-0">
-                      {reply.userAvatar ? (
-                        <img
-                          src={reply.userAvatar}
-                          alt={reply.userName}
-                          className="w-6 h-6 rounded-full object-cover"
-                          onError={(e) => {
-                            const img = e.currentTarget as HTMLImageElement
-                            img.style.display = "none"
-                            const fallback = img.nextElementSibling as HTMLElement
-                            if (fallback) fallback.style.display = "flex"
-                          }}
-                        />
-                      ) : null}
-                      <div
-                        className={`w-6 h-6 rounded-full ${getAvatarColor(reply.userName)} text-white font-bold items-center justify-center text-[8px]`}
-                        style={{ display: reply.userAvatar ? "none" : "flex" }}
-                      >
-                        {reply.userName.charAt(0).toUpperCase()}
-                      </div>
-                    </div>
-
-                    {/* Reply content */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-[11px] font-semibold text-foreground">
-                          {reply.userName}
-                        </span>
-                        <span className="text-[9px] text-muted-foreground">
-                          {formatRelativeTime(reply.createdAt)}
-                        </span>
-                      </div>
-                      <p className="text-xs text-foreground mt-0.5 whitespace-pre-wrap">
-                        {reply.content}
-                      </p>
-                      <div className="flex items-center gap-3 mt-1">
-                        <motion.button
-                          whileTap={{ scale: 0.8 }}
-                          onClick={() => onLikeReply(reply.id)}
-                          className="flex items-center gap-1"
-                        >
-                          <Heart
-                            className={`w-3 h-3 ${
-                              reply.isLiked
-                                ? "text-red-500 fill-red-500"
-                                : "text-muted-foreground"
-                            }`}
+                {comment.replies.map((reply) => {
+                  const replyUserName = reply.user?.name || 'User'
+                  const replyUserAvatar = reply.user?.avatar
+                  return (
+                    <div key={reply.id} className="flex gap-2.5">
+                      {/* Reply avatar */}
+                      <div className="relative flex-shrink-0">
+                        {replyUserAvatar ? (
+                          <img
+                            src={replyUserAvatar}
+                            alt={replyUserName}
+                            className="w-6 h-6 rounded-full object-cover"
+                            onError={(e) => {
+                              const img = e.currentTarget as HTMLImageElement
+                              img.style.display = "none"
+                              const fallback = img.nextElementSibling as HTMLElement
+                              if (fallback) fallback.style.display = "flex"
+                            }}
                           />
-                          {reply.likeCount > 0 && (
-                            <span
-                              className={`text-[9px] font-medium ${
+                        ) : null}
+                        <div
+                          className={`w-6 h-6 rounded-full ${getAvatarColor(replyUserName)} text-white font-bold items-center justify-center text-[8px]`}
+                          style={{ display: replyUserAvatar ? "none" : "flex" }}
+                        >
+                          {replyUserName.charAt(0).toUpperCase()}
+                        </div>
+                      </div>
+
+                      {/* Reply content */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-[11px] font-semibold text-foreground">
+                            {replyUserName}
+                          </span>
+                          <span className="text-[9px] text-muted-foreground">
+                            {formatRelativeTime(reply.createdAt)}
+                          </span>
+                        </div>
+                        <p className="text-xs text-foreground mt-0.5 whitespace-pre-wrap">
+                          {reply.content}
+                        </p>
+                        <div className="flex items-center gap-3 mt-1">
+                          <motion.button
+                            whileTap={{ scale: 0.8 }}
+                            onClick={() => onLikeReply(reply.id)}
+                            className="flex items-center gap-1"
+                          >
+                            <Heart
+                              className={`w-3 h-3 ${
                                 reply.isLiked
-                                  ? "text-red-500"
+                                  ? "text-red-500 fill-red-500"
                                   : "text-muted-foreground"
                               }`}
-                            >
-                              {reply.likeCount}
-                            </span>
-                          )}
-                        </motion.button>
-                        <button
-                          onClick={() => onReply(reply)}
-                          className="text-[9px] font-medium text-muted-foreground hover:text-foreground transition-colors"
-                        >
-                          Balas
-                        </button>
+                            />
+                            {reply.likeCount > 0 && (
+                              <span
+                                className={`text-[9px] font-medium ${
+                                  reply.isLiked
+                                    ? "text-red-500"
+                                    : "text-muted-foreground"
+                                }`}
+                              >
+                                {reply.likeCount}
+                              </span>
+                            )}
+                          </motion.button>
+                          <button
+                            onClick={() => onReply(reply)}
+                            className="text-[9px] font-medium text-muted-foreground hover:text-foreground transition-colors"
+                          >
+                            Balas
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </motion.div>
             )}
           </AnimatePresence>

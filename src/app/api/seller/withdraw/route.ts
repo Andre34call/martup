@@ -116,8 +116,17 @@ export async function POST(request: NextRequest) {
         throw new Error('Wallet not found for this seller')
       }
 
-      // Check available balance (balance - holdBalance is the actual available amount)
-      const availableBalance = Number(wallet.balance) - Number(wallet.holdBalance)
+      // BUG 17 FIX: Available balance calculation
+      // After a withdrawal of X: balance = original - X (already reduced)
+      // and holdBalance = original_hold + X (amount moved to hold).
+      // Since balance already has the withdrawal deducted, the available
+      // amount is just `balance` (NOT balance - holdBalance, which would
+      // double-count the withdrawal).
+      // If holdBalance represents amounts held WITHIN balance, then
+      // available = balance - holdBalance. But in our model, the withdrawal
+      // is moved FROM balance TO holdBalance atomically, so balance already
+      // excludes the held amount. Therefore: available = balance.
+      const availableBalance = Number(wallet.balance)
 
       if (amount > availableBalance) {
         throw new Error(`Insufficient balance. Available: Rp ${availableBalance.toLocaleString('id-ID')}, Requested: Rp ${amount.toLocaleString('id-ID')}`)

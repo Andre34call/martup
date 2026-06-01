@@ -7,6 +7,31 @@ import { ProductCard, FlashSaleTimer, CategoryPill, SectionHeader, EmptyState } 
 import type { Product } from "@/lib/types"
 import { useState, useEffect, useCallback, useRef } from "react"
 
+// ==================== SECURITY HELPERS ====================
+
+/**
+ * Validate that a URL uses a safe protocol (http: or https:).
+ * Prevents XSS via javascript:, data:, vbscript: and other dangerous URI schemes.
+ */
+function isSafeUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Safely open a URL in a new tab with noopener/noreferrer protection.
+ * Prevents reverse tabnapping attacks where the opened page can access window.opener.
+ */
+function safeWindowOpen(url: string): void {
+  if (isSafeUrl(url)) {
+    window.open(url, '_blank', 'noopener,noreferrer')
+  }
+}
+
 // ==================== (banners now from DB via homeBanners) ====================
 
 // ==================== QUICK ACTIONS DATA ====================
@@ -213,8 +238,10 @@ export function HomeScreen() {
                   transition={{ duration: 0.4 }}
                   onClick={() => {
                     const banner = homeBanners[currentBanner]
-                    if (banner?.link) {
-                      window.open(banner.link, '_blank')
+                    // SECURITY: Validate URL protocol before opening to prevent XSS
+                    // (e.g. javascript: URIs in banner.link from DB)
+                    if (banner?.link && isSafeUrl(banner.link)) {
+                      safeWindowOpen(banner.link)
                     }
                   }}
                   className="absolute inset-0 cursor-pointer"
@@ -360,7 +387,7 @@ export function HomeScreen() {
                   {/* Discount badge */}
                   {product.discountPrice && (
                     <div className="absolute top-1 left-1 bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md">
-                      -{Math.round(((product.price - product.discountPrice) / product.price) * 100)}%
+                      -{product.price > 0 ? Math.round(((product.price - product.discountPrice) / product.price) * 100) : 0}%
                     </div>
                   )}
                 </div>

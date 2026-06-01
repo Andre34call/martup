@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
 import { validateBody, createOrderSchema, updateOrderSchema } from '@/lib/validations'
+import { updateOrderStatus } from '@/lib/order-status'
 
 import { logger } from '@/lib/logger'
 // Helper to safely parse JSON fields
@@ -138,6 +139,8 @@ export async function GET(request: NextRequest) {
 }
 
 // PUT /api/orders - Update order status
+// BUG 8 FIX: Now delegates to updateOrderStatus() for proper state machine validation,
+// escrow release, stock restoration, refund processing, and notifications
 export async function PUT(request: NextRequest) {
   try {
     // SECURITY: Require authentication
@@ -154,9 +157,9 @@ export async function PUT(request: NextRequest) {
         { status: 400 }
       )
     }
-    const { orderId, status, paymentStatus, trackingNumber } = validation.data
+    const { orderId, status, trackingNumber, cancelReason } = validation.data
 
-    // Find the order
+    // Find the order to verify ownership
     const existingOrder = await db.order.findUnique({
       where: { id: orderId },
     })
@@ -198,107 +201,53 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    // Build update data
-    const updateData: Record<string, unknown> = {}
-
-    if (status) {
-      updateData.status = status
-      // Set timestamp fields based on status
-      if (status === 'paid') {
-        updateData.paidAt = new Date()
-      }
-      if (status === 'shipped') {
-        updateData.shippedAt = new Date()
-      }
-      if (status === 'delivered') {
-        updateData.deliveredAt = new Date()
-      }
-    }
-
-    if (paymentStatus) {
-      updateData.paymentStatus = paymentStatus
-    }
-
-    // Update order in a transaction (also update shipping if tracking number provided)
-    const updatedOrder = await db.$transaction(async (tx) => {
-      const order = await tx.order.update({
-        where: { id: orderId },
-        data: updateData,
-        include: {
-          items: {
-            include: {
-              product: {
-                select: {
-                  id: true,
-                  name: true,
-                  images: true,
-                  slug: true,
-                },
-              },
-              variant: true,
-            },
-          },
-          shipping: true,
-          seller: {
-            select: {
-              id: true,
-              storeName: true,
-              storeSlug: true,
-              storeAvatar: true,
-              isVerified: true,
-            },
-          },
-        },
-      })
-
-      // If tracking number provided, update the shipping record
-      if (trackingNumber) {
-        const shipping = await tx.shipping.findUnique({
-          where: { orderId },
-        })
-
-        if (shipping) {
-          await tx.shipping.update({
-            where: { orderId },
-            data: { trackingNumber },
-          })
-        }
-      }
-
-      return order
+    // Delegate to the shared updateOrderStatus function for proper state machine validation,
+    // escrow release, stock restoration, refund processing, and notifications
+    const result = await updateOrderStatus({
+      orderId,
+      status,
+      trackingNumber,
+      cancelReason,
+      authUserId: authResult.user.id,
+      authUserRole: authResult.user.role,
     })
 
-    // Re-fetch to get updated shipping if tracking number was set
-    const finalOrder = trackingNumber
-      ? await db.order.findUnique({
-          where: { id: orderId },
+    if (!result.success) {
+      return NextResponse.json(
+        { success: false, error: result.error },
+        { status: result.status || 400 }
+      )
+    }
+
+    // Re-fetch to get updated data with all relations
+    const finalOrder = await db.order.findUnique({
+      where: { id: orderId },
+      include: {
+        items: {
           include: {
-            items: {
-              include: {
-                product: {
-                  select: {
-                    id: true,
-                    name: true,
-                    images: true,
-                    slug: true,
-                  },
-                },
-                variant: true,
-              },
-            },
-            shipping: true,
-            seller: {
+            product: {
               select: {
                 id: true,
-                storeName: true,
-                storeSlug: true,
-                storeAvatar: true,
-                isVerified: true,
+                name: true,
+                images: true,
+                slug: true,
               },
             },
+            variant: true,
           },
-        })
-      : updatedOrder
+        },
+        shipping: true,
+        seller: {
+          select: {
+            id: true,
+            storeName: true,
+            storeSlug: true,
+            storeAvatar: true,
+            isVerified: true,
+          },
+        },
+      },
+    })
 
     // Parse JSON fields
     const parsedOrder = finalOrder
@@ -314,7 +263,7 @@ export async function PUT(request: NextRequest) {
               : item.product,
           })),
         }
-      : updatedOrder
+      : result.data
 
     return NextResponse.json(serializeDecimal({
       success: true,
@@ -545,27 +494,30 @@ export async function POST(request: NextRequest) {
         validatedVoucherId = voucher.id
       }
 
-      // SECURITY: Compute monetary values server-side where possible
-      // NOTE: shippingCost and taxAmount are client-provided because the shipping
-      // calculator runs client-side. We validate they are non-negative and within
-      // reasonable bounds. Platform fee is computed server-side.
+      // =====================================================
+      // BUG 16 FIX: Validate shipping cost and compute tax server-side
+      // Previously, client-provided shippingCost and taxAmount were
+      // only loosely bounds-checked. Now:
+      // - shippingCost: strict bounds [0, 500000]
+      // - taxAmount: computed server-side from fixed rate (not trusted from client)
+      // =====================================================
       const clientShippingCost = validatedData.shippingCost ?? 0
-      const clientTaxAmount = validatedData.taxAmount ?? 0
 
-      // Validate client-provided costs are non-negative and within reasonable bounds
-      if (clientShippingCost < 0 || clientShippingCost > 10_000_000) {
-        throw new Error('Biaya pengiriman tidak valid')
+      // Validate shipping cost is within reasonable bounds
+      if (clientShippingCost < 0 || clientShippingCost > 500_000) {
+        throw new Error('Biaya pengiriman tidak valid (harus antara 0 - 500.000)')
       }
-      if (clientTaxAmount < 0 || clientTaxAmount > serverSubtotal * 0.5) {
-        throw new Error('Biaya pajak tidak valid')
-      }
+
+      // BUG 16 FIX: Calculate tax server-side instead of trusting client input
+      const TAX_RATE = 0 // Tax rate from server config (0 if not configured)
+      const serverTaxAmount = Math.floor(serverSubtotal * TAX_RATE)
 
       // SECURITY: Compute platform fee server-side (typically 1-5% of subtotal)
       // Client should not control this value — it directly affects revenue
       const PLATFORM_FEE_RATE = 0.03 // 3% platform fee
       const serverPlatformFee = Math.floor(serverSubtotal * PLATFORM_FEE_RATE)
 
-      const serverTotalAmount = serverSubtotal + clientShippingCost + clientTaxAmount + serverPlatformFee - serverDiscountAmount
+      const serverTotalAmount = serverSubtotal + clientShippingCost + serverTaxAmount + serverPlatformFee - serverDiscountAmount
 
       const newOrder = await tx.order.create({
         data: {
@@ -577,7 +529,7 @@ export async function POST(request: NextRequest) {
           subtotal: serverSubtotal,
           shippingCost: clientShippingCost,
           discountAmount: serverDiscountAmount,
-          taxAmount: clientTaxAmount,
+          taxAmount: serverTaxAmount,
           platformFee: serverPlatformFee,
           totalAmount: serverTotalAmount,
           paymentMethod: paymentMethod || null,

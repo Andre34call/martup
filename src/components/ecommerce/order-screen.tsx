@@ -14,6 +14,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
+import { apiClient } from "@/lib/api-client"
 
 const ORDER_TABS = [
   { key: "all", label: "Semua" },
@@ -160,7 +161,9 @@ function OrderCard({ order, onTap }: { order: Order; onTap: () => void }) {
               onClick={(e) => {
                 e.stopPropagation()
                 if (order.status === "shipped") {
+                  // BUG 19 FIX: Sync status update to server via API
                   updateOrderStatus(order.id, "delivered")
+                  apiClient.rawPut(`/api/orders/${order.id}/status`, { status: 'delivered' }).catch(() => {})
                   showToast("Pesanan dikonfirmasi diterima!", "success")
                 } else if (order.status === "delivered") {
                   const product = products.find(p => p.id === order.items[0]?.productId)
@@ -237,7 +240,9 @@ function OrderCard({ order, onTap }: { order: Order; onTap: () => void }) {
             </Button>
             <Button
               onClick={() => {
+                // BUG 19 FIX: Sync cancel to server via the cancel API endpoint
                 cancelOrder(order.id)
+                apiClient.rawPost(`/api/orders/${order.id}/cancel`, { reason: 'Dibatalkan oleh pembeli' }).catch(() => {})
                 showToast("Pesanan berhasil dibatalkan", "success")
                 setShowCancelDialog(false)
               }}
@@ -569,7 +574,12 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
           {order.status === "shipped" && (
             <Button
               className="w-full h-12 rounded-xl bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white text-sm font-semibold"
-              onClick={() => { updateOrderStatus(order.id, "delivered"); showToast("Pesanan dikonfirmasi diterima!", "success") }}
+              // BUG 19 FIX: Sync status update to server via API
+              onClick={() => {
+                updateOrderStatus(order.id, "delivered")
+                apiClient.rawPut(`/api/orders/${order.id}/status`, { status: 'delivered' }).catch(() => {})
+                showToast("Pesanan dikonfirmasi diterima!", "success")
+              }}
             >
               <CheckCircle2 className="w-4 h-4 mr-2" />
               Konfirmasi Diterima
@@ -616,7 +626,9 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
             </Button>
             <Button
               onClick={() => {
+                // BUG 19 FIX: Sync cancel to server via the cancel API endpoint
                 cancelOrder(order.id)
+                apiClient.rawPost(`/api/orders/${order.id}/cancel`, { reason: 'Dibatalkan oleh pembeli' }).catch(() => {})
                 showToast("Pesanan berhasil dibatalkan", "success")
                 setShowCancelDialog(false)
               }}

@@ -356,30 +356,34 @@ export async function updateOrderStatus(params: {
 
         // If order was paid, process refund
         if (order.paymentStatus === 'paid') {
-          // Refund buyer's wallet
-          const buyerWallet = await tx.wallet.findUnique({
-            where: { userId: order.userId },
-          })
-
-          if (buyerWallet) {
-            const refundAmount = Number(order.totalAmount)
-            const updatedBuyerWallet = await tx.wallet.update({
-              where: { id: buyerWallet.id },
-              data: { balance: { increment: refundAmount } },
+          // BUG 9 FIX: Only refund to buyer's wallet when paymentMethod === 'wallet'
+          // For other payment methods (Midtrans), only the Midtrans refund is requested
+          // (handled outside the transaction below) — NOT both wallet credit AND Midtrans refund
+          if (order.paymentMethod === 'wallet') {
+            const buyerWallet = await tx.wallet.findUnique({
+              where: { userId: order.userId },
             })
 
-            // Record wallet mutation for buyer (credit = refund)
-            await tx.walletMutation.create({
-              data: {
-                walletId: buyerWallet.id,
-                type: 'credit',
-                amount: new Prisma.Decimal(refundAmount),
-                balance: new Prisma.Decimal(Number(updatedBuyerWallet.balance)),
-                description: `Refund pesanan ${order.orderNumber}`,
-                refType: 'refund',
-                refId: order.id,
-              },
-            })
+            if (buyerWallet) {
+              const refundAmount = Number(order.totalAmount)
+              const updatedBuyerWallet = await tx.wallet.update({
+                where: { id: buyerWallet.id },
+                data: { balance: { increment: refundAmount } },
+              })
+
+              // Record wallet mutation for buyer (credit = refund)
+              await tx.walletMutation.create({
+                data: {
+                  walletId: buyerWallet.id,
+                  type: 'credit',
+                  amount: new Prisma.Decimal(refundAmount),
+                  balance: new Prisma.Decimal(Number(updatedBuyerWallet.balance)),
+                  description: `Refund pesanan ${order.orderNumber}`,
+                  refType: 'refund',
+                  refId: order.id,
+                },
+              })
+            }
           }
 
           // Deduct from seller's pending balance (escrow reversal)

@@ -18,8 +18,11 @@ import type { ScreenName } from "@/lib/types"
 interface StreamPost {
   id: string
   userId: string
-  userName: string
-  userAvatar?: string
+  user: {
+    id: string
+    name: string
+    avatar?: string
+  }
   type: "text" | "image" | "video"
   content: string
   mediaUrl?: string
@@ -43,8 +46,11 @@ interface StreamPost {
 interface StreamFeedResponse {
   success: boolean
   data: StreamPost[]
-  nextCursor?: string
-  hasMore: boolean
+  pagination: {
+    nextCursor?: string | null
+    hasMore: boolean
+    limit: number
+  }
 }
 
 interface LikeResponse {
@@ -128,8 +134,8 @@ export function StreamFeedScreen() {
         } else {
           setPosts((prev) => [...prev, ...data.data])
         }
-        setCursor(data.nextCursor)
-        setHasMore(data.hasMore)
+        setCursor(data.pagination?.nextCursor ?? undefined)
+        setHasMore(data.pagination?.hasMore ?? false)
       }
     } catch (error) {
       showToast("Gagal memuat feed", "error")
@@ -148,8 +154,8 @@ export function StreamFeedScreen() {
         const data = await apiClient.get<StreamFeedResponse>("/api/stream", { limit: "10" })
         if (data.success && data.data) {
           setPosts(data.data)
-          setCursor(data.nextCursor)
-          setHasMore(data.hasMore)
+          setCursor(data.pagination?.nextCursor ?? undefined)
+          setHasMore(data.pagination?.hasMore ?? false)
         }
       } catch {
         showToast("Gagal memuat feed", "error")
@@ -238,7 +244,7 @@ export function StreamFeedScreen() {
     if (navigator.share) {
       try {
         await navigator.share({
-          title: `Postingan dari ${post.userName}`,
+          title: `Postingan dari ${post.user?.name || 'User'}`,
           text: truncateText(post.content, 100),
           url: window.location.href,
         })
@@ -376,55 +382,59 @@ export function StreamFeedScreen() {
           </motion.button>
 
           {/* Top posters (derived from feed) */}
-          {posts.slice(0, 8).map((post, idx) => (
-            <motion.button
-              key={post.userId}
-              whileTap={{ scale: 0.95 }}
-              className="flex flex-col items-center gap-1.5 flex-shrink-0"
-            >
-              <div className="relative w-[62px] h-[62px]">
-                {/* Gradient ring */}
-                <div className={`absolute inset-0 rounded-full bg-gradient-to-br ${
-                  idx % 3 === 0 ? "from-orange-400 via-pink-500 to-rose-500" :
-                  idx % 3 === 1 ? "from-emerald-400 via-teal-500 to-cyan-500" :
-                  "from-violet-400 via-purple-500 to-fuchsia-500"
-                } p-[2px]`}>
-                  <div className="w-full h-full rounded-full bg-background p-[2px]">
-                    <div className="w-full h-full rounded-full overflow-hidden">
-                      {post.userAvatar ? (
-                        <img
-                          src={post.userAvatar}
-                          alt={post.userName}
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            const img = e.currentTarget as HTMLImageElement
-                            img.style.display = "none"
-                            const fallback = img.nextElementSibling as HTMLElement
-                            if (fallback) fallback.style.display = "flex"
-                          }}
-                        />
-                      ) : null}
-                      <div
-                        className={`w-full h-full rounded-full ${getAvatarColor(post.userName)} text-white font-bold items-center justify-center text-lg`}
-                        style={{ display: post.userAvatar ? "none" : "flex" }}
-                      >
-                        {post.userName.charAt(0).toUpperCase()}
+          {posts.slice(0, 8).map((post, idx) => {
+            const userName = post.user?.name || 'User'
+            const userAvatar = post.user?.avatar
+            return (
+              <motion.button
+                key={post.user?.id || post.userId}
+                whileTap={{ scale: 0.95 }}
+                className="flex flex-col items-center gap-1.5 flex-shrink-0"
+              >
+                <div className="relative w-[62px] h-[62px]">
+                  {/* Gradient ring */}
+                  <div className={`absolute inset-0 rounded-full bg-gradient-to-br ${
+                    idx % 3 === 0 ? "from-orange-400 via-pink-500 to-rose-500" :
+                    idx % 3 === 1 ? "from-emerald-400 via-teal-500 to-cyan-500" :
+                    "from-violet-400 via-purple-500 to-fuchsia-500"
+                  } p-[2px]`}>
+                    <div className="w-full h-full rounded-full bg-background p-[2px]">
+                      <div className="w-full h-full rounded-full overflow-hidden">
+                        {userAvatar ? (
+                          <img
+                            src={userAvatar}
+                            alt={userName}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              const img = e.currentTarget as HTMLImageElement
+                              img.style.display = "none"
+                              const fallback = img.nextElementSibling as HTMLElement
+                              if (fallback) fallback.style.display = "flex"
+                            }}
+                          />
+                        ) : null}
+                        <div
+                          className={`w-full h-full rounded-full ${getAvatarColor(userName)} text-white font-bold items-center justify-center text-lg`}
+                          style={{ display: userAvatar ? "none" : "flex" }}
+                        >
+                          {userName.charAt(0).toUpperCase()}
+                        </div>
                       </div>
                     </div>
                   </div>
+                  {/* Live / New indicator */}
+                  {idx === 0 && (
+                    <div className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded-full bg-gradient-to-r from-orange-500 to-red-500 text-white text-[8px] font-bold leading-none">
+                      NEW
+                    </div>
+                  )}
                 </div>
-                {/* Live / New indicator */}
-                {idx === 0 && (
-                  <div className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded-full bg-gradient-to-r from-orange-500 to-red-500 text-white text-[8px] font-bold leading-none">
-                    NEW
-                  </div>
-                )}
-              </div>
-              <span className="text-[10px] font-medium text-foreground max-w-[62px] truncate">
-                {post.userName.split(" ")[0]}
-              </span>
-            </motion.button>
-          ))}
+                <span className="text-[10px] font-medium text-foreground max-w-[62px] truncate">
+                  {userName.split(" ")[0]}
+                </span>
+              </motion.button>
+            )
+          })}
         </div>
       </div>
 
@@ -665,6 +675,9 @@ function StreamPostCard({
   const [isBookmarked, setIsBookmarked] = useState(false)
   const [isContentExpanded, setIsContentExpanded] = useState(false)
 
+  const userName = post.user?.name || 'User'
+  const userAvatar = post.user?.avatar
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -678,10 +691,10 @@ function StreamPostCard({
         <div className="relative flex-shrink-0">
           <div className="w-11 h-11 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 p-[2px]">
             <div className="w-full h-full rounded-full bg-card p-[1.5px]">
-              {post.userAvatar ? (
+              {userAvatar ? (
                 <img
-                  src={post.userAvatar}
-                  alt={post.userName}
+                  src={userAvatar}
+                  alt={userName}
                   className="w-full h-full rounded-full object-cover"
                   onError={(e) => {
                     const img = e.currentTarget as HTMLImageElement
@@ -692,10 +705,10 @@ function StreamPostCard({
                 />
               ) : null}
               <div
-                className={`w-full h-full rounded-full ${getAvatarColor(post.userName)} text-white font-bold items-center justify-center text-sm`}
-                style={{ display: post.userAvatar ? "none" : "flex" }}
+                className={`w-full h-full rounded-full ${getAvatarColor(userName)} text-white font-bold items-center justify-center text-sm`}
+                style={{ display: userAvatar ? "none" : "flex" }}
               >
-                {post.userName.charAt(0).toUpperCase()}
+                {userName.charAt(0).toUpperCase()}
               </div>
             </div>
           </div>
@@ -706,7 +719,7 @@ function StreamPostCard({
         {/* Name & time */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
-            <p className="text-sm font-bold text-foreground truncate">{post.userName}</p>
+            <p className="text-sm font-bold text-foreground truncate">{userName}</p>
             {post.likeCount > 50 && (
               <Verified className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" fill="currentColor" />
             )}

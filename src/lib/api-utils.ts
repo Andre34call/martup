@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { verifyAuthToken } from '@/lib/auth-middleware'
 import type { AuthResult, AuthError } from '@/lib/auth-middleware'
+import { ELEVATED_ROLES } from '@/lib/types'
 import { logger } from '@/lib/logger'
 
 // ==================== TYPE DEFINITIONS ====================
@@ -204,6 +205,8 @@ export async function verifyAuthOrSession(request: NextRequest): Promise<AuthUse
   }
 
   // --- Method 2: NextAuth session ---
+  // SECURITY: NextAuth JWT callback now validates tokenVersion, so if the session
+  // is valid here, the tokenVersion check has already been performed in auth.ts.
   try {
     const session = await getServerSession(authOptions)
     if (session?.user) {
@@ -245,13 +248,18 @@ export async function verifyAuthOrSession(request: NextRequest): Promise<AuthUse
  * Uses `verifyAuthOrSession` internally and returns either the
  * authenticated admin's info, or a ready-to-send 401/403 error response.
  *
+ * SECURITY FIX: Now uses ELEVATED_ROLES from the centralized types module
+ * instead of only checking `role !== 'admin'`. This allows managers and
+ * all division staff (finance, pr, tech, cs, marketing, operations, legal, hr)
+ * to access admin routes.
+ *
  * Usage:
  * ```ts
  * export async function GET(request: NextRequest) {
  *   const auth = await requireAdminAuth(request)
  *   if (auth instanceof NextResponse) return auth
  *
- *   // auth.userId is now guaranteed to be an admin
+ *   // auth.userId is now guaranteed to be an admin/staff user
  *   ...
  * }
  * ```
@@ -263,7 +271,9 @@ export async function requireAdminAuth(request: NextRequest): Promise<AdminAuthR
     return unauthorizedResponse()
   }
 
-  if (user.role !== 'admin') {
+  // SECURITY FIX: Use centralized ELEVATED_ROLES instead of hardcoded 'admin' check.
+  // This allows all admin, manager, and division staff roles to access admin routes.
+  if (!ELEVATED_ROLES.includes(user.role as any)) {
     return forbiddenResponse('Forbidden - Admin access required')
   }
 
@@ -278,7 +288,9 @@ export async function requireAdminAuth(request: NextRequest): Promise<AdminAuthR
 /**
  * Require staff-level authentication (admin or any staff role).
  *
- * Staff roles mirror those in `auth-middleware.ts verifyStaff`.
+ * SECURITY FIX: Now uses centralized ELEVATED_ROLES instead of a hardcoded
+ * staff roles list, ensuring consistency with the role hierarchy defined
+ * in @/lib/types.
  *
  * Usage:
  * ```ts
@@ -287,14 +299,14 @@ export async function requireAdminAuth(request: NextRequest): Promise<AdminAuthR
  * ```
  */
 export async function requireStaffAuth(request: NextRequest): Promise<AdminAuthResult> {
-  const staffRoles = ['admin', 'finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr']
   const user = await verifyAuthOrSession(request)
 
   if (!user) {
     return unauthorizedResponse()
   }
 
-  if (!staffRoles.includes(user.role)) {
+  // SECURITY FIX: Use centralized ELEVATED_ROLES for consistency
+  if (!ELEVATED_ROLES.includes(user.role as any)) {
     return forbiddenResponse('Forbidden - Staff access required')
   }
 

@@ -377,7 +377,8 @@ export function CheckoutScreen() {
     return selectedVoucher.value
   }, [selectedVoucher, subtotal])
 
-  const totalAmount = subtotal + shippingCost - voucherDiscount + platformFee + taxAmount
+  // BUG 20 FIX: Ensure totalAmount never goes negative (e.g., voucher > subtotal + shipping)
+  const totalAmount = Math.max(0, subtotal + shippingCost - voucherDiscount + platformFee + taxAmount)
 
   // Calculate current checkout step
   const currentStep = useMemo(() => {
@@ -554,10 +555,10 @@ export function CheckoutScreen() {
         }
       }
 
-      // Remove checked items from cart AFTER orders are created
-      // (Cart is cleared here because orders are already in the database)
-      const checkedItemIds = checkedItems.map(i => i.id)
-      checkedItemIds.forEach(id => removeItem(id))
+      // BUG 10 FIX: Cart removal moved to AFTER payment confirmation
+      // Previously removed items before payment processing — if payment failed,
+      // the cart was already empty and user had no way to retry.
+      // Now items are removed after successful payment for each method.
 
       // ==================== Payment processing ====================
 
@@ -588,6 +589,12 @@ export function CheckoutScreen() {
         // Update local wallet balance
         deductWallet(Math.max(0, totalAmount), 'Pembayaran pesanan via MartUp Pay')
 
+        // BUG 10 FIX: Remove cart items only after wallet payment succeeds
+        if (walletPaymentSuccess) {
+          const checkedItemIds = checkedItems.map(i => i.id)
+          checkedItemIds.forEach(id => removeItem(id))
+        }
+
         setIsProcessing(false)
         if (walletPaymentSuccess) {
           setShowSuccessModal(true)
@@ -603,6 +610,13 @@ export function CheckoutScreen() {
       } else if (selectedPayment === 'midtrans' || selectedPayment === 'card') {
         // Midtrans / Card payment: open Snap popup for each seller order
         if (selectedVoucher) markVoucherUsed(selectedVoucher.id)
+
+        // BUG 10 FIX: Remove cart items after Midtrans payment creation succeeds
+        // (user is redirected to pay, so order is committed)
+        if (createdOrders.length > 0) {
+          const checkedItemIds = checkedItems.map(i => i.id)
+          checkedItemIds.forEach(id => removeItem(id))
+        }
 
         if (createdOrders.length > 0) {
           try {
@@ -667,6 +681,11 @@ export function CheckoutScreen() {
       } else {
         // COD or other payment methods — order stays pending
         if (selectedVoucher) markVoucherUsed(selectedVoucher.id)
+
+        // BUG 10 FIX: Remove cart items for COD (no payment step needed)
+        const checkedItemIds = checkedItems.map(i => i.id)
+        checkedItemIds.forEach(id => removeItem(id))
+
         setIsProcessing(false)
         setShowSuccessModal(true)
         setTimeout(() => {

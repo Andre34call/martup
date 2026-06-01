@@ -60,6 +60,7 @@ model User {
   streamPosts    StreamPost[]
   streamComments StreamComment[]
   streamLikes    StreamLike[]
+  streamCommentLikes StreamCommentLike[]
 }
 
 model Seller {
@@ -702,6 +703,7 @@ model StreamComment {
   post      StreamPost     @relation(fields: [postId], references: [id])
   parent    StreamComment? @relation("CommentReplies", fields: [parentId], references: [id])
   replies   StreamComment[] @relation("CommentReplies")
+  likes     StreamCommentLike[]
 
   @@index([postId, createdAt])
   @@index([parentId, createdAt])
@@ -719,5 +721,18 @@ model StreamLike {
 
   @@unique([postId, userId])
   @@index([postId])
+  @@index([userId])
+}
+
+model StreamCommentLike {
+  id        String   @id @default(cuid())
+  commentId String
+  userId    String
+  comment   StreamComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([commentId, userId])
+  @@index([commentId])
   @@index([userId])
 }

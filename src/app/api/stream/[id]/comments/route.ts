@@ -6,7 +6,8 @@ import { logger } from '@/lib/logger'
 
 // ==================== GET /api/stream/[id]/comments ====================
 // Fetch comments for a post — public endpoint
-// Includes user info and limited replies per comment
+// Supports parentId filter for loading replies
+// Includes user info, isLiked status, and likeCount per comment
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -16,6 +17,7 @@ export async function GET(
     const { searchParams } = new URL(request.url)
     const cursor = searchParams.get('cursor')
     const limitParam = searchParams.get('limit')
+    const parentIdParam = searchParams.get('parentId')
 
     // Parse and clamp limit
     let limit = parseInt(limitParam || '20', 10)
@@ -35,16 +37,31 @@ export async function GET(
       )
     }
 
-    // Build where clause for top-level comments only (parentId = null)
+    // Optionally check auth for isLiked on comments
+    let authedUserId: string | null = null
+    try {
+      const authResult = await verifyAuth(request)
+      if (authResult.success) {
+        authedUserId = authResult.user.id
+      }
+    } catch {
+      // Auth check is optional for GET — continue without auth
+    }
+
+    // Build where clause
+    // If parentId is provided, fetch replies to that comment; otherwise fetch top-level comments
     const where: Record<string, unknown> = {
       postId,
-      parentId: null,
+      parentId: parentIdParam || null,
     }
     if (cursor) {
       where.createdAt = { lt: new Date(cursor) }
     }
 
-    // Fetch top-level comments
+    // When loading by parentId, don't include nested replies
+    const includeReplies = !parentIdParam
+
+    // Fetch comments
     const comments = await db.streamComment.findMany({
       where,
       take: limit + 1, // +1 to detect if there's a next page
@@ -57,22 +74,42 @@ export async function GET(
             avatar: true,
           },
         },
-        replies: {
-          take: 3,
-          orderBy: { createdAt: 'desc' },
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                avatar: true,
+        ...(includeReplies
+          ? {
+              replies: {
+                take: 3,
+                orderBy: { createdAt: 'desc' },
+                include: {
+                  user: {
+                    select: {
+                      id: true,
+                      name: true,
+                      avatar: true,
+                    },
+                  },
+                  ...(authedUserId
+                    ? {
+                        likes: {
+                          where: { userId: authedUserId },
+                          select: { id: true },
+                        },
+                      }
+                    : {}),
+                },
               },
-            },
-          },
-        },
+            }
+          : {}),
         _count: {
           select: { replies: true },
         },
+        ...(authedUserId
+          ? {
+              likes: {
+                where: { userId: authedUserId },
+                select: { id: true },
+              },
+            }
+          : {}),
       },
     })
 
@@ -80,18 +117,28 @@ export async function GET(
     const hasMore = comments.length > limit
     const items = hasMore ? comments.slice(0, limit) : comments
 
-    // Format comments — include reply count and limited replies
-    const formattedComments = items.map((comment) => {
-      const { _count, replies, ...commentData } = comment
-      return {
+    // Format comments — include reply count, isLiked, likeCount
+    const formattedComments = items.map((comment: any) => {
+      const { _count, likes, replies, ...commentData } = comment
+      const formatted: Record<string, unknown> = {
         ...commentData,
-        replyCount: _count.replies,
-        replies: replies.map((reply) => {
-          // Replies don't need nested replies in the list view
-          const { ...replyData } = reply
-          return replyData
-        }),
+        replyCount: _count?.replies ?? 0,
+        isLiked: authedUserId ? (likes?.length ?? 0) > 0 : false,
+        likeCount: commentData.likeCount ?? 0,
       }
+
+      if (replies) {
+        formatted.replies = replies.map((reply: any) => {
+          const { likes: replyLikes, ...replyData } = reply
+          return {
+            ...replyData,
+            isLiked: authedUserId ? (replyLikes?.length ?? 0) > 0 : false,
+            likeCount: replyData.likeCount ?? 0,
+          }
+        })
+      }
+
+      return formatted
     })
 
     // Next cursor = last item's createdAt
@@ -242,7 +289,11 @@ export async function POST(
     return NextResponse.json(
       {
         success: true,
-        data: comment,
+        data: {
+          ...comment,
+          isLiked: false,
+          likeCount: 0,
+        },
       },
       { status: 201 }
     )

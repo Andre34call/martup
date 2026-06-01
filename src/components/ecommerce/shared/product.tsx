@@ -59,7 +59,7 @@ export function ProductCard({ product, onClick, layout = "grid" }: ProductCardPr
   const { toggleWishlist, isWishlisted } = useWishlistStore()
   const wishlisted = isWishlisted(product.id)
   const discountPercent = product.discountPrice
-    ? Math.round(((product.price - product.discountPrice) / product.price) * 100)
+    ? (product.price > 0 ? Math.round(((product.price - product.discountPrice) / product.price) * 100) : 0)
     : 0
 
   const colors = [

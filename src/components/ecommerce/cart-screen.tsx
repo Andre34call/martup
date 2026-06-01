@@ -91,7 +91,7 @@ function CartItemCard({
         )}
         {item.product.discountPrice && (
           <div className="absolute top-0.5 left-0.5 bg-red-500 text-white text-[8px] font-bold px-1 py-0.5 rounded">
-            -{Math.round(((item.product.price - item.product.discountPrice) / item.product.price) * 100)}%
+            -{item.product.price > 0 ? Math.round(((item.product.price - item.product.discountPrice) / item.product.price) * 100) : 0}%
           </div>
         )}
       </div>

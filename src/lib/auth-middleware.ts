@@ -52,7 +52,12 @@ export async function checkRateLimitAdvanced(
 
 /**
  * Legacy synchronous rate limit check — kept for backward compatibility.
- * DEPRECATED: Use checkRateLimitAdvanced() for new code.
+ *
+ * @deprecated Use checkRateLimitAdvanced() for production code.
+ * This function uses in-memory storage which:
+ * 1. Has a memory leak — entries are never cleaned up, causing unbounded Map growth
+ * 2. Is ineffective in serverless environments — each cold start creates a fresh empty map
+ * Kept for backward compatibility with existing routes.
  */
 export function checkRateLimit(identifier: string, maxRequests: number = 60): boolean {
   // Synchronous approximation — uses in-memory fallback for immediate response
@@ -62,6 +67,18 @@ export function checkRateLimit(identifier: string, maxRequests: number = 60): bo
     checkRateLimit.map = new Map<string, { count: number; lastReset: number }>()
   }
   const rateLimitMap = checkRateLimit.map
+
+  // SECURITY FIX: Periodic cleanup to prevent memory leak.
+  // Remove entries older than 2 minutes when the map exceeds 10,000 entries.
+  // This prevents unbounded growth of the in-memory Map.
+  if (rateLimitMap.size > 10000) {
+    for (const [key, value] of rateLimitMap) {
+      if (now - value.lastReset > 120_000) {
+        rateLimitMap.delete(key)
+      }
+    }
+  }
+
   const entry = rateLimitMap.get(identifier)
 
   if (!entry || now - entry.lastReset > 60_000) {
@@ -205,7 +222,7 @@ export interface AuthError {
 /**
  * Verify that the request comes from an authenticated user.
  * SECURITY: Three methods are accepted:
- * 1. NextAuth session (for Google OAuth users)
+ * 1. NextAuth session (for Google OAuth users) — tokenVersion validated in auth.ts JWT callback
  * 2. HMAC-signed session cookie (for email/password users — sticky login)
  * 3. HMAC-signed bearer token (fallback for API clients)
  * 
@@ -214,6 +231,10 @@ export interface AuthError {
 export async function verifyAuth(request: NextRequest): Promise<AuthResult | AuthError> {
   try {
     // Method 1: Check NextAuth session (for Google OAuth)
+    // SECURITY: The JWT callback in auth.ts now validates tokenVersion on every refresh.
+    // If tokenVersion doesn't match (e.g. password was changed), the JWT callback
+    // returns an empty token, which causes getServerSession to return null.
+    // So if we get a valid session here, tokenVersion has already been validated.
     const session = await getServerSession(authOptions)
     if (session?.user) {
       const userEmail = (session.user as Record<string, unknown>).email as string | undefined

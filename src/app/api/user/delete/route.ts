@@ -39,9 +39,16 @@ export async function DELETE(request: NextRequest) {
         return NextResponse.json({ success: false, error: 'Password salah' }, { status: 401 })
       }
     } else {
-      // OAuth-only user - require email confirmation to prevent accidental deletion
-      if (password !== userWithPassword?.email) {
-        return NextResponse.json({ success: false, error: 'Ketik email Anda untuk mengkonfirmasi penghapusan akun' }, { status: 400 })
+      // SECURITY FIX: OAuth-only user — require typed confirmation "HAPUS" instead of email.
+      // Using the user's email as confirmation was insecure because emails are often public
+      // or guessable. An attacker with access to a user's session could delete the account
+      // by simply typing the email address. Requiring "HAPUS" (Indonesian for DELETE) as a
+      // deliberate confirmation phrase prevents accidental deletion and requires explicit intent.
+      if (password !== 'HAPUS') {
+        return NextResponse.json({ 
+          success: false, 
+          error: 'Ketik HAPUS untuk mengkonfirmasi penghapusan akun' 
+        }, { status: 400 })
       }
     }
 

@@ -77,7 +77,8 @@ export async function GET(request: NextRequest) {
             select: {
               id: true,
               name: true,
-              email: true,
+              // SECURITY FIX: Removed email from select — buyer email addresses
+              // should not be exposed to sellers (data privacy risk).
               avatar: true,
             },
           },
