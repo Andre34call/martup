@@ -21,6 +21,7 @@ interface StreamPost {
   user: {
     id: string
     name: string
+    username?: string
     avatar?: string
   }
   type: "text" | "image" | "video"
@@ -38,6 +39,7 @@ interface StreamComment {
   user: {
     id: string
     name: string
+    username?: string
     avatar?: string
   }
   content: string

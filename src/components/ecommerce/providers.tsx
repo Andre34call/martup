@@ -19,6 +19,8 @@ interface AuthMeResponse {
     id: string
     email: string
     name: string
+    username?: string
+    usernameChangedAt?: string
     phone?: string
     avatar?: string
     role?: string
@@ -26,6 +28,8 @@ interface AuthMeResponse {
     loyaltyPoints?: number
     coins?: number
     referralCode?: string
+    twoFactorEnabled?: boolean
+    emailHidden?: boolean
   }
   isSuperAdmin?: boolean
 }
@@ -105,6 +109,8 @@ function DataFetcher({ children }: { children: React.ReactNode }) {
             id: data.user.id,
             email: data.user.email,
             name: data.user.name,
+            username: data.user.username || undefined,
+            usernameChangedAt: data.user.usernameChangedAt || undefined,
             phone: data.user.phone || undefined,
             avatar: data.user.avatar || undefined,
             role: (data.user.role || 'buyer') as UserRole,
@@ -112,6 +118,8 @@ function DataFetcher({ children }: { children: React.ReactNode }) {
             loyaltyPoints: data.user.loyaltyPoints || 0,
             coins: data.user.coins || 0,
             referralCode: data.user.referralCode || undefined,
+            twoFactorEnabled: data.user.twoFactorEnabled || false,
+            emailHidden: data.user.emailHidden || false,
             isSuperAdmin: data.isSuperAdmin || false,
           })
           // Set Sentry user context for error tracking
@@ -150,6 +158,8 @@ function DataFetcher({ children }: { children: React.ReactNode }) {
               id: data.user.id,
               email: data.user.email,
               name: data.user.name,
+              username: data.user.username || undefined,
+              usernameChangedAt: data.user.usernameChangedAt || undefined,
               phone: data.user.phone || undefined,
               avatar: data.user.avatar || undefined,
               role: (data.user.role || 'buyer') as UserRole,
@@ -157,6 +167,8 @@ function DataFetcher({ children }: { children: React.ReactNode }) {
               loyaltyPoints: data.user.loyaltyPoints || 0,
               coins: data.user.coins || 0,
               referralCode: data.user.referralCode || undefined,
+              twoFactorEnabled: data.user.twoFactorEnabled || false,
+              emailHidden: data.user.emailHidden || false,
               isSuperAdmin: data.isSuperAdmin || false,
             })
             // Set auth flag cookie for Google OAuth users (same as email login)

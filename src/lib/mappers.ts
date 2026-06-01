@@ -9,6 +9,8 @@ export function mapUser(raw: any): User {
     email: raw.email,
     phone: raw.phone || undefined,
     name: raw.name,
+    username: raw.username || undefined,
+    usernameChangedAt: raw.usernameChangedAt || undefined,
     avatar: raw.avatar || undefined,
     role: (raw.role as UserRole) || 'buyer',
     isVerified: raw.isVerified,
