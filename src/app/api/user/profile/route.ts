@@ -28,10 +28,83 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { name, email, phone, emailHidden } = body
+    const { name, email, phone, emailHidden, username } = body
 
     // Build update data — only include fields that are provided
     const updateData: Record<string, unknown> = {}
+
+    if (username !== undefined) {
+      if (typeof username !== 'string') {
+        return NextResponse.json(
+          { success: false, error: 'Format username tidak valid' },
+          { status: 400 }
+        )
+      }
+
+      const trimmedUsername = username.trim().toLowerCase()
+
+      // Allow setting to empty (removing username)
+      if (trimmedUsername === '') {
+        return NextResponse.json(
+          { success: false, error: 'Username tidak boleh kosong' },
+          { status: 400 }
+        )
+      }
+
+      // Validate username format: 3-20 chars, alphanumeric, underscore, hyphen
+      const usernameRegex = /^[a-z0-9_-]{3,20}$/
+      if (!usernameRegex.test(trimmedUsername)) {
+        return NextResponse.json(
+          { success: false, error: 'Username harus 3-20 karakter, hanya huruf kecil, angka, underscore (_), atau strip (-)' },
+          { status: 400 }
+        )
+      }
+
+      // Reserved usernames
+      const reservedUsernames = ['admin', 'administrator', 'root', 'system', 'moderator', 'mod', 'support', 'help', 'info', 'martup', 'api', 'null', 'undefined', 'settings', 'profile', 'search', 'stream', 'shop', 'store', 'seller', 'buyer']
+      if (reservedUsernames.includes(trimmedUsername)) {
+        return NextResponse.json(
+          { success: false, error: 'Username ini tidak tersedia (reserved)' },
+          { status: 400 }
+        )
+      }
+
+      // Check 30-day cooldown
+      const currentUser = await db.user.findUnique({
+        where: { id: authResult.user.id },
+        select: { username: true, usernameChangedAt: true },
+      })
+
+      if (currentUser?.usernameChangedAt) {
+        const lastChange = new Date(currentUser.usernameChangedAt)
+        const now = new Date()
+        const daysSinceLastChange = (now.getTime() - lastChange.getTime()) / (1000 * 60 * 60 * 24)
+        if (daysSinceLastChange < 30) {
+          const remainingDays = Math.ceil(30 - daysSinceLastChange)
+          return NextResponse.json(
+            { success: false, error: `Username hanya bisa diganti setiap 30 hari. Tunggu ${remainingDays} hari lagi.` },
+            { status: 400 }
+          )
+        }
+      }
+
+      // Check if username is already taken (but allow same user keeping their own)
+      if (trimmedUsername !== currentUser?.username) {
+        const existingUsername = await db.user.findUnique({
+          where: { username: trimmedUsername },
+          select: { id: true },
+        })
+        if (existingUsername && existingUsername.id !== authResult.user.id) {
+          return NextResponse.json(
+            { success: false, error: 'Username sudah digunakan oleh orang lain' },
+            { status: 409 }
+          )
+        }
+      }
+
+      updateData.username = trimmedUsername
+      updateData.usernameChangedAt = new Date()
+    }
 
     if (name !== undefined) {
       if (typeof name !== 'string' || name.trim().length === 0) {
@@ -134,6 +207,8 @@ export async function PUT(request: NextRequest) {
         email: true,
         phone: true,
         name: true,
+        username: true,
+        usernameChangedAt: true,
         avatar: true,
         role: true,
         isVerified: true,

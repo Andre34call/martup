@@ -74,6 +74,8 @@ export async function GET(request: NextRequest) {
           email: true,
           phone: true,
           name: true,
+          username: true,
+          usernameChangedAt: true,
           avatar: true,
           role: true,
           isVerified: true,

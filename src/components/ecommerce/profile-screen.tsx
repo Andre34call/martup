@@ -102,6 +102,7 @@ export function ProfileScreen() {
   const isDarkMode = theme === 'dark'
 
   const userName = currentUser?.name || DEFAULT_USER_VALUES.name
+  const userUsername = currentUser?.username
   const userEmail = currentUser?.email || DEFAULT_USER_VALUES.email
 
   // Mask email if user has hidden it: "john@example.com" → "j***@example.com"
@@ -204,6 +205,9 @@ export function ProfileScreen() {
               </div>
               <div className="flex-1 min-w-0">
                 <h2 className="text-lg font-bold text-foreground">{userName}</h2>
+                {userUsername && (
+                  <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">@{userUsername}</p>
+                )}
                 <p className="text-xs text-muted-foreground">{displayEmail}</p>
                 <p className="text-[10px] text-muted-foreground mt-0.5">
                   Member sejak {memberSince}
