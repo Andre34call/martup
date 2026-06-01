@@ -2142,3 +2142,30 @@ Stage Summary:
 - Post menu: 2 fixes (AnimatePresence exit, dead imports)
 - User profile: 2 fixes (email icon, fake online indicator)
 - TypeScript ✅ ESLint ✅ Dev server ✅
+---
+Task ID: 1
+Agent: main
+Task: Fix login timeout - conflicting dynamic routes prevented app from starting
+
+Work Log:
+- Investigated login timeout bug: user sees "Koneksi timeout. Periksa koneksi internet Anda dan coba lagi."
+- Discovered root cause: conflicting dynamic route names at same path level in /api/stream/
+  - `/api/stream/[id]/` had existing routes (get, like, comments)
+  - `/api/stream/[postId]/report/` was added later (report feature)
+  - Next.js REJECTS different slug names (`[id]` vs `[postId]`) at the same path level
+  - Error: "You cannot use different slug names for the same dynamic path ('postId' !== 'id')"
+- This caused the entire Next.js app to fail to build/start — ALL routes were broken, not just login
+- Fixed by moving `/api/stream/[postId]/report/route.ts` to `/api/stream/[id]/report/route.ts`
+- Updated the route handler to use `const { id: postId } = await context.params` instead of `const { postId } = await context.params`
+- Deleted the conflicting `[postId]` directory
+- Verified no other dynamic route conflicts exist
+- Verified dev server starts successfully (no more slug conflict error)
+- Verified login API route is reachable (returns proper error messages, not timeout)
+- Verified lint passes
+
+Stage Summary:
+- ROOT CAUSE: Conflicting dynamic routes `[postId]` vs `[id]` at `/api/stream/` prevented Next.js from building
+- This caused ALL API requests to timeout (including login) — the app couldn't start at all
+- Fix: Moved report route from `[postId]` to `[id]` directory, updated param destructuring
+- Previous fixes (CSRF exempt lists, loading state finally blocks) were correct but insufficient — the app couldn't even start
+- This explains why 3 rounds of fixes didn't help: the app was broken at the framework level

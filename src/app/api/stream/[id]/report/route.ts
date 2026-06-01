@@ -16,9 +16,9 @@ export const POST = withErrorHandler(async (request: NextRequest, context?: Rout
   const auth = await requireAuth(request)
   if (auth instanceof NextResponse) return auth
 
-  // 2. Get postId from context params
+  // 2. Get postId from context params (slug is [id] but semantically it's a post ID)
   if (!context) return errorResponse('Missing route context', 500)
-  const { postId } = await context.params
+  const { id: postId } = await context.params
 
   // 3. Parse request body
   const body = await parseRequestBody<ReportBody>(request)
