@@ -72,7 +72,7 @@ export function SellerShopScreen() {
 
   if (!seller) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen bg-background pb-20">
         <PageHeader title="Toko" onBack={handleBack} />
         <EmptyState
           icon={<Store className="w-10 h-10 text-muted-foreground" />}

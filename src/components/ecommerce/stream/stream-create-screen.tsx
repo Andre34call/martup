@@ -301,7 +301,7 @@ export function StreamCreateScreen() {
   ]
 
   return (
-    <div className="min-h-screen bg-background pb-6">
+    <div className="min-h-screen bg-background pb-20">
       <PageHeader title="Buat Postingan" onBack={handleGoBack} />
 
       <div className="px-4 pt-4 space-y-5">

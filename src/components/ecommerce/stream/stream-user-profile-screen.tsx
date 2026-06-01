@@ -196,7 +196,6 @@ export function StreamUserProfileScreen() {
   const setSelectedProduct = useAppStore(s => s.setSelectedProduct)
   const setSelectedSeller = useAppStore(s => s.setSelectedSeller)
   const showToast = useAppStore(s => s.showToast)
-  const setOverlayOpen = useAppStore(s => s.setOverlayOpen)
   const currentUser = useAppStore(s => s.currentUser)
   const currentUserId = currentUser?.id || null
 
@@ -217,12 +216,6 @@ export function StreamUserProfileScreen() {
   // Video playback state
   const [playingVideoId, setPlayingVideoId] = useState<string | null>(null)
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({})
-
-  // Signal overlay on mount
-  useEffect(() => {
-    setOverlayOpen(true)
-    return () => setOverlayOpen(false)
-  }, [setOverlayOpen])
 
   // Navigate back if no selected user
   useEffect(() => {

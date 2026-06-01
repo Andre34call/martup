@@ -278,7 +278,7 @@ export function SellerWithdrawScreen() {
   const selectedBank = sellerBankAccounts.find(a => a.id === selectedBankId)
 
   return (
-    <div className="min-h-screen bg-background pb-8">
+    <div className="min-h-screen bg-background pb-20">
       <PageHeader title="Tarik Dana" />
 
       <WithdrawStepIndicator currentStep={currentStep} />
@@ -606,7 +606,7 @@ export function SellerWithdrawHistoryScreen() {
   ]
 
   return (
-    <div className="min-h-screen bg-background pb-8">
+    <div className="min-h-screen bg-background pb-20">
       <PageHeader title="Riwayat Penarikan" />
 
       <div className="px-4 space-y-4">
