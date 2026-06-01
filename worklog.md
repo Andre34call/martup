@@ -2169,3 +2169,30 @@ Stage Summary:
 - Fix: Moved report route from `[postId]` to `[id]` directory, updated param destructuring
 - Previous fixes (CSRF exempt lists, loading state finally blocks) were correct but insufficient — the app couldn't even start
 - This explains why 3 rounds of fixes didn't help: the app was broken at the framework level
+
+---
+Task ID: 2
+Agent: main
+Task: Fix missing bottom nav on Profile + upgrade profile header to shopping style
+
+Work Log:
+- Investigated bottom nav missing on Profile screen
+- Found root cause: navigate() and goBack() did not reset isOverlayOpen
+  - Stream screens (comment sheet, report dialog, user profile) set isOverlayOpen=true
+  - If user navigated away without proper cleanup, bottom nav stayed hidden permanently
+  - page.tsx getBottomNav() returns null when isOverlayOpen is true
+- Fixed by adding isOverlayOpen: false to navigate() and goBack() in navigation.ts
+- Upgraded Profile header from simple PageHeader ("Profil" + Settings icon) to shopping-style top bar:
+  - MartUp gradient logo (matching HomeScreen)
+  - Search bar button
+  - Cart icon with badge (from useCartStore)
+  - Notification bell with badge (unreadNotificationCount)
+  - Settings gear icon
+- Cleaned up unused imports: ArrowLeft, Wallet, Coins, Clock, X, MessageCircle, AnimatePresence, Separator, SectionHeader
+- Lint passes, dev server compiles successfully
+- Pushed to production (commit 5332c7c)
+
+Stage Summary:
+- Bottom nav fix: navigate()/goBack() now reset isOverlayOpen → prevents nav from disappearing
+- Profile header: shopping-style top bar matching HomeScreen (logo + search + cart + bell + settings)
+- Two changes deployed to production
