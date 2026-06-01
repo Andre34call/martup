@@ -1,20 +1,19 @@
 "use client"
 
-import { motion, AnimatePresence } from "framer-motion"
-import { useAppStore } from "@/lib/store"
+import { motion } from "framer-motion"
+import { useAppStore, useCartStore } from "@/lib/store"
 import { formatPrice } from "@/lib/utils"
-import { PageHeader, SectionHeader, RoleBadge } from "./shared"
+import { RoleBadge } from "./shared"
 import { useState, useMemo, useRef, useEffect } from "react"
 import { useTheme } from 'next-themes'
 import {
-  ArrowLeft, User, Edit, Wallet, Coins, Ticket, Package, Truck,
+  User, Edit, Ticket, Package, Truck,
   Star, MapPin, Heart, Store, HelpCircle, Settings as SettingsIcon,
   Shield, Bell, Globe, ChevronRight, LogOut, Moon, Sun,
-  CreditCard, Clock, Check, Store as StoreIcon, LayoutDashboard,
-  Camera, X
+  CreditCard, Check, Store as StoreIcon, LayoutDashboard,
+  Camera, Search, ShoppingCart
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { ELEVATED_ROLES, type UserRole } from "@/lib/types"
 import { UPLOAD_LIMITS } from "@/lib/upload-limits"
@@ -67,7 +66,9 @@ function MenuItem({
 
 // ==================== PROFILE SCREEN ====================
 export function ProfileScreen() {
-  const { currentUser, userRole, originalRole, switchRole, orders, navigate, logout, showToast, avatarUrl, uploadAvatar, walletBalance, walletCoins, vouchers } = useAppStore()
+  const { currentUser, userRole, originalRole, switchRole, orders, navigate, logout, showToast, avatarUrl, uploadAvatar, walletBalance, walletCoins, vouchers, unreadNotificationCount, totalUnreadChats } = useAppStore()
+  const { getTotalItemCount } = useCartStore()
+  const cartCount = getTotalItemCount()
   const avatarInputRef = useRef<HTMLInputElement>(null)
   const [avatarError, setAvatarError] = useState(false)
 
@@ -144,18 +145,69 @@ export function ProfileScreen() {
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
-      <PageHeader
-        title="Profil"
-        showBack={false}
-        rightAction={
-          <button
+      {/* ===== TOP BAR (Shopping Style — matches HomeScreen) ===== */}
+      <div className="sticky top-0 z-40 glass">
+        <div className="flex items-center gap-3 px-4 h-14">
+          {/* Logo */}
+          <span className="text-xl font-extrabold bg-gradient-to-r from-emerald-600 to-teal-400 bg-clip-text text-transparent flex-shrink-0">
+            MartUp
+          </span>
+
+          {/* Search bar */}
+          <motion.button
+            whileTap={{ scale: 0.98 }}
+            onClick={() => navigate("search")}
+            className="flex-1 flex items-center gap-2 h-9 px-3 rounded-xl bg-muted/60 border border-border/50 text-muted-foreground text-sm"
+          >
+            <Search className="w-4 h-4" />
+          </motion.button>
+
+          {/* Cart icon */}
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            onClick={() => navigate("cart")}
+            className="relative w-9 h-9 flex items-center justify-center rounded-xl hover:bg-muted transition-colors"
+          >
+            <ShoppingCart className="w-5 h-5 text-foreground" />
+            {cartCount > 0 && (
+              <motion.span
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 flex items-center justify-center rounded-full bg-orange-500 text-white text-[9px] font-bold px-1"
+              >
+                {cartCount > 99 ? "99+" : cartCount}
+              </motion.span>
+            )}
+          </motion.button>
+
+          {/* Notification bell */}
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            onClick={() => navigate("notification")}
+            className="relative w-9 h-9 flex items-center justify-center rounded-xl hover:bg-muted transition-colors"
+          >
+            <Bell className="w-5 h-5 text-foreground" />
+            {unreadNotificationCount > 0 && (
+              <motion.span
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 flex items-center justify-center rounded-full bg-red-500 text-white text-[9px] font-bold px-1"
+              >
+                {unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}
+              </motion.span>
+            )}
+          </motion.button>
+
+          {/* Settings gear */}
+          <motion.button
+            whileTap={{ scale: 0.9 }}
             onClick={() => navigate("settings")}
             className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-muted transition-colors"
           >
-            <SettingsIcon className="w-5 h-5 text-muted-foreground" />
-          </button>
-        }
-      />
+            <SettingsIcon className="w-5 h-5 text-foreground" />
+          </motion.button>
+        </div>
+      </div>
 
       <div className="flex-1 pb-20 overflow-y-auto">
         {/* Profile Header */}
