@@ -26,8 +26,8 @@ interface StreamPost {
     avatar?: string
   }
   type: "text" | "image" | "video"
-  content: string
-  mediaUrl?: string
+  content: string | null
+  mediaUrl?: string | null
   likeCount: number
   commentCount: number
   isLiked: boolean
