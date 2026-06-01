@@ -7,7 +7,7 @@ import { logger } from '@/lib/logger'
 // ==================== CONFIG ====================
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 
 const AVATAR_BUCKET = 'avatars'
 const AVATAR_FOLDER = 'profiles'
@@ -59,13 +59,13 @@ function extractSupabasePath(url: string): string | null {
  * Silently ignores errors (best-effort cleanup).
  */
 async function deleteFromSupabase(filePath: string): Promise<void> {
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return
   try {
     await fetch(`${SUPABASE_URL}/storage/v1/object/${AVATAR_BUCKET}/${filePath}`, {
       method: 'DELETE',
       headers: {
-        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        'apikey': SUPABASE_SERVICE_ROLE_KEY,
       },
     })
   } catch {
@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate Supabase configuration
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
       return NextResponse.json(
         { success: false, error: 'Storage not configured. Contact admin.' },
         { status: 500 }
@@ -144,14 +144,15 @@ export async function POST(request: NextRequest) {
     // Generate unique filename
     const filename = `${AVATAR_FOLDER}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
 
-    // Upload to Supabase Storage using REST API
+    // Upload to Supabase Storage using REST API with SERVICE ROLE KEY
+    // Service role key bypasses RLS policies — required for server-side uploads
     const uploadResponse = await fetch(
       `${SUPABASE_URL}/storage/v1/object/${AVATAR_BUCKET}/${filename}`,
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          'apikey': SUPABASE_SERVICE_ROLE_KEY!,
           'Content-Type': file.type,
         },
         body: arrayBuffer,
@@ -168,11 +169,73 @@ export async function POST(request: NextRequest) {
       logger.error({ err: errorData }, 'Avatar upload error')
 
       const errorMsg = errorData.message || errorData.error || 'Unknown error'
-      let userMessage = 'Avatar upload failed'
 
-      if (errorMsg.includes('Bucket not found') || errorMsg.includes('bucket')) {
-        userMessage = 'Avatar storage not configured. Please setup storage first.'
-      } else if (errorMsg.includes('policy') || errorMsg.includes('RLS') || errorMsg.includes('permission')) {
+      // AUTO-CREATE: If bucket not found, try to create it automatically and retry
+      if (errorMsg.includes('Bucket not found') || errorMsg.includes('not found') || uploadResponse.status === 404) {
+        logger.info({ bucket: AVATAR_BUCKET }, 'Avatar bucket not found, attempting auto-creation...')
+
+        try {
+          const createRes = await fetch(`${SUPABASE_URL}/storage/v1/bucket`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+              'apikey': SUPABASE_SERVICE_ROLE_KEY!,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              id: AVATAR_BUCKET,
+              name: AVATAR_BUCKET,
+              public: true,
+              fileSizeLimit: 5 * 1024 * 1024,
+              allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
+            }),
+          })
+
+          if (createRes.ok || createRes.status === 409) {
+            // Retry upload after bucket creation
+            const retryResponse = await fetch(
+              `${SUPABASE_URL}/storage/v1/object/${AVATAR_BUCKET}/${filename}`,
+              {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+                  'apikey': SUPABASE_SERVICE_ROLE_KEY!,
+                  'Content-Type': file.type,
+                },
+                body: arrayBuffer,
+              }
+            )
+
+            if (retryResponse.ok) {
+              const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${AVATAR_BUCKET}/${filename}`
+              logger.info({ userId: authResult.user.id, autoCreated: true }, 'Avatar uploaded after bucket auto-creation')
+
+              // Update User record
+              const currentUser = await db.user.findUnique({
+                where: { id: authResult.user.id },
+                select: { avatar: true },
+              })
+              if (currentUser?.avatar) {
+                const oldPath = extractSupabasePath(currentUser.avatar)
+                if (oldPath) await deleteFromSupabase(oldPath)
+              }
+              await db.user.update({ where: { id: authResult.user.id }, data: { avatar: publicUrl } })
+
+              return NextResponse.json({ success: true, data: { avatar: publicUrl } })
+            }
+          }
+        } catch (autoCreateErr) {
+          logger.error({ err: autoCreateErr }, 'Avatar bucket auto-creation failed')
+        }
+
+        return NextResponse.json(
+          { success: false, error: 'Storage bucket tidak ditemukan dan gagal dibuat otomatis.' },
+          { status: 500 }
+        )
+      }
+
+      let userMessage = 'Avatar upload failed'
+      if (errorMsg.includes('policy') || errorMsg.includes('RLS') || errorMsg.includes('permission')) {
         userMessage = 'Permission denied. Storage policy not configured.'
       }
 

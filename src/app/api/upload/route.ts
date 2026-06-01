@@ -17,6 +17,85 @@ const ALLOWED_BUCKETS: Record<string, string[]> = {
   reviews: ['images', 'videos'],
 }
 
+// Bucket configuration for auto-creation
+const BUCKET_CONFIG: Record<string, { public: boolean; fileSizeLimit: number; allowedMimeTypes: string[] }> = {
+  products: {
+    public: true,
+    fileSizeLimit: 10 * 1024 * 1024,
+    allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/webm'],
+  },
+  avatars: {
+    public: true,
+    fileSizeLimit: 5 * 1024 * 1024,
+    allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
+  },
+  banners: {
+    public: true,
+    fileSizeLimit: 10 * 1024 * 1024,
+    allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/webm'],
+  },
+  streams: {
+    public: true,
+    fileSizeLimit: 100 * 1024 * 1024,
+    allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/webm', 'video/quicktime'],
+  },
+  reviews: {
+    public: true,
+    fileSizeLimit: 10 * 1024 * 1024,
+    allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/webm'],
+  },
+}
+
+// ==================== AUTO-CREATE BUCKET ====================
+
+/**
+ * Attempt to create a missing bucket in Supabase Storage.
+ * Uses service role key to create the bucket with appropriate config.
+ * Returns true if bucket now exists (created or already existed).
+ */
+async function ensureBucketExists(bucketId: string): Promise<boolean> {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return false
+
+  const config = BUCKET_CONFIG[bucketId]
+  if (!config) return false
+
+  try {
+    const res = await fetch(`${SUPABASE_URL}/storage/v1/bucket`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        'apikey': SUPABASE_SERVICE_ROLE_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        id: bucketId,
+        name: bucketId,
+        public: config.public,
+        fileSizeLimit: config.fileSizeLimit,
+        allowedMimeTypes: config.allowedMimeTypes,
+      }),
+    })
+
+    if (res.ok) {
+      logger.info({ bucketId }, 'Auto-created missing storage bucket')
+      return true
+    }
+
+    // If 409 Conflict, bucket already exists (race condition)
+    if (res.status === 409) {
+      logger.info({ bucketId }, 'Bucket already exists (concurrent creation)')
+      return true
+    }
+
+    const errData = await res.json().catch(() => ({}))
+    logger.error({ bucketId, status: res.status, err: errData }, 'Failed to auto-create bucket')
+    return false
+  } catch (error) {
+    logger.error({ err: error, bucketId }, 'Exception auto-creating bucket')
+    return false
+  }
+}
+
 // Allowed extensions per media type
 const ALLOWED_IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif']
 const ALLOWED_VIDEO_EXTENSIONS = ['mp4', 'webm', 'mov', 'quicktime']
@@ -228,11 +307,55 @@ export async function POST(request: NextRequest) {
       logger.error({ err: errorData, bucket, folder, filename }, 'Upload to Supabase failed')
 
       const errorMsg = errorData.message || errorData.error || 'Unknown error'
-      let userMessage = 'Upload gagal'
 
-      if (errorMsg.includes('Bucket not found') || errorMsg.includes('bucket')) {
-        userMessage = 'Storage bucket tidak ditemukan. Silakan setup storage terlebih dahulu.'
-      } else if (errorMsg.includes('policy') || errorMsg.includes('RLS') || errorMsg.includes('permission')) {
+      // AUTO-CREATE: If bucket not found, try to create it automatically and retry
+      if (errorMsg.includes('Bucket not found') || errorMsg.includes('not found') || uploadResponse.status === 404) {
+        logger.info({ bucket }, 'Bucket not found, attempting auto-creation...')
+        const created = await ensureBucketExists(bucket)
+
+        if (created) {
+          // Retry the upload after bucket creation
+          const retryResponse = await fetch(
+            `${SUPABASE_URL}/storage/v1/object/${bucket}/${filename}`,
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+                'apikey': SUPABASE_SERVICE_ROLE_KEY!,
+                'Content-Type': mimeType,
+              },
+              body: arrayBuffer,
+            }
+          )
+
+          if (retryResponse.ok) {
+            const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${filename}`
+            logger.info(
+              { userId: authResult.user.id, bucket, folder, filename, size: file.size, type: mimeType, autoCreated: true },
+              'File uploaded successfully after bucket auto-creation'
+            )
+            return NextResponse.json({
+              success: true,
+              data: {
+                url: publicUrl,
+                path: filename,
+                type: isVideo ? 'video' as const : 'image' as const,
+              },
+            })
+          }
+
+          // Retry also failed
+          logger.error({ bucket, retryStatus: retryResponse.status }, 'Upload still failed after bucket auto-creation')
+        }
+
+        return NextResponse.json(
+          { success: false, error: 'Storage bucket tidak ditemukan dan gagal dibuat otomatis. Silakan jalankan setup storage.' },
+          { status: 500 }
+        )
+      }
+
+      let userMessage = 'Upload gagal'
+      if (errorMsg.includes('policy') || errorMsg.includes('RLS') || errorMsg.includes('permission')) {
         userMessage = 'Permission denied. Storage policy tidak dikonfigurasi.'
       }
 
