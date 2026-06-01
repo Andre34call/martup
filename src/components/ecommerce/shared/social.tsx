@@ -1,14 +1,14 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { Package, Gift, Bell, MessageCircle, Check } from "lucide-react"
+import { Package, Gift, Bell, MessageCircle, Check, AtSign } from "lucide-react"
 import { formatRelativeTime } from "@/lib/utils"
 
 // ==================== NOTIFICATION ITEM ====================
 interface NotificationItemProps {
   title: string
   content: string
-  type: "order" | "promo" | "system" | "chat"
+  type: "order" | "promo" | "system" | "chat" | "mention"
   isRead: boolean
   createdAt: string
   onClick?: () => void
@@ -19,6 +19,7 @@ const notificationIcons: Record<string, React.ReactNode> = {
   promo: <Gift className="w-5 h-5 text-orange-500" />,
   system: <Bell className="w-5 h-5 text-gray-500" />,
   chat: <MessageCircle className="w-5 h-5 text-emerald-500" />,
+  mention: <AtSign className="w-5 h-5 text-teal-500" />,
 }
 
 export function NotificationItem({

@@ -12,6 +12,7 @@ import { StreamCommentSheet } from "./stream-comment-sheet"
 import { formatRelativeTime, formatPrice, truncateText } from "@/lib/utils"
 import { fadeIn } from "@/lib/animations"
 import { Input } from "@/components/ui/input"
+import { MentionText } from "./mention-components"
 
 // ==================== LOCAL TYPES ====================
 interface StreamPost {
@@ -378,12 +379,10 @@ function StreamSearchResultCard({ post, index, onLike, onComment, onProductClick
       {post.content && (
         <div className="px-4 pb-2">
           <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed line-clamp-3">
-            {post.content.length > 300 ? (
-              <>
-                {post.content.slice(0, 300)}...
-                <button onClick={() => {}} className="text-emerald-600 font-semibold text-xs ml-1">Baca selengkapnya</button>
-              </>
-            ) : post.content}
+            <MentionText
+              content={post.content}
+              maxChars={300}
+            />
           </p>
         </div>
       )}

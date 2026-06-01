@@ -7,12 +7,13 @@ import { PageHeader, EmptyState, TabBar, NotificationItem } from "./shared"
 import type { Notification as AppNotification } from "@/lib/types"
 import { useState, useMemo, useCallback, useEffect } from "react"
 import {
-  Package, Gift, Bell, MessageCircle, CheckCheck, Trash2
+  Package, Gift, Bell, MessageCircle, CheckCheck, Trash2, AtSign
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 const NOTIFICATION_TABS = [
   { key: "all", label: "Semua" },
+  { key: "mention", label: "Mention" },
   { key: "order", label: "Pesanan" },
   { key: "promo", label: "Promo" },
   { key: "system", label: "Sistem" },
@@ -51,6 +52,7 @@ export function NotificationScreen() {
 
   const tabCounts = useMemo(() => ({
     all: notifications.length,
+    mention: notifications.filter((n) => n.type === "mention").length,
     order: notifications.filter((n) => n.type === "order").length,
     promo: notifications.filter((n) => n.type === "promo").length,
     system: notifications.filter((n) => n.type === "system").length,
@@ -72,6 +74,9 @@ export function NotificationScreen() {
       navigate('voucher')
     } else if (notification.type === 'chat') {
       navigate('chat')
+    } else if (notification.type === 'mention') {
+      // Navigate to stream when mentioned
+      navigate('stream')
     }
   }, [notifications, markNotificationRead, setSelectedOrder, navigate])
 
@@ -128,7 +133,7 @@ export function NotificationScreen() {
                     <NotificationItem
                       title={notification.title}
                       content={notification.content}
-                      type={notification.type as "order" | "promo" | "system" | "chat"}
+                      type={notification.type as "order" | "promo" | "system" | "chat" | "mention"}
                       isRead={notification.isRead}
                       createdAt={notification.createdAt}
                       onClick={() => handleNotificationTap(notification.id)}
@@ -150,6 +155,8 @@ export function NotificationScreen() {
                       <Gift className="w-10 h-10 text-muted-foreground" />
                     ) : activeTab === "system" ? (
                       <Bell className="w-10 h-10 text-muted-foreground" />
+                    ) : activeTab === "mention" ? (
+                      <AtSign className="w-10 h-10 text-muted-foreground" />
                     ) : (
                       <Bell className="w-10 h-10 text-muted-foreground" />
                     )

@@ -13,6 +13,7 @@ import { StreamCommentSheet } from "./stream-comment-sheet"
 import { formatRelativeTime, formatPrice, truncateText } from "@/lib/utils"
 import { fadeIn } from "@/lib/animations"
 import type { ScreenName } from "@/lib/types"
+import { MentionText } from "./mention-components"
 
 // ==================== LOCAL TYPES ====================
 interface StreamPost {
@@ -741,20 +742,12 @@ function StreamPostCard({
       {post.content && (
         <div className="px-4 pb-2">
           <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
-            {post.content.length > 500 ? (
-              <>
-                {isContentExpanded ? post.content : post.content.slice(0, 500)}
-                {!isContentExpanded && <span className="text-muted-foreground">... </span>}
-                <button
-                  onClick={() => setIsContentExpanded(!isContentExpanded)}
-                  className="text-emerald-600 font-semibold text-xs hover:text-emerald-700"
-                >
-                  {isContentExpanded ? " Tampilkan lebih sedikit" : "Baca selengkapnya"}
-                </button>
-              </>
-            ) : (
-              post.content
-            )}
+            <MentionText
+              content={post.content}
+              maxChars={500}
+              isExpanded={isContentExpanded}
+              onExpand={() => setIsContentExpanded(!isContentExpanded)}
+            />
           </p>
         </div>
       )}

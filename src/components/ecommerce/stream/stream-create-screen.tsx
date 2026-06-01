@@ -15,6 +15,7 @@ import {
   ChevronRight,
 } from "lucide-react"
 import { useAppStore } from "@/lib/store"
+import { MentionTextarea } from "./mention-components"
 import { apiClient, ApiClientError } from "@/lib/api-client"
 import { uploadFile } from "@/lib/upload"
 import { PageHeader } from "../shared"
@@ -349,11 +350,24 @@ export function StreamCreateScreen() {
 
         {/* ===== CAPTION TEXT AREA ===== */}
         <motion.div {...fadeIn}>
+          {/* Quick mention hint */}
+          <div className="flex items-center gap-2 mb-2">
+            <button
+              onClick={() => {
+                setContent(prev => prev + (prev && !prev.endsWith(' ') ? ' ' : '') + '@')
+              }}
+              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/50 text-emerald-600 dark:text-emerald-400 text-xs font-medium hover:bg-emerald-100 dark:hover:bg-emerald-950/50 transition-colors"
+            >
+              <span className="text-sm font-bold">@</span>
+              Mention
+            </button>
+            <span className="text-[10px] text-muted-foreground">Tag seseorang di postinganmu</span>
+          </div>
           <div className="relative">
-            <textarea
+            <MentionTextarea
               value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder="Tulis caption untuk postinganmu..."
+              onChange={setContent}
+              placeholder="Tulis caption untuk postinganmu... Gunakan @ untuk mention seseorang"
               maxLength={MAX_CAPTION_LENGTH}
               rows={5}
               className="w-full resize-none rounded-xl border border-border/50 bg-card px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/50 transition-all"

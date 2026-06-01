@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middleware'
 import { sanitizeInput } from '@/lib/sanitize'
 import { logger } from '@/lib/logger'
+import { createMentionNotifications } from '@/lib/mention'
 
 // ==================== GET /api/stream/[id]/comments ====================
 // Fetch comments for a post — public endpoint
@@ -285,6 +286,18 @@ export async function POST(
       { userId: authResult.user.id, postId, commentId: comment.id, isReply: !!parentId },
       'Stream comment created'
     )
+
+    // Create mention notifications (non-blocking)
+    createMentionNotifications({
+      content,
+      authorUserId: authResult.user.id,
+      authorName: comment.user.name,
+      refType: 'stream_comment',
+      refId: comment.id,
+      db,
+    }).catch((err) => {
+      logger.error({ err }, 'Failed to create mention notifications for stream comment')
+    })
 
     return NextResponse.json(
       {

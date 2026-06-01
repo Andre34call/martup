@@ -12,6 +12,7 @@ import {
 } from "lucide-react"
 import { apiClient, ApiClientError } from "@/lib/api-client"
 import { formatRelativeTime, truncateText } from "@/lib/utils"
+import { MentionInput, MentionText } from "./mention-components"
 
 // ==================== LOCAL TYPES ====================
 interface StreamPost {
@@ -509,17 +510,29 @@ export function StreamCommentSheet({
 
             {/* Input area */}
             <div className="flex items-center gap-2 px-4 py-3 border-t border-border/50 bg-background">
-              <input
-                ref={inputRef}
-                type="text"
+              {/* @ mention quick insert */}
+              <motion.button
+                whileTap={{ scale: 0.85 }}
+                onClick={() => {
+                  setNewComment(prev => prev + (prev && !prev.endsWith(' ') ? ' ' : '') + '@')
+                  inputRef.current?.focus()
+                }}
+                className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/50 text-emerald-600 dark:text-emerald-400 text-sm font-bold hover:bg-emerald-100 dark:hover:bg-emerald-950/50 transition-colors"
+                title="Mention seseorang"
+              >
+                @
+              </motion.button>
+              <MentionInput
+                inputRef={inputRef}
                 value={newComment}
-                onChange={(e) => setNewComment(e.target.value)}
-                onKeyDown={handleKeyDown}
+                onChange={setNewComment}
+                onSubmit={handleSendComment}
                 placeholder={
                   replyingTo
                     ? `Balas ${replyingTo.user?.name || 'User'}...`
-                    : "Tulis komentar..."
+                    : "Tulis komentar... Gunakan @ untuk mention"
                 }
+                disabled={isSending}
                 className="flex-1 h-10 px-4 rounded-xl bg-muted/50 border border-border/50 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/50 transition-all"
               />
               <motion.button
@@ -607,7 +620,7 @@ function CommentItem({
             </span>
           </div>
           <p className="text-sm text-foreground mt-0.5 whitespace-pre-wrap">
-            {comment.content}
+            <MentionText content={comment.content} />
           </p>
 
           {/* Actions */}
@@ -717,7 +730,7 @@ function CommentItem({
                           </span>
                         </div>
                         <p className="text-xs text-foreground mt-0.5 whitespace-pre-wrap">
-                          {reply.content}
+                          <MentionText content={reply.content} />
                         </p>
                         <div className="flex items-center gap-3 mt-1">
                           <motion.button

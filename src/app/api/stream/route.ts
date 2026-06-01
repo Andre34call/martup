@@ -4,6 +4,7 @@ import { verifyAuth, authErrorResponse, checkRateLimit, ELEVATED_ROLES } from '@
 import { createRateLimiter } from '@/lib/rate-limit'
 import { sanitizeInput } from '@/lib/sanitize'
 import { logger } from '@/lib/logger'
+import { createMentionNotifications } from '@/lib/mention'
 
 // ==================== RATE LIMITERS ====================
 
@@ -274,6 +275,18 @@ export async function POST(request: NextRequest) {
       { userId: authResult.user.id, postId: post.id, type },
       'Stream post created'
     )
+
+    // Create mention notifications (non-blocking, don't await to avoid slowing response)
+    createMentionNotifications({
+      content,
+      authorUserId: authResult.user.id,
+      authorName: post.user.name,
+      refType: 'stream_post',
+      refId: post.id,
+      db,
+    }).catch((err) => {
+      logger.error({ err }, 'Failed to create mention notifications for stream post')
+    })
 
     return NextResponse.json(
       {
