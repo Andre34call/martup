@@ -165,7 +165,6 @@ export function HomeScreen() {
             className="flex-1 flex items-center gap-2 h-9 px-3 rounded-xl bg-muted/60 border border-border/50 text-muted-foreground text-sm"
           >
             <Search className="w-4 h-4" />
-            <span>Cari produk...</span>
           </motion.button>
 
           {/* Cart icon */}
