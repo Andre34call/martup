@@ -678,6 +678,8 @@ model StreamPost {
   commentCount Int      @default(0)
   isActive     Boolean  @default(true)
   isHidden     Boolean  @default(false) // admin can hide inappropriate posts
+  isPrivate    Boolean  @default(false) // private post — only owner can see
+  isEdited     Boolean  @default(false) // whether post has been edited
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

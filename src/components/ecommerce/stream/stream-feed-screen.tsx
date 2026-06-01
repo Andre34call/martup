@@ -5,15 +5,19 @@ import { motion, AnimatePresence } from "framer-motion"
 import {
   Heart, MessageCircle, Share2, Play, Pause, Plus, Package,
   Search, Bell, ShoppingCart, RefreshCw, Flame,
-  Bookmark, MoreHorizontal, Verified, Sparkles, Camera
+  Bookmark, MoreHorizontal, Verified, Sparkles, Camera,
+  Lock, Eye, Pencil,
 } from "lucide-react"
 import { useAppStore, useCartStore } from "@/lib/store"
 import { apiClient } from "@/lib/api-client"
 import { StreamCommentSheet } from "./stream-comment-sheet"
+import { StreamEditScreen } from "./stream-edit-screen"
+import { PostActionMenu } from "./stream-post-menu"
 import { formatRelativeTime, formatPrice, truncateText } from "@/lib/utils"
 import { fadeIn } from "@/lib/animations"
 import type { ScreenName } from "@/lib/types"
 import { MentionText } from "./mention-components"
+import { ConfirmDialog } from "../confirm-dialog"
 
 // ==================== LOCAL TYPES ====================
 interface StreamPost {
@@ -26,10 +30,11 @@ interface StreamPost {
     avatar?: string
   }
   type: "text" | "image" | "video"
-  content: string
-  mediaUrl?: string
-  thumbnailUrl?: string
-  productId?: string
+  content: string | null
+  mediaUrl?: string | null
+  thumbnailUrl?: string | null
+  mediaType?: string | null
+  productId?: string | null
   product?: {
     id: string
     name: string
@@ -41,8 +46,10 @@ interface StreamPost {
   likeCount: number
   commentCount: number
   isLiked: boolean
+  isPrivate: boolean
+  isEdited: boolean
+  viewCount: number
   createdAt: string
-  viewCount?: number
 }
 
 interface StreamFeedResponse {
@@ -59,6 +66,12 @@ interface LikeResponse {
   success: boolean
   isLiked: boolean
   likeCount: number
+}
+
+interface EditPostResponse {
+  success: boolean
+  data?: StreamPost
+  error?: string
 }
 
 // ==================== AVATAR HELPER ====================
@@ -87,9 +100,10 @@ const trendingTopics = [
 
 // ==================== STREAM FEED SCREEN ====================
 export function StreamFeedScreen() {
-  const { navigate, showToast, isAuthenticated, unreadNotificationCount } = useAppStore()
+  const { navigate, showToast, isAuthenticated, unreadNotificationCount, user } = useAppStore()
   const { getTotalItemCount } = useCartStore()
   const cartCount = getTotalItemCount()
+  const currentUserId = user?.id || null
 
   // Feed state
   const [posts, setPosts] = useState<StreamPost[]>([])
@@ -104,6 +118,16 @@ export function StreamFeedScreen() {
 
   // Comment sheet state
   const [activeCommentPost, setActiveCommentPost] = useState<StreamPost | null>(null)
+
+  // Edit screen state
+  const [editingPost, setEditingPost] = useState<StreamPost | null>(null)
+
+  // Delete confirmation
+  const [deletingPost, setDeletingPost] = useState<StreamPost | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  // Post action menu state
+  const [activeMenuPostId, setActiveMenuPostId] = useState<string | null>(null)
 
   // Video playback state
   const [playingVideoId, setPlayingVideoId] = useState<string | null>(null)
@@ -148,7 +172,7 @@ export function StreamFeedScreen() {
     }
   }, [cursor, posts.length, showToast])
 
-  // Initial fetch — only on mount
+  // Initial fetch
   useEffect(() => {
     const loadInitial = async () => {
       setIsLoading(true)
@@ -247,7 +271,7 @@ export function StreamFeedScreen() {
       try {
         await navigator.share({
           title: `Postingan dari ${post.user?.name || 'User'}`,
-          text: truncateText(post.content, 100),
+          text: truncateText(post.content || '', 100),
           url: window.location.href,
         })
       } catch { /* User cancelled */ }
@@ -270,6 +294,66 @@ export function StreamFeedScreen() {
     }
     navigate("stream-create")
   }, [isAuthenticated, navigate, showToast])
+
+  // ==================== EDIT POST ====================
+  const handleEditPost = useCallback((post: StreamPost) => {
+    setEditingPost(post)
+  }, [])
+
+  const handleEditSaved = useCallback((updatedPost: StreamPost) => {
+    setPosts((prev) =>
+      prev.map((p) => (p.id === updatedPost.id ? { ...p, ...updatedPost, isEdited: true } : p))
+    )
+    setEditingPost(null)
+  }, [])
+
+  // ==================== DELETE POST ====================
+  const handleDeletePost = useCallback(async () => {
+    if (!deletingPost) return
+    setIsDeleting(true)
+    try {
+      await apiClient.del(`/api/stream/${deletingPost.id}`)
+      setPosts((prev) => prev.filter((p) => p.id !== deletingPost.id))
+      showToast("Postingan berhasil dihapus", "success")
+    } catch {
+      showToast("Gagal menghapus postingan", "error")
+    } finally {
+      setIsDeleting(false)
+      setDeletingPost(null)
+    }
+  }, [deletingPost, showToast])
+
+  // ==================== TOGGLE PRIVATE ====================
+  const handleTogglePrivate = useCallback(async (post: StreamPost) => {
+    const newPrivate = !post.isPrivate
+    // Optimistic update
+    setPosts((prev) =>
+      prev.map((p) => (p.id === post.id ? { ...p, isPrivate: newPrivate } : p))
+    )
+    try {
+      await apiClient.put(`/api/stream/${post.id}`, { isPrivate: newPrivate })
+      showToast(
+        newPrivate ? "Postingan dijadikan privat" : "Postingan dijadikan publik",
+        "success"
+      )
+    } catch {
+      // Revert
+      setPosts((prev) =>
+        prev.map((p) => (p.id === post.id ? { ...p, isPrivate: !newPrivate } : p))
+      )
+      showToast("Gagal mengubah privasi postingan", "error")
+    }
+  }, [showToast])
+
+  // ==================== COPY LINK ====================
+  const handleCopyLink = useCallback(async (post: StreamPost) => {
+    try {
+      await navigator.clipboard.writeText(window.location.href)
+      showToast("Link berhasil disalin!", "success")
+    } catch {
+      showToast("Gagal menyalin link", "error")
+    }
+  }, [showToast])
 
   // ==================== LOADING SKELETON ====================
   if (isLoading) {
@@ -317,7 +401,6 @@ export function StreamFeedScreen() {
           {...fadeIn}
           className="flex flex-col items-center justify-center py-16 px-6 text-center"
         >
-          {/* Animated illustration */}
           <motion.div
             animate={{ y: [0, -8, 0] }}
             transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
@@ -326,7 +409,6 @@ export function StreamFeedScreen() {
             <div className="w-28 h-28 rounded-3xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center shadow-xl shadow-emerald-500/20">
               <Sparkles className="w-14 h-14 text-white" strokeWidth={1.5} />
             </div>
-            {/* Floating dots */}
             <motion.div
               animate={{ scale: [1, 1.5, 1], opacity: [0.5, 1, 0.5] }}
               transition={{ duration: 2, repeat: Infinity }}
@@ -355,7 +437,6 @@ export function StreamFeedScreen() {
           </motion.button>
         </motion.div>
 
-        {/* Floating create button */}
         <FloatingCreateButton onClick={handleCreatePost} />
       </div>
     )
@@ -394,7 +475,6 @@ export function StreamFeedScreen() {
                 className="flex flex-col items-center gap-1.5 flex-shrink-0"
               >
                 <div className="relative w-[62px] h-[62px]">
-                  {/* Gradient ring */}
                   <div className={`absolute inset-0 rounded-full bg-gradient-to-br ${
                     idx % 3 === 0 ? "from-orange-400 via-pink-500 to-rose-500" :
                     idx % 3 === 1 ? "from-emerald-400 via-teal-500 to-cyan-500" :
@@ -424,7 +504,6 @@ export function StreamFeedScreen() {
                       </div>
                     </div>
                   </div>
-                  {/* Live / New indicator */}
                   {idx === 0 && (
                     <div className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded-full bg-gradient-to-r from-orange-500 to-red-500 text-white text-[8px] font-bold leading-none">
                       NEW
@@ -493,7 +572,9 @@ export function StreamFeedScreen() {
               key={post.id}
               post={post}
               index={index}
+              currentUserId={currentUserId}
               isVideoPlaying={playingVideoId === post.id}
+              isMenuOpen={activeMenuPostId === post.id}
               onLike={handleLike}
               onComment={() => setActiveCommentPost(post)}
               onShare={handleShare}
@@ -502,6 +583,13 @@ export function StreamFeedScreen() {
                 useAppStore.getState().setSelectedProduct(productId)
                 navigate("product-detail")
               }}
+              onToggleMenu={(postId) => {
+                setActiveMenuPostId(prev => prev === postId ? null : postId)
+              }}
+              onEdit={handleEditPost}
+              onDelete={setDeletingPost}
+              onTogglePrivate={handleTogglePrivate}
+              onCopyLink={handleCopyLink}
               videoRef={(el) => {
                 videoRefs.current[post.id] = el
               }}
@@ -557,6 +645,29 @@ export function StreamFeedScreen() {
           )
         }}
       />
+
+      {/* Edit screen */}
+      <AnimatePresence>
+        {editingPost && (
+          <StreamEditScreen
+            post={editingPost}
+            onClose={() => setEditingPost(null)}
+            onSaved={handleEditSaved}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Delete confirmation dialog */}
+      <ConfirmDialog
+        isOpen={!!deletingPost}
+        onClose={() => setDeletingPost(null)}
+        onConfirm={handleDeletePost}
+        title="Hapus Postingan?"
+        message="Postingan ini akan dihapus secara permanen dan tidak bisa dikembalikan."
+        confirmLabel="Hapus"
+        cancelLabel="Batal"
+        variant="danger"
+      />
     </div>
   )
 }
@@ -573,11 +684,9 @@ interface StreamNavTopProps {
 function StreamNavTop({ onRefresh, isRefreshing, navigate, unreadNotificationCount, cartCount }: StreamNavTopProps) {
   return (
     <div className="sticky top-0 z-40">
-      {/* Gradient top accent */}
       <div className="h-[2px] bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-500" />
       <div className="glass">
         <div className="flex items-center gap-2 px-4 h-14">
-          {/* Logo / Title with icon */}
           <div className="flex items-center gap-1.5 flex-shrink-0">
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-400 flex items-center justify-center">
               <Play className="w-3.5 h-3.5 text-white ml-0.5" fill="white" />
@@ -587,7 +696,6 @@ function StreamNavTop({ onRefresh, isRefreshing, navigate, unreadNotificationCou
             </span>
           </div>
 
-          {/* Search bar */}
           <motion.button
             whileTap={{ scale: 0.98 }}
             onClick={() => navigate("stream-search")}
@@ -596,7 +704,6 @@ function StreamNavTop({ onRefresh, isRefreshing, navigate, unreadNotificationCou
             <Search className="w-4 h-4" />
           </motion.button>
 
-          {/* Refresh button */}
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={onRefresh}
@@ -608,7 +715,6 @@ function StreamNavTop({ onRefresh, isRefreshing, navigate, unreadNotificationCou
             />
           </motion.button>
 
-          {/* Notification bell */}
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => navigate("notification")}
@@ -626,7 +732,6 @@ function StreamNavTop({ onRefresh, isRefreshing, navigate, unreadNotificationCou
             )}
           </motion.button>
 
-          {/* Cart icon */}
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => navigate("cart")}
@@ -653,24 +758,38 @@ function StreamNavTop({ onRefresh, isRefreshing, navigate, unreadNotificationCou
 interface StreamPostCardProps {
   post: StreamPost
   index: number
+  currentUserId: string | null
   isVideoPlaying: boolean
+  isMenuOpen: boolean
   onLike: (id: string) => void
   onComment: () => void
   onShare: (post: StreamPost) => void
   onVideoToggle: (id: string) => void
   onProductClick: (productId: string) => void
+  onToggleMenu: (postId: string) => void
+  onEdit: (post: StreamPost) => void
+  onDelete: (post: StreamPost) => void
+  onTogglePrivate: (post: StreamPost) => void
+  onCopyLink: (post: StreamPost) => void
   videoRef: (el: HTMLVideoElement | null) => void
 }
 
 function StreamPostCard({
   post,
   index,
+  currentUserId,
   isVideoPlaying,
+  isMenuOpen,
   onLike,
   onComment,
   onShare,
   onVideoToggle,
   onProductClick,
+  onToggleMenu,
+  onEdit,
+  onDelete,
+  onTogglePrivate,
+  onCopyLink,
   videoRef,
 }: StreamPostCardProps) {
   const [isBookmarked, setIsBookmarked] = useState(false)
@@ -678,13 +797,14 @@ function StreamPostCard({
 
   const userName = post.user?.name || 'User'
   const userAvatar = post.user?.avatar
+  const isOwner = currentUserId === post.userId
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay: Math.min(index * 0.05, 0.3) }}
-      className="bg-card rounded-2xl border border-border/50 overflow-hidden shadow-sm"
+      className="bg-card rounded-2xl border border-border/50 overflow-hidden shadow-sm relative"
     >
       {/* ===== POST HEADER ===== */}
       <div className="flex items-center gap-3 p-4 pb-2">
@@ -713,7 +833,6 @@ function StreamPostCard({
               </div>
             </div>
           </div>
-          {/* Online indicator */}
           <div className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 border-2 border-card" />
         </div>
 
@@ -727,19 +846,42 @@ function StreamPostCard({
             {post.likeCount > 50 && (
               <Verified className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" fill="currentColor" />
             )}
+            {/* Private badge */}
+            {post.isPrivate && (
+              <Lock className="w-3 h-3 text-amber-500 flex-shrink-0" />
+            )}
           </div>
           <div className="flex items-center gap-1.5">
             <p className="text-[11px] text-muted-foreground">{formatStreamTime(post.createdAt)}</p>
             {post.type === "video" && (
               <span className="text-[9px] font-bold text-orange-500 bg-orange-100 dark:bg-orange-900/30 px-1.5 py-0.5 rounded-md">VIDEO</span>
             )}
+            {/* Edited indicator */}
+            {post.isEdited && (
+              <span className="text-[9px] text-muted-foreground">· Diedit</span>
+            )}
           </div>
         </div>
 
         {/* More button */}
-        <button className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-muted transition-colors">
+        <button
+          onClick={() => onToggleMenu(post.id)}
+          className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-muted transition-colors"
+        >
           <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
         </button>
+
+        {/* Post action menu */}
+        <PostActionMenu
+          post={post}
+          currentUserId={currentUserId}
+          isOpen={isMenuOpen}
+          onClose={() => onToggleMenu(post.id)}
+          onEdit={onEdit}
+          onDelete={onDelete}
+          onTogglePrivate={onTogglePrivate}
+          onCopyLink={onCopyLink}
+        />
       </div>
 
       {/* ===== POST CONTENT ===== */}
@@ -796,13 +938,6 @@ function StreamPostCard({
                   <Pause className="w-4 h-4 text-white" fill="white" />
                 </button>
               )}
-              {/* View count on video */}
-              {post.viewCount !== undefined && post.viewCount > 0 && (
-                <div className="absolute bottom-3 left-3 flex items-center gap-1 px-2 py-1 rounded-lg bg-black/40 backdrop-blur-sm">
-                  <Play className="w-3 h-3 text-white" fill="white" />
-                  <span className="text-[10px] font-medium text-white">{formatCount(post.viewCount)}</span>
-                </div>
-              )}
             </div>
           ) : post.type === "image" ? (
             <div className="px-4 pb-2">
@@ -818,6 +953,18 @@ function StreamPostCard({
               />
             </div>
           ) : null}
+        </div>
+      )}
+
+      {/* ===== VIEW COUNT BAR ===== */}
+      {post.viewCount > 0 && (
+        <div className="px-4 pt-1.5 pb-0.5">
+          <div className="flex items-center gap-1">
+            <Eye className="w-3 h-3 text-muted-foreground" />
+            <span className="text-[10px] font-medium text-muted-foreground">
+              {formatCount(post.viewCount)} ditonton
+            </span>
+          </div>
         </div>
       )}
 
@@ -894,7 +1041,6 @@ function StreamPostCard({
           onClick={() => onProductClick(post.product!.id)}
           className="mx-4 mb-3 flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-emerald-50/80 to-teal-50/50 dark:from-emerald-950/30 dark:to-teal-950/20 border border-emerald-200/50 dark:border-emerald-800/30 hover:shadow-md transition-all"
         >
-          {/* Product image */}
           <div className="w-16 h-16 rounded-xl bg-muted flex items-center justify-center overflow-hidden flex-shrink-0 border border-border/30">
             {post.product.image ? (
               <img
@@ -917,7 +1063,6 @@ function StreamPostCard({
             </div>
           </div>
 
-          {/* Product info */}
           <div className="flex-1 min-w-0 text-left">
             <div className="flex items-center gap-1.5">
               <span className="text-[9px] font-bold text-emerald-600 bg-emerald-100 dark:bg-emerald-900/40 px-1.5 py-0.5 rounded-md uppercase tracking-wider">Produk</span>
@@ -930,11 +1075,20 @@ function StreamPostCard({
             </p>
           </div>
 
-          {/* CTA */}
           <div className="flex items-center gap-1 flex-shrink-0 bg-emerald-500 text-white px-3 py-1.5 rounded-lg">
             <span className="text-[11px] font-bold">Beli</span>
           </div>
         </motion.button>
+      )}
+
+      {/* Private overlay indicator at bottom */}
+      {post.isPrivate && (
+        <div className="flex items-center gap-1.5 px-4 pb-3">
+          <Lock className="w-3 h-3 text-amber-500" />
+          <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">
+            Postingan privat
+          </span>
+        </div>
       )}
     </motion.div>
   )
@@ -953,7 +1107,6 @@ function FloatingCreateButton({ onClick }: { onClick: () => void }) {
       className="fixed bottom-24 right-5 z-30 w-14 h-14 rounded-full bg-gradient-to-br from-emerald-500 to-teal-500 shadow-xl shadow-emerald-500/30 flex items-center justify-center transition-all"
     >
       <Plus className="w-6 h-6 text-white" strokeWidth={2.5} />
-      {/* Glow ring */}
       <div className="absolute inset-0 rounded-full bg-emerald-500/20 animate-ping" style={{ animationDuration: '3s' }} />
     </motion.button>
   )

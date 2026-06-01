@@ -13,6 +13,8 @@ import {
   Search,
   Package,
   ChevronRight,
+  Lock,
+  Globe,
 } from "lucide-react"
 import { useAppStore } from "@/lib/store"
 import { MentionTextarea } from "./mention-components"
@@ -76,6 +78,9 @@ export function StreamCreateScreen() {
   // Upload state
   const [isPosting, setIsPosting] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<string>("")
+
+  // Private toggle
+  const [isPrivate, setIsPrivate] = useState(false)
 
   // Confirm dialog state
   const [showExitConfirm, setShowExitConfirm] = useState(false)
@@ -258,6 +263,7 @@ export function StreamCreateScreen() {
         type: postType,
         content: content.trim(),
         productId: selectedProductId || undefined,
+        isPrivate,
       }
 
       if (mediaUrl) {
@@ -622,6 +628,49 @@ export function StreamCreateScreen() {
                 </motion.div>
               )}
             </AnimatePresence>
+          </div>
+        </motion.div>
+
+        {/* ===== PRIVACY TOGGLE ===== */}
+        <motion.div {...fadeIn}>
+          <div className="flex items-center justify-between p-4 rounded-xl border border-border/50 bg-card">
+            <div className="flex items-center gap-3">
+              <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${
+                isPrivate
+                  ? "bg-amber-100 dark:bg-amber-900/30"
+                  : "bg-emerald-100 dark:bg-emerald-900/30"
+              }`}>
+                {isPrivate ? (
+                  <Lock className="w-4 h-4 text-amber-500" />
+                ) : (
+                  <Globe className="w-4 h-4 text-emerald-500" />
+                )}
+              </div>
+              <div className="text-left">
+                <p className="text-sm font-medium text-foreground">
+                  {isPrivate ? "Privat" : "Publik"}
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  {isPrivate
+                    ? "Hanya kamu yang bisa lihat"
+                    : "Semua orang bisa lihat"}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setIsPrivate(!isPrivate)}
+              className={`relative w-11 h-6 rounded-full transition-colors ${
+                isPrivate
+                  ? "bg-amber-500"
+                  : "bg-muted"
+              }`}
+            >
+              <motion.div
+                animate={{ x: isPrivate ? 20 : 2 }}
+                transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                className="absolute top-1 w-4 h-4 rounded-full bg-white shadow-sm"
+              />
+            </button>
           </div>
         </motion.div>
 
