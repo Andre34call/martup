@@ -2063,3 +2063,33 @@ Stage Summary:
 - Upload limits confirmed at industry-standard values (5-10MB images, 50-100MB videos)
 - All username/@mention/email hiding features working end-to-end
 - Stream comments now show @username for comment authors
+
+---
+Task ID: 1
+Agent: main
+Task: Add stream post edit, delete, private post, and view count features
+
+Work Log:
+- Added `isPrivate` and `isEdited` fields to StreamPost model in Prisma schema
+- Created PUT /api/stream/[id] endpoint for editing posts (content, media, product link, private status)
+- Updated GET /api/stream feed endpoint with proper AND/OR where clause for private post filtering
+- Updated GET /api/stream/[id] with private post access check (only owner can see private posts)
+- Added isPrivate support to POST /api/stream for creating private posts
+- Created StreamEditScreen component for editing posts (text, image, video, product link)
+- Created PostActionMenu component with edit, delete, private toggle, copy link options
+- Updated StreamFeedScreen with post action menu, view count, edited indicator, private badge, delete confirmation
+- Added privacy toggle (Lock/Globe) to StreamCreateScreen
+- Fixed where clause in stream GET to properly combine AND/OR conditions for private + search filtering
+- Pushed Prisma schema changes (generated client successfully)
+- Ran lint check - no errors
+- Deployed to production via git push
+
+Stage Summary:
+- Stream posts now support: edit (text, images, links), delete (soft), private toggle, view count
+- Post action menu shows owner-only actions (edit, private, delete) plus public actions (copy link)
+- View count displayed on all posts with "X ditonton" format
+- Edited posts show "Diedit" indicator
+- Private posts show lock icon and "Postingan privat" label
+- Private posts are filtered from public feed, only visible to owner
+- Create post screen has privacy toggle (Publik/Privat)
+- All features deployed to production
