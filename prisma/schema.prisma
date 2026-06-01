@@ -64,6 +64,7 @@ model User {
   streamComments StreamComment[]
   streamLikes    StreamLike[]
   streamCommentLikes StreamCommentLike[]
+  streamReports  StreamPostReport[]
 }
 
 model Seller {
@@ -687,6 +688,7 @@ model StreamPost {
   product    Product?        @relation(fields: [productId], references: [id])
   likes      StreamLike[]
   comments   StreamComment[]
+  reports    StreamPostReport[]
 
   @@index([userId, createdAt])
   @@index([isActive, createdAt])
@@ -740,4 +742,23 @@ model StreamCommentLike {
   @@unique([commentId, userId])
   @@index([commentId])
   @@index([userId])
+}
+
+model StreamPostReport {
+  id          String   @id @default(cuid())
+  postId      String
+  userId      String   // who reported
+  reason      String   // spam, harassment, inappropriate_content, scam, other
+  description String?  // optional additional details
+  status      String   @default("pending") // pending, reviewed, dismissed, actioned
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  post        StreamPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId]) // one report per user per post
+  @@index([postId])
+  @@index([userId])
+  @@index([status, createdAt])
 }

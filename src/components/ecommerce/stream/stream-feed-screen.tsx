@@ -13,6 +13,7 @@ import { apiClient } from "@/lib/api-client"
 import { StreamCommentSheet } from "./stream-comment-sheet"
 import { StreamEditScreen } from "./stream-edit-screen"
 import { PostActionMenu } from "./stream-post-menu"
+import { StreamReportDialog } from "./stream-report-dialog"
 import { formatRelativeTime, formatPrice, truncateText } from "@/lib/utils"
 import { fadeIn } from "@/lib/animations"
 import type { ScreenName } from "@/lib/types"
@@ -71,6 +72,9 @@ export function StreamFeedScreen() {
   // Delete confirmation
   const [deletingPost, setDeletingPost] = useState<StreamPost | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+
+  // Report dialog state
+  const [reportingPost, setReportingPost] = useState<StreamPost | null>(null)
 
   // Post action menu state
   const [activeMenuPostId, setActiveMenuPostId] = useState<string | null>(null)
@@ -536,6 +540,11 @@ export function StreamFeedScreen() {
               onDelete={setDeletingPost}
               onTogglePrivate={handleTogglePrivate}
               onCopyLink={handleCopyLink}
+              onReport={setReportingPost}
+              onViewProfile={(userId) => {
+                useAppStore.getState().setSelectedUser(userId)
+                navigate("user-profile")
+              }}
               videoRef={(el) => {
                 videoRefs.current[post.id] = el
               }}
@@ -613,6 +622,14 @@ export function StreamFeedScreen() {
         confirmLabel="Hapus"
         cancelLabel="Batal"
         variant="danger"
+      />
+
+      {/* Report dialog */}
+      <StreamReportDialog
+        isOpen={!!reportingPost}
+        onClose={() => setReportingPost(null)}
+        postId={reportingPost?.id || ""}
+        postOwnerName={reportingPost?.user?.name || "User"}
       />
     </div>
   )
@@ -717,6 +734,8 @@ interface StreamPostCardProps {
   onDelete: (post: StreamPost) => void
   onTogglePrivate: (post: StreamPost) => void
   onCopyLink: (post: StreamPost) => void
+  onReport: (post: StreamPost) => void
+  onViewProfile: (userId: string) => void
   videoRef: (el: HTMLVideoElement | null) => void
 }
 
@@ -736,6 +755,8 @@ function StreamPostCard({
   onDelete,
   onTogglePrivate,
   onCopyLink,
+  onReport,
+  onViewProfile,
   videoRef,
 }: StreamPostCardProps) {
   const [isBookmarked, setIsBookmarked] = useState(false)
@@ -754,8 +775,12 @@ function StreamPostCard({
     >
       {/* ===== POST HEADER ===== */}
       <div className="flex items-center gap-3 p-4 pb-2">
-        {/* Avatar with gradient ring */}
-        <div className="relative flex-shrink-0">
+        {/* Avatar with gradient ring — clickable to profile */}
+        <motion.button
+          whileTap={{ scale: 0.95 }}
+          onClick={() => onViewProfile(post.userId)}
+          className="relative flex-shrink-0"
+        >
           <div className="w-11 h-11 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 p-[2px]">
             <div className="w-full h-full rounded-full bg-card p-[1.5px]">
               {userAvatar ? (
@@ -780,10 +805,14 @@ function StreamPostCard({
             </div>
           </div>
           <div className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 border-2 border-card" />
-        </div>
+        </motion.button>
 
-        {/* Name & time */}
-        <div className="flex-1 min-w-0">
+        {/* Name & time — clickable to profile */}
+        <motion.button
+          whileTap={{ scale: 0.98 }}
+          onClick={() => onViewProfile(post.userId)}
+          className="flex-1 min-w-0 text-left"
+        >
           <div className="flex items-center gap-1.5">
             <p className="text-sm font-bold text-foreground truncate">{userName}</p>
             {post.user?.username && (
@@ -807,7 +836,7 @@ function StreamPostCard({
               <span className="text-[9px] text-muted-foreground">· Diedit</span>
             )}
           </div>
-        </div>
+        </motion.button>
 
         {/* More button */}
         <button
@@ -827,6 +856,8 @@ function StreamPostCard({
           onDelete={onDelete}
           onTogglePrivate={onTogglePrivate}
           onCopyLink={onCopyLink}
+          onReport={onReport}
+          onViewProfile={onViewProfile}
         />
       </div>
 

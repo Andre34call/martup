@@ -17,7 +17,7 @@ export type ScreenName =
   | 'admin-withdraw' | 'admin-banner' | 'admin-analytics' | 'admin-complaints'
   | 'admin-divisions' | 'admin-workflow'
   | 'admin-categories' | 'admin-vouchers' | 'admin-deposits' | 'admin-campaigns' | 'admin-reviews' | 'admin-settings'
-  | 'stream' | 'stream-create' | 'stream-search'
+  | 'stream' | 'stream-create' | 'stream-search' | 'user-profile'
 
 export interface User {
   id: string
@@ -421,6 +421,8 @@ export const WORK_TYPE_TO_DIVISION: Record<string, string> = {
   deposit: 'finance',
   refund: 'finance',
   product_report: 'tech',
+  post_report: 'cs',
+  user_report: 'cs',
   product_review: 'marketing',
   order_issue: 'operations',
   seller_verification: 'hr',
@@ -434,6 +436,8 @@ export const WORK_TYPE_DISPLAY: Record<string, { label: string; icon: string; co
   deposit: { label: 'Deposit', icon: '💳', color: 'emerald' },
   refund: { label: 'Refund', icon: '↩️', color: 'red' },
   product_report: { label: 'Laporan Produk', icon: '🚨', color: 'purple' },
+  post_report: { label: 'Laporan Postingan', icon: '🚩', color: 'purple' },
+  user_report: { label: 'Laporan Pengguna', icon: '👤', color: 'purple' },
   product_review: { label: 'Review Produk', icon: '⭐', color: 'amber' },
   order_issue: { label: 'Masalah Pesanan', icon: '📦', color: 'blue' },
   seller_verification: { label: 'Verifikasi Seller', icon: '✅', color: 'teal' },

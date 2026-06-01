@@ -11,6 +11,8 @@ import {
   EyeOff,
   Copy,
   Link2,
+  Flag,
+  User,
 } from "lucide-react"
 import { StreamPost } from "./stream-types"
 
@@ -23,6 +25,8 @@ interface PostActionMenuProps {
   onDelete: (post: StreamPost) => void
   onTogglePrivate: (post: StreamPost) => void
   onCopyLink: (post: StreamPost) => void
+  onReport?: (post: StreamPost) => void
+  onViewProfile?: (userId: string) => void
 }
 
 // ==================== POST ACTION MENU ====================
@@ -35,6 +39,8 @@ export function PostActionMenu({
   onDelete,
   onTogglePrivate,
   onCopyLink,
+  onReport,
+  onViewProfile,
 }: PostActionMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -86,6 +92,18 @@ export function PostActionMenu({
         ]
       : []),
     // Public actions
+    ...(onViewProfile && !isOwner
+      ? [
+          {
+            key: "viewprofile",
+            label: "Lihat Profil",
+            icon: User,
+            color: "text-foreground",
+            hoverBg: "hover:bg-emerald-50 dark:hover:bg-emerald-950/30",
+            onClick: () => { onViewProfile(post.userId); onClose() },
+          },
+        ]
+      : []),
     {
       key: "copylink",
       label: "Salin Link",
@@ -94,6 +112,19 @@ export function PostActionMenu({
       hoverBg: "hover:bg-muted/50",
       onClick: () => { onCopyLink(post); onClose() },
     },
+    // Report (non-owners only)
+    ...(!isOwner && onReport
+      ? [
+          {
+            key: "report",
+            label: "Laporkan",
+            icon: Flag,
+            color: "text-red-500",
+            hoverBg: "hover:bg-red-50 dark:hover:bg-red-950/30",
+            onClick: () => { onReport(post); onClose() },
+          },
+        ]
+      : []),
   ]
 
   return (
