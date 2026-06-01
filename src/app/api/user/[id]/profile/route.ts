@@ -1,15 +1,20 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
-import { successResponse, errorResponse, notFoundResponse, withErrorHandler, type RouteContext } from '@/lib/api-utils'
+import { successResponse, errorResponse, notFoundResponse, withErrorHandler, verifyAuthOrSession, type RouteContext } from '@/lib/api-utils'
 
 // ==================== GET /api/user/[id]/profile ====================
 // Fetch a user's public profile for the Stream feature.
 // Public endpoint — no auth required.
+// If authenticated, also returns isLiked for each post.
 // Returns: user info, seller info (if any), recent stream posts, recent products, and post stats.
 
 export const GET = withErrorHandler(async (request: NextRequest, context?: RouteContext) => {
   if (!context) return errorResponse('Missing route context', 500)
   const { id } = await context.params
+
+  // Try to get authenticated user (optional — for isLiked data)
+  const authUser = await verifyAuthOrSession(request)
+  const currentUserId = authUser?.userId ?? null
 
   // 1. Fetch user with select fields (email only if NOT hidden)
   const user = await db.user.findUnique({
@@ -75,6 +80,7 @@ export const GET = withErrorHandler(async (request: NextRequest, context?: Route
       commentCount: true,
       viewCount: true,
       isEdited: true,
+      isPrivate: true,
       createdAt: true,
       product: {
         select: {
@@ -89,7 +95,22 @@ export const GET = withErrorHandler(async (request: NextRequest, context?: Route
     },
   })
 
+  // 3b. If authenticated, fetch which posts the current user has liked
+  let likedPostIds: Set<string> = new Set()
+  if (currentUserId && posts.length > 0) {
+    const postIds = posts.map(p => p.id)
+    const likes = await db.streamLike.findMany({
+      where: {
+        userId: currentUserId,
+        postId: { in: postIds },
+      },
+      select: { postId: true },
+    })
+    likedPostIds = new Set(likes.map(l => l.postId))
+  }
+
   // Format posts — map product.images (JSON string) to product.image (first URL)
+  // Also add isLiked, userId, and user object for StreamPost compatibility
   const formattedPosts = posts.map((post) => {
     const { product: rawProduct, ...postData } = post
 
@@ -122,6 +143,14 @@ export const GET = withErrorHandler(async (request: NextRequest, context?: Route
 
     return {
       ...postData,
+      userId: id,
+      isLiked: likedPostIds.has(post.id),
+      user: {
+        id: userData.id,
+        name: userData.name,
+        username: userData.username,
+        avatar: userData.avatar,
+      },
       product,
     }
   })

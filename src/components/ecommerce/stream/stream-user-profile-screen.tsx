@@ -1,12 +1,18 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { ArrowLeft, Heart, MessageCircle, Eye, Play, Package, Store, Verified, Mail, Calendar, Loader2, Grid3X3, List, ShoppingBag } from "lucide-react"
+import { ArrowLeft, Heart, MessageCircle, Eye, Play, Pause, Package, Store, Verified, Mail, Calendar, Grid3X3, Share2, Bookmark, MoreHorizontal, Lock, ShoppingBag } from "lucide-react"
 import { useAppStore } from "@/lib/store"
 import { apiClient } from "@/lib/api-client"
 import { formatRelativeTime, formatPrice, truncateText } from "@/lib/utils"
 import { MentionText } from "./mention-components"
+import { StreamCommentSheet } from "./stream-comment-sheet"
+import { PostActionMenu } from "./stream-post-menu"
+import { StreamReportDialog } from "./stream-report-dialog"
+import { StreamEditScreen } from "./stream-edit-screen"
+import { ConfirmDialog } from "../confirm-dialog"
+import type { StreamPost, LikeResponse } from "./stream-types"
 
 // ==================== TYPES ====================
 interface UserProfile {
@@ -18,20 +24,6 @@ interface UserProfile {
   isVerified: boolean
   createdAt: string
   email?: string
-}
-
-interface UserPost {
-  id: string
-  type: "text" | "image" | "video"
-  content: string | null
-  mediaUrl?: string | null
-  thumbnailUrl?: string | null
-  likeCount: number
-  commentCount: number
-  viewCount: number
-  isEdited: boolean
-  createdAt: string
-  product?: { id: string; name: string; price: number; discountPrice?: number; image?: string; slug: string }
 }
 
 interface UserProduct {
@@ -60,13 +52,13 @@ interface ProfileResponse {
   data: {
     user: UserProfile
     seller: SellerInfo | null
-    posts: UserPost[]
+    posts: StreamPost[]
     products: UserProduct[]
     stats: { totalPosts: number; totalLikes: number }
   }
 }
 
-// ==================== AVATAR HELPER ====================
+// ==================== HELPERS ====================
 const avatarColors = [
   "bg-emerald-500",
   "bg-orange-500",
@@ -91,6 +83,10 @@ function formatMemberSince(dateStr: string): string {
     month: "long",
     year: "numeric",
   })
+}
+
+function formatStreamTime(dateStr: string): string {
+  return formatRelativeTime(dateStr)
 }
 
 // ==================== RATING STARS ====================
@@ -118,7 +114,7 @@ function RatingStars({ rating, size = "sm" }: { rating: number; size?: "sm" | "m
 // ==================== SKELETON ====================
 function ProfileSkeleton() {
   return (
-    <div className="min-h-screen bg-background pb-6">
+    <div className="min-h-screen bg-background pb-20">
       {/* Header skeleton */}
       <div className="sticky top-0 z-40">
         <div className="h-[2px] bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-500" />
@@ -174,6 +170,13 @@ function ProfileSkeleton() {
       <div className="px-4 pt-3 space-y-3">
         {[1, 2].map((i) => (
           <div key={i} className="bg-card rounded-2xl border border-border/50 p-4 space-y-3 animate-pulse">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-muted" />
+              <div className="space-y-2 flex-1">
+                <div className="h-3.5 w-24 rounded bg-muted" />
+                <div className="h-2.5 w-16 rounded bg-muted" />
+              </div>
+            </div>
             <div className="space-y-1.5">
               <div className="h-3 w-full rounded bg-muted" />
               <div className="h-3 w-3/4 rounded bg-muted" />
@@ -194,11 +197,26 @@ export function StreamUserProfileScreen() {
   const setSelectedSeller = useAppStore(s => s.setSelectedSeller)
   const showToast = useAppStore(s => s.showToast)
   const setOverlayOpen = useAppStore(s => s.setOverlayOpen)
+  const currentUser = useAppStore(s => s.currentUser)
+  const currentUserId = currentUser?.id || null
 
   // Data state
   const [profileData, setProfileData] = useState<ProfileResponse["data"] | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<"posts" | "products">("posts")
+
+  // Post interaction state
+  const [posts, setPosts] = useState<StreamPost[]>([])
+  const [activeCommentPost, setActiveCommentPost] = useState<StreamPost | null>(null)
+  const [editingPost, setEditingPost] = useState<StreamPost | null>(null)
+  const [deletingPost, setDeletingPost] = useState<StreamPost | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [reportingPost, setReportingPost] = useState<StreamPost | null>(null)
+  const [activeMenuPostId, setActiveMenuPostId] = useState<string | null>(null)
+
+  // Video playback state
+  const [playingVideoId, setPlayingVideoId] = useState<string | null>(null)
+  const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({})
 
   // Signal overlay on mount
   useEffect(() => {
@@ -221,6 +239,7 @@ export function StreamUserProfileScreen() {
       const data = await apiClient.get<ProfileResponse>(`/api/user/${selectedUserId}/profile`)
       if (data.success && data.data) {
         setProfileData(data.data)
+        setPosts(data.data.posts)
       }
     } catch {
       showToast("Gagal memuat profil pengguna", "error")
@@ -237,9 +256,136 @@ export function StreamUserProfileScreen() {
   // Derived data
   const user = profileData?.user
   const seller = profileData?.seller
-  const posts = profileData?.posts ?? []
   const products = profileData?.products ?? []
   const stats = profileData?.stats
+
+  // ==================== LIKE TOGGLE ====================
+  const handleLike = useCallback(async (postId: string) => {
+    setPosts((prev) =>
+      prev.map((p) =>
+        p.id === postId
+          ? { ...p, isLiked: !p.isLiked, likeCount: p.isLiked ? p.likeCount - 1 : p.likeCount + 1 }
+          : p
+      )
+    )
+
+    try {
+      const data = await apiClient.post<LikeResponse>(`/api/stream/${postId}/like`)
+      if (data.success) {
+        setPosts((prev) =>
+          prev.map((p) =>
+            p.id === postId ? { ...p, isLiked: data.isLiked, likeCount: data.likeCount } : p
+          )
+        )
+      }
+    } catch {
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === postId
+            ? { ...p, isLiked: !p.isLiked, likeCount: p.isLiked ? p.likeCount - 1 : p.likeCount + 1 }
+            : p
+        )
+      )
+      showToast("Gagal menyukai postingan", "error")
+    }
+  }, [showToast])
+
+  // ==================== VIDEO PLAY/PAUSE ====================
+  const handleVideoToggle = useCallback((postId: string) => {
+    if (playingVideoId === postId) {
+      const video = videoRefs.current[postId]
+      if (video) video.pause()
+      setPlayingVideoId(null)
+    } else {
+      if (playingVideoId) {
+        const prevVideo = videoRefs.current[playingVideoId]
+        if (prevVideo) prevVideo.pause()
+      }
+      const video = videoRefs.current[postId]
+      if (video) video.play().catch(() => {})
+      setPlayingVideoId(postId)
+    }
+  }, [playingVideoId])
+
+  // ==================== SHARE ====================
+  const handleShare = useCallback(async (post: StreamPost) => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `Postingan dari ${post.user?.name || 'User'}`,
+          text: truncateText(post.content || '', 100),
+          url: `${window.location.origin}/stream/post/${post.id}`,
+        })
+      } catch { /* User cancelled */ }
+    } else {
+      try {
+        const postUrl = `${window.location.origin}/stream/post/${post.id}`
+        await navigator.clipboard.writeText(postUrl)
+        showToast("Link berhasil disalin!", "success")
+      } catch {
+        showToast("Gagal menyalin link", "error")
+      }
+    }
+  }, [showToast])
+
+  // ==================== EDIT POST ====================
+  const handleEditPost = useCallback((post: StreamPost) => {
+    setEditingPost(post)
+  }, [])
+
+  const handleEditSaved = useCallback((updatedPost: StreamPost) => {
+    setPosts((prev) =>
+      prev.map((p) => (p.id === updatedPost.id ? { ...p, ...updatedPost, isEdited: true } : p))
+    )
+    setEditingPost(null)
+  }, [])
+
+  // ==================== DELETE POST ====================
+  const handleDeletePost = useCallback(async () => {
+    if (!deletingPost) return
+    setIsDeleting(true)
+    try {
+      await apiClient.del(`/api/stream/${deletingPost.id}`)
+      setPosts((prev) => prev.filter((p) => p.id !== deletingPost.id))
+      showToast("Postingan berhasil dihapus", "success")
+    } catch {
+      showToast("Gagal menghapus postingan", "error")
+    } finally {
+      setIsDeleting(false)
+      setDeletingPost(null)
+    }
+  }, [deletingPost, showToast])
+
+  // ==================== TOGGLE PRIVATE ====================
+  const handleTogglePrivate = useCallback(async (post: StreamPost) => {
+    const newPrivate = !post.isPrivate
+    setPosts((prev) =>
+      prev.map((p) => (p.id === post.id ? { ...p, isPrivate: newPrivate } : p))
+    )
+    try {
+      await apiClient.put(`/api/stream/${post.id}`, { isPrivate: newPrivate })
+      showToast(
+        newPrivate ? "Postingan dijadikan privat" : "Postingan dijadikan publik",
+        "success"
+      )
+    } catch {
+      setPosts((prev) =>
+        prev.map((p) => (p.id === post.id ? { ...p, isPrivate: !newPrivate } : p))
+      )
+      showToast("Gagal mengubah privasi postingan", "error")
+    }
+  }, [showToast])
+
+  // ==================== COPY LINK ====================
+  const handleCopyLink = useCallback(async (post: StreamPost) => {
+    try {
+      const postUrl = `${window.location.origin}/stream/post/${post.id}`
+      await navigator.clipboard.writeText(postUrl)
+      showToast("Link berhasil disalin!", "success")
+    } catch {
+      showToast("Gagal menyalin link", "error")
+    }
+  }, [showToast])
 
   // ==================== LOADING STATE ====================
   if (isLoading) {
@@ -250,7 +396,7 @@ export function StreamUserProfileScreen() {
 
   // ==================== RENDER ====================
   return (
-    <div className="min-h-screen bg-background pb-6">
+    <div className="min-h-screen bg-background pb-20">
       {/* ===== HEADER ===== */}
       <div className="sticky top-0 z-40">
         <div className="h-[2px] bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-500" />
@@ -493,7 +639,33 @@ export function StreamUserProfileScreen() {
               ) : (
                 <div className="space-y-3">
                   {posts.map((post, index) => (
-                    <UserPostCard key={post.id} post={post} index={index} />
+                    <ProfilePostCard
+                      key={post.id}
+                      post={post}
+                      index={index}
+                      currentUserId={currentUserId}
+                      isVideoPlaying={playingVideoId === post.id}
+                      isMenuOpen={activeMenuPostId === post.id}
+                      onLike={handleLike}
+                      onComment={() => setActiveCommentPost(post)}
+                      onShare={handleShare}
+                      onVideoToggle={handleVideoToggle}
+                      onProductClick={(productId) => {
+                        useAppStore.getState().setSelectedProduct(productId)
+                        navigate("product-detail")
+                      }}
+                      onToggleMenu={(postId) => {
+                        setActiveMenuPostId(prev => prev === postId ? null : postId)
+                      }}
+                      onEdit={handleEditPost}
+                      onDelete={setDeletingPost}
+                      onTogglePrivate={handleTogglePrivate}
+                      onCopyLink={handleCopyLink}
+                      onReport={setReportingPost}
+                      videoRef={(el) => {
+                        videoRefs.current[post.id] = el
+                      }}
+                    />
                   ))}
                 </div>
               )}
@@ -531,6 +703,50 @@ export function StreamUserProfileScreen() {
           )}
         </AnimatePresence>
       </div>
+
+      {/* ===== COMMENT SHEET ===== */}
+      <StreamCommentSheet
+        post={activeCommentPost}
+        onClose={() => setActiveCommentPost(null)}
+        onCommentAdded={(postId) => {
+          setPosts((prev) =>
+            prev.map((p) =>
+              p.id === postId ? { ...p, commentCount: p.commentCount + 1 } : p
+            )
+          )
+        }}
+      />
+
+      {/* ===== EDIT SCREEN ===== */}
+      <AnimatePresence>
+        {editingPost && (
+          <StreamEditScreen
+            post={editingPost}
+            onClose={() => setEditingPost(null)}
+            onSaved={handleEditSaved}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* ===== DELETE CONFIRMATION ===== */}
+      <ConfirmDialog
+        isOpen={!!deletingPost}
+        onClose={() => setDeletingPost(null)}
+        onConfirm={handleDeletePost}
+        title="Hapus Postingan?"
+        message="Postingan ini akan dihapus secara permanen dan tidak bisa dikembalikan."
+        confirmLabel="Hapus"
+        cancelLabel="Batal"
+        variant="danger"
+      />
+
+      {/* ===== REPORT DIALOG ===== */}
+      <StreamReportDialog
+        isOpen={!!reportingPost}
+        onClose={() => setReportingPost(null)}
+        postId={reportingPost?.id || ""}
+        postOwnerName={reportingPost?.user?.name || "User"}
+      />
     </div>
   )
 }
@@ -552,54 +768,193 @@ function EmptyState({ icon, title, description }: { icon: React.ReactNode; title
   )
 }
 
-// ==================== USER POST CARD ====================
-function UserPostCard({ post, index }: { post: UserPost; index: number }) {
+// ==================== PROFILE POST CARD (Interactive) ====================
+interface ProfilePostCardProps {
+  post: StreamPost
+  index: number
+  currentUserId: string | null
+  isVideoPlaying: boolean
+  isMenuOpen: boolean
+  onLike: (id: string) => void
+  onComment: () => void
+  onShare: (post: StreamPost) => void
+  onVideoToggle: (id: string) => void
+  onProductClick: (productId: string) => void
+  onToggleMenu: (postId: string) => void
+  onEdit: (post: StreamPost) => void
+  onDelete: (post: StreamPost) => void
+  onTogglePrivate: (post: StreamPost) => void
+  onCopyLink: (post: StreamPost) => void
+  onReport: (post: StreamPost) => void
+  videoRef: (el: HTMLVideoElement | null) => void
+}
+
+function ProfilePostCard({
+  post,
+  index,
+  currentUserId,
+  isVideoPlaying,
+  isMenuOpen,
+  onLike,
+  onComment,
+  onShare,
+  onVideoToggle,
+  onProductClick,
+  onToggleMenu,
+  onEdit,
+  onDelete,
+  onTogglePrivate,
+  onCopyLink,
+  onReport,
+  videoRef,
+}: ProfilePostCardProps) {
+  const [isBookmarked, setIsBookmarked] = useState(false)
+  const [isContentExpanded, setIsContentExpanded] = useState(false)
+
+  const userName = post.user?.name || 'User'
+  const userAvatar = post.user?.avatar
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay: Math.min(index * 0.05, 0.3) }}
-      className="rounded-2xl bg-card border border-border/50 overflow-hidden shadow-sm"
+      className="bg-card rounded-2xl border border-border/50 overflow-hidden shadow-sm relative"
     >
-      {/* Content */}
+      {/* ===== POST HEADER ===== */}
+      <div className="flex items-center gap-3 p-4 pb-2">
+        {/* Avatar — small, matches the profile context */}
+        <div className="relative flex-shrink-0">
+          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 p-[1.5px]">
+            <div className="w-full h-full rounded-full bg-card p-[1px]">
+              {userAvatar ? (
+                <img
+                  src={userAvatar}
+                  alt={userName}
+                  className="w-full h-full rounded-full object-cover"
+                  onError={(e) => {
+                    const img = e.currentTarget as HTMLImageElement
+                    img.style.display = "none"
+                    const fallback = img.nextElementSibling as HTMLElement
+                    if (fallback) fallback.style.display = "flex"
+                  }}
+                />
+              ) : null}
+              <div
+                className={`w-full h-full rounded-full ${getAvatarColor(userName)} text-white font-bold items-center justify-center text-xs`}
+                style={{ display: userAvatar ? "none" : "flex" }}
+              >
+                {userName.charAt(0).toUpperCase()}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Name & time */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <p className="text-sm font-bold text-foreground truncate">{userName}</p>
+            {post.user?.username && (
+              <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium truncate">@{post.user.username}</span>
+            )}
+            {post.isPrivate && (
+              <Lock className="w-3 h-3 text-amber-500 flex-shrink-0" />
+            )}
+          </div>
+          <div className="flex items-center gap-1.5">
+            <p className="text-[11px] text-muted-foreground">{formatStreamTime(post.createdAt)}</p>
+            {post.type === "video" && (
+              <span className="text-[9px] font-bold text-orange-500 bg-orange-100 dark:bg-orange-900/30 px-1.5 py-0.5 rounded-md">VIDEO</span>
+            )}
+            {post.isEdited && (
+              <span className="text-[9px] text-muted-foreground">· Diedit</span>
+            )}
+          </div>
+        </div>
+
+        {/* More button */}
+        <button
+          onClick={() => onToggleMenu(post.id)}
+          className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-muted transition-colors"
+        >
+          <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
+        </button>
+
+        {/* Post action menu */}
+        <PostActionMenu
+          post={post}
+          currentUserId={currentUserId}
+          isOpen={isMenuOpen}
+          onClose={() => onToggleMenu(post.id)}
+          onEdit={onEdit}
+          onDelete={onDelete}
+          onTogglePrivate={onTogglePrivate}
+          onCopyLink={onCopyLink}
+          onReport={onReport}
+        />
+      </div>
+
+      {/* ===== POST CONTENT ===== */}
       {post.content && (
-        <div className="p-4 pb-2">
+        <div className="px-4 pb-2">
           <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
-            <MentionText content={post.content} maxChars={200} />
+            <MentionText
+              content={post.content}
+              maxChars={500}
+              isExpanded={isContentExpanded}
+              onExpand={() => setIsContentExpanded(!isContentExpanded)}
+            />
           </p>
         </div>
       )}
 
-      {/* Media */}
+      {/* ===== MEDIA ===== */}
       {post.mediaUrl && (
         <div className="relative">
           {post.type === "video" ? (
             <div className="relative bg-black/5 dark:bg-black/20">
-              <img
-                src={post.thumbnailUrl ?? post.mediaUrl ?? ""}
-                alt="Video thumbnail"
-                className="w-full h-48 object-cover"
-                loading="lazy"
-                onError={(e) => {
-                  const target = e.target as HTMLImageElement
-                  target.style.display = "none"
-                }}
+              <video
+                ref={videoRef}
+                src={post.mediaUrl}
+                poster={post.thumbnailUrl ?? undefined}
+                className="w-full max-h-[500px] object-contain bg-black"
+                playsInline
+                loop
+                onClick={() => onVideoToggle(post.id)}
               />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-12 h-12 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center shadow-xl">
-                  <Play className="w-5 h-5 text-white ml-0.5" fill="white" />
-                </div>
-              </div>
-              <span className="absolute top-2 right-2 text-[9px] font-bold text-white bg-black/50 backdrop-blur-sm px-2 py-0.5 rounded-md">
-                VIDEO
-              </span>
+              <motion.button
+                whileTap={{ scale: 0.9 }}
+                onClick={() => onVideoToggle(post.id)}
+                className="absolute inset-0 flex items-center justify-center"
+              >
+                <AnimatePresence>
+                  {!isVideoPlaying && (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.5 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.5 }}
+                      className="w-14 h-14 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center shadow-xl"
+                    >
+                      <Play className="w-6 h-6 text-white ml-0.5" fill="white" />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </motion.button>
+              {isVideoPlaying && (
+                <button
+                  onClick={() => onVideoToggle(post.id)}
+                  className="absolute top-3 right-3 w-9 h-9 rounded-full bg-black/30 backdrop-blur-sm flex items-center justify-center"
+                >
+                  <Pause className="w-4 h-4 text-white" fill="white" />
+                </button>
+              )}
             </div>
           ) : post.type === "image" ? (
             <div className="px-4 pb-2">
               <img
                 src={post.mediaUrl}
                 alt="Post image"
-                className="w-full h-48 object-cover rounded-xl"
+                className="w-full max-h-[500px] object-cover rounded-xl"
                 loading="lazy"
                 onError={(e) => {
                   const target = e.target as HTMLImageElement
@@ -611,10 +966,92 @@ function UserPostCard({ post, index }: { post: UserPost; index: number }) {
         </div>
       )}
 
-      {/* Product link */}
+      {/* ===== VIEW COUNT BAR ===== */}
+      {post.viewCount > 0 && (
+        <div className="px-4 pt-1.5 pb-0.5">
+          <div className="flex items-center gap-1">
+            <Eye className="w-3 h-3 text-muted-foreground" />
+            <span className="text-[10px] font-medium text-muted-foreground">
+              {formatCount(post.viewCount)} ditonton
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* ===== ACTION BAR ===== */}
+      <div className="flex items-center justify-between px-3 py-1.5">
+        <div className="flex items-center gap-0.5">
+          {/* Like */}
+          <motion.button
+            whileTap={{ scale: 0.8 }}
+            onClick={() => onLike(post.id)}
+            className="flex items-center gap-1 px-2.5 py-2 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors"
+          >
+            <motion.div
+              animate={post.isLiked ? { scale: [1, 1.4, 1] } : {}}
+              transition={{ duration: 0.3 }}
+            >
+              <Heart
+                className={`w-[20px] h-[20px] ${
+                  post.isLiked
+                    ? "text-red-500 fill-red-500"
+                    : "text-muted-foreground"
+                }`}
+              />
+            </motion.div>
+            {post.likeCount > 0 && (
+              <span className={`text-xs font-semibold ${post.isLiked ? "text-red-500" : "text-muted-foreground"}`}>
+                {formatCount(post.likeCount)}
+              </span>
+            )}
+          </motion.button>
+
+          {/* Comment */}
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            onClick={onComment}
+            className="flex items-center gap-1 px-2.5 py-2 rounded-xl hover:bg-emerald-50 dark:hover:bg-emerald-900/10 transition-colors"
+          >
+            <MessageCircle className="w-[20px] h-[20px] text-muted-foreground" />
+            {post.commentCount > 0 && (
+              <span className="text-xs font-semibold text-muted-foreground">
+                {formatCount(post.commentCount)}
+              </span>
+            )}
+          </motion.button>
+
+          {/* Share */}
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            onClick={() => onShare(post)}
+            className="flex items-center gap-1 px-2.5 py-2 rounded-xl hover:bg-cyan-50 dark:hover:bg-cyan-900/10 transition-colors"
+          >
+            <Share2 className="w-[20px] h-[20px] text-muted-foreground" />
+          </motion.button>
+        </div>
+
+        {/* Bookmark */}
+        <motion.button
+          whileTap={{ scale: 0.9 }}
+          onClick={() => setIsBookmarked(!isBookmarked)}
+          className="p-2 rounded-xl hover:bg-muted transition-colors"
+        >
+          <Bookmark
+            className={`w-[20px] h-[20px] ${
+              isBookmarked ? "text-amber-500 fill-amber-500" : "text-muted-foreground"
+            }`}
+          />
+        </motion.button>
+      </div>
+
+      {/* ===== PRODUCT LINK CARD ===== */}
       {post.product && (
-        <div className="mx-4 mb-2 flex items-center gap-3 p-2.5 rounded-xl bg-gradient-to-r from-emerald-50/80 to-teal-50/50 dark:from-emerald-950/30 dark:to-teal-950/20 border border-emerald-200/50 dark:border-emerald-800/30">
-          <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
+        <motion.button
+          whileTap={{ scale: 0.98 }}
+          onClick={() => onProductClick(post.product!.id)}
+          className="mx-4 mb-3 flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-emerald-50/80 to-teal-50/50 dark:from-emerald-950/30 dark:to-teal-950/20 border border-emerald-200/50 dark:border-emerald-800/30 hover:shadow-md transition-all"
+        >
+          <div className="w-14 h-14 rounded-xl bg-muted flex items-center justify-center overflow-hidden flex-shrink-0 border border-border/30">
             {post.product.image ? (
               <img
                 src={post.product.image}
@@ -626,36 +1063,23 @@ function UserPostCard({ post, index }: { post: UserPost; index: number }) {
                 }}
               />
             ) : (
-              <Package className="w-4 h-4 text-muted-foreground" />
+              <Package className="w-5 h-5 text-muted-foreground" />
             )}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-[11px] font-semibold text-foreground line-clamp-1">{post.product.name}</p>
-            <p className="text-xs font-bold text-emerald-600">{formatPrice(post.product.discountPrice ?? post.product.price)}</p>
+            <div className="flex items-center gap-1.5 mb-0.5">
+              <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/30 px-1.5 py-0.5 rounded-md">Produk</span>
+            </div>
+            <p className="text-xs font-semibold text-foreground line-clamp-1">{post.product.name}</p>
+            <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
+              {formatPrice(post.product.discountPrice ?? post.product.price)}
+            </p>
           </div>
-        </div>
+          <div className="flex-shrink-0 px-3 py-1.5 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-xs font-bold">
+            Beli
+          </div>
+        </motion.button>
       )}
-
-      {/* Stats bar */}
-      <div className="flex items-center gap-4 px-4 py-2.5 text-muted-foreground">
-        <div className="flex items-center gap-1">
-          <Heart className="w-3.5 h-3.5" />
-          <span className="text-[11px] font-medium">{formatCount(post.likeCount)}</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <MessageCircle className="w-3.5 h-3.5" />
-          <span className="text-[11px] font-medium">{formatCount(post.commentCount)}</span>
-        </div>
-        {post.viewCount > 0 && (
-          <div className="flex items-center gap-1">
-            <Eye className="w-3.5 h-3.5" />
-            <span className="text-[11px] font-medium">{formatCount(post.viewCount)}</span>
-          </div>
-        )}
-        <span className="ml-auto text-[10px] text-muted-foreground">
-          {formatRelativeTime(post.createdAt)}
-        </span>
-      </div>
     </motion.div>
   )
 }

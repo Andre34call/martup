@@ -2196,3 +2196,49 @@ Stage Summary:
 - Bottom nav fix: navigate()/goBack() now reset isOverlayOpen → prevents nav from disappearing
 - Profile header: shopping-style top bar matching HomeScreen (logo + search + cart + bell + settings)
 - Two changes deployed to production
+---
+Task ID: 6
+Agent: Main
+Task: Fix other user's profile - add interactive post features (like, comment, share, report, react)
+
+Work Log:
+- Analyzed screenshot: User viewing @Acque's profile, posts are read-only (no like/comment/share/report)
+- Discovered the root cause: `UserPostCard` component was a simplified read-only card with only stat display
+- The `UserPost` type lacked `isLiked`, `isPrivate`, `userId`, and `user` object fields
+- The API `/api/user/[id]/profile` didn't return `isLiked` data (no auth check)
+
+Changes made:
+1. **Updated API endpoint** (`/api/user/[id]/profile/route.ts`):
+   - Added optional auth check via `verifyAuthOrSession(request)` to get currentUserId
+   - Added `StreamLike` query to check which posts the current user has liked
+   - Added `isLiked`, `isPrivate`, `userId`, and `user` object to post response
+   - Posts now fully compatible with `StreamPost` type from `stream-types.ts`
+
+2. **Rewrote `StreamUserProfileScreen`** (`stream-user-profile-screen.tsx`):
+   - Replaced `UserPost` type with `StreamPost` type from shared types
+   - Replaced read-only `UserPostCard` with interactive `ProfilePostCard` component
+   - Added full post interactions: Like (heart animation + count), Comment (opens comment sheet), Share (native share / clipboard), Bookmark
+   - Added video playback with play/pause controls (replaces static thumbnail)
+   - Added post action menu (3-dot → Edit/Delete/Toggle Private for owners, Copy Link/Report for others)
+   - Added `StreamCommentSheet` for commenting functionality
+   - Added `StreamReportDialog` for reporting posts
+   - Added `ConfirmDialog` for delete confirmation
+   - Added `StreamEditScreen` for editing posts
+   - Added expandable text (500 chars like Stream, up from 200)
+   - Added view count bar ("X ditonton")
+   - Upgraded product link card with "Beli" button and "Produk" badge (matching Stream style)
+   - Fixed bottom padding from `pb-6` to `pb-20` to prevent content clipping
+   - All post state changes use optimistic updates with rollback on error
+
+- Cleaned stale `.next/types/validator.ts` reference to old `[postId]` route
+- TypeScript compiles cleanly (npx tsc --noEmit passes)
+- Lint passes
+- Dev server compiles and serves page (GET / 200)
+
+Stage Summary:
+- Other user's profile posts are now fully interactive (like, comment, share, report, video playback, menu)
+- API now returns `isLiked` status for authenticated users
+- Posts use `StreamPost` type — same rich data as Stream feed
+- All interactive components reused from Stream (comment sheet, report dialog, action menu, edit screen)
+- Bottom padding fixed to prevent content clipping
+- Zero breaking changes — lint passes, TypeScript passes, dev server OK
