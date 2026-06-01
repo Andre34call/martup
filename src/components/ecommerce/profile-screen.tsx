@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { ELEVATED_ROLES, type UserRole } from "@/lib/types"
+import { UPLOAD_LIMITS } from "@/lib/upload-limits"
 
 // Default values for unauthenticated users — NOT a mock, just sensible defaults
 const DEFAULT_USER_VALUES = {
@@ -83,8 +84,8 @@ export function ProfileScreen() {
       showToast("File harus berupa gambar", "error")
       return
     }
-    if (file.size > 5 * 1024 * 1024) {
-      showToast("Ukuran foto maksimal 5MB", "error")
+    if (file.size > UPLOAD_LIMITS.mbToBytes(UPLOAD_LIMITS.MAX_AVATAR_SIZE_MB)) {
+      showToast(`Ukuran foto maksimal ${UPLOAD_LIMITS.MAX_AVATAR_SIZE_MB}MB`, "error")
       return
     }
     setIsUploadingAvatar(true)

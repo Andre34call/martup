@@ -17,31 +17,31 @@ const ALLOWED_BUCKETS: Record<string, string[]> = {
   reviews: ['images', 'videos'],
 }
 
-// Bucket configuration for auto-creation
+// Bucket configuration for auto-creation — sizes aligned with centralized UPLOAD_LIMITS
 const BUCKET_CONFIG: Record<string, { public: boolean; fileSizeLimit: number; allowedMimeTypes: string[] }> = {
   products: {
     public: true,
-    fileSizeLimit: 10 * 1024 * 1024,
+    fileSizeLimit: UPLOAD_LIMITS.mbToBytes(UPLOAD_LIMITS.MAX_PRODUCT_VIDEO_SIZE_MB), // 50MB
     allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/webm'],
   },
   avatars: {
     public: true,
-    fileSizeLimit: 5 * 1024 * 1024,
+    fileSizeLimit: UPLOAD_LIMITS.mbToBytes(UPLOAD_LIMITS.MAX_AVATAR_SIZE_MB), // 5MB — avatar specific limit
     allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
   },
   banners: {
     public: true,
-    fileSizeLimit: 10 * 1024 * 1024,
+    fileSizeLimit: UPLOAD_LIMITS.mbToBytes(UPLOAD_LIMITS.MAX_BANNER_SIZE_MB), // 10MB
     allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/webm'],
   },
   streams: {
     public: true,
-    fileSizeLimit: 100 * 1024 * 1024,
+    fileSizeLimit: UPLOAD_LIMITS.mbToBytes(UPLOAD_LIMITS.MAX_STREAM_VIDEO_SIZE_MB), // 100MB
     allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/webm', 'video/quicktime'],
   },
   reviews: {
     public: true,
-    fileSizeLimit: 10 * 1024 * 1024,
+    fileSizeLimit: UPLOAD_LIMITS.mbToBytes(UPLOAD_LIMITS.MAX_REVIEW_VIDEO_SIZE_MB), // 50MB
     allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/webm'],
   },
 }
@@ -241,15 +241,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // SECURITY: Validate file size using centralized limits
-    const maxSizeBytes = isVideo
+    // SECURITY: Validate file size using bucket-specific limits
+    const bucketConfig = BUCKET_CONFIG[bucket]
+    const maxFileSizeBytes = bucketConfig?.fileSizeLimit || (isVideo
       ? UPLOAD_LIMITS.mbToBytes(UPLOAD_LIMITS.MAX_VIDEO_SIZE_MB)
-      : UPLOAD_LIMITS.mbToBytes(UPLOAD_LIMITS.MAX_IMAGE_SIZE_MB)
-    const maxSizeMB = isVideo ? UPLOAD_LIMITS.MAX_VIDEO_SIZE_MB : UPLOAD_LIMITS.MAX_IMAGE_SIZE_MB
+      : UPLOAD_LIMITS.mbToBytes(UPLOAD_LIMITS.MAX_IMAGE_SIZE_MB))
+    const maxFileSizeMB = Math.round(maxFileSizeBytes / (1024 * 1024))
 
-    if (file.size > maxSizeBytes) {
+    if (file.size > maxFileSizeBytes) {
       return NextResponse.json(
-        { success: false, error: `File too large. Maximum size is ${maxSizeMB}MB for ${isVideo ? 'video' : 'image'} files.` },
+        { success: false, error: `File too large. Maximum size for ${bucket} is ${maxFileSizeMB}MB for ${isVideo ? 'video' : 'image'} files.` },
         { status: 400 }
       )
     }

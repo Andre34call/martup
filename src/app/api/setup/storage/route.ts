@@ -7,13 +7,13 @@ import { logger } from '@/lib/logger'
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-// Required buckets with their configuration
+// Required buckets with their configuration — sizes aligned with centralized UPLOAD_LIMITS
 const REQUIRED_BUCKETS = [
-  { id: 'products', name: 'products', public: true, fileSizeLimit: 10 * 1024 * 1024 },
-  { id: 'avatars', name: 'avatars', public: true, fileSizeLimit: 5 * 1024 * 1024 },
-  { id: 'banners', name: 'banners', public: true, fileSizeLimit: 10 * 1024 * 1024 },
-  { id: 'streams', name: 'streams', public: true, fileSizeLimit: 100 * 1024 * 1024 },
-  { id: 'reviews', name: 'reviews', public: true, fileSizeLimit: 10 * 1024 * 1024 },
+  { id: 'products', name: 'products', public: true, fileSizeLimit: 50 * 1024 * 1024 },    // 50MB
+  { id: 'avatars', name: 'avatars', public: true, fileSizeLimit: 10 * 1024 * 1024 },      // 10MB
+  { id: 'banners', name: 'banners', public: true, fileSizeLimit: 10 * 1024 * 1024 },      // 10MB
+  { id: 'streams', name: 'streams', public: true, fileSizeLimit: 100 * 1024 * 1024 },     // 100MB
+  { id: 'reviews', name: 'reviews', public: true, fileSizeLimit: 50 * 1024 * 1024 },      // 50MB
 ]
 
 // ==================== HELPER: Supabase Storage REST API ====================
@@ -68,20 +68,8 @@ async function createBucket(bucket: typeof REQUIRED_BUCKETS[number]): Promise<{ 
 
 /** Create storage policy to allow public reads */
 async function createPublicReadPolicy(bucketId: string): Promise<void> {
-  // Create a policy that allows public access to read objects
   const policyName = `${bucketId}_public_read`
-  const policySql = {
-    sql: `
-      CREATE POLICY "${policyName}" ON storage.objects
-      FOR SELECT
-      USING (bucket_id = '${bucketId}');
-    `,
-  }
-
-  // We use the Supabase REST API for storage policies via the /rpc endpoint
-  // But since we may not have pg_net enabled, we'll skip this for now.
-  // Public buckets already allow public reads by default.
-  logger.info({ bucketId }, 'Public read policy setup (bucket is already public)')
+  logger.info({ bucketId, policyName }, 'Public read policy setup (bucket is already public)')
 }
 
 // ==================== POST /api/setup/storage ====================

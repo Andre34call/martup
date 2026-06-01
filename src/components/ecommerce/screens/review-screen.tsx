@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
+import { UPLOAD_LIMITS } from "@/lib/upload-limits"
 
 // --- Media types ---
 interface ReviewImage {
@@ -25,9 +26,9 @@ interface ReviewVideo {
   file: File
 }
 
-const MAX_IMAGES = 5
-const MAX_VIDEO_SIZE_MB = 30
-const MAX_IMAGE_SIZE_MB = 5
+const MAX_IMAGES = UPLOAD_LIMITS.MAX_REVIEW_IMAGES
+const MAX_VIDEO_SIZE_MB = UPLOAD_LIMITS.MAX_REVIEW_VIDEO_SIZE_MB
+const MAX_IMAGE_SIZE_MB = UPLOAD_LIMITS.MAX_REVIEW_IMAGE_SIZE_MB
 
 // Rating labels
 const ratingLabels: Record<number, { text: string; color: string; icon: React.ReactNode }> = {

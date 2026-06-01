@@ -2,16 +2,36 @@
  * Shared upload limits for the entire application.
  * All components and API routes should reference these constants
  * to ensure consistent file size validation across the app.
+ *
+ * Standard/common limits based on major platforms:
+ * - Avatar: 5MB (Twitter, common standard)
+ * - Product images: 10MB (Shopee, Tokopedia standard)
+ * - Product video: 50MB (e-commerce standard)
+ * - Review images: 10MB (common standard)
+ * - Review video: 50MB (common standard)
+ * - Stream/social images: 10MB (Instagram-like)
+ * - Stream/social video: 100MB (social media standard)
+ * - Banner: 10MB (common standard)
+ * - Complaint/evidence: 10MB (common standard)
  */
 
 export const UPLOAD_LIMITS = {
-  // Generic limits (used by API route for all image/video uploads)
+  // General image/video limits (used by API routes as fallback)
   MAX_IMAGE_SIZE_MB: 10,
-  MAX_VIDEO_SIZE_MB: 50,
+  MAX_VIDEO_SIZE_MB: 100,
+
+  // Avatar/profile photo limits
+  MAX_AVATAR_SIZE_MB: 5,
+
+  // Banner limits
+  MAX_BANNER_SIZE_MB: 10,
 
   // Product image limits
   MAX_PRODUCT_IMAGES: 8,
   MAX_PRODUCT_IMAGE_SIZE_MB: 10,
+
+  // Product video limits
+  MAX_PRODUCT_VIDEO_SIZE_MB: 50,
 
   // Review image limits
   MAX_REVIEW_IMAGES: 5,
@@ -20,8 +40,11 @@ export const UPLOAD_LIMITS = {
   // Review video limits
   MAX_REVIEW_VIDEO_SIZE_MB: 50,
 
-  // Avatar/profile photo limits
-  MAX_AVATAR_SIZE_MB: 10,
+  // Stream/social image limits
+  MAX_STREAM_IMAGE_SIZE_MB: 10,
+
+  // Stream/social video limits
+  MAX_STREAM_VIDEO_SIZE_MB: 100,
 
   // Complaint evidence limits
   MAX_COMPLAINT_IMAGES: 4,

@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { UPLOAD_LIMITS } from "@/lib/upload-limits"
 
 export function SettingsScreen() {
   const { currentUser, showToast, logout, avatarUrl, uploadAvatar, updateProfile, settings, updateSettings, deleteAccount, navigate } = useAppStore()
@@ -247,8 +248,8 @@ export function SettingsScreen() {
       showToast("File harus berupa gambar", "error")
       return
     }
-    if (file.size > 5 * 1024 * 1024) {
-      showToast("Ukuran foto maksimal 5MB", "error")
+    if (file.size > UPLOAD_LIMITS.mbToBytes(UPLOAD_LIMITS.MAX_AVATAR_SIZE_MB)) {
+      showToast(`Ukuran foto maksimal ${UPLOAD_LIMITS.MAX_AVATAR_SIZE_MB}MB`, "error")
       return
     }
     setIsUploadingAvatar(true)

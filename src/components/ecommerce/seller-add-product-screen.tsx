@@ -14,12 +14,13 @@ import { PageHeader } from "./shared"
 import type { Product } from "@/lib/types"
 import { logger } from '@/lib/logger'
 import { mapSeller } from '@/lib/mappers'
+import { UPLOAD_LIMITS } from '@/lib/upload-limits'
 import { useState, useRef } from "react"
 
 // ==================== CONSTANTS ====================
-const MAX_PRODUCT_IMAGES = 8
-const MAX_PRODUCT_IMAGE_SIZE_MB = 5
-const MAX_VIDEO_SIZE_MB = 30
+const MAX_PRODUCT_IMAGES = UPLOAD_LIMITS.MAX_PRODUCT_IMAGES
+const MAX_PRODUCT_IMAGE_SIZE_MB = UPLOAD_LIMITS.MAX_PRODUCT_IMAGE_SIZE_MB
+const MAX_VIDEO_SIZE_MB = UPLOAD_LIMITS.MAX_PRODUCT_VIDEO_SIZE_MB
 
 // ==================== VARIANT GROUP TYPE ====================
 interface VariantGroup {
@@ -716,7 +717,7 @@ export function SellerAddProductScreen() {
               <h3 className="text-sm font-semibold text-foreground">Video Produk</h3>
               <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 font-medium">Opsional</span>
             </div>
-            <p className="text-xs text-muted-foreground">Tambahkan video untuk menarik lebih banyak pembeli. Max 30MB.</p>
+            <p className="text-xs text-muted-foreground">Tambahkan video untuk menarik lebih banyak pembeli. Max {MAX_VIDEO_SIZE_MB}MB.</p>
 
             <input
               ref={videoInputRef}
@@ -751,7 +752,7 @@ export function SellerAddProductScreen() {
               >
                 <Video className="w-6 h-6 text-purple-400" />
                 <span className="text-xs text-purple-600 dark:text-purple-400 font-medium">Upload Video</span>
-                <span className="text-[10px] text-muted-foreground">MP4, WebM, MOV · Max 30MB</span>
+                <span className="text-[10px] text-muted-foreground">MP4, WebM, MOV · Max {MAX_VIDEO_SIZE_MB}MB</span>
               </motion.button>
             )}
           </div>

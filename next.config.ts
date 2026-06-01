@@ -17,6 +17,13 @@ const nextConfig: NextConfig = {
     // shouldn't block the build, exclude those directories in tsconfig.json instead.
     ignoreBuildErrors: false,
   },
+  // Allow large file uploads through API routes
+  // Default Next.js limit is ~1MB which is too small for images/videos
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '100mb',
+    },
+  },
   async headers() {
     return [
       {

@@ -9,6 +9,7 @@ import { RotateCcw, X, ImagePlus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
+import { UPLOAD_LIMITS } from "@/lib/upload-limits"
 import { stagger } from '@/lib/animations'
 
 export function RefundScreen() {
@@ -33,15 +34,15 @@ export function RefundScreen() {
   const handleEvidenceUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
     if (!files.length) return
-    const remaining = 4 - evidenceImages.length
+    const remaining = UPLOAD_LIMITS.MAX_COMPLAINT_IMAGES - evidenceImages.length
     const filesToAdd = files.slice(0, remaining)
     if (files.length > remaining) {
-      showToast(`Maksimal 4 foto bukti`, "error")
+      showToast(`Maksimal ${UPLOAD_LIMITS.MAX_COMPLAINT_IMAGES} foto bukti`, "error")
     }
     const newImages: { id: string; url: string; file: File }[] = []
     for (const file of filesToAdd) {
-      if (file.size > 5 * 1024 * 1024) {
-        showToast(`Foto "${file.name}" melebihi 5MB`, "error")
+      if (file.size > UPLOAD_LIMITS.mbToBytes(UPLOAD_LIMITS.MAX_COMPLAINT_IMAGE_SIZE_MB)) {
+        showToast(`Foto "${file.name}" melebihi ${UPLOAD_LIMITS.MAX_COMPLAINT_IMAGE_SIZE_MB}MB`, "error")
         continue
       }
       if (!file.type.startsWith("image/")) {
@@ -185,7 +186,7 @@ export function RefundScreen() {
                             </button>
                           </div>
                         ))}
-                        {evidenceImages.length < 4 && (
+                        {evidenceImages.length < UPLOAD_LIMITS.MAX_COMPLAINT_IMAGES && (
                           <button
                             onClick={() => evidenceInputRef.current?.click()}
                             className="w-16 h-16 rounded-lg border-2 border-dashed border-border hover:border-emerald-400 bg-muted/30 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/20 flex flex-col items-center justify-center gap-0.5 transition-colors"
@@ -195,7 +196,7 @@ export function RefundScreen() {
                           </button>
                         )}
                       </div>
-                      <p className="text-[10px] text-muted-foreground">Maks 4 foto · JPG, PNG · Maks 5MB/foto</p>
+                      <p className="text-[10px] text-muted-foreground">Maks {UPLOAD_LIMITS.MAX_COMPLAINT_IMAGES} foto · JPG, PNG · Maks {UPLOAD_LIMITS.MAX_COMPLAINT_IMAGE_SIZE_MB}MB/foto</p>
                     </div>
                     <Button onClick={handleSubmitRefund} className="w-full bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl h-10">
                       Kirim Pengajuan

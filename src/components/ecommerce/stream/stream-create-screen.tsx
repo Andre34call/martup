@@ -18,6 +18,7 @@ import { useAppStore } from "@/lib/store"
 import { MentionTextarea } from "./mention-components"
 import { apiClient, ApiClientError } from "@/lib/api-client"
 import { uploadFile } from "@/lib/upload"
+import { UPLOAD_LIMITS } from "@/lib/upload-limits"
 import { PageHeader } from "../shared"
 import { ConfirmDialog } from "../confirm-dialog"
 import { formatPrice } from "@/lib/utils"
@@ -120,8 +121,8 @@ export function StreamCreateScreen() {
         return
       }
 
-      if (file.size > 10 * 1024 * 1024) {
-        showToast("Ukuran gambar maksimal 10MB", "error")
+      if (file.size > UPLOAD_LIMITS.mbToBytes(UPLOAD_LIMITS.MAX_STREAM_IMAGE_SIZE_MB)) {
+        showToast(`Ukuran gambar maksimal ${UPLOAD_LIMITS.MAX_STREAM_IMAGE_SIZE_MB}MB`, "error")
         return
       }
 
@@ -143,8 +144,8 @@ export function StreamCreateScreen() {
         return
       }
 
-      if (file.size > 50 * 1024 * 1024) {
-        showToast("Ukuran video maksimal 50MB", "error")
+      if (file.size > UPLOAD_LIMITS.mbToBytes(UPLOAD_LIMITS.MAX_STREAM_VIDEO_SIZE_MB)) {
+        showToast(`Ukuran video maksimal ${UPLOAD_LIMITS.MAX_STREAM_VIDEO_SIZE_MB}MB`, "error")
         return
       }
 
@@ -450,7 +451,7 @@ export function StreamCreateScreen() {
                   Pilih Gambar
                 </span>
                 <span className="text-[10px] text-muted-foreground">
-                  JPG, PNG, WebP (maks. 10MB)
+                  JPG, PNG, WebP (maks. {UPLOAD_LIMITS.MAX_STREAM_IMAGE_SIZE_MB}MB)
                 </span>
               </button>
             )}
@@ -465,7 +466,7 @@ export function StreamCreateScreen() {
                   Pilih Video
                 </span>
                 <span className="text-[10px] text-muted-foreground">
-                  MP4, WebM (maks. 50MB)
+                  MP4, WebM (maks. {UPLOAD_LIMITS.MAX_STREAM_VIDEO_SIZE_MB}MB)
                 </span>
               </button>
             )}
