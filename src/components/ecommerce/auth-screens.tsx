@@ -360,24 +360,35 @@ export function LoginScreen() {
     try {
       // If input is a phone number, redirect to OTP flow with the phone number
       if (isValidPhone(trimmedInput)) {
-        // Navigate to OTP screen - the phone number will be passed via store
         useAppStore.setState({ otpPhoneNumber: trimmedInput })
         navigate('otp')
-        setIsLoading(false)
         return
       }
 
       // Email + password login
-      // Use rawPost to read response body even on 403 (requiresVerification)
       const res = await apiClient.rawPost('/api/auth/login', { email: trimmedInput, password, rememberMe })
-      const data: LoginResponse = await res.json()
+
+      // Safely parse JSON — handle non-JSON responses (e.g., HTML error pages from CDN/proxy)
+      let data: LoginResponse
+      try {
+        data = await res.json()
+      } catch {
+        // Response is not JSON — likely a server/proxy error (502, 503, etc.)
+        if (res.status === 403) {
+          showToast('Akses ditolak. Refresh halaman dan coba lagi.', 'error')
+        } else if (res.status >= 500) {
+          showToast('Server sedang bermasalah. Coba lagi nanti.', 'error')
+        } else {
+          showToast(`Login gagal (HTTP ${res.status}). Coba lagi.`, 'error')
+        }
+        return
+      }
 
       // Email verification check — if email not verified, redirect to verification screen
       if (!data.success && data.requiresVerification) {
         useAppStore.setState({ pendingVerificationEmail: data.email || trimmedInput })
         navigate('email-verification')
         showToast(data.error || 'Email belum diverifikasi', 'error')
-        setIsLoading(false)
         return
       }
 
@@ -386,7 +397,6 @@ export function LoginScreen() {
         useAppStore.setState({ otpPhoneNumber: data.phone || '' })
         navigate('otp')
         showToast(data.message || 'Verifikasi 2FA diperlukan', 'info')
-        setIsLoading(false)
         return
       }
 
@@ -409,8 +419,6 @@ export function LoginScreen() {
         }
         login(user)
         // Fire-and-forget: these are non-critical data sync operations.
-        // Don't await them — they should not block the login flow or keep the loading spinner.
-        // If they fail, the data will be loaded on-demand when the user navigates.
         const { fetchUserData, connectSocket } = useAppStore.getState()
         fetchUserData(data.user.id).catch(() => {})
         useCartStore.getState().mergeLocalToServer(data.user.id).catch(() => {})
@@ -420,17 +428,19 @@ export function LoginScreen() {
         // Show the server error message (e.g., "Email atau password salah")
         showToast(data.error || 'Login gagal. Periksa email dan password Anda.', 'error')
       }
-    } catch (error) {
-      // Handle timeout (AbortError from fetchWithTimeout)
+    } catch (error: unknown) {
+      // Handle every possible error type with a user-friendly message
       if (error instanceof DOMException && error.name === 'AbortError') {
-        showToast('Koneksi timeout. Periksa koneksi internet Anda dan coba lagi.', 'error')
+        showToast('Koneksi timeout. Periksa internet Anda dan coba lagi.', 'error')
+      } else if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+        showToast('Tidak bisa terhubung ke server. Periksa internet Anda.', 'error')
       } else if (error instanceof ApiClientError) {
         showToast(error.message, 'error')
       } else {
-        logger.warn({ component: 'auth', err: error }, 'Login failed')
-        showToast('Terjadi kesalahan koneksi. Coba lagi nanti.', 'error')
+        showToast('Terjadi kesalahan. Coba lagi nanti.', 'error')
       }
     } finally {
+      // ALWAYS reset loading state — this guarantees the spinner stops
       setIsLoading(false)
     }
   }

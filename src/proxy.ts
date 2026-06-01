@@ -53,6 +53,17 @@ function cleanupRateLimitStore() {
 }
 
 export async function proxy(request: NextRequest) {
+  try {
+    return await _proxyInner(request)
+  } catch (err) {
+    // If the proxy crashes for ANY reason, let the request through.
+    // A broken proxy should never prevent the app from working.
+    console.error('[PROXY ERROR]', err)
+    return NextResponse.next()
+  }
+}
+
+async function _proxyInner(request: NextRequest) {
   // Lazy cleanup on each request instead of unreliable setInterval in Edge
   cleanupRateLimitStore()
 
@@ -132,26 +143,32 @@ export async function proxy(request: NextRequest) {
   // ===== CSRF Protection =====
   // Issue CSRF token on page loads (non-API GET requests).
   // This ensures the client has a fresh token for subsequent mutating requests.
+  // Wrapped in try/catch to prevent proxy crash if CSRF module has issues.
   if (!pathname.startsWith('/api/')) {
     if (request.method === 'GET') {
-      const { response: updatedResponse } = await issueCsrfToken(response)
-      return updatedResponse
+      try {
+        const { response: updatedResponse } = await issueCsrfToken(response)
+        return updatedResponse
+      } catch {
+        // CSRF token generation failed — return response without CSRF cookie
+        // The page will still load, but mutating requests may fail until CSRF is fixed
+        return response
+      }
     }
     return response
   }
 
   // For API GET requests: only issue a CSRF cookie if one doesn't already exist.
-  // DO NOT refresh the cookie on every API GET request — this causes a race condition
-  // where concurrent GET requests keep changing the cookie, making it impossible for
-  // the client to send a matching token on subsequent POST requests.
-  // The cookie is refreshed on every full page load (non-API GET) above.
   if (request.method === 'GET') {
     const existingCsrfCookie = request.cookies.get('csrf-token')?.value
     if (!existingCsrfCookie) {
-      const { response: updatedResponse } = await issueCsrfToken(response)
-      return updatedResponse
+      try {
+        const { response: updatedResponse } = await issueCsrfToken(response)
+        return updatedResponse
+      } catch {
+        return response
+      }
     }
-    // Cookie exists — don't refresh it to avoid race conditions with concurrent GET requests
     return response
   }
 

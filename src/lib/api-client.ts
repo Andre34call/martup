@@ -21,21 +21,23 @@ const UPLOAD_TIMEOUT_MS = 60_000
  * Fetch with AbortController timeout — prevents requests from hanging indefinitely.
  * On slow/unstable connections (especially mobile), a server that doesn't respond
  * will leave the UI stuck in a loading state forever without this.
+ *
+ * NOTE: Does NOT use AbortSignal.any() because it's not supported on older
+ * mobile browsers (requires Chrome 116+, Safari 17.4+, Firefox 130+).
  */
 function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: number = API_TIMEOUT_MS): Promise<Response> {
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 
-  // Merge the abort signal with any existing signal
-  const mergedOptions: RequestInit = {
-    ...options,
-    signal: options.signal
-      ? // If there's already a signal, abort on either
-        AbortSignal.any([options.signal, controller.signal])
-      : controller.signal,
-  }
-
-  return fetch(url, mergedOptions).finally(() => clearTimeout(timeoutId))
+  return fetch(url, { ...options, signal: controller.signal })
+    .catch((err) => {
+      // Convert AbortError to a more descriptive error
+      if (err.name === 'AbortError') {
+        throw new DOMException('Request timed out', 'AbortError')
+      }
+      throw err
+    })
+    .finally(() => clearTimeout(timeoutId))
 }
 
 interface ApiError {
