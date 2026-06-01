@@ -161,14 +161,29 @@ export async function proxy(request: NextRequest) {
   // EXEMPTION: NextAuth built-in routes are exempted — NextAuth has its own CSRF protection
   //   and uses a different mechanism (csrfToken body field + cookie). Our custom CSRF would
   //   block NextAuth's signIn/signout POST requests, breaking Google OAuth login.
+  // EXEMPTION: Custom unauthenticated auth routes (login, register, forgot-password, etc.)
+  //   These are pre-authentication routes — CSRF protection is unnecessary because there's
+  //   no authenticated session to protect. They have their own rate limiting.
+  //   The client-side api-client.ts also skips CSRF tokens for these routes.
   const isInternalRequest = !!request.headers.get('x-internal-secret')
   const isNextAuthRoute = pathname.startsWith('/api/auth/signin') ||
     pathname.startsWith('/api/auth/callback') ||
     pathname === '/api/auth/csrf' ||
     pathname === '/api/auth/session' ||
     pathname === '/api/auth/_log'
+  const isCsrfExemptAuthRoute = pathname === '/api/auth/login' ||
+    pathname === '/api/auth/register' ||
+    pathname === '/api/auth/forgot-password' ||
+    pathname === '/api/auth/reset-password' ||
+    pathname === '/api/auth/verify-email' ||
+    pathname === '/api/auth/resend-verification' ||
+    pathname === '/api/auth/otp/send' ||
+    pathname === '/api/auth/otp/verify' ||
+    pathname === '/api/auth/sync-user' ||
+    pathname === '/api/auth/diagnostic' ||
+    pathname === '/api/auth/login-diagnostic'
   let csrfResult: { valid: boolean; reason?: string } = { valid: true }
-  if (!isInternalRequest && !isNextAuthRoute) {
+  if (!isInternalRequest && !isNextAuthRoute && !isCsrfExemptAuthRoute) {
     csrfResult = await validateCsrfRequest(request)
   }
   if (!csrfResult.valid) {
