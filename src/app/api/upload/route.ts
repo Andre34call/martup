@@ -3,6 +3,10 @@ import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middle
 import { UPLOAD_LIMITS } from '@/lib/upload-limits'
 import { logger } from '@/lib/logger'
 
+// ==================== ROUTE SEGMENT CONFIG ====================
+// Increase max duration for large file uploads (videos up to 100MB)
+export const maxDuration = 300 // 5 minutes
+
 // ==================== CONFIG ====================
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
