@@ -99,7 +99,9 @@ function DataFetcher({ children }: { children: React.ReactNode }) {
 
     // Auth flag exists → try to restore session via /api/auth/me
     // The httpOnly session cookie will be sent automatically by the browser
-    tokenRecoveryDone.current = true
+    // NOTE: Do NOT set tokenRecoveryDone.current = true here — if the async call fails,
+    // we want to allow retries on subsequent effect triggers (e.g., network recovery).
+    // It will be set to true after the async call completes (success or failure).
 
     ;(async () => {
       try {
@@ -142,6 +144,10 @@ function DataFetcher({ children }: { children: React.ReactNode }) {
         logger.warn({ component: 'providers', err: err }, 'Failed to restore session from cookie')
         // Don't clear the flag — it might be a temporary network error
         // The user can try again on next page load
+      } finally {
+        // Mark recovery as done AFTER the async call completes
+        // This allows retries if the call failed due to a transient network error
+        tokenRecoveryDone.current = true
       }
     })()
   }, [isAuthenticated, login, connectSocket])

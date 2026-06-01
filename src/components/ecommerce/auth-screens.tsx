@@ -408,21 +408,26 @@ export function LoginScreen() {
           isSuperAdmin: data.isSuperAdmin || false,
         }
         login(user)
+        // Fire-and-forget: these are non-critical data sync operations.
+        // Don't await them — they should not block the login flow or keep the loading spinner.
+        // If they fail, the data will be loaded on-demand when the user navigates.
         const { fetchUserData, connectSocket } = useAppStore.getState()
-        await fetchUserData(data.user.id)
-        // Merge local cart to server & connect WebSocket
-        useCartStore.getState().mergeLocalToServer(data.user.id)
-        useWishlistStore.getState().syncWishlistFromServer(data.user.id)
+        fetchUserData(data.user.id).catch(() => {})
+        useCartStore.getState().mergeLocalToServer(data.user.id).catch(() => {})
+        useWishlistStore.getState().syncWishlistFromServer(data.user.id).catch(() => {})
         connectSocket()
       } else {
         // Show the server error message (e.g., "Email atau password salah")
         showToast(data.error || 'Login gagal. Periksa email dan password Anda.', 'error')
       }
     } catch (error) {
-      logger.warn({ component: 'auth', err: error }, 'Login failed')
-      if (error instanceof ApiClientError) {
+      // Handle timeout (AbortError from fetchWithTimeout)
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        showToast('Koneksi timeout. Periksa koneksi internet Anda dan coba lagi.', 'error')
+      } else if (error instanceof ApiClientError) {
         showToast(error.message, 'error')
       } else {
+        logger.warn({ component: 'auth', err: error }, 'Login failed')
         showToast('Terjadi kesalahan koneksi. Coba lagi nanti.', 'error')
       }
     } finally {
@@ -749,10 +754,11 @@ export function RegisterScreen() {
           isSuperAdmin: data.isSuperAdmin || false,
         }
         login(user)
+        // Fire-and-forget: non-critical data sync operations
         const { fetchUserData, connectSocket } = useAppStore.getState()
-        await fetchUserData(data.user.id)
-        useCartStore.getState().mergeLocalToServer(data.user.id)
-        useWishlistStore.getState().syncWishlistFromServer(data.user.id)
+        fetchUserData(data.user.id).catch(() => {})
+        useCartStore.getState().mergeLocalToServer(data.user.id).catch(() => {})
+        useWishlistStore.getState().syncWishlistFromServer(data.user.id).catch(() => {})
         connectSocket()
         showToast("Registrasi berhasil! 🎉", "success")
       } else {
@@ -1237,11 +1243,11 @@ export function OTPScreen() {
           isSuperAdmin: false, // OTP login users are never Super Admin
         }
         login(user)
+        // Fire-and-forget: non-critical data sync operations
         const { fetchUserData, connectSocket } = useAppStore.getState()
-        await fetchUserData(data.user.id)
-        // Merge local cart to server & connect WebSocket
-        useCartStore.getState().mergeLocalToServer(data.user.id)
-        useWishlistStore.getState().syncWishlistFromServer(data.user.id)
+        fetchUserData(data.user.id).catch(() => {})
+        useCartStore.getState().mergeLocalToServer(data.user.id).catch(() => {})
+        useWishlistStore.getState().syncWishlistFromServer(data.user.id).catch(() => {})
         connectSocket()
         showToast('Login berhasil! 🎉', 'success')
       } else {
