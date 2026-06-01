@@ -195,10 +195,12 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     logger.error({ err: error }, 'Admin init error')
 
-    // Provide specific error for database connection issues
-    const errorMessage = error?.code === 'P1001'
+    // SECURITY: Only expose Prisma error codes and infrastructure details in development.
+    // In production, return generic error messages to prevent information leakage.
+    const isDev = process.env.NODE_ENV === 'development'
+    const errorMessage = isDev && error?.code === 'P1001'
       ? 'Database tidak dapat diakses. Pastikan SUPABASE_DATABASE_URL sudah dikonfigurasi di Vercel.'
-      : error?.code === 'P1002'
+      : isDev && error?.code === 'P1002'
       ? 'Database connection timeout. Coba lagi dalam beberapa detik.'
       : 'Terjadi kesalahan server. Coba lagi nanti.'
 

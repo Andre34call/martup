@@ -7,8 +7,6 @@ import {
   Trash2,
   Lock,
   Unlock,
-  Eye,
-  EyeOff,
   Copy,
   Link2,
   Flag,
@@ -58,8 +56,6 @@ export function PostActionMenu({
     }
     return () => document.removeEventListener("mousedown", handleClickOutside)
   }, [isOpen, onClose])
-
-  if (!isOpen) return null
 
   const menuItems = [
     // Owner-only actions

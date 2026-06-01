@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { X, Flag, Loader2, AlertTriangle, MessageSquare, Ban, ShieldAlert, HelpCircle } from "lucide-react"
 import { apiClient, ApiClientError } from "@/lib/api-client"
@@ -34,10 +34,6 @@ export function StreamReportDialog({ isOpen, onClose, postId, postOwnerName }: R
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   // Signal overlay state to hide bottom nav
-  const handleOpen = useCallback(() => {
-    setOverlayOpen(true)
-  }, [setOverlayOpen])
-
   const handleClose = useCallback(() => {
     setOverlayOpen(false)
     // Reset state when dialog closes
@@ -48,9 +44,11 @@ export function StreamReportDialog({ isOpen, onClose, postId, postOwnerName }: R
   }, [setOverlayOpen, onClose])
 
   // Trigger overlay on open
-  if (isOpen) {
-    handleOpen()
-  }
+  useEffect(() => {
+    if (isOpen) {
+      setOverlayOpen(true)
+    }
+  }, [isOpen, setOverlayOpen])
 
   // ==================== SUBMIT REPORT ====================
   const handleSubmit = useCallback(async () => {
@@ -63,7 +61,12 @@ export function StreamReportDialog({ isOpen, onClose, postId, postOwnerName }: R
         description: description.trim() || undefined,
       })
       showToast("Laporan berhasil dikirim. Terima kasih!", "success")
-      handleClose()
+      // Cleanup and close directly — avoid calling handleClose which may unmount before finally runs
+      setOverlayOpen(false)
+      setSelectedReason(null)
+      setDescription("")
+      setIsSubmitting(false)
+      onClose()
     } catch (error) {
       if (error instanceof ApiClientError && error.status === 409) {
         showToast("Anda sudah melaporkan postingan ini", "error")
@@ -72,10 +75,9 @@ export function StreamReportDialog({ isOpen, onClose, postId, postOwnerName }: R
       } else {
         showToast("Gagal mengirim laporan. Coba lagi nanti.", "error")
       }
-    } finally {
       setIsSubmitting(false)
     }
-  }, [selectedReason, isSubmitting, postId, description, showToast, handleClose])
+  }, [selectedReason, isSubmitting, postId, description, showToast, setOverlayOpen, onClose])
 
   // ==================== RENDER ====================
   return (

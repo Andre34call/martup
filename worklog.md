@@ -2093,3 +2093,52 @@ Stage Summary:
 - Private posts are filtered from public feed, only visible to owner
 - Create post screen has privacy toggle (Publik/Privat)
 - All features deployed to production
+
+---
+Task ID: 7
+Agent: Main Coordinator
+Task: Full app audit — fix critical issues and deploy to production
+
+Work Log:
+- Ran comprehensive 3-agent audit: API security, Prisma schema, UI components
+- TypeScript and ESLint pass with zero errors at baseline
+- **Prisma Schema** (CRITICAL):
+  - Added `onDelete: Cascade` to ~30 relations that were missing it (was Restrict by default, causing FK violations on delete)
+  - Added `onDelete: SetNull` for Reviews, Product stream posts, OrderItem variants (preserve data on parent delete)
+  - Added missing relations: Order→Address, Complaint→User, Withdrawal→Seller, ChatMessage→User (sender)
+  - Added relation names to disambiguate: UserReviews, ProductReviews, UserComplaints, MessageSender, ReferredUsers
+  - Added missing indexes: role, isActive, createdAt, divisionId, referredBy on User; isVerified on Seller; productId on Product; trackingNumber on Shipping; productId on Wishlist; sellerId on FollowedStore/Withdrawal; senderId on ChatMessage; type on Notification; active vouchers; orderId on VoucherUsage; productId on StreamPost; sku on ProductVariant
+  - Added @@unique([referredId]) on Referral to prevent duplicate referrals
+  - Schema validates successfully with `prisma validate`
+- **API Security**:
+  - Health endpoint: Now returns detailed info only for admin users; unauthenticated users get `{ status: "ok" }` only
+  - Admin init: Prisma error codes (P1001, P1002) now gated behind development mode
+  - Order cancellation: Added rate limiting (5/min/user) to prevent abuse
+- **Stream Feed Bugs**:
+  - Fixed `fetchFeed` dependency array: Removed `posts.length` (caused infinite re-render churn), replaced with ref
+  - Fixed `handleCopyLink`: Now copies post-specific URL instead of `window.location.href`
+  - Fixed `handleShare`: Both share and clipboard fallback use post-specific URL
+  - Fixed `activeTab` filtering: "Following" tab now sends `tab=following` param to API; switching tabs resets and refetches feed
+  - Removed dead imports: `Pencil`, `EditPostResponse`
+  - Removed unused `isOwner` variable in StreamPostCard
+  - Fixed `video.play()` error handling: Added `.catch(() => {})` to prevent unhandled rejection
+- **Report Dialog**:
+  - Fixed render-time state update: Moved `handleOpen()` from render body to `useEffect`
+  - Fixed submit flow: No longer calls `handleClose()` from `handleSubmit` — does individual cleanup to avoid unmount-before-finally
+- **Post Menu**:
+  - Fixed AnimatePresence exit animation: Removed early `if (!isOpen) return null` that prevented exit animations
+  - Removed dead imports: `Eye`, `EyeOff`
+- **User Profile Screen**:
+  - Fixed email icon: Changed `MapPin` to `Mail` for email display
+  - Removed fake "online indicator" green dot (no actual online tracking exists)
+- All changes pass TypeScript and ESLint checks
+- Dev server compiles and runs successfully
+
+Stage Summary:
+- Prisma schema: Added cascade deletes on ~30 relations, 4 missing relations, 20+ missing indexes
+- API security: Health endpoint auth-gated, error messages production-safe, order cancel rate-limited
+- Stream bugs: 7 fixes (fetchFeed deps, copy link, share link, activeTab, video play, dead imports, unused vars)
+- Report dialog: 3 fixes (render-time state, submit flow, unmount safety)
+- Post menu: 2 fixes (AnimatePresence exit, dead imports)
+- User profile: 2 fixes (email icon, fake online indicator)
+- TypeScript ✅ ESLint ✅ Dev server ✅

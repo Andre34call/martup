@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { ArrowLeft, Heart, MessageCircle, Eye, Play, Package, Store, Verified, MapPin, Calendar, Loader2, Grid3X3, List, ShoppingBag } from "lucide-react"
+import { ArrowLeft, Heart, MessageCircle, Eye, Play, Package, Store, Verified, Mail, Calendar, Loader2, Grid3X3, List, ShoppingBag } from "lucide-react"
 import { useAppStore } from "@/lib/store"
 import { apiClient } from "@/lib/api-client"
 import { formatRelativeTime, formatPrice, truncateText } from "@/lib/utils"
@@ -308,12 +308,12 @@ export function StreamUserProfileScreen() {
                 </div>
               </div>
             </div>
-            {/* Online indicator */}
-            <div className="absolute bottom-0.5 right-0.5 w-5 h-5 rounded-full bg-emerald-500 border-[2.5px] border-background flex items-center justify-center">
-              {user.isVerified && (
+            {/* Verified indicator */}
+            {user.isVerified && (
+              <div className="absolute bottom-0.5 right-0.5 w-5 h-5 rounded-full bg-emerald-500 border-[2.5px] border-background flex items-center justify-center">
                 <Verified className="w-3 h-3 text-white" fill="white" />
-              )}
-            </div>
+              </div>
+            )}
           </div>
 
           {/* Name & username */}
@@ -339,7 +339,7 @@ export function StreamUserProfileScreen() {
             </div>
             {user.email && (
               <div className="flex items-center gap-1.5 text-muted-foreground">
-                <MapPin className="w-3.5 h-3.5" />
+                <Mail className="w-3.5 h-3.5" />
                 <span className="text-xs">{user.email}</span>
               </div>
             )}

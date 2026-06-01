@@ -6,7 +6,7 @@ import {
   Heart, MessageCircle, Share2, Play, Pause, Plus, Package,
   Search, Bell, ShoppingCart, RefreshCw, Flame,
   Bookmark, MoreHorizontal, Verified, Sparkles, Camera,
-  Lock, Eye, Pencil,
+  Lock, Eye,
 } from "lucide-react"
 import { useAppStore, useCartStore } from "@/lib/store"
 import { apiClient } from "@/lib/api-client"
@@ -19,7 +19,7 @@ import { fadeIn } from "@/lib/animations"
 import type { ScreenName } from "@/lib/types"
 import { MentionText } from "./mention-components"
 import { ConfirmDialog } from "../confirm-dialog"
-import { StreamPost, StreamFeedResponse, LikeResponse, EditPostResponse } from "./stream-types"
+import { StreamPost, StreamFeedResponse, LikeResponse } from "./stream-types"
 
 // ==================== AVATAR HELPER ====================
 const avatarColors = [
@@ -86,18 +86,21 @@ export function StreamFeedScreen() {
   // Infinite scroll sentinel ref
   const sentinelRef = useRef<HTMLDivElement>(null)
 
+  // Ref to track current posts length without causing re-renders
+  const postsLengthRef = useRef(0)
+
   // ==================== FETCH FEED ====================
   const fetchFeed = useCallback(async (isRefresh = false) => {
     try {
       if (isRefresh) {
         setIsRefreshing(true)
-      } else if (posts.length === 0) {
+      } else if (postsLengthRef.current === 0) {
         setIsLoading(true)
       } else {
         setIsLoadingMore(true)
       }
 
-      const params: Record<string, string | undefined> = { limit: "10" }
+      const params: Record<string, string | undefined> = { limit: "10", tab: activeTab }
       if (!isRefresh && cursor) {
         params.cursor = cursor
       }
@@ -107,8 +110,13 @@ export function StreamFeedScreen() {
       if (data.success && data.data) {
         if (isRefresh) {
           setPosts(data.data)
+          postsLengthRef.current = data.data.length
         } else {
-          setPosts((prev) => [...prev, ...data.data])
+          setPosts((prev) => {
+            const next = [...prev, ...data.data]
+            postsLengthRef.current = next.length
+            return next
+          })
         }
         setCursor(data.pagination?.nextCursor ?? undefined)
         setHasMore(data.pagination?.hasMore ?? false)
@@ -120,16 +128,21 @@ export function StreamFeedScreen() {
       setIsRefreshing(false)
       setIsLoadingMore(false)
     }
-  }, [cursor, posts.length, showToast])
+  }, [cursor, activeTab, showToast])
 
-  // Initial fetch
+  // Initial fetch & tab change handler
   useEffect(() => {
     const loadInitial = async () => {
       setIsLoading(true)
+      setPosts([])
+      postsLengthRef.current = 0
+      setCursor(undefined)
+      setHasMore(true)
       try {
-        const data = await apiClient.get<StreamFeedResponse>("/api/stream", { limit: "10" })
+        const data = await apiClient.get<StreamFeedResponse>("/api/stream", { limit: "10", tab: activeTab })
         if (data.success && data.data) {
           setPosts(data.data)
+          postsLengthRef.current = data.data.length
           setCursor(data.pagination?.nextCursor ?? undefined)
           setHasMore(data.pagination?.hasMore ?? false)
         }
@@ -140,7 +153,7 @@ export function StreamFeedScreen() {
       }
     }
     loadInitial()
-  }, [])
+  }, [activeTab, showToast])
 
   // ==================== INFINITE SCROLL ====================
   useEffect(() => {
@@ -210,7 +223,7 @@ export function StreamFeedScreen() {
         if (prevVideo) prevVideo.pause()
       }
       const video = videoRefs.current[postId]
-      if (video) video.play()
+      if (video) video.play().catch(() => {})
       setPlayingVideoId(postId)
     }
   }, [playingVideoId])
@@ -222,12 +235,13 @@ export function StreamFeedScreen() {
         await navigator.share({
           title: `Postingan dari ${post.user?.name || 'User'}`,
           text: truncateText(post.content || '', 100),
-          url: window.location.href,
+          url: `${window.location.origin}/stream/post/${post.id}`,
         })
       } catch { /* User cancelled */ }
     } else {
       try {
-        await navigator.clipboard.writeText(window.location.href)
+        const postUrl = `${window.location.origin}/stream/post/${post.id}`
+        await navigator.clipboard.writeText(postUrl)
         showToast("Link berhasil disalin!", "success")
       } catch {
         showToast("Gagal menyalin link", "error")
@@ -298,7 +312,8 @@ export function StreamFeedScreen() {
   // ==================== COPY LINK ====================
   const handleCopyLink = useCallback(async (post: StreamPost) => {
     try {
-      await navigator.clipboard.writeText(window.location.href)
+      const postUrl = `${window.location.origin}/stream/post/${post.id}`
+      await navigator.clipboard.writeText(postUrl)
       showToast("Link berhasil disalin!", "success")
     } catch {
       showToast("Gagal menyalin link", "error")
@@ -764,8 +779,6 @@ function StreamPostCard({
 
   const userName = post.user?.name || 'User'
   const userAvatar = post.user?.avatar
-  const isOwner = currentUserId === post.userId
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}

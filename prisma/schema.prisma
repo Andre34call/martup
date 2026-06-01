@@ -47,7 +47,7 @@ model User {
   wallet        Wallet?
   addresses     Address[]
   orders        Order[]
-  reviews       Review[]
+  reviews       Review[]      @relation("UserReviews")
   notifications Notification[]
   chats         ChatParticipant[]
   wishlists     Wishlist[]
@@ -55,6 +55,7 @@ model User {
   transactions  Transaction[]
   deposits      Deposit[]
   referrals     Referral[] @relation("UserReferrals")
+  referredByReferrals Referral[] @relation("ReferredUsers")
   division      Division? @relation(fields: [divisionId], references: [id])
   ledDivision   Division? @relation("DivisionHead")
   userSettings  UserSetting[]
@@ -65,6 +66,14 @@ model User {
   streamLikes    StreamLike[]
   streamCommentLikes StreamCommentLike[]
   streamReports  StreamPostReport[]
+  complaints     Complaint[]    @relation("UserComplaints")
+  chatMessages   ChatMessage[]  @relation("MessageSender")
+
+  @@index([role])
+  @@index([isActive])
+  @@index([createdAt])
+  @@index([divisionId])
+  @@index([referredBy])
 }
 
 model Seller {
@@ -93,13 +102,18 @@ model Seller {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  user            User     @relation(fields: [userId], references: [id])
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   products        Product[]
   orders          Order[]
   wallet          Wallet?
   campaigns       Campaign[]
   vouchers        Voucher[]
   followers       FollowedStore[]
+  withdrawals     Withdrawal[]
+
+  @@index([isVerified])
+  @@index([isPremium])
+  @@index([createdAt])
 }
 
 model Address {
@@ -116,7 +130,8 @@ model Address {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  user        User     @relation(fields: [userId], references: [id])
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders      Order[]
 
   @@index([userId])
 }
@@ -133,8 +148,8 @@ model Wallet {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  user      User?    @relation(fields: [userId], references: [id])
-  seller    Seller?  @relation(fields: [sellerId], references: [id])
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  seller    Seller?  @relation(fields: [sellerId], references: [id], onDelete: Cascade)
   mutations WalletMutation[]
 }
 
@@ -149,7 +164,7 @@ model WalletMutation {
   refId       String?
   createdAt   DateTime @default(now())
 
-  wallet      Wallet   @relation(fields: [walletId], references: [id])
+  wallet      Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
 
   @@index([walletId, createdAt])
 }
@@ -165,7 +180,7 @@ model Deposit {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  user        User     @relation(fields: [userId], references: [id])
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, status])
 }
@@ -183,7 +198,10 @@ model Withdrawal {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  seller    Seller   @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+
   @@index([status, createdAt])
+  @@index([sellerId])
 }
 
 model Transaction {
@@ -199,7 +217,7 @@ model Transaction {
   refId       String?
   createdAt   DateTime  @default(now())
 
-  user        User      @relation(fields: [userId], references: [id])
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
 }
@@ -218,7 +236,7 @@ model Category {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
-  parent    Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  parent    Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
   children  Category[] @relation("CategoryHierarchy")
   products  Product[]
 
@@ -257,13 +275,15 @@ model Product {
   variants      ProductVariant[]
   cartItems     CartItem[]
   orderItems    OrderItem[]
-  reviews       Review[]
+  reviews       Review[]  @relation("ProductReviews")
   wishlists     Wishlist[]
   streamPosts   StreamPost[]
 
   @@index([categoryId, status])
+  @@index([categoryId])
   @@index([sellerId, status])
   @@index([isFlashSale, status])
+  @@index([isFeatured, status])
   @@index([status, createdAt])
 }
 
@@ -277,11 +297,12 @@ model ProductVariant {
   stock     Int      @default(0)
   image     String?
 
-  product   Product       @relation(fields: [productId], references: [id])
+  product   Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
   cartItems CartItem[]
   orderItems OrderItem[]
 
   @@index([productId])
+  @@index([sku])
 }
 
 // ==================== CART & ORDER ====================
@@ -296,9 +317,9 @@ model CartItem {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user      User     @relation(fields: [userId], references: [id])
-  product   Product  @relation(fields: [productId], references: [id])
-  variant   ProductVariant? @relation(fields: [variantId], references: [id])
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant   ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
 
   @@unique([userId, productId, variantId])
   @@index([userId])
@@ -328,8 +349,9 @@ model Order {
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
-  user            User       @relation(fields: [userId], references: [id])
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   seller          Seller     @relation(fields: [sellerId], references: [id])
+  address         Address    @relation(fields: [addressId], references: [id])
   items           OrderItem[]
   shipping        Shipping?
   voucherUsages   VoucherUsage[]
@@ -340,6 +362,7 @@ model Order {
   @@index([status, paymentStatus])
   @@index([status])
   @@index([createdAt])
+  @@index([addressId])
 }
 
 model OrderItem {
@@ -354,9 +377,9 @@ model OrderItem {
   subtotal    Decimal
   image       String?
 
-  order       Order   @relation(fields: [orderId], references: [id])
+  order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product     Product @relation(fields: [productId], references: [id])
-  variant     ProductVariant? @relation(fields: [variantId], references: [id])
+  variant     ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
   review      Review?
 
   @@index([orderId])
@@ -374,7 +397,9 @@ model Shipping {
   shippedAt      DateTime?
   deliveredAt    DateTime?
 
-  order          Order    @relation(fields: [orderId], references: [id])
+  order          Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([trackingNumber])
 }
 
 // ==================== REVIEWS & WISHLIST ====================
@@ -393,9 +418,9 @@ model Review {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @default(now()) @updatedAt
 
-  user      User       @relation(fields: [userId], references: [id])
-  product   Product    @relation(fields: [productId], references: [id])
-  orderItem OrderItem? @relation(fields: [orderItemId], references: [id])
+  user      User       @relation("UserReviews", fields: [userId], references: [id], onDelete: SetNull)
+  product   Product    @relation("ProductReviews", fields: [productId], references: [id], onDelete: SetNull)
+  orderItem OrderItem? @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
 
   @@index([productId, createdAt])
   @@index([userId])
@@ -407,10 +432,11 @@ model Wishlist {
   productId String
   createdAt DateTime @default(now())
 
-  user      User     @relation(fields: [userId], references: [id])
-  product   Product  @relation(fields: [productId], references: [id])
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@unique([userId, productId])
+  @@index([productId])
 }
 
 model FollowedStore {
@@ -419,11 +445,12 @@ model FollowedStore {
   sellerId  String
   createdAt DateTime @default(now())
 
-  user      User     @relation(fields: [userId], references: [id])
-  seller    Seller   @relation(fields: [sellerId], references: [id])
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  seller    Seller   @relation(fields: [sellerId], references: [id], onDelete: Cascade)
 
   @@unique([userId, sellerId])
   @@index([userId])
+  @@index([sellerId])
 }
 
 // ==================== CHAT ====================
@@ -436,6 +463,8 @@ model ChatRoom {
 
   participants ChatParticipant[]
   messages     ChatMessage[]
+
+  @@index([productId])
 }
 
 model ChatParticipant {
@@ -444,8 +473,8 @@ model ChatParticipant {
   userId   String
   lastRead DateTime @default(now())
 
-  room     ChatRoom @relation(fields: [roomId], references: [id])
-  user     User     @relation(fields: [userId], references: [id])
+  room     ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([roomId, userId])
 }
@@ -459,9 +488,11 @@ model ChatMessage {
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
 
-  room      ChatRoom @relation(fields: [roomId], references: [id])
+  room      ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  sender    User     @relation("MessageSender", fields: [senderId], references: [id])
 
   @@index([roomId, createdAt])
+  @@index([senderId])
 }
 
 // ==================== NOTIFICATIONS ====================
@@ -477,10 +508,11 @@ model Notification {
   refId     String?
   createdAt DateTime @default(now())
 
-  user      User     @relation(fields: [userId], references: [id])
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, isRead])
   @@index([userId, createdAt])
+  @@index([type])
 }
 
 // ==================== VOUCHER & PROMO ====================
@@ -503,8 +535,10 @@ model Voucher {
   isActive      Boolean   @default(true)
   createdAt     DateTime  @default(now())
 
-  seller        Seller?   @relation(fields: [sellerId], references: [id])
+  seller        Seller?   @relation(fields: [sellerId], references: [id], onDelete: SetNull)
   usages        VoucherUsage[]
+
+  @@index([isActive, validFrom, validUntil])
 }
 
 model VoucherUsage {
@@ -515,10 +549,11 @@ model VoucherUsage {
   usedAt    DateTime @default(now())
 
   voucher   Voucher  @relation(fields: [voucherId], references: [id])
-  order     Order    @relation(fields: [orderId], references: [id])
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@unique([voucherId, userId, orderId])
   @@index([voucherId, userId])
+  @@index([orderId])
 }
 
 model Campaign {
@@ -532,7 +567,7 @@ model Campaign {
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
 
-  seller      Seller   @relation(fields: [sellerId], references: [id])
+  seller      Seller   @relation(fields: [sellerId], references: [id], onDelete: Cascade)
 
   @@index([sellerId])
   @@index([isActive, startDate, endDate])
@@ -572,7 +607,11 @@ model Complaint {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  order       Order    @relation(fields: [orderId], references: [id])
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user        User     @relation("UserComplaints", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([status])
 }
 
 // ==================== REFERRAL ====================
@@ -585,8 +624,10 @@ model Referral {
   isClaimed   Boolean  @default(false)
   createdAt   DateTime @default(now())
 
-  referrer    User     @relation("UserReferrals", fields: [referrerId], references: [id])
+  referrer    User     @relation("UserReferrals", fields: [referrerId], references: [id], onDelete: Cascade)
+  referred    User     @relation("ReferredUsers", fields: [referredId], references: [id], onDelete: Cascade)
 
+  @@unique([referredId])
   @@index([referrerId])
   @@index([referredId])
 }
@@ -657,7 +698,7 @@ model UserSetting {
   key    String
   value  String // JSON string
 
-  user   User   @relation(fields: [userId], references: [id])
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, key])
   @@index([userId])
@@ -684,8 +725,8 @@ model StreamPost {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  user       User            @relation(fields: [userId], references: [id])
-  product    Product?        @relation(fields: [productId], references: [id])
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product    Product?        @relation(fields: [productId], references: [id], onDelete: SetNull)
   likes      StreamLike[]
   comments   StreamComment[]
   reports    StreamPostReport[]
@@ -694,6 +735,7 @@ model StreamPost {
   @@index([isActive, createdAt])
   @@index([isHidden, createdAt])
   @@index([createdAt])
+  @@index([productId])
 }
 
 model StreamComment {
@@ -706,9 +748,9 @@ model StreamComment {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user      User           @relation(fields: [userId], references: [id])
-  post      StreamPost     @relation(fields: [postId], references: [id])
-  parent    StreamComment? @relation("CommentReplies", fields: [parentId], references: [id])
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post      StreamPost     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  parent    StreamComment? @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
   replies   StreamComment[] @relation("CommentReplies")
   likes     StreamCommentLike[]
 
@@ -723,8 +765,8 @@ model StreamLike {
   userId    String
   createdAt DateTime @default(now())
 
-  post      StreamPost @relation(fields: [postId], references: [id])
-  user      User       @relation(fields: [userId], references: [id])
+  post      StreamPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([postId, userId])
   @@index([postId])
