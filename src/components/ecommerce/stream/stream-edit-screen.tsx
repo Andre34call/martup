@@ -26,9 +26,9 @@ interface StreamPost {
   userId: string
   type: "text" | "image" | "video"
   content: string | null
-  mediaUrl: string | null
-  mediaType: string | null
-  productId: string | null
+  mediaUrl?: string | null
+  mediaType?: string | null
+  productId?: string | null
   isPrivate: boolean
 }
 
