@@ -227,10 +227,8 @@ export function StreamCreateScreen() {
         const result = await uploadFile(mediaFile, bucket, folder)
         mediaUrl = result.url
 
-        // For video, the thumbnail might be auto-generated
-        if (postType === "video" && result.url) {
-          thumbnailUrl = result.url.replace(/\.[^.]+$/, "_thumb.jpg")
-        }
+        // No server-side thumbnail generation — browser will use first video frame
+        // as poster automatically. thumbnailUrl is left undefined.
       }
 
       setUploadProgress("Memposting...")

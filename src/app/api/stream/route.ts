@@ -205,7 +205,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Sanitize and validate content — content is optional if media is provided
-    const content = sanitizeInput(body.content || '')
+    // Store null instead of empty string for media-only posts
+    const content = sanitizeInput(body.content || '') || null
     if (!content && !mediaUrl) {
       return NextResponse.json(
         { success: false, error: 'Content or media is required' },

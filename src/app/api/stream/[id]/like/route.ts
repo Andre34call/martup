@@ -116,11 +116,8 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-      data: {
-        postId,
-        isLiked: isLiked!,
-        likeCount: updatedPost?.likeCount ?? 0,
-      },
+      isLiked: isLiked!,
+      likeCount: updatedPost?.likeCount ?? 0,
     })
   } catch (error: unknown) {
     logger.error({ err: error }, 'Stream like toggle error')

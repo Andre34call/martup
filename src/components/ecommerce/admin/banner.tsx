@@ -29,7 +29,7 @@ const BANNER_POSITIONS = [
 
 // ==================== TYPE ALIASES (avoid TSX generic ambiguity) ====================
 type BannerMutationResponse = { success: boolean; error?: string }
-type UploadResponse = { success: boolean; url?: string; error?: string }
+type UploadResponse = { success: boolean; data?: { url: string; path: string; type: 'image' | 'video' }; error?: string }
 
 export function AdminBanner() {
   const { showToast, adminBanners, fetchAdminBanners } = useAppStore()
@@ -59,9 +59,11 @@ export function AdminBanner() {
     try {
       const formData = new FormData()
       formData.append('file', file)
+      formData.append('bucket', 'banners')
+      formData.append('folder', 'images')
       const uploadData = await apiClient.upload<UploadResponse>('/api/upload', formData)
-      if (uploadData.success) {
-        setNewBannerImageUrl(uploadData.url || '')
+      if (uploadData.success && uploadData.data?.url) {
+        setNewBannerImageUrl(uploadData.data.url)
         showToast('Gambar berhasil diupload', 'success')
       } else {
         showToast(uploadData.error || 'Gagal mengupload gambar', 'error')
