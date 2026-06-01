@@ -14,65 +14,7 @@ import { apiClient, ApiClientError } from "@/lib/api-client"
 import { formatRelativeTime, truncateText } from "@/lib/utils"
 import { MentionInput, MentionText } from "./mention-components"
 import { useAppStore } from "@/lib/store"
-
-// ==================== LOCAL TYPES ====================
-interface StreamPost {
-  id: string
-  userId: string
-  user: {
-    id: string
-    name: string
-    username?: string
-    avatar?: string
-  }
-  type: "text" | "image" | "video"
-  content: string | null
-  mediaUrl?: string | null
-  likeCount: number
-  commentCount: number
-  isLiked: boolean
-  createdAt: string
-}
-
-interface StreamComment {
-  id: string
-  userId: string
-  user: {
-    id: string
-    name: string
-    username?: string
-    avatar?: string
-  }
-  content: string
-  likeCount: number
-  isLiked: boolean
-  parentId?: string
-  replyCount: number
-  createdAt: string
-  replies?: StreamComment[]
-}
-
-interface CommentsResponse {
-  success: boolean
-  data: StreamComment[]
-  pagination?: {
-    nextCursor?: string | null
-    hasMore: boolean
-    limit: number
-  }
-}
-
-interface CommentMutationResponse {
-  success: boolean
-  data?: StreamComment
-  error?: string
-}
-
-interface LikeCommentResponse {
-  success: boolean
-  isLiked: boolean
-  likeCount: number
-}
+import { StreamPost, StreamComment, CommentsResponse, CommentMutationResponse, LikeCommentResponse } from "./stream-types"
 
 // ==================== AVATAR HELPER ====================
 const avatarColors = [

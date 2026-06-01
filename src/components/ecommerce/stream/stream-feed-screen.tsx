@@ -18,61 +18,7 @@ import { fadeIn } from "@/lib/animations"
 import type { ScreenName } from "@/lib/types"
 import { MentionText } from "./mention-components"
 import { ConfirmDialog } from "../confirm-dialog"
-
-// ==================== LOCAL TYPES ====================
-interface StreamPost {
-  id: string
-  userId: string
-  user: {
-    id: string
-    name: string
-    username?: string
-    avatar?: string
-  }
-  type: "text" | "image" | "video"
-  content: string | null
-  mediaUrl?: string | null
-  thumbnailUrl?: string | null
-  mediaType?: string | null
-  productId?: string | null
-  product?: {
-    id: string
-    name: string
-    price: number
-    discountPrice?: number
-    image?: string
-    slug: string
-  }
-  likeCount: number
-  commentCount: number
-  isLiked: boolean
-  isPrivate: boolean
-  isEdited: boolean
-  viewCount: number
-  createdAt: string
-}
-
-interface StreamFeedResponse {
-  success: boolean
-  data: StreamPost[]
-  pagination: {
-    nextCursor?: string | null
-    hasMore: boolean
-    limit: number
-  }
-}
-
-interface LikeResponse {
-  success: boolean
-  isLiked: boolean
-  likeCount: number
-}
-
-interface EditPostResponse {
-  success: boolean
-  data?: StreamPost
-  error?: string
-}
+import { StreamPost, StreamFeedResponse, LikeResponse, EditPostResponse } from "./stream-types"
 
 // ==================== AVATAR HELPER ====================
 const avatarColors = [
@@ -906,7 +852,7 @@ function StreamPostCard({
               <video
                 ref={videoRef}
                 src={post.mediaUrl}
-                poster={post.thumbnailUrl}
+                poster={post.thumbnailUrl ?? undefined}
                 className="w-full max-h-[500px] object-contain bg-black"
                 playsInline
                 loop

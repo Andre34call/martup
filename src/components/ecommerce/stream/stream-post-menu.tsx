@@ -12,22 +12,7 @@ import {
   Copy,
   Link2,
 } from "lucide-react"
-
-// ==================== TYPES ====================
-interface StreamPost {
-  id: string
-  userId: string
-  type: "text" | "image" | "video"
-  content: string | null
-  mediaUrl: string | null
-  mediaType: string | null
-  productId: string | null
-  isPrivate: boolean
-  isEdited: boolean
-  viewCount: number
-  likeCount: number
-  commentCount: number
-}
+import { StreamPost } from "./stream-types"
 
 interface PostActionMenuProps {
   post: StreamPost

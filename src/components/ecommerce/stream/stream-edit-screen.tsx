@@ -19,24 +19,7 @@ import { apiClient, ApiClientError } from "@/lib/api-client"
 import { uploadFile } from "@/lib/upload"
 import { UPLOAD_LIMITS } from "@/lib/upload-limits"
 import { formatPrice } from "@/lib/utils"
-
-// ==================== LOCAL TYPES ====================
-interface StreamPost {
-  id: string
-  userId: string
-  type: "text" | "image" | "video"
-  content: string | null
-  mediaUrl?: string | null
-  mediaType?: string | null
-  productId?: string | null
-  isPrivate: boolean
-}
-
-interface EditPostResponse {
-  success: boolean
-  data?: StreamPost
-  error?: string
-}
+import { StreamPost, EditPostResponse } from "./stream-types"
 
 interface ProductSearchResponse {
   success: boolean

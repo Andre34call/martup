@@ -13,26 +13,7 @@ import { formatRelativeTime, formatPrice, truncateText } from "@/lib/utils"
 import { fadeIn } from "@/lib/animations"
 import { Input } from "@/components/ui/input"
 import { MentionText } from "./mention-components"
-
-// ==================== LOCAL TYPES ====================
-interface StreamPost {
-  id: string
-  userId: string
-  user: { id: string; name: string; avatar?: string }
-  type: "text" | "image" | "video"
-  content: string
-  mediaUrl?: string
-  thumbnailUrl?: string
-  productId?: string
-  product?: {
-    id: string; name: string; price: number; discountPrice?: number; image?: string; slug: string
-  }
-  likeCount: number
-  commentCount: number
-  isLiked: boolean
-  createdAt: string
-  viewCount?: number
-}
+import { StreamPost } from "./stream-types"
 
 interface StreamSearchResponse {
   success: boolean
@@ -392,7 +373,7 @@ function StreamSearchResultCard({ post, index, onLike, onComment, onProductClick
         <div className="relative">
           {post.type === "video" ? (
             <div className="relative bg-black/5 dark:bg-black/20">
-              <video src={post.mediaUrl} poster={post.thumbnailUrl} className="w-full max-h-80 object-contain bg-black" playsInline muted />
+              <video src={post.mediaUrl ?? undefined} poster={post.thumbnailUrl ?? undefined} className="w-full max-h-80 object-contain bg-black" playsInline muted />
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="w-12 h-12 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center">
                   <Play className="w-5 h-5 text-white ml-0.5" fill="white" />
