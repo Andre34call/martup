@@ -13,6 +13,7 @@ import {
 import { apiClient, ApiClientError } from "@/lib/api-client"
 import { formatRelativeTime, truncateText } from "@/lib/utils"
 import { MentionInput, MentionText } from "./mention-components"
+import { useAppStore } from "@/lib/store"
 
 // ==================== LOCAL TYPES ====================
 interface StreamPost {
@@ -110,6 +111,7 @@ export function StreamCommentSheet({
 
   const inputRef = useRef<HTMLInputElement>(null)
   const commentsEndRef = useRef<HTMLDivElement>(null)
+  const setOverlayOpen = useAppStore((s) => s.setOverlayOpen)
 
   // ==================== FETCH COMMENTS ====================
   const fetchComments = useCallback(async () => {
@@ -130,6 +132,18 @@ export function StreamCommentSheet({
       setIsLoading(false)
     }
   }, [post])
+
+  // Signal overlay state to hide bottom nav
+  useEffect(() => {
+    if (post) {
+      setOverlayOpen(true)
+    }
+    return () => {
+      if (post) {
+        setOverlayOpen(false)
+      }
+    }
+  }, [post, setOverlayOpen])
 
   // Fetch when post changes
   useEffect(() => {
@@ -371,7 +385,7 @@ export function StreamCommentSheet({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
+            className="fixed inset-0 z-[55] bg-black/50 backdrop-blur-sm"
           />
 
           {/* Sheet */}
@@ -380,16 +394,16 @@ export function StreamCommentSheet({
             animate={{ y: 0 }}
             exit={{ y: "100%" }}
             transition={{ type: "spring", damping: 30, stiffness: 300 }}
-            className="fixed bottom-0 left-0 right-0 z-50 bg-background rounded-t-2xl shadow-2xl"
+            className="fixed bottom-0 left-0 right-0 z-[60] bg-background rounded-t-2xl shadow-2xl flex flex-col"
             style={{ maxHeight: "85vh" }}
           >
             {/* Handle */}
-            <div className="flex justify-center pt-3 pb-1">
+            <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
               <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
             </div>
 
             {/* Header */}
-            <div className="flex items-center justify-between px-4 pb-3 border-b border-border/50">
+            <div className="flex items-center justify-between px-4 pb-3 border-b border-border/50 flex-shrink-0">
               <div className="flex items-center gap-3 flex-1 min-w-0">
                 {/* Post user avatar */}
                 <div className="relative flex-shrink-0">
@@ -437,8 +451,8 @@ export function StreamCommentSheet({
               </motion.button>
             </div>
 
-            {/* Comments list */}
-            <div className="overflow-y-auto custom-scrollbar" style={{ maxHeight: "calc(85vh - 140px)" }}>
+            {/* Comments list - flex-1 to take remaining space, min-h-0 for overflow */}
+            <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0">
               {isLoading ? (
                 <div className="flex items-center justify-center py-12">
                   <motion.div
@@ -491,7 +505,7 @@ export function StreamCommentSheet({
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: "auto" }}
                   exit={{ opacity: 0, height: 0 }}
-                  className="flex items-center gap-2 px-4 py-2 bg-muted/30 border-t border-border/50"
+                  className="flex items-center gap-2 px-4 py-2 bg-muted/30 border-t border-border/50 flex-shrink-0"
                 >
                   <span className="text-xs text-muted-foreground flex-1">
                     Membalas{" "}
@@ -511,7 +525,7 @@ export function StreamCommentSheet({
             </AnimatePresence>
 
             {/* Input area */}
-            <div className="flex items-center gap-2 px-4 py-3 border-t border-border/50 bg-background">
+            <div className="flex items-center gap-2 px-4 py-3 border-t border-border/50 bg-background pb-safe flex-shrink-0">
               {/* @ mention quick insert */}
               <motion.button
                 whileTap={{ scale: 0.85 }}

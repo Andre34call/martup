@@ -44,6 +44,8 @@ export interface UISlice {
   isLoading: boolean
   showSplash: boolean
   setShowSplash: (v: boolean) => void
+  isOverlayOpen: boolean
+  setOverlayOpen: (open: boolean) => void
   toast: { message: string; type: 'success' | 'error' | 'info' | 'warning' } | null
   showToast: (message: string, type?: 'success' | 'error' | 'info' | 'warning') => void
   hideToast: () => void

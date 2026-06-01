@@ -60,7 +60,7 @@ interface StreamEditScreenProps {
 }
 
 export function StreamEditScreen({ post, onClose, onSaved }: StreamEditScreenProps) {
-  const { showToast } = useAppStore()
+  const { showToast, setOverlayOpen } = useAppStore()
 
   // Form state
   const [content, setContent] = useState(post?.content || "")
@@ -81,6 +81,18 @@ export function StreamEditScreen({ post, onClose, onSaved }: StreamEditScreenPro
   // Upload state
   const [isSaving, setIsSaving] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<string>("")
+
+  // Signal overlay state to hide bottom nav
+  useEffect(() => {
+    if (post) {
+      setOverlayOpen(true)
+    }
+    return () => {
+      if (post) {
+        setOverlayOpen(false)
+      }
+    }
+  }, [post, setOverlayOpen])
 
   // File input refs
   const imageInputRef = useRef<HTMLInputElement>(null)
@@ -264,7 +276,7 @@ export function StreamEditScreen({ post, onClose, onSaved }: StreamEditScreenPro
   if (!post) return null
 
   return (
-    <div className="fixed inset-0 z-50 bg-background flex flex-col">
+    <div className="fixed inset-0 z-[60] bg-background flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between px-4 h-14 border-b border-border/50">
         <motion.button

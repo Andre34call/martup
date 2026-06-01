@@ -121,7 +121,7 @@ export function PostActionMenu({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 z-40"
+            className="fixed inset-0 z-[55]"
           />
 
           {/* Menu */}
@@ -131,7 +131,7 @@ export function PostActionMenu({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: -8 }}
             transition={{ duration: 0.15 }}
-            className="absolute right-4 top-12 z-50 min-w-[200px] bg-popover border border-border rounded-xl shadow-xl overflow-hidden"
+            className="absolute right-4 top-12 z-[60] min-w-[200px] bg-popover border border-border rounded-xl shadow-xl overflow-hidden"
           >
             <div className="py-1">
               {menuItems.map((item, idx) => (

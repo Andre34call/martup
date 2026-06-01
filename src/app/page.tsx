@@ -95,6 +95,7 @@ function ScreenRenderer() {
 export default function Home() {
   const currentScreen = useAppStore((s) => s.currentScreen)
   const navigate = useAppStore((s) => s.navigate)
+  const isOverlayOpen = useAppStore((s) => s.isOverlayOpen)
   const isAuthScreen = (AUTH_SCREENS as readonly string[]).includes(currentScreen)
   const isSellerScreen = (SELLER_SCREENS as readonly string[]).includes(currentScreen)
   const isAdminScreen = (ADMIN_SCREENS as readonly string[]).includes(currentScreen)
@@ -134,7 +135,7 @@ export default function Home() {
   }, [navigate, isAuthenticated])
 
   const getBottomNav = () => {
-    if (isAuthScreen || isSubScreen) return null
+    if (isAuthScreen || isSubScreen || isOverlayOpen) return null
     if (isAdminScreen) return <AdminBottomNav />
     if (isSellerScreen) return <SellerBottomNav />
     return <BottomNav />
