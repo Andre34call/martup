@@ -425,9 +425,9 @@ export function LoginScreen() {
       } else {
         showToast('Terjadi kesalahan koneksi. Coba lagi nanti.', 'error')
       }
+    } finally {
+      setIsLoading(false)
     }
-
-    setIsLoading(false)
   }
 
   const handleGoogleLogin = async () => {
@@ -446,14 +446,18 @@ export function LoginScreen() {
           Default: 'Login gagal. Coba lagi nanti.',
         }
         showToast(errorMessages[result.error] || `Login gagal: ${result.error}`, 'error')
-        setIsLoading(false)
       } else if (result?.ok) {
         // Google login successful — NextAuth session is now active
-        // DataFetcher will detect the session and call /api/auth/me
+        // Set auth flag cookie so DataFetcher can detect the session
+        setAuthFlagCookie()
         showToast('Login Google berhasil!', 'success')
+        // DataFetcher will detect the NextAuth session and call /api/auth/me
+        // to populate the user data in the store
       }
     } catch (err) {
       showToast('Gagal terhubung ke Google. Coba lagi.', 'error')
+    } finally {
+      // Always reset loading state regardless of outcome
       setIsLoading(false)
     }
   }
@@ -761,9 +765,9 @@ export function RegisterScreen() {
         logger.warn({ component: 'auth', err: error }, 'Register failed')
         showToast('Terjadi kesalahan koneksi. Coba lagi nanti.', "error")
       }
+    } finally {
+      setIsLoading(false)
     }
-
-    setIsLoading(false)
   }
 
   return (
@@ -1441,9 +1445,9 @@ export function ForgotPasswordScreen() {
       } else {
         showToast('Terjadi kesalahan koneksi. Coba lagi nanti.', 'error')
       }
+    } finally {
+      setIsLoading(false)
     }
-
-    setIsLoading(false)
   }
 
   return (
@@ -1629,8 +1633,9 @@ export function ResetPasswordScreen() {
       } else {
         showToast('Terjadi kesalahan koneksi. Coba lagi nanti.', 'error')
       }
+    } finally {
+      setIsLoading(false)
     }
-    setIsLoading(false)
   }
 
   // Invalid/expired token view
