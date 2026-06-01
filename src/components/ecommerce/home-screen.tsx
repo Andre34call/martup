@@ -467,6 +467,7 @@ export function HomeScreen() {
                   product={product}
                   onClick={() => handleProductClick(product)}
                   layout="grid"
+                  showShareToStream
                 />
               </motion.div>
             ))}

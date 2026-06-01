@@ -922,7 +922,10 @@ function StreamPostCard({
 
           {/* Product info */}
           <div className="flex-1 min-w-0 text-left">
-            <p className="text-xs font-semibold text-foreground line-clamp-1">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[9px] font-bold text-emerald-600 bg-emerald-100 dark:bg-emerald-900/40 px-1.5 py-0.5 rounded-md uppercase tracking-wider">Produk</span>
+            </div>
+            <p className="text-xs font-semibold text-foreground line-clamp-1 mt-0.5">
               {post.product.name}
             </p>
             <p className="text-sm font-bold text-emerald-600 mt-0.5">

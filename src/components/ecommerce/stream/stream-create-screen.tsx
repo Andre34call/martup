@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useRef } from "react"
+import { useState, useCallback, useRef, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import {
   ArrowLeft,
@@ -49,7 +49,7 @@ const MAX_CAPTION_LENGTH = 2000
 
 // ==================== STREAM CREATE SCREEN ====================
 export function StreamCreateScreen() {
-  const { navigate, showToast, isAuthenticated } = useAppStore()
+  const { navigate, showToast, isAuthenticated, shareToStreamProduct, clearShareToStreamProduct } = useAppStore()
 
   // Form state
   const [postType, setPostType] = useState<PostType>("text")
@@ -58,6 +58,10 @@ export function StreamCreateScreen() {
   const [mediaPreview, setMediaPreview] = useState<string | null>(null)
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null)
   const [selectedProductName, setSelectedProductName] = useState<string | null>(null)
+
+  // Pre-populate from shared product (when user clicks "Share to Stream" from a product)
+  const initializedRef = useRef(false)
+  const [selectedProductImage, setSelectedProductImage] = useState<string | null>(null)
 
   // Product search
   const [productSearchQuery, setProductSearchQuery] = useState("")
@@ -77,6 +81,18 @@ export function StreamCreateScreen() {
   // File input refs
   const imageInputRef = useRef<HTMLInputElement>(null)
   const videoInputRef = useRef<HTMLInputElement>(null)
+
+  // Initialize from shared product on mount
+  useEffect(() => {
+    if (shareToStreamProduct && !initializedRef.current) {
+      setSelectedProductId(shareToStreamProduct.id)
+      setSelectedProductName(shareToStreamProduct.name)
+      setSelectedProductImage(shareToStreamProduct.image ?? null)
+      initializedRef.current = true
+      // Clear the shared product state after reading it
+      clearShareToStreamProduct()
+    }
+  }, [shareToStreamProduct, clearShareToStreamProduct])
 
   // ==================== GO BACK ====================
   const handleGoBack = useCallback(() => {
@@ -176,9 +192,10 @@ export function StreamCreateScreen() {
   )
 
   const handleSelectProduct = useCallback(
-    (product: { id: string; name: string }) => {
+    (product: { id: string; name: string; image?: string }) => {
       setSelectedProductId(product.id)
       setSelectedProductName(product.name)
+      setSelectedProductImage(product.image ?? null)
       setShowProductSearch(false)
       setProductSearchQuery("")
       setProductSearchResults([])
@@ -189,6 +206,7 @@ export function StreamCreateScreen() {
   const handleRemoveProduct = useCallback(() => {
     setSelectedProductId(null)
     setSelectedProductName(null)
+    setSelectedProductImage(null)
   }, [])
 
   // ==================== SUBMIT POST ====================
@@ -477,7 +495,19 @@ export function StreamCreateScreen() {
                   className="px-4 pb-3"
                 >
                   <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/50">
-                    <Package className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
+                    {selectedProductImage ? (
+                      <img
+                        src={selectedProductImage}
+                        alt={selectedProductName}
+                        className="w-7 h-7 rounded-md object-cover flex-shrink-0"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement
+                          target.style.display = "none"
+                        }}
+                      />
+                    ) : (
+                      <Package className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
+                    )}
                     <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400 truncate flex-1">
                       {selectedProductName}
                     </span>

@@ -3,7 +3,7 @@
 import { motion, AnimatePresence } from "framer-motion"
 import {
   Heart, MessageCircle, ShoppingCart, Star, Truck, Shield, RotateCcw,
-  Zap, Check, ChevronRight, Share2, MapPin, Clock, Award, Minus, Plus, Video
+  Zap, Check, ChevronRight, Share2, MapPin, Clock, Award, Minus, Plus, Video, Share
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -236,7 +236,7 @@ function VariantSelector({
 
 // ==================== MAIN COMPONENT ====================
 export function ProductDetailScreen() {
-  const { selectedProductId, navigate, goBack, setSelectedProduct, setSelectedSeller, setSelectedChatRoom, showToast, toggleFollowStore, isFollowingStore, chatRooms, products, reviews: storeReviews, createChatRoom, fetchProductReviews, isAuthenticated, currentUser } = useAppStore()
+  const { selectedProductId, navigate, goBack, setSelectedProduct, setSelectedSeller, setSelectedChatRoom, showToast, toggleFollowStore, isFollowingStore, chatRooms, products, reviews: storeReviews, createChatRoom, fetchProductReviews, isAuthenticated, currentUser, setShareToStreamProduct } = useAppStore()
   const { addItem } = useCartStore()
   const { toggleWishlist, isWishlisted } = useWishlistStore()
 
@@ -352,6 +352,22 @@ export function ProductDetailScreen() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
+  const handleShareToStream = () => {
+    if (!isAuthenticated) {
+      showToast("Silakan login terlebih dahulu", "warning")
+      navigate("login")
+      return
+    }
+    setShareToStreamProduct({
+      id: product.id,
+      name: product.name,
+      image: product.images?.[0],
+      price: product.price,
+      discountPrice: product.discountPrice ?? undefined,
+    })
+    navigate("stream-create")
+  }
+
   return (
     <div className="min-h-screen bg-background pb-24">
       <PageHeader
@@ -359,6 +375,14 @@ export function ProductDetailScreen() {
         onBack={handleBack}
         rightAction={
           <div className="flex items-center gap-1">
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              onClick={handleShareToStream}
+              className="relative w-9 h-9 flex items-center justify-center rounded-xl hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors"
+              title="Bagikan ke Stream"
+            >
+              <Share className="w-5 h-5 text-emerald-600" />
+            </motion.button>
             <motion.button
               whileTap={{ scale: 0.9 }}
               onClick={() => {
@@ -846,6 +870,15 @@ export function ProductDetailScreen() {
             <Heart
               className={`w-5 h-5 transition-colors ${wishlisted ? "fill-red-500 text-red-500" : "text-muted-foreground"}`}
             />
+          </motion.button>
+
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            onClick={handleShareToStream}
+            className="w-11 h-11 flex items-center justify-center rounded-xl border border-emerald-200 dark:border-emerald-800/50 bg-emerald-50 dark:bg-emerald-950/30"
+            title="Bagikan ke Stream"
+          >
+            <Share className="w-5 h-5 text-emerald-600" />
           </motion.button>
 
           <motion.button

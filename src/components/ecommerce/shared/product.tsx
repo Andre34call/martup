@@ -1,8 +1,8 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { Heart, Star, Zap, Truck, Shield, RotateCcw } from "lucide-react"
-import { useWishlistStore } from "@/lib/store"
+import { Heart, Star, Zap, Truck, Shield, RotateCcw, Share } from "lucide-react"
+import { useWishlistStore, useAppStore } from "@/lib/store"
 import type { Product } from "@/lib/types"
 import { useState } from "react"
 import { PriceDisplay } from "./display"
@@ -53,10 +53,12 @@ interface ProductCardProps {
   product: Product
   onClick?: () => void
   layout?: "grid" | "list"
+  showShareToStream?: boolean
 }
 
-export function ProductCard({ product, onClick, layout = "grid" }: ProductCardProps) {
+export function ProductCard({ product, onClick, layout = "grid", showShareToStream = false }: ProductCardProps) {
   const { toggleWishlist, isWishlisted } = useWishlistStore()
+  const { setShareToStreamProduct, navigate, showToast, isAuthenticated } = useAppStore()
   const wishlisted = isWishlisted(product.id)
   const discountPercent = product.discountPrice
     ? (product.price > 0 ? Math.round(((product.price - product.discountPrice) / product.price) * 100) : 0)
@@ -186,6 +188,32 @@ export function ProductCard({ product, onClick, layout = "grid" }: ProductCardPr
             />
           </motion.div>
         </motion.button>
+
+        {/* Share to Stream button */}
+        {showShareToStream && (
+          <motion.button
+            whileTap={{ scale: 0.8 }}
+            onClick={(e) => {
+              e.stopPropagation()
+              if (!isAuthenticated) {
+                showToast("Silakan login terlebih dahulu", "warning")
+                navigate("login")
+                return
+              }
+              setShareToStreamProduct({
+                id: product.id,
+                name: product.name,
+                image: product.images?.[0],
+                price: product.price,
+                discountPrice: product.discountPrice ?? undefined,
+              })
+              navigate("stream-create")
+            }}
+            className="absolute top-2 right-2 w-7 h-7 rounded-full bg-white/80 dark:bg-black/50 backdrop-blur-sm flex items-center justify-center shadow-sm"
+          >
+            <Share className="w-3.5 h-3.5 text-emerald-600" />
+          </motion.button>
+        )}
       </div>
 
       {/* Content */}

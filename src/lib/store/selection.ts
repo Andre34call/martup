@@ -7,9 +7,12 @@ export const createSelectionSlice: StateCreator<AppStore, [], [], SelectionSlice
   selectedOrderId: null,
   selectedChatRoomId: null,
   selectedSellerId: null,
+  shareToStreamProduct: null,
   setSelectedProduct: (id) => set({ selectedProductId: id }),
   setSelectedCategory: (id) => set({ selectedCategoryId: id }),
   setSelectedOrder: (id) => set({ selectedOrderId: id }),
   setSelectedChatRoom: (id) => set({ selectedChatRoomId: id }),
   setSelectedSeller: (id) => set({ selectedSellerId: id }),
+  setShareToStreamProduct: (product) => set({ shareToStreamProduct: product }),
+  clearShareToStreamProduct: () => set({ shareToStreamProduct: null }),
 })

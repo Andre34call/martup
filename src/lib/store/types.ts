@@ -30,11 +30,14 @@ export interface SelectionSlice {
   selectedOrderId: string | null
   selectedChatRoomId: string | null
   selectedSellerId: string | null
+  shareToStreamProduct: { id: string; name: string; image?: string; price: number; discountPrice?: number } | null
   setSelectedProduct: (id: string | null) => void
   setSelectedCategory: (id: string | null) => void
   setSelectedOrder: (id: string | null) => void
   setSelectedChatRoom: (id: string | null) => void
   setSelectedSeller: (id: string | null) => void
+  setShareToStreamProduct: (product: SelectionSlice['shareToStreamProduct']) => void
+  clearShareToStreamProduct: () => void
 }
 
 export interface UISlice {
