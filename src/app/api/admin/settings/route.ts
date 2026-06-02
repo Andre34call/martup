@@ -20,7 +20,7 @@ const DEFAULT_SETTINGS: Record<string, number | boolean | string> = {
   flashSaleEnabled: true,
   autoConfirmDays: 3,      // auto-confirm delivery after N days
   returnWindowDays: 7,     // return window after delivery
-  martupBankAccounts: [],   // JSON array: [{ bankName, accountNumber, accountHolder }]
+  martupBankAccounts: '[]', // JSON string: [{ bankName, accountNumber, accountHolder }]
 }
 
 // Validation rules for numeric settings
