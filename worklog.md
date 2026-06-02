@@ -2348,3 +2348,30 @@ Stage Summary:
 - Admin: expandable cards with inline proof viewing, approve/reject with verification tracking
 - New API endpoints: 3 (deposits list, deposit detail, proof upload)
 - Enhanced API endpoints: 3 (topup, deposit, admin deposits)
+---
+Task ID: midtrans-deposit-integration
+Agent: Main Agent
+Task: Integrate Midtrans Snap payment gateway for deposit/top-up feature
+
+Work Log:
+- Added Midtrans fields to Deposit model (snapToken, midtransOrderId, paymentType, midtransTransactionId)
+- Added NEXT_PUBLIC_MIDTRANS_CLIENT_KEY and NEXT_PUBLIC_MIDTRANS_IS_PRODUCTION env vars
+- Created POST /api/deposit/midtrans/create - creates deposit with Midtrans Snap token (CSRF + rate limiting)
+- Created GET /api/deposit/status - polling endpoint for deposit payment status
+- Updated POST /api/payment/notification webhook to handle both ORDER and DEPOSIT payments
+- Updated deposit-screen.tsx: 3-step wizard with Midtrans auto-payment (VA, GoPay, ShopeePay, QRIS) + manual escrow
+- Updated deposit-detail-screen.tsx: Midtrans "Pay Now" button, status polling, payment info display
+- Updated deposit-history-screen.tsx: Added Midtrans method label
+- Updated deposit APIs to include Midtrans fields in responses
+- Added /api/deposit/ rate limiting in proxy.ts
+- Fixed: Removed duplicate middleware.ts (conflicting with proxy.ts in Next.js 16)
+- Pushed to GitHub (commit 46f8562), Vercel auto-deploys
+
+Stage Summary:
+- Midtrans Sandbox integration complete for deposit/top-up
+- Supports: Virtual Account (BCA, Mandiri, BNI, BRI, Permata), GoPay, ShopeePay, QRIS
+- Auto-verification via Midtrans webhook (no admin verification needed for Midtrans deposits)
+- Manual escrow transfer still available as fallback
+- All payment flows secured: CSRF, rate limiting, signature verification, idempotency, atomic transactions
+- Sandbox mode: ALL transactions are simulated (no real money)
+- User needs to: (1) Get Midtrans Sandbox keys from dashboard.midtrans.com, (2) Update MIDTRANS_SERVER_KEY and NEXT_PUBLIC_MIDTRANS_CLIENT_KEY in Vercel env vars
