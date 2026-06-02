@@ -2242,3 +2242,32 @@ Stage Summary:
 - All interactive components reused from Stream (comment sheet, report dialog, action menu, edit screen)
 - Bottom padding fixed to prevent content clipping
 - Zero breaking changes — lint passes, TypeScript passes, dev server OK
+
+---
+Task ID: 1-a
+Agent: code
+Task: Create DELETE API route for stream comments at src/app/api/stream/[id]/comments/[commentId]/route.ts
+
+Work Log:
+- Read worklog.md and all reference files: comments route, like route, auth-middleware, rate-limit, logger, db
+- Created new route file at `src/app/api/stream/[id]/comments/[commentId]/route.ts`
+- Followed exact same patterns as existing code:
+  - Auth: verifyAuth + authErrorResponse (same as comments and like routes)
+  - Rate limiting: createRateLimiter (10 req/min per user) + checkRateLimit burst protection (same dual-layer pattern as like route)
+  - Params: Promise-based with await (Next.js 16 pattern)
+  - Comment ownership verification: 403 if user is not the comment author
+  - Comment existence + post belonging check: 404 and 400 responses
+  - Transaction: counts descendant replies, deletes comment (cascade handles replies+likes), decrements post commentCount by total (1 + reply count)
+  - Logging: structured log with userId, postId, commentId, isReply, totalDeleted
+  - Error handling: 401 (auth), 403 (not author), 404 (not found), 400 (wrong post), 429 (rate limit), 500 (server error)
+- Lint passes ✅
+
+Stage Summary:
+- New DELETE route created at `src/app/api/stream/[id]/comments/[commentId]/route.ts`
+- Only comment author can delete their own comment (403 for unauthorized)
+- Authentication required (401 for unauthenticated)
+- Comment existence and post ownership verified (404/400)
+- Transactional: counts replies, deletes comment (cascade), decrements commentCount by total deleted
+- Rate limited: 10 per minute per user (advanced rate limiter + burst protection)
+- Deletion logged with structured context
+- Zero modifications to existing files

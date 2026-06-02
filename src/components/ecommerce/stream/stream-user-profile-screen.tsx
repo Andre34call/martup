@@ -193,6 +193,7 @@ function ProfileSkeleton() {
 export function StreamUserProfileScreen() {
   const selectedUserId = useAppStore(s => s.selectedUserId)
   const navigate = useAppStore(s => s.navigate)
+  const setSelectedUser = useAppStore(s => s.setSelectedUser)
   const setSelectedProduct = useAppStore(s => s.setSelectedProduct)
   const setSelectedSeller = useAppStore(s => s.setSelectedSeller)
   const showToast = useAppStore(s => s.showToast)
@@ -655,6 +656,23 @@ export function StreamUserProfileScreen() {
                       onTogglePrivate={handleTogglePrivate}
                       onCopyLink={handleCopyLink}
                       onReport={setReportingPost}
+                      onMentionClick={async (username: string) => {
+                        try {
+                          const data = await apiClient.get<{ success: boolean; data: Array<{ id: string; name: string; username?: string }> }>(
+                            "/api/user/search",
+                            { q: username, limit: "1" }
+                          )
+                          if (data.success && data.data && data.data.length > 0) {
+                            const user = data.data[0]
+                            if (user.username?.toLowerCase() === username.toLowerCase()) {
+                              setSelectedUser(user.id)
+                              navigate("user-profile")
+                            }
+                          }
+                        } catch {
+                          // Silently fail
+                        }
+                      }}
                       videoRef={(el) => {
                         videoRefs.current[post.id] = el
                       }}
@@ -779,6 +797,7 @@ interface ProfilePostCardProps {
   onTogglePrivate: (post: StreamPost) => void
   onCopyLink: (post: StreamPost) => void
   onReport: (post: StreamPost) => void
+  onMentionClick: (username: string) => void
   videoRef: (el: HTMLVideoElement | null) => void
 }
 
@@ -799,6 +818,7 @@ function ProfilePostCard({
   onTogglePrivate,
   onCopyLink,
   onReport,
+  onMentionClick,
   videoRef,
 }: ProfilePostCardProps) {
   const [isBookmarked, setIsBookmarked] = useState(false)
@@ -896,6 +916,7 @@ function ProfilePostCard({
               maxChars={500}
               isExpanded={isContentExpanded}
               onExpand={() => setIsContentExpanded(!isContentExpanded)}
+              onMentionClick={onMentionClick}
             />
           </p>
         </div>

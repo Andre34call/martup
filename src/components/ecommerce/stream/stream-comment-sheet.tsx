@@ -9,6 +9,7 @@ import {
   ChevronDown,
   Loader2,
   MessageCircle,
+  Trash2,
 } from "lucide-react"
 import { apiClient, ApiClientError } from "@/lib/api-client"
 import { formatRelativeTime, truncateText } from "@/lib/utils"
@@ -51,9 +52,14 @@ export function StreamCommentSheet({
   const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set())
   const [isLoadingReplies, setIsLoadingReplies] = useState<Set<string>>(new Set())
 
+  const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null)
+
   const inputRef = useRef<HTMLInputElement>(null)
   const commentsEndRef = useRef<HTMLDivElement>(null)
   const setOverlayOpen = useAppStore((s) => s.setOverlayOpen)
+  const setSelectedUser = useAppStore((s) => s.setSelectedUser)
+  const currentUser = useAppStore((s) => s.currentUser)
+  const navigate = useAppStore((s) => s.navigate)
 
   // ==================== FETCH COMMENTS ====================
   const fetchComments = useCallback(async () => {
@@ -312,6 +318,77 @@ export function StreamCommentSheet({
     [handleSendComment]
   )
 
+  // ==================== DELETE COMMENT ====================
+  const handleDeleteComment = useCallback(
+    async (commentId: string, isReply: boolean, parentId?: string) => {
+      if (!post || deletingCommentId) return
+
+      setDeletingCommentId(commentId)
+      try {
+        const data = await apiClient.del<{ success: boolean; data?: { deletedCount: number } }>(
+          `/api/stream/${post.id}/comments/${commentId}`
+        )
+
+        if (data.success) {
+          if (isReply && parentId) {
+            // Remove reply from parent's replies and update replyCount
+            setComments((prev) =>
+              prev.map((c) => {
+                if (c.id === parentId) {
+                  const updatedReplies = (c.replies || []).filter(
+                    (r) => r.id !== commentId
+                  )
+                  return {
+                    ...c,
+                    replyCount: Math.max(0, c.replyCount - 1),
+                    replies: updatedReplies,
+                  }
+                }
+                return c
+              })
+            )
+          } else {
+            // Remove top-level comment (and its replies)
+            setComments((prev) => prev.filter((c) => c.id !== commentId))
+          }
+          onCommentAdded?.(post.id)
+        }
+      } catch (error) {
+        if (error instanceof ApiClientError) {
+          // Server returned an error
+        }
+      } finally {
+        setDeletingCommentId(null)
+      }
+    },
+    [post, deletingCommentId, onCommentAdded]
+  )
+
+  // ==================== MENTION CLICK → NAVIGATE TO PROFILE ====================
+  const handleMentionClick = useCallback(
+    async (username: string) => {
+      try {
+        // Resolve username to userId via the search API
+        const data = await apiClient.get<{ success: boolean; data: Array<{ id: string; name: string; username?: string }> }>(
+          "/api/user/search",
+          { q: username, limit: "1" }
+        )
+        if (data.success && data.data && data.data.length > 0) {
+          const user = data.data[0]
+          // Verify the username matches (search also matches by name)
+          if (user.username?.toLowerCase() === username.toLowerCase()) {
+            onClose()
+            setSelectedUser(user.id)
+            navigate("user-profile")
+          }
+        }
+      } catch {
+        // Silently fail — user can try again
+      }
+    },
+    [onClose, setSelectedUser, navigate]
+  )
+
   // Derive post user info
   const postUserName = post?.user?.name || 'User'
   const postUserAvatar = post?.user?.avatar
@@ -425,14 +502,18 @@ export function StreamCommentSheet({
                     <CommentItem
                       key={comment.id}
                       comment={comment}
+                      currentUserId={currentUser?.id}
                       isExpanded={expandedReplies.has(comment.id)}
                       isLoadingReplies={isLoadingReplies.has(comment.id)}
+                      isDeleting={deletingCommentId === comment.id}
                       onLike={(id) => handleLikeComment(id, false)}
                       onReply={handleReply}
                       onLoadReplies={handleLoadReplies}
                       onLikeReply={(replyId) =>
                         handleLikeComment(replyId, true, comment.id)
                       }
+                      onDelete={(commentId, isReply, parentId) => handleDeleteComment(commentId, isReply, parentId)}
+                      onMentionClick={handleMentionClick}
                     />
                   ))}
                 </div>
@@ -520,28 +601,38 @@ export function StreamCommentSheet({
 // ==================== COMMENT ITEM ====================
 interface CommentItemProps {
   comment: StreamComment
+  currentUserId?: string
   isExpanded: boolean
   isLoadingReplies: boolean
+  isDeleting: boolean
   onLike: (id: string) => void
   onReply: (comment: StreamComment) => void
   onLoadReplies: (id: string) => void
   onLikeReply: (id: string) => void
+  onDelete: (commentId: string, isReply: boolean, parentId?: string) => void
+  onMentionClick: (username: string) => void
 }
 
 function CommentItem({
   comment,
+  currentUserId,
   isExpanded,
   isLoadingReplies,
+  isDeleting,
   onLike,
   onReply,
   onLoadReplies,
   onLikeReply,
+  onDelete,
+  onMentionClick,
 }: CommentItemProps) {
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const isOwner = currentUserId === comment.userId
   const commentUserName = comment.user?.name || 'User'
   const commentUserAvatar = comment.user?.avatar
 
   return (
-    <div className="px-4 py-3">
+    <div className={`px-4 py-3 transition-opacity ${isDeleting ? 'opacity-40 pointer-events-none' : ''}`}>
       {/* Comment content */}
       <div className="flex gap-2.5">
         {/* Avatar */}
@@ -578,7 +669,7 @@ function CommentItem({
             </span>
           </div>
           <p className="text-sm text-foreground mt-0.5 whitespace-pre-wrap">
-            <MentionText content={comment.content} />
+            <MentionText content={comment.content} onMentionClick={onMentionClick} />
           </p>
 
           {/* Actions */}
@@ -614,6 +705,38 @@ function CommentItem({
             >
               Balas
             </button>
+
+            {/* Delete — only visible to comment author */}
+            {isOwner && !showDeleteConfirm && (
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground hover:text-red-500 transition-colors"
+              >
+                <Trash2 className="w-3 h-3" />
+                Hapus
+              </button>
+            )}
+
+            {/* Delete confirmation */}
+            {isOwner && showDeleteConfirm && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setShowDeleteConfirm(false)
+                    onDelete(comment.id, false)
+                  }}
+                  className="text-[10px] font-semibold text-red-500 hover:text-red-600 transition-colors"
+                >
+                  Ya, hapus
+                </button>
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="text-[10px] font-medium text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Batal
+                </button>
+              </div>
+            )}
           </div>
 
           {/* View replies toggle */}
@@ -652,8 +775,9 @@ function CommentItem({
                 {comment.replies.map((reply) => {
                   const replyUserName = reply.user?.name || 'User'
                   const replyUserAvatar = reply.user?.avatar
+                  const isReplyOwner = currentUserId === reply.userId
                   return (
-                    <div key={reply.id} className="flex gap-2.5">
+                    <div key={reply.id} className={`flex gap-2.5 transition-opacity ${isDeleting ? 'opacity-40 pointer-events-none' : ''}`}>
                       {/* Reply avatar */}
                       <div className="relative flex-shrink-0">
                         {replyUserAvatar ? (
@@ -688,7 +812,7 @@ function CommentItem({
                           </span>
                         </div>
                         <p className="text-xs text-foreground mt-0.5 whitespace-pre-wrap">
-                          <MentionText content={reply.content} />
+                          <MentionText content={reply.content} onMentionClick={onMentionClick} />
                         </p>
                         <div className="flex items-center gap-3 mt-1">
                           <motion.button
@@ -721,6 +845,16 @@ function CommentItem({
                           >
                             Balas
                           </button>
+                          {/* Delete reply — only visible to reply author */}
+                          {isReplyOwner && (
+                            <button
+                              onClick={() => onDelete(reply.id, true, comment.id)}
+                              className="flex items-center gap-0.5 text-[9px] font-medium text-muted-foreground hover:text-red-500 transition-colors"
+                            >
+                              <Trash2 className="w-2.5 h-2.5" />
+                              Hapus
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>

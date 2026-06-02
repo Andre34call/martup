@@ -560,6 +560,23 @@ export function StreamFeedScreen() {
                 useAppStore.getState().setSelectedUser(userId)
                 navigate("user-profile")
               }}
+              onMentionClick={async (username: string) => {
+                try {
+                  const data = await apiClient.get<{ success: boolean; data: Array<{ id: string; name: string; username?: string }> }>(
+                    "/api/user/search",
+                    { q: username, limit: "1" }
+                  )
+                  if (data.success && data.data && data.data.length > 0) {
+                    const user = data.data[0]
+                    if (user.username?.toLowerCase() === username.toLowerCase()) {
+                      useAppStore.getState().setSelectedUser(user.id)
+                      navigate("user-profile")
+                    }
+                  }
+                } catch {
+                  // Silently fail
+                }
+              }}
               videoRef={(el) => {
                 videoRefs.current[post.id] = el
               }}
@@ -751,6 +768,7 @@ interface StreamPostCardProps {
   onCopyLink: (post: StreamPost) => void
   onReport: (post: StreamPost) => void
   onViewProfile: (userId: string) => void
+  onMentionClick: (username: string) => void
   videoRef: (el: HTMLVideoElement | null) => void
 }
 
@@ -772,6 +790,7 @@ function StreamPostCard({
   onCopyLink,
   onReport,
   onViewProfile,
+  onMentionClick,
   videoRef,
 }: StreamPostCardProps) {
   const [isBookmarked, setIsBookmarked] = useState(false)
@@ -883,6 +902,7 @@ function StreamPostCard({
               maxChars={500}
               isExpanded={isContentExpanded}
               onExpand={() => setIsContentExpanded(!isContentExpanded)}
+              onMentionClick={onMentionClick}
             />
           </p>
         </div>
