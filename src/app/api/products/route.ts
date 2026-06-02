@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
     const sellerId = searchParams.get('sellerId')
     const isPromoted = searchParams.get('isPromoted')
     const isFeatured = searchParams.get('isFeatured')
+    const productType = searchParams.get('productType') // 'product' or 'jasa'
     const sort = searchParams.get('sort') || 'viral' // default to viral
     const limit = Math.min(Math.max(parseInt(searchParams.get('limit') || '50', 10), 1), 100)
     const offset = Math.max(parseInt(searchParams.get('offset') || '0', 10), 0)
@@ -41,6 +42,7 @@ export async function GET(request: NextRequest) {
       where.promotedUntil = { gt: new Date() }
     }
     if (isFeatured === 'true') where.isFeatured = true
+    if (productType === 'product' || productType === 'jasa') where.productType = productType
 
     if (search) {
       where.OR = [

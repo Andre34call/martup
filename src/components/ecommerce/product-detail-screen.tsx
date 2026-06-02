@@ -490,7 +490,14 @@ export function ProductDetailScreen() {
             transition={{ delay: 0.15 }}
             className="space-y-3"
           >
-            <h1 className="text-lg font-bold text-foreground leading-tight">{product.name}</h1>
+            <div className="flex items-start gap-2">
+              <h1 className="text-lg font-bold text-foreground leading-tight">{product.name}</h1>
+              {(product as any).productType === 'jasa' && (
+                <Badge className="bg-emerald-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md flex-shrink-0 mt-0.5">
+                  🛠️ JASA
+                </Badge>
+              )}
+            </div>
 
             <div className="flex items-center gap-3 flex-wrap">
               <RatingStars rating={product.rating} size="sm" reviewCount={product.reviewCount} />
@@ -498,10 +505,14 @@ export function ProductDetailScreen() {
               <span className="text-xs text-muted-foreground">
                 {product.sold > 1000 ? `${(product.sold / 1000).toFixed(1)}rb` : product.sold} terjual
               </span>
-              <Separator orientation="vertical" className="h-4" />
-              <span className="text-xs text-muted-foreground">
-                Stok: {effectiveVariant ? effectiveVariant.stock : product.stock}
-              </span>
+              {(product as any).productType !== 'jasa' && (
+                <>
+                  <Separator orientation="vertical" className="h-4" />
+                  <span className="text-xs text-muted-foreground">
+                    Stok: {effectiveVariant ? effectiveVariant.stock : product.stock}
+                  </span>
+                </>
+              )}
             </div>
 
             {/* Variant selector */}
@@ -669,8 +680,32 @@ export function ProductDetailScreen() {
             <div className="space-y-2 pt-2">
               <p className="text-sm font-medium">Detail:</p>
               <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
-                <span className="text-muted-foreground">Berat</span>
-                <span className="text-foreground">{product.weight}g</span>
+                {/* Jasa products: show jasa-specific info instead of weight/shipping */}
+                {(product as any).productType === 'jasa' ? (
+                  <>
+                    <span className="text-muted-foreground">Tipe</span>
+                    <span className="text-foreground flex items-center gap-1">
+                      🛠️ <span className="font-medium text-emerald-600">Jasa</span>
+                    </span>
+                    {(product as any).serviceDuration && (
+                      <>
+                        <span className="text-muted-foreground">Durasi</span>
+                        <span className="text-foreground">{(product as any).serviceDuration}</span>
+                      </>
+                    )}
+                    {(product as any).serviceLocation && (
+                      <>
+                        <span className="text-muted-foreground">Lokasi</span>
+                        <span className="text-foreground">{(product as any).serviceLocation}</span>
+                      </>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <span className="text-muted-foreground">Berat</span>
+                    <span className="text-foreground">{product.weight}g</span>
+                  </>
+                )}
                 <span className="text-muted-foreground">Kondisi</span>
                 <span className="text-foreground">{product.condition === 'new' ? 'Baru' : 'Bekas'}</span>
                 <span className="text-muted-foreground">Min. Pemesanan</span>

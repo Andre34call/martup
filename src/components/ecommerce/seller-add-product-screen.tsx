@@ -392,12 +392,20 @@ export function SellerAddProductScreen() {
       showToast("Harga harus diisi", "error")
       return
     }
-    if (!stock || parseInt(stock) <= 0) {
-      showToast("Stok harus diisi", "error")
-      return
+    // For jasa products, skip stock and weight validation
+    if (productType === 'product') {
+      if (!stock || parseInt(stock) <= 0) {
+        showToast("Stok harus diisi", "error")
+        return
+      }
+      if (!weight || parseInt(weight) <= 0) {
+        showToast("Berat produk harus diisi", "error")
+        return
+      }
     }
-    if (!weight || parseInt(weight) <= 0) {
-      showToast("Berat produk harus diisi", "error")
+    // Jasa-specific validation
+    if (productType === 'jasa' && !serviceDuration.trim()) {
+      showToast("Durasi pengerjaan harus diisi untuk jasa", "error")
       return
     }
 
@@ -909,16 +917,29 @@ export function SellerAddProductScreen() {
               <h3 className="text-sm font-semibold text-foreground">Stok & Pengiriman</h3>
             </div>
 
+            {productType === 'jasa' && (
+              <div className="bg-emerald-50 dark:bg-emerald-950/20 rounded-xl p-3 border border-emerald-200 dark:border-emerald-800/50">
+                <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+                  <span className="text-xs font-medium">Mode Jasa — tanpa pengiriman fisik</span>
+                </div>
+                <p className="text-[10px] text-emerald-600/70 dark:text-emerald-400/70 mt-1 ml-6">Stok otomatis & berat tidak diperlukan untuk jasa</p>
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <label className="text-xs font-medium text-muted-foreground">Stok <span className="text-red-500">*</span></label>
+                <label className="text-xs font-medium text-muted-foreground">
+                  Stok {productType === 'product' && <span className="text-red-500">*</span>}
+                </label>
                 <Input
                   type="number"
-                  value={stock}
+                  value={productType === 'jasa' ? '999' : stock}
                   onChange={(e) => setStock(e.target.value)}
                   placeholder="0"
                   min="0"
-                  className="rounded-xl h-10 focus:border-emerald-500 focus:ring-emerald-500/20"
+                  disabled={productType === 'jasa'}
+                  className="rounded-xl h-10 focus:border-emerald-500 focus:ring-emerald-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
               <div className="space-y-2">
@@ -933,22 +954,24 @@ export function SellerAddProductScreen() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-muted-foreground">Berat (gram) <span className="text-red-500">*</span></label>
-              <Input
-                type="number"
-                value={weight}
-                onChange={(e) => setWeight(e.target.value)}
-                placeholder="0"
-                min="1"
-                className="rounded-xl h-10 focus:border-emerald-500 focus:ring-emerald-500/20"
-              />
-              <p className="text-[10px] text-muted-foreground">Berat termasuk packaging</p>
-            </div>
+            {productType === 'product' && (
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-muted-foreground">Berat (gram) <span className="text-red-500">*</span></label>
+                <Input
+                  type="number"
+                  value={weight}
+                  onChange={(e) => setWeight(e.target.value)}
+                  placeholder="0"
+                  min="1"
+                  className="rounded-xl h-10 focus:border-emerald-500 focus:ring-emerald-500/20"
+                />
+                <p className="text-[10px] text-muted-foreground">Berat termasuk packaging</p>
+              </div>
+            )}
           </div>
         </motion.div>
 
-        {/* ============ Product Type (Barang / Jasa) ============ */}
+        {/* ============ Product Type (Barang / Jasa) — MOVED UP before stock/weight ============ */}
         <motion.div {...fadeIn}>
           <div className="rounded-2xl border border-border/50 bg-card p-4 space-y-3">
             <label className="text-sm font-semibold text-foreground">Tipe Produk</label>
@@ -1022,9 +1045,10 @@ export function SellerAddProductScreen() {
               <div className="flex items-center gap-2">
                 <span className="text-sm">🛠️</span>
                 <h3 className="text-sm font-semibold text-foreground">Detail Jasa</h3>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 font-medium">Wajib</span>
               </div>
               <div>
-                <label className="text-xs font-medium text-foreground mb-1 block">Durasi Pengerjaan</label>
+                <label className="text-xs font-medium text-foreground mb-1 block">Durasi Pengerjaan <span className="text-red-500">*</span></label>
                 <Input
                   value={serviceDuration}
                   onChange={(e) => setServiceDuration(e.target.value)}

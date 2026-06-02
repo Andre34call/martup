@@ -154,9 +154,16 @@ export function ProductCard({ product, onClick, layout = "grid", showShareToStre
         )}
 
         {/* Discount badge */}
-        {discountPercent > 0 && (
+        {discountPercent > 0 && !(showPromotedBadge || product.isPromoted) && (
           <div className="absolute top-2 left-2 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md">
             -{discountPercent}%
+          </div>
+        )}
+
+        {/* Jasa badge */}
+        {(product as any).productType === 'jasa' && (
+          <div className="absolute top-2 left-2 bg-emerald-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-0.5">
+            🛠️ JASA
           </div>
         )}
 
@@ -169,14 +176,14 @@ export function ProductCard({ product, onClick, layout = "grid", showShareToStre
         )}
 
         {/* Promoted/IKLAN badge */}
-        {(showPromotedBadge || product.isPromoted) && (
+        {(showPromotedBadge || product.isPromoted) && (product as any).productType !== 'jasa' && (
           <div className="absolute top-2 left-2 bg-amber-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md">
             IKLAN
           </div>
         )}
 
         {/* Viral badge */}
-        {(showViralBadge || (product.viralScore > 0 && product.sold >= 10)) && !product.isPromoted && (
+        {(showViralBadge || (product.viralScore > 0 && product.sold >= 10)) && !product.isPromoted && (product as any).productType !== 'jasa' && (
           <div className="absolute top-2 left-2 bg-gradient-to-r from-red-500 to-orange-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-0.5">
             <Flame className="w-2.5 h-2.5" /> VIRAL
           </div>

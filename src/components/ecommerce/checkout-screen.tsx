@@ -292,17 +292,26 @@ export function CheckoutScreen() {
     return Object.values(groups)
   }, [checkedItems])
 
-  // Calculate total weight per seller group
+  // Calculate total weight per seller group (skip jasa products — they don't need shipping)
   const weightBySeller = useMemo(() => {
     const weights: Record<string, number> = {}
     groupedBySeller.forEach(group => {
       const sellerId = group.seller.id
       weights[sellerId] = group.items.reduce((sum, item) => {
+        // Jasa products have no physical weight — skip them from shipping calculation
+        if ((item.product as any).productType === 'jasa') return sum
         const itemWeight = (item.product.weight || 500) * item.quantity // default 500g if not set
         return sum + itemWeight
       }, 0)
     })
     return weights
+  }, [groupedBySeller])
+
+  // Check if a seller group contains ONLY jasa products (no shipping needed)
+  const isJasaOnlySeller = useCallback((sellerId: string): boolean => {
+    const group = groupedBySeller.find(g => g.seller.id === sellerId)
+    if (!group) return false
+    return group.items.every(item => (item.product as any).productType === 'jasa')
   }, [groupedBySeller])
 
   // Fetch shipping rates from API when address is selected
@@ -336,6 +345,12 @@ export function CheckoutScreen() {
 
     groupedBySeller.forEach(group => {
       const sellerId = group.seller.id
+      // Skip shipping for jasa-only sellers
+      if (isJasaOnlySeller(sellerId)) {
+        // Set zero-cost shipping for jasa-only sellers
+        setShippingBySeller(prev => ({ ...prev, [sellerId]: { id: 'jasa-free', name: 'Tanpa Pengiriman (Jasa)', price: 0, estimate: '-', provider: 'jasa' } }))
+        return
+      }
       const weight = weightBySeller[sellerId] || 1000
       // Only fetch if we don't have rates yet for this seller or if address changed
       const currentRates = shippingRatesBySeller[sellerId]
@@ -351,6 +366,7 @@ export function CheckoutScreen() {
 
     groupedBySeller.forEach(group => {
       const sellerId = group.seller.id
+      if (isJasaOnlySeller(sellerId)) return // Skip jasa-only sellers
       const weight = weightBySeller[sellerId] || 1000
       fetchShippingRates(sellerId, defaultAddress.city, weight, group.seller.storeCity)
     })
