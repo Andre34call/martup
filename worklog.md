@@ -2271,3 +2271,44 @@ Stage Summary:
 - Rate limited: 10 per minute per user (advanced rate limiter + burst protection)
 - Deletion logged with structured context
 - Zero modifications to existing files
+
+---
+Task ID: 1-2
+Agent: Main
+Task: Add delete comment feature + clickable @mention to profile
+
+Work Log:
+- Created DELETE API route at `src/app/api/stream/[id]/comments/[commentId]/route.ts`
+  - Only comment author can delete (403 for unauthorized)
+  - Transaction-based: counts replies, deletes comment, adjusts commentCount
+  - Cascade deletes handle replies + likes
+  - Rate limited: 10/min per user (dual-layer: createRateLimiter + checkRateLimit burst)
+  - Auth required, logs unauthorized attempts as warnings
+- Updated `MentionText` component to accept `onMentionClick` prop
+  - When provided, mentions render as interactive `<button>` with hover effects
+  - When not provided, mentions render as styled `<span>` (backward compatible)
+  - e.stopPropagation() prevents parent click handlers
+- Added delete comment UI in `StreamCommentSheet`
+  - Trash icon + "Hapus" button visible only to comment author
+  - Two-step confirmation for top-level comments ("Ya, hapus" / "Batal")
+  - Single-step delete for replies (smaller target)
+  - Optimistic fade-out animation while deleting
+  - `handleDeleteComment` updates local state (removes comment/reply, adjusts replyCount)
+- Added @mention click → profile navigation in 3 locations:
+  - Stream feed screen (StreamPostCard)
+  - Comment sheet (CommentItem)
+  - User profile screen (ProfilePostCard)
+  - Uses `/api/user/search?q=username&limit=1` to resolve username → userId
+  - Verifies username match before navigating (prevents false positives from name search)
+- Added `onMentionClick` prop to `ProfilePostCardProps` in user profile screen
+- Added `setSelectedUser` to user profile screen store subscriptions
+- Fixed `navigate` in comment sheet (was `setCurrentScreen`, changed to `navigate`)
+- Lint passes ✅
+- Build passes ✅ (Compiled successfully in 10.4s)
+- Pushed to production (commit dc780d1)
+
+Stage Summary:
+- **Delete comment**: Full backend + frontend implementation, secure (owner-only, rate-limited, transactional)
+- **Clickable @mention**: Works in feed, comments, and profile screens — resolves username to user ID before navigating
+- Backward compatible — `MentionText` without `onMentionClick` renders same as before
+- Deployed to Vercel auto-deploy
