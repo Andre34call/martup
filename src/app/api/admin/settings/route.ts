@@ -146,6 +146,8 @@ export async function PUT(request: NextRequest) {
               validationErrors.push(`martupBankAccounts[${i}]: must be an object`)
               continue
             }
+            // Validate type field (bank or ewallet)
+            const accType = acc.type === 'ewallet' ? 'ewallet' : 'bank'
             if (!acc.bankName || typeof acc.bankName !== 'string' || acc.bankName.trim().length === 0) {
               validationErrors.push(`martupBankAccounts[${i}].bankName: required`)
             }
@@ -157,6 +159,7 @@ export async function PUT(request: NextRequest) {
             }
             // Sanitize: only allow expected fields
             accounts[i] = {
+              type: accType,
               bankName: String(acc.bankName || '').trim().slice(0, 50),
               accountNumber: String(acc.accountNumber || '').trim().slice(0, 30),
               accountHolder: String(acc.accountHolder || '').trim().slice(0, 100),

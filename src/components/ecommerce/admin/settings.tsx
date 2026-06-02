@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion"
 import {
-  Settings, Banknote, Box, ToggleLeft, Gift, Clock, Save, Landmark, Plus, Trash2
+  Settings, Banknote, Box, ToggleLeft, Gift, Clock, Save, Landmark, Plus, Trash2, Smartphone
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -18,6 +18,7 @@ import { handleApiError } from '@/lib/handle-api-error'
 
 // ==================== TYPE DEFINITIONS ====================
 interface MartUpBankAccount {
+  type: 'bank' | 'ewallet'
   bankName: string
   accountNumber: string
   accountHolder: string
@@ -99,7 +100,13 @@ export function AdminSettings() {
 
   const addBankAccount = () => {
     if (!settings) return
-    const updated = [...(settings.martupBankAccounts || []), { bankName: '', accountNumber: '', accountHolder: '' }]
+    const updated = [...(settings.martupBankAccounts || []), { type: 'bank' as const, bankName: '', accountNumber: '', accountHolder: '' }]
+    updateSetting('martupBankAccounts', updated)
+  }
+
+  const addEWallet = () => {
+    if (!settings) return
+    const updated = [...(settings.martupBankAccounts || []), { type: 'ewallet' as const, bankName: '', accountNumber: '', accountHolder: '' }]
     updateSetting('martupBankAccounts', updated)
   }
 
@@ -312,7 +319,11 @@ export function AdminSettings() {
             {(settings.martupBankAccounts || []).map((acc, idx) => (
               <div key={idx} className="relative border rounded-lg p-3 space-y-3 bg-muted/30">
                 <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold text-amber-600">Rekening #{idx + 1}</p>
+                  <div className="flex items-center gap-2">
+                    <p className={`text-xs font-semibold ${acc.type === 'ewallet' ? 'text-purple-600' : 'text-amber-600'}`}>
+                      {acc.type === 'ewallet' ? 'E-Wallet' : 'Rekening Bank'} #{idx + 1}
+                    </p>
+                  </div>
                   <Button
                     variant="ghost"
                     size="icon"
@@ -323,58 +334,118 @@ export function AdminSettings() {
                   </Button>
                 </div>
                 <div className="space-y-2">
-                  <div>
-                    <label className="text-[10px] text-muted-foreground">Nama Bank</label>
-                    <select
-                      value={acc.bankName}
-                      onChange={(e) => updateBankAccount(idx, 'bankName', e.target.value)}
-                      className="w-full h-8 text-sm rounded-md border bg-background px-2 mt-0.5"
+                  {/* Type toggle */}
+                  <div className="flex gap-1 bg-muted rounded-md p-0.5">
+                    <button
+                      type="button"
+                      className={`flex-1 text-[11px] py-1.5 rounded-md font-medium transition-colors ${acc.type !== 'ewallet' ? 'bg-amber-500 text-white' : 'text-muted-foreground hover:text-foreground'}`}
+                      onClick={() => updateBankAccount(idx, 'type', 'bank')}
                     >
-                      <option value="">-- Pilih Bank --</option>
-                      <option value="BCA">BCA</option>
-                      <option value="Mandiri">Mandiri</option>
-                      <option value="BNI">BNI</option>
-                      <option value="BRI">BRI</option>
-                      <option value="BSI">BSI</option>
-                      <option value="CIMB Niaga">CIMB Niaga</option>
-                      <option value="Danamon">Danamon</option>
-                      <option value="Permata">Permata</option>
-                      <option value="BTN">BTN</option>
-                      <option value="Maybank">Maybank</option>
-                      <option value="OCBC NISP">OCBC NISP</option>
-                      <option value="Panin Bank">Panin Bank</option>
-                      <option value="Lainnya">Lainnya</option>
-                    </select>
+                      <Landmark className="w-3 h-3 inline mr-1" />Bank
+                    </button>
+                    <button
+                      type="button"
+                      className={`flex-1 text-[11px] py-1.5 rounded-md font-medium transition-colors ${acc.type === 'ewallet' ? 'bg-purple-500 text-white' : 'text-muted-foreground hover:text-foreground'}`}
+                      onClick={() => updateBankAccount(idx, 'type', 'ewallet')}
+                    >
+                      <Smartphone className="w-3 h-3 inline mr-1" />E-Wallet
+                    </button>
                   </div>
-                  <div>
-                    <label className="text-[10px] text-muted-foreground">Nomor Rekening</label>
-                    <Input
-                      value={acc.accountNumber}
-                      onChange={(e) => updateBankAccount(idx, 'accountNumber', e.target.value)}
-                      placeholder="Contoh: 1234567890"
-                      className="h-8 text-sm mt-0.5"
-                    />
-                  </div>
+                  {acc.type === 'ewallet' ? (
+                    <>
+                      <div>
+                        <label className="text-[10px] text-muted-foreground">E-Wallet</label>
+                        <select
+                          value={acc.bankName}
+                          onChange={(e) => updateBankAccount(idx, 'bankName', e.target.value)}
+                          className="w-full h-8 text-sm rounded-md border bg-background px-2 mt-0.5"
+                        >
+                          <option value="">-- Pilih E-Wallet --</option>
+                          <option value="GoPay">GoPay</option>
+                          <option value="OVO">OVO</option>
+                          <option value="DANA">DANA</option>
+                          <option value="ShopeePay">ShopeePay</option>
+                          <option value="LinkAja">LinkAja</option>
+                          <option value="QRIS">QRIS</option>
+                          <option value="Lainnya">Lainnya</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-muted-foreground">Nomor HP / ID</label>
+                        <Input
+                          value={acc.accountNumber}
+                          onChange={(e) => updateBankAccount(idx, 'accountNumber', e.target.value)}
+                          placeholder="Contoh: 081234567890"
+                          className="h-8 text-sm mt-0.5"
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div>
+                        <label className="text-[10px] text-muted-foreground">Nama Bank</label>
+                        <select
+                          value={acc.bankName}
+                          onChange={(e) => updateBankAccount(idx, 'bankName', e.target.value)}
+                          className="w-full h-8 text-sm rounded-md border bg-background px-2 mt-0.5"
+                        >
+                          <option value="">-- Pilih Bank --</option>
+                          <option value="BCA">BCA</option>
+                          <option value="Mandiri">Mandiri</option>
+                          <option value="BNI">BNI</option>
+                          <option value="BRI">BRI</option>
+                          <option value="BSI">BSI</option>
+                          <option value="CIMB Niaga">CIMB Niaga</option>
+                          <option value="Danamon">Danamon</option>
+                          <option value="Permata">Permata</option>
+                          <option value="BTN">BTN</option>
+                          <option value="Maybank">Maybank</option>
+                          <option value="OCBC NISP">OCBC NISP</option>
+                          <option value="Panin Bank">Panin Bank</option>
+                          <option value="Lainnya">Lainnya</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-muted-foreground">Nomor Rekening</label>
+                        <Input
+                          value={acc.accountNumber}
+                          onChange={(e) => updateBankAccount(idx, 'accountNumber', e.target.value)}
+                          placeholder="Contoh: 1234567890"
+                          className="h-8 text-sm mt-0.5"
+                        />
+                      </div>
+                    </>
+                  )}
                   <div>
                     <label className="text-[10px] text-muted-foreground">Atas Nama</label>
                     <Input
                       value={acc.accountHolder}
                       onChange={(e) => updateBankAccount(idx, 'accountHolder', e.target.value)}
-                      placeholder="Contoh: PT MartUp Indonesia"
+                      placeholder={acc.type === 'ewallet' ? 'Contoh: Kholisa MartUp' : 'Contoh: PT MartUp Indonesia'}
                       className="h-8 text-sm mt-0.5"
                     />
                   </div>
                 </div>
               </div>
             ))}
-            <Button
-              variant="outline"
-              className="w-full h-9 text-xs rounded-lg border-dashed border-amber-600/50 text-amber-600 hover:bg-amber-50"
-              onClick={addBankAccount}
-            >
-              <Plus className="w-3.5 h-3.5 mr-1" />
-              Tambah Rekening
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1 h-9 text-xs rounded-lg border-dashed border-amber-600/50 text-amber-600 hover:bg-amber-50"
+                onClick={addBankAccount}
+              >
+                <Plus className="w-3.5 h-3.5 mr-1" />
+                Tambah Bank
+              </Button>
+              <Button
+                variant="outline"
+                className="flex-1 h-9 text-xs rounded-lg border-dashed border-purple-600/50 text-purple-600 hover:bg-purple-50"
+                onClick={addEWallet}
+              >
+                <Plus className="w-3.5 h-3.5 mr-1" />
+                Tambah E-Wallet
+              </Button>
+            </div>
           </Card>
         </motion.div>
 

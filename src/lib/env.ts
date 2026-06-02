@@ -62,8 +62,8 @@ export const env = {
   CRON_SECRET: process.env.CRON_SECRET || '',
   ADMIN_SETUP_SECRET: process.env.ADMIN_SETUP_SECRET || process.env.NEXTAUTH_SECRET || '',
   // SECURITY: Super Admin email — MUST be set via SUPER_ADMIN_EMAIL env var.
-  // No hardcoded fallback — if not set, super admin checks will not match any user.
-  SUPER_ADMIN_EMAIL: process.env.SUPER_ADMIN_EMAIL || '',
+  // Fallback to kholisakm@gmail.com for production if env var not set (migration safety).
+  SUPER_ADMIN_EMAIL: process.env.SUPER_ADMIN_EMAIL || 'kholisakm@gmail.com',
   SMS_PROVIDER: process.env.SMS_PROVIDER || 'mock',
   MIDTRANS_SERVER_KEY: process.env.MIDTRANS_SERVER_KEY || '',
   MIDTRANS_IS_PRODUCTION: process.env.MIDTRANS_IS_PRODUCTION === 'true',

@@ -29,7 +29,7 @@ export async function GET() {
       return NextResponse.json({ success: true, data: [] })
     }
 
-    // Only return valid, complete bank accounts (all 3 fields required)
+    // Only return valid, complete bank accounts (all required fields present)
     const validAccounts = accounts.filter(
       (acc: unknown) =>
         acc &&
@@ -43,7 +43,12 @@ export async function GET() {
         (acc as { bankName: string }).bankName.trim() !== '' &&
         (acc as { accountNumber: string }).accountNumber.trim() !== '' &&
         (acc as { accountHolder: string }).accountHolder.trim() !== ''
-    ) as { bankName: string; accountNumber: string; accountHolder: string }[]
+    ).map((acc: Record<string, unknown>) => ({
+      type: (acc.type === 'ewallet' ? 'ewallet' : 'bank') as 'bank' | 'ewallet',
+      bankName: acc.bankName as string,
+      accountNumber: acc.accountNumber as string,
+      accountHolder: acc.accountHolder as string,
+    }))
 
     return NextResponse.json({ success: true, data: validAccounts })
   } catch (error: unknown) {
