@@ -2345,3 +2345,118 @@ Stage Summary:
 - Buyer Rating System fully implemented — sellers can rate buyers, trust scores visible
 - MartUp Jasa marketplace type added — sellers can list services alongside products
 - Both features deployed to Vercel auto-deploy
+
+---
+Task ID: 9
+Agent: code
+Task: Update admin products screen to support promoting/unpromoting products
+
+Work Log:
+- Read worklog.md and current products.tsx (558 lines)
+- Updated AdminProductItem interface: added isPromoted (boolean), promotedUntil (string | null), viewCount (number), viralScore (number)
+- Updated product mapping in fetchAdminProducts: added isPromoted, promotedUntil, viewCount, viralScore fields with defaults
+- Added handlePromote function: calls apiClient.put('/api/admin/products/promote'), updates local state, shows success/error toasts
+- Added promote/unpromote dialog state: promoteProduct (AdminProductItem | null), promoteDays (string, default "30")
+- Added "Promosi" filter button to status filter bar
+- Updated filter logic: statusFilter === "promoted" now checks p.isPromoted instead of p.status
+- Added Target icon to lucide-react imports
+- Added promote/unpromote button to both flagged products section and main product list section
+  - If product is promoted: button shows "Promosi" with amber styling, clicking triggers confirm dialog to unpromote
+  - If product is not promoted: button shows "Promosikan", clicking opens promote dialog
+- Added promoted badge ("Promosi") on product cards when isPromoted is true
+- Added view count display: "Terjual X · 👁 Y" in product info line
+- Added promote dialog with duration picker (7, 14, 30, 60 days), info box about "IKLAN" badge and "Promo Pilihan" section
+- All edits use MultiEdit for atomic changes
+- Lint passes ✅
+
+Stage Summary:
+- Admin products screen now fully supports promote/unpromote workflow
+- New interface fields: isPromoted, promotedUntil, viewCount, viralScore
+- New filter: "Promosi" tab filters by isPromoted flag
+- Promote dialog: duration picker with 7/14/30/60 day options
+- Promoted products show amber "Promosi" badge and amber-styled promote button
+- View count displayed on product cards
+- Zero breaking changes — lint passes
+
+---
+Task ID: 7-8
+Agent: code
+Task: Update HomeScreen with Promoted + Viral sections and ProductCard with IKLAN/VIRAL badges
+
+Work Log:
+- Read worklog.md, home-screen.tsx (507 lines), product.tsx (298 lines), api-client.ts, and types.ts
+- **Task 1: Updated HomeScreen** (`src/components/ecommerce/home-screen.tsx`):
+  - Added `Target, Flame` to lucide-react imports
+  - Added `import { apiClient } from '@/lib/api-client'`
+  - Added `promotedProducts` and `viralProducts` state (useState<Product[]>)
+  - Added `useEffect` on mount to fetch promoted products from `/api/products?sort=promoted&limit=10` and viral products from `/api/products?sort=viral&limit=20` using `apiClient.get` with `Promise.all`
+  - Added `mapProduct` helper inside the effect to map raw API data to typed Product objects (covers all Product interface fields including variants, seller, category)
+  - Added "Promo Pilihan 🎯" section after Category section — horizontal scrollable row of promoted product cards with amber/IKLAN badge, discount percentage badge, "Lihat Semua" button
+  - Added "Lagi Viral 🔥" section after Promoted section — horizontal scrollable row of viral product cards (top 10) with ranking badges (#1-#3), discount percentage, sold count
+  - Changed "Rekomendasi Untukmu" subtitle from "Berdasarkan preferensimu" to "Urutan berdasarkan popularitas"
+- **Task 2: Updated ProductCard** (`src/components/ecommerce/shared/product.tsx`):
+  - Added `Flame` to lucide-react imports
+  - Added `showViralBadge?: boolean` and `showPromotedBadge?: boolean` optional props to ProductCardProps interface
+  - Updated function signature to destructure new props with default values `false`
+  - Added IKLAN (promoted) badge in grid layout — amber-500 background, shown when `showPromotedBadge` or `product.isPromoted`
+  - Added VIRAL badge in grid layout — gradient red-to-orange, shown when `showViralBadge` or `(product.viralScore > 0 && product.sold >= 10)`, hidden when `product.isPromoted` (mutual exclusion)
+  - Badges placed after flash sale badge in the image area, at top-left position
+- Lint passes ✅
+
+Stage Summary:
+- HomeScreen now has 3 product feed sections: Promoted (IKLAN) → Viral (Trending) → Regular feed
+- ProductCard now shows contextual IKLAN and VIRAL badges based on product properties
+- Promoted and viral products fetched from API on mount via apiClient
+- Zero breaking changes — existing ProductCard usages work unchanged (new props default to false)
+
+---
+Task ID: 3-6
+Agent: code
+Task: API Routes - Viral sorting, view tracking, promote management
+
+Work Log:
+- **Task 1**: Updated GET /api/products/route.ts with viral sorting and filters
+  - Added `sort` query param: `viral` (default), `newest`, `popular`, `promoted`
+  - Viral sort: Uses $queryRawUnsafe to compute viral score = `(sold * 3 + COALESCE(rating, 0) * reviewCount * 5 + viewCount * 0.1)`, sorts by viralScore DESC, createdAt DESC
+  - Raw SQL fetches IDs only, then fetches full products with Prisma include for seller/category/variants
+  - Re-sorts Prisma results to match raw SQL viral order using viralScoreMap
+  - Newest sort: orderBy createdAt DESC (original behavior)
+  - Popular sort: orderBy sold DESC, rating DESC
+  - Promoted sort: filters isPromoted=true AND promotedUntil > NOW(), orderBy promotedUntil ASC (ending soon first)
+  - Added `isPromoted` filter: when isPromoted=true query param, filters promoted products
+  - Added `isFeatured` filter: when isFeatured=true query param, filters featured products
+  - Added viralScore to product response for viral-sorted results
+
+- **Task 2**: Created POST /api/products/[id]/view/route.ts
+  - New endpoint for explicit view tracking
+  - Rate limited: max 1 view per product per IP per minute using checkRateLimit
+  - Increments viewCount and recalculates viralScore = sold * 3 + (rating || 0) * reviewCount * 5 + viewCount * 0.1
+  - Returns { success: true, viewed: false } on rate limit (not an error)
+  - No auth required (public tracking)
+
+- **Task 3**: Created PUT /api/admin/products/promote/route.ts
+  - Admin-only endpoint (verifyAdmin) for product promotion management
+  - Accepts: productId (required), isPromoted (boolean, required), promotedDays (optional, default 30)
+  - When promoting: sets isPromoted=true, promotedUntil=NOW()+days, promotedBy=adminUserId
+  - When unpromoting: sets isPromoted=false, promotedUntil=null, promotedBy=null
+  - Creates notification to seller about promotion status change
+  - Returns updated product promotion data with serializeDecimal
+
+- **Task 4**: Updated GET /api/products/[id]/route.ts with background view tracking
+  - Added non-blocking view tracking in the GET handler after product found
+  - Rate limited: 1 view per IP per product per minute using checkRateLimit
+  - Uses fire-and-forget pattern: db.product.update().catch(() => {}) — doesn't await
+  - Increments viewCount and recalculates viralScore
+  - View tracking does not slow down the response
+  - checkRateLimit already imported in file (used by PUT handler)
+
+- Lint passes ✅
+- All imports verified against existing modules (db, auth-middleware, decimal-utils, logger)
+
+Stage Summary:
+- 2 API route files updated, 2 new API route files created
+- Viral scoring algorithm: sold * 3 + rating * reviewCount * 5 + viewCount * 0.1
+- Product listing now defaults to viral sort for homepage discovery
+- View tracking works both implicitly (product detail GET) and explicitly (/view POST)
+- Admin can manage product promotions with duration and seller notifications
+- Zero breaking changes — lint passes ✅

@@ -82,7 +82,11 @@ export interface Product {
   status: 'active' | 'draft' | 'blocked'
   rating: number
   reviewCount: number
+  viewCount: number
+  viralScore: number
   isFeatured: boolean
+  isPromoted: boolean
+  promotedUntil?: string
   isFlashSale: boolean
   flashSaleEnd?: string
   tags?: string[]

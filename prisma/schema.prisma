@@ -272,7 +272,12 @@ model Product {
   status        String    @default("active") // active, draft, blocked
   rating        Float     @default(0)
   reviewCount   Int       @default(0)
-  isFeatured    Boolean   @default(false)
+  viewCount     Int       @default(0)          // total views for viral score
+  viralScore    Float     @default(0)          // computed viral ranking score
+  isFeatured    Boolean   @default(false)       // admin editorial pick
+  isPromoted    Boolean   @default(false)       // paid ad/promoted product
+  promotedUntil DateTime?                      // promotion expiry time
+  promotedBy    String?                       // admin who set promotion
   isFlashSale   Boolean   @default(false)
   flashSaleEnd  DateTime?
   tags          String?   // JSON array
@@ -293,6 +298,9 @@ model Product {
   @@index([sellerId, status])
   @@index([isFlashSale, status])
   @@index([isFeatured, status])
+  @@index([isPromoted, promotedUntil, status])
+  @@index([viralScore, status])
+  @@index([viewCount])
   @@index([status, createdAt])
 }
 

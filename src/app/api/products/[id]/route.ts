@@ -72,6 +72,19 @@ export async function GET(
       )
     }
 
+    // Track view in background (non-blocking) with rate limit per IP
+    const clientIp = _request.headers.get('x-forwarded-for') || _request.headers.get('x-real-ip') || 'unknown'
+    if (checkRateLimit(`product-view:${clientIp}:${id}`, 1, 60)) {
+      // Fire and forget - don't await
+      db.product.update({
+        where: { id },
+        data: {
+          viewCount: { increment: 1 },
+          viralScore: (product.sold * 3 + (product.rating || 0) * product.reviewCount * 5 + (product.viewCount + 1) * 0.1),
+        },
+      }).catch(() => {}) // silently ignore view tracking errors
+    }
+
     // Parse JSON fields safely (no more try/catch crash risk)
     const responseProduct = {
       ...product,
