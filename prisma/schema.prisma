@@ -40,6 +40,10 @@ model User {
   coins         Decimal   @default(0)
   dailyCheckIn  DateTime?
   fcmToken      String?
+  buyerRating       Float    @default(0)     // Average rating from sellers (0-5)
+  buyerRatingCount  Int      @default(0)     // Number of seller ratings received
+  cancellationCount Int      @default(0)     // Orders cancelled by this buyer
+  returnCount       Int      @default(0)     // Orders returned by this buyer
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -68,6 +72,8 @@ model User {
   streamReports  StreamPostReport[]
   complaints     Complaint[]    @relation("UserComplaints")
   chatMessages   ChatMessage[]  @relation("MessageSender")
+  sellerBuyerRatings BuyerRating[] @relation("SellerRatings")    // ratings this user gave as seller
+  buyerRatings   BuyerRating[]  @relation("BuyerReceivedRatings") // ratings this user received as buyer
 
   @@index([role])
   @@index([isActive])
@@ -260,6 +266,9 @@ model Product {
   minOrder      Int       @default(1)
   weight        Float     // grams
   condition     String    @default("new") // new, used
+  productType   String    @default("product") // product (barang), jasa (service)
+  serviceDuration String?   // e.g., "1 jam", "1 hari", "1 minggu" — for jasa
+  serviceLocation String?  // e.g., "Online", "Jakarta", "Surabaya" — for jasa
   status        String    @default("active") // active, draft, blocked
   rating        Float     @default(0)
   reviewCount   Int       @default(0)
@@ -356,6 +365,7 @@ model Order {
   shipping        Shipping?
   voucherUsages   VoucherUsage[]
   complaint       Complaint?
+  buyerRating     BuyerRating?
 
   @@index([userId, status])
   @@index([sellerId])
@@ -424,6 +434,27 @@ model Review {
 
   @@index([productId, createdAt])
   @@index([userId])
+}
+
+// ==================== BUYER RATING ====================
+// Sellers rate buyers after order completion — protects sellers from problematic buyers
+model BuyerRating {
+  id          String   @id @default(cuid())
+  orderId     String   @unique  // One rating per order
+  sellerId    String
+  buyerId     String
+  rating      Int      // 1-5
+  content     String?  // Optional review text
+  tags        String?  // JSON array: ["bayar_cepat", "komunikatif", "responsible", ...]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  seller      User     @relation("SellerRatings", fields: [sellerId], references: [id], onDelete: Cascade)
+  buyer       User     @relation("BuyerReceivedRatings", fields: [buyerId], references: [id], onDelete: Cascade)
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([buyerId, createdAt])
+  @@index([sellerId])
 }
 
 model Wishlist {

@@ -114,6 +114,9 @@ export async function POST(request: NextRequest) {
       minOrder = 1,
       weight,
       condition = 'new',
+      productType = 'product',
+      serviceDuration,
+      serviceLocation,
       status = 'active',
       isFeatured = false,
       isFlashSale = false,
@@ -170,7 +173,8 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-    if (weight === undefined || weight === null) {
+    // Jasa (service) products don't require weight
+    if (productType !== 'jasa' && (weight === undefined || weight === null)) {
       return NextResponse.json(
         { success: false, error: 'weight is required' },
         { status: 400 }
@@ -214,6 +218,9 @@ export async function POST(request: NextRequest) {
         minOrder,
         weight,
         condition,
+        productType,
+        serviceDuration: productType === 'jasa' ? (serviceDuration || null) : null,
+        serviceLocation: productType === 'jasa' ? (serviceLocation || null) : null,
         status,
         isFeatured,
         isFlashSale,
@@ -301,6 +308,9 @@ export async function PUT(request: NextRequest) {
       minOrder,
       weight,
       condition,
+      productType,
+      serviceDuration,
+      serviceLocation,
       status,
       isFeatured,
       isFlashSale,
@@ -420,6 +430,17 @@ export async function PUT(request: NextRequest) {
     if (minOrder !== undefined) updateData.minOrder = minOrder
     if (weight !== undefined) updateData.weight = weight
     if (condition !== undefined) updateData.condition = condition
+    if (productType !== undefined) {
+      updateData.productType = productType
+      // When switching to jasa, clear service fields or set them
+      if (productType === 'jasa') {
+        updateData.serviceDuration = serviceDuration || null
+        updateData.serviceLocation = serviceLocation || null
+      } else {
+        updateData.serviceDuration = null
+        updateData.serviceLocation = null
+      }
+    }
     if (isFeatured !== undefined) updateData.isFeatured = isFeatured
     if (isFlashSale !== undefined) updateData.isFlashSale = isFlashSale
     if (flashSaleEnd !== undefined) updateData.flashSaleEnd = flashSaleEnd ? new Date(flashSaleEnd) : null

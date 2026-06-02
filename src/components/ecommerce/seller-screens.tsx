@@ -7,7 +7,7 @@ import {
   BarChart3, Check, TrendingUp, ChevronRight, ArrowLeft, Search,
   Edit, Trash2, Truck, Printer, Calendar, Wallet, Banknote, Clock,
   Megaphone, Zap, Tag, Store, AlertTriangle, ArrowUpRight, ArrowDownLeft, Shield,
-  ShoppingBag, X
+  ShoppingBag, X, UserCheck
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -22,6 +22,8 @@ import { formatPrice, formatRelativeTime } from "@/lib/utils"
 import { fadeIn, stagger } from '@/lib/animations'
 import { PageHeader, SectionHeader, StatusBadge, SearchBar, EmptyState, WalletBalanceCard } from "./shared"
 import type { Order } from "@/lib/types"
+import { BUYER_RATING_TAGS, TRUST_LEVEL_CONFIG } from "@/lib/types"
+import type { TrustLevel } from "@/lib/types"
 import { useState, useRef, useEffect } from "react"
 import { AnimatePresence } from "framer-motion"
 
@@ -449,6 +451,18 @@ export function SellerOrders() {
   const [replyReviewId, setReplyReviewId] = useState<string | null>(null)
   const [replyContent, setReplyContent] = useState("")
   const [isSubmittingReply, setIsSubmittingReply] = useState(false)
+  const [showRateBuyerDialog, setShowRateBuyerDialog] = useState(false)
+  const [rateBuyerOrderId, setRateBuyerOrderId] = useState<string | null>(null)
+  const [rateBuyerBuyerId, setRateBuyerBuyerId] = useState<string | null>(null)
+  const [rateBuyerBuyerName, setRateBuyerBuyerName] = useState("")
+  const [buyerRatingValue, setBuyerRatingValue] = useState(5)
+  const [buyerRatingContent, setBuyerRatingContent] = useState("")
+  const [buyerRatingTags, setBuyerRatingTags] = useState<string[]>([])
+  const [isSubmittingBuyerRating, setIsSubmittingBuyerRating] = useState(false)
+  const [buyerTrustScore, setBuyerTrustScore] = useState<{
+    buyerRating: number; buyerRatingCount: number; trustLevel: string;
+    cancellationRate: number; returnRate: number; totalOrders: number;
+  } | null>(null)
 
   // Derive sellerId from store seller
   const sellerId = seller?.id || ''
@@ -466,6 +480,7 @@ export function SellerOrders() {
         id: o.id,
         orderNumber: o.orderNumber,
         buyerName: o.address.recipient,
+        buyerUserId: o.userId,
         items: o.items.map(i => `${i.productName} x${i.quantity}`).join(', '),
         itemIds: o.items.map(i => i.id),
         amount: o.totalAmount,
@@ -590,6 +605,36 @@ export function SellerOrders() {
                           setShowReplyDialog(true)
                         }}>
                           <MessageCircle className="w-3 h-3 mr-1" /> Balas Ulasan
+                        </Button>
+                      )}
+                      {order.status === "delivered" && (
+                        <Button size="sm" className="h-8 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={async () => {
+                          setRateBuyerOrderId(order.id)
+                          setRateBuyerBuyerId(order.buyerUserId)
+                          setRateBuyerBuyerName(order.buyerName)
+                          setBuyerRatingValue(5)
+                          setBuyerRatingContent("")
+                          setBuyerRatingTags([])
+                          setBuyerTrustScore(null)
+                          setShowRateBuyerDialog(true)
+                          // Fetch buyer trust score
+                          try {
+                            const data = await apiClient.get<{
+                              success: boolean
+                              buyerStats: {
+                                buyerRating: number; buyerRatingCount: number;
+                                trustLevel: string; cancellationRate: number;
+                                returnRate: number; totalOrders: number;
+                              }
+                            }>(`/api/buyer-ratings`, { buyerId: order.buyerUserId, limit: "1" })
+                            if (data.success && data.buyerStats) {
+                              setBuyerTrustScore(data.buyerStats)
+                            }
+                          } catch {
+                            // Silently fail
+                          }
+                        }}>
+                          <UserCheck className="w-3 h-3 mr-1" /> Rating Pembeli
                         </Button>
                       )}
                     </div>
@@ -755,6 +800,142 @@ export function SellerOrders() {
               className="bg-amber-500 hover:bg-amber-600 text-white rounded-xl h-10 flex-1"
             >
               {isSubmittingReply ? 'Mengirim...' : 'Kirim Balasan'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rate Buyer Dialog */}
+      <Dialog open={showRateBuyerDialog} onOpenChange={setShowRateBuyerDialog}>
+        <DialogContent className="max-w-[360px] rounded-2xl p-5">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold flex items-center gap-2">
+              <UserCheck className="w-4 h-4 text-emerald-500" />
+              Rating Pembeli
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-2">
+            {/* Buyer name & trust score */}
+            <div className="flex items-center gap-3 p-3 rounded-xl bg-muted/50 border border-border/50">
+              <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-950/30 flex items-center justify-center text-emerald-600 font-bold text-sm">
+                {rateBuyerBuyerName.charAt(0).toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-foreground truncate">{rateBuyerBuyerName}</p>
+                {buyerTrustScore && (
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${TRUST_LEVEL_CONFIG[buyerTrustScore.trustLevel as TrustLevel]?.bg || 'bg-gray-50 border-gray-200'} ${TRUST_LEVEL_CONFIG[buyerTrustScore.trustLevel as TrustLevel]?.color || 'text-gray-600'}`}>
+                      {TRUST_LEVEL_CONFIG[buyerTrustScore.trustLevel as TrustLevel]?.emoji} {TRUST_LEVEL_CONFIG[buyerTrustScore.trustLevel as TrustLevel]?.label || 'Baru'}
+                    </span>
+                    {buyerTrustScore.buyerRatingCount > 0 && (
+                      <span className="text-[10px] text-muted-foreground">
+                        ★ {buyerTrustScore.buyerRating.toFixed(1)} ({buyerTrustScore.buyerRatingCount})
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Star rating */}
+            <div>
+              <label className="text-xs font-medium text-foreground mb-2 block">Bagaimana pengalaman Anda dengan pembeli ini?</label>
+              <div className="flex items-center gap-1 justify-center">
+                {[1, 2, 3, 4, 5].map(star => (
+                  <button
+                    key={star}
+                    type="button"
+                    onClick={() => setBuyerRatingValue(star)}
+                    className="p-1 transition-transform hover:scale-110"
+                  >
+                    <Star
+                      className={`w-8 h-8 transition-colors ${
+                        star <= buyerRatingValue
+                          ? 'text-amber-400 fill-amber-400'
+                          : 'text-gray-300 dark:text-gray-600'
+                      }`}
+                    />
+                  </button>
+                ))}
+              </div>
+              <p className="text-center text-xs text-muted-foreground mt-1">
+                {buyerRatingValue === 5 ? 'Sangat Baik' : buyerRatingValue === 4 ? 'Baik' : buyerRatingValue === 3 ? 'Cukup' : buyerRatingValue === 2 ? 'Kurang' : 'Sangat Kurang'}
+              </p>
+            </div>
+
+            {/* Tags */}
+            <div>
+              <label className="text-xs font-medium text-foreground mb-2 block">Pilih tag yang sesuai</label>
+              <div className="flex flex-wrap gap-1.5">
+                {BUYER_RATING_TAGS.map(tag => (
+                  <button
+                    key={tag.id}
+                    type="button"
+                    onClick={() => {
+                      setBuyerRatingTags(prev =>
+                        prev.includes(tag.id)
+                          ? prev.filter(t => t !== tag.id)
+                          : [...prev, tag.id]
+                      )
+                    }}
+                    className={`text-[10px] px-2 py-1 rounded-full border transition-colors ${
+                      buyerRatingTags.includes(tag.id)
+                        ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300'
+                        : 'bg-muted/30 border-border/50 text-muted-foreground hover:border-emerald-300'
+                    }`}
+                  >
+                    {tag.icon} {tag.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Comment */}
+            <div>
+              <label className="text-xs font-medium text-foreground mb-1 block">Komentar (opsional)</label>
+              <textarea
+                value={buyerRatingContent}
+                onChange={(e) => setBuyerRatingContent(e.target.value)}
+                placeholder="Bagikan pengalaman Anda..."
+                maxLength={500}
+                className="w-full min-h-[60px] rounded-xl border border-input bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 resize-none"
+              />
+            </div>
+          </div>
+          <DialogFooter className="mt-4 gap-2">
+            <Button variant="outline" onClick={() => setShowRateBuyerDialog(false)} className="rounded-xl h-10 flex-1">
+              Batal
+            </Button>
+            <Button
+              disabled={isSubmittingBuyerRating}
+              onClick={async () => {
+                if (!rateBuyerOrderId || !rateBuyerBuyerId) return
+                setIsSubmittingBuyerRating(true)
+                try {
+                  const data = await apiClient.post<{ success: boolean; error?: string }>(
+                    '/api/buyer-ratings',
+                    {
+                      orderId: rateBuyerOrderId,
+                      rating: buyerRatingValue,
+                      content: buyerRatingContent.trim() || undefined,
+                      tags: buyerRatingTags.length > 0 ? buyerRatingTags : undefined,
+                    }
+                  )
+                  if (!data.success) {
+                    throw new Error(data.error || 'Gagal memberikan rating')
+                  }
+                  showToast("Rating pembeli berhasil disimpan!", "success")
+                  setShowRateBuyerDialog(false)
+                } catch (err: unknown) {
+                  const message = err instanceof ApiClientError ? err.message : err instanceof Error ? err.message : 'Gagal memberikan rating'
+                  showToast(message, "error")
+                } finally {
+                  setIsSubmittingBuyerRating(false)
+                }
+              }}
+              className="bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl h-10 flex-1"
+            >
+              {isSubmittingBuyerRating ? 'Menyimpan...' : 'Kirim Rating'}
             </Button>
           </DialogFooter>
         </DialogContent>

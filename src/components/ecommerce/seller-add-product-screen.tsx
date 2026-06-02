@@ -73,6 +73,9 @@ export function SellerAddProductScreen() {
   const [minOrder, setMinOrder] = useState(editingProduct?.minOrder?.toString() || "1")
   const [weight, setWeight] = useState(editingProduct?.weight?.toString() || "")
   const [condition, setCondition] = useState<"new" | "used">(editingProduct?.condition || "new")
+  const [productType, setProductType] = useState<"product" | "jasa">((editingProduct as any)?.productType || "product")
+  const [serviceDuration, setServiceDuration] = useState((editingProduct as any)?.serviceDuration || "")
+  const [serviceLocation, setServiceLocation] = useState((editingProduct as any)?.serviceLocation || "")
   const [variants, setVariants] = useState<VariantGroup[]>(editingProduct?.variants ? Object.entries(
     editingProduct.variants.reduce((acc, v) => {
       if (!acc[v.name]) acc[v.name] = []
@@ -447,6 +450,8 @@ export function SellerAddProductScreen() {
             minOrder: parseInt(minOrder) || 1,
             weight: parseInt(weight) || 100,
             condition,
+            productType,
+            ...(productType === 'jasa' ? { serviceDuration: serviceDuration.trim() || null, serviceLocation: serviceLocation.trim() || null } : {}),
             status: 'active',
             categoryId: category,
             tags: tags.length > 0 ? tags : null,
@@ -478,6 +483,8 @@ export function SellerAddProductScreen() {
           minOrder: parseInt(minOrder) || 1,
           weight: parseInt(weight) || 100,
           condition,
+          productType: productType as any,
+          ...(productType === 'jasa' ? { serviceDuration: serviceDuration.trim() || undefined, serviceLocation: serviceLocation.trim() || undefined } : {}),
           status: 'active',
           categoryId: category,
           variants: productVariants,
@@ -495,10 +502,12 @@ export function SellerAddProductScreen() {
             price: priceNumber,
             discountPrice: discountPriceNumber > 0 && discountPriceNumber < priceNumber ? discountPriceNumber : null,
             images: productImages2,
-            stock: parseInt(stock),
+            stock: productType === 'jasa' ? 999 : parseInt(stock),
             minOrder: parseInt(minOrder) || 1,
-            weight: parseInt(weight) || 100,
-            condition,
+            weight: productType === 'jasa' ? 0 : parseInt(weight) || 100,
+            condition: productType === 'jasa' ? 'new' : condition,
+            productType,
+            ...(productType === 'jasa' ? { serviceDuration: serviceDuration.trim() || null, serviceLocation: serviceLocation.trim() || null } : {}),
             status: 'active',
             variants: apiVariants,
             tags: tags.length > 0 ? tags : null,
@@ -933,6 +942,42 @@ export function SellerAddProductScreen() {
           </div>
         </motion.div>
 
+        {/* ============ Product Type (Barang / Jasa) ============ */}
+        <motion.div {...fadeIn}>
+          <div className="rounded-2xl border border-border/50 bg-card p-4 space-y-3">
+            <label className="text-sm font-semibold text-foreground">Tipe Produk</label>
+            <div className="flex gap-2">
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setProductType("product")}
+                className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-all border-2 ${
+                  productType === "product"
+                    ? "bg-emerald-500 text-white border-emerald-500 shadow-sm"
+                    : "bg-card text-foreground border-border hover:border-emerald-300"
+                }`}
+              >
+                📦 Barang
+              </motion.button>
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setProductType("jasa")}
+                className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-all border-2 ${
+                  productType === "jasa"
+                    ? "bg-emerald-500 text-white border-emerald-500 shadow-sm"
+                    : "bg-card text-foreground border-border hover:border-emerald-300"
+                }`}
+              >
+                🛠️ Jasa
+              </motion.button>
+            </div>
+            {productType === "jasa" && (
+              <p className="text-[10px] text-muted-foreground">
+                Mode Jasa: tanpa pengiriman, tanpa stok fisik. Cocok untuk jasa desain, konsultasi, jasa titip, dll.
+              </p>
+            )}
+          </div>
+        </motion.div>
+
         {/* ============ Condition ============ */}
         <motion.div {...fadeIn}>
           <div className="rounded-2xl border border-border/50 bg-card p-4 space-y-3">
@@ -963,6 +1008,38 @@ export function SellerAddProductScreen() {
             </div>
           </div>
         </motion.div>
+
+        {/* ============ Jasa-specific fields ============ */}
+        {productType === "jasa" && (
+          <motion.div {...fadeIn}>
+            <div className="rounded-2xl border border-emerald-200 dark:border-emerald-800/50 bg-emerald-50/50 dark:bg-emerald-950/10 p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="text-sm">🛠️</span>
+                <h3 className="text-sm font-semibold text-foreground">Detail Jasa</h3>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-foreground mb-1 block">Durasi Pengerjaan</label>
+                <Input
+                  value={serviceDuration}
+                  onChange={(e) => setServiceDuration(e.target.value)}
+                  placeholder="Contoh: 1-3 hari, 1 minggu, 2 jam"
+                  className="rounded-xl h-10"
+                />
+                <p className="text-[10px] text-muted-foreground mt-1">Berapa lama jasa Anda selesai dikerjakan?</p>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-foreground mb-1 block">Lokasi Jasa</label>
+                <Input
+                  value={serviceLocation}
+                  onChange={(e) => setServiceLocation(e.target.value)}
+                  placeholder="Contoh: Online, Jakarta, Seluruh Indonesia"
+                  className="rounded-xl h-10"
+                />
+                <p className="text-[10px] text-muted-foreground mt-1">Apakah jasa bisa dikerjakan online atau offline?</p>
+              </div>
+            </div>
+          </motion.div>
+        )}
 
         {/* ============ Variants Section ============ */}
         <motion.div {...fadeIn}>

@@ -76,6 +76,9 @@ export interface Product {
   minOrder: number
   weight: number
   condition: 'new' | 'used'
+  productType?: 'product' | 'jasa'
+  serviceDuration?: string
+  serviceLocation?: string
   status: 'active' | 'draft' | 'blocked'
   rating: number
   reviewCount: number
@@ -194,6 +197,54 @@ export interface Review {
   sellerReplyAt?: string
   createdAt: string
 }
+
+// ==================== BUYER RATING ====================
+export interface BuyerRating {
+  id: string
+  orderId: string
+  rating: number
+  content?: string
+  tags?: string[]
+  createdAt: string
+  seller: {
+    id: string
+    storeName: string
+    storeAvatar?: string
+  }
+}
+
+export interface BuyerTrustScore {
+  buyerRating: number
+  buyerRatingCount: number
+  cancellationCount: number
+  returnCount: number
+  cancellationRate: number
+  returnRate: number
+  trustLevel: 'excellent' | 'good' | 'fair' | 'poor' | 'new'
+  totalOrders: number
+}
+
+export type TrustLevel = BuyerTrustScore['trustLevel']
+
+export const TRUST_LEVEL_CONFIG: Record<TrustLevel, { label: string; color: string; bg: string; emoji: string }> = {
+  excellent: { label: 'Sangat Dipercaya', color: 'text-emerald-600', bg: 'bg-emerald-50 border-emerald-200', emoji: '⭐' },
+  good: { label: 'Dipercaya', color: 'text-blue-600', bg: 'bg-blue-50 border-blue-200', emoji: '✅' },
+  fair: { label: 'Cukup', color: 'text-amber-600', bg: 'bg-amber-50 border-amber-200', emoji: '🟡' },
+  poor: { label: 'Waspada', color: 'text-red-600', bg: 'bg-red-50 border-red-200', emoji: '⚠️' },
+  new: { label: 'Pembeli Baru', color: 'text-gray-600', bg: 'bg-gray-50 border-gray-200', emoji: '🆕' },
+}
+
+// Tags that sellers can choose when rating buyers
+export const BUYER_RATING_TAGS = [
+  { id: 'bayar_cepat', label: 'Bayar Cepat', icon: '⚡' },
+  { id: 'komunikatif', label: 'Komunikatif', icon: '💬' },
+  { id: 'ramah', label: 'Ramah', icon: '😊' },
+  { id: 'mudah_diajak_kerja_sama', label: 'Mudah Diajak Kerja Sama', icon: '🤝' },
+  { id: 'terlambat_bayar', label: 'Terlambat Bayar', icon: '🕐' },
+  { id: 'tidak_respon', label: 'Tidak Respon', icon: '🔕' },
+  { id: 'cancel_sepihak', label: 'Cancel Sepihak', icon: '❌' },
+  { id: 'return_bermasalah', label: 'Return Bermasalah', icon: '📦' },
+] as const
 
 export interface Wallet {
   id: string
