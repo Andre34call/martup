@@ -264,7 +264,7 @@ model Product {
   stock         Int       @default(0)
   sold          Int       @default(0)
   minOrder      Int       @default(1)
-  weight        Float     // grams
+  weight        Float?    // grams — null for jasa (service) products
   condition     String    @default("new") // new, used
   productType   String    @default("product") // product (barang), jasa (service)
   serviceDuration String?   // e.g., "1 jam", "1 hari", "1 minggu" — for jasa
@@ -347,7 +347,7 @@ model Order {
   orderNumber     String     @unique
   userId          String
   sellerId        String
-  addressId       String
+  addressId       String?    // null for service orders (no shipping)
   status          String     @default("pending") // pending, paid, processing, shipped, delivered, cancelled, refunded
   subtotal        Decimal
   shippingCost    Decimal
@@ -357,6 +357,11 @@ model Order {
   totalAmount     Decimal
   paymentMethod   String?
   paymentStatus   String     @default("unpaid")
+  isServiceOrder  Boolean    @default(false) // true if ALL items are jasa (service) products
+  serviceProofImages String? // JSON array — seller-uploaded proof of service completion
+  sellerCompletedAt DateTime? // when seller marked service as completed
+  buyerConfirmedAt  DateTime? // when buyer confirmed service completion
+  autoConfirmAt     DateTime? // auto-release escrow after this time if buyer doesn't respond (3 days)
   paidAt          DateTime?
   shippedAt       DateTime?
   deliveredAt     DateTime?
@@ -368,7 +373,7 @@ model Order {
 
   user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   seller          Seller     @relation(fields: [sellerId], references: [id])
-  address         Address    @relation(fields: [addressId], references: [id])
+  address         Address?   @relation(fields: [addressId], references: [id])
   items           OrderItem[]
   shipping        Shipping?
   voucherUsages   VoucherUsage[]
@@ -380,7 +385,8 @@ model Order {
   @@index([status, paymentStatus])
   @@index([status])
   @@index([createdAt])
-  @@index([addressId])
+  @@index([isServiceOrder])
+  @@index([autoConfirmAt])
 }
 
 model OrderItem {

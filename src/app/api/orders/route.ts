@@ -316,26 +316,61 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // SECURITY (CB-5): Verify address belongs to the user BEFORE the transaction
-    const address = await db.address.findUnique({ where: { id: addressId } })
-    if (!address) {
-      return NextResponse.json(
-        { success: false, error: 'Alamat pengiriman tidak ditemukan' },
-        { status: 400 }
-      )
-    }
-    if (address.userId !== authResult.user.id) {
-      return NextResponse.json(
-        { success: false, error: 'Anda tidak memiliki akses ke alamat ini' },
-        { status: 403 }
-      )
+    // Determine if this is a service order (all items are jasa/service products)
+    const itemArray = items as Array<{ productId: string; quantity: number; variantId?: string | null }>
+    const productIds = itemArray.map(item => item.productId)
+    const productsInfo = await db.product.findMany({
+      where: { id: { in: productIds } },
+      select: { id: true, productType: true },
+    })
+    const isServiceOrder = productsInfo.length > 0 && productsInfo.every(p => p.productType === 'jasa')
+
+    if (isServiceOrder) {
+      // Anti-fraud: limit active service orders between same buyer-seller pair
+      const activeServiceOrders = await db.order.count({
+        where: {
+          userId,
+          sellerId,
+          isServiceOrder: true,
+          status: { notIn: ['cancelled'] },
+        },
+      })
+      if (activeServiceOrders >= 5) {
+        return NextResponse.json(
+          { success: false, error: 'Terlalu banyak pesanan jasa aktif dengan toko ini. Selesaikan pesanan yang ada terlebih dahulu.' },
+          { status: 400 }
+        )
+      }
+      // No address needed for service orders
+    } else {
+      // Physical order — addressId is required
+      if (!addressId) {
+        return NextResponse.json(
+          { success: false, error: 'Alamat pengiriman wajib diisi untuk pesanan produk fisik' },
+          { status: 400 }
+        )
+      }
+      // SECURITY (CB-5): Verify address belongs to the user BEFORE the transaction
+      const address = await db.address.findUnique({ where: { id: addressId } })
+      if (!address) {
+        return NextResponse.json(
+          { success: false, error: 'Alamat pengiriman tidak ditemukan' },
+          { status: 400 }
+        )
+      }
+      if (address.userId !== authResult.user.id) {
+        return NextResponse.json(
+          { success: false, error: 'Anda tidak memiliki akses ke alamat ini' },
+          { status: 403 }
+        )
+      }
     }
 
     // SECURITY: Validate stock before entering transaction
     for (const item of items as Array<{ productId: string; quantity: number; variantId?: string | null }>) {
       const product = await db.product.findUnique({
         where: { id: item.productId },
-        select: { id: true, name: true, stock: true },
+        select: { id: true, name: true, stock: true, productType: true },
       })
       if (!product) {
         return NextResponse.json(
@@ -343,7 +378,8 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         )
       }
-      if (product.stock < item.quantity) {
+      // Skip stock check for jasa (service) products — they have unlimited stock
+      if (product.productType !== 'jasa' && product.stock < item.quantity) {
         return NextResponse.json(
           { success: false, error: `Stok tidak mencukupi untuk "${product.name}". Tersedia: ${product.stock}, Diminta: ${item.quantity}` },
           { status: 400 }
@@ -354,7 +390,8 @@ export async function POST(request: NextRequest) {
           where: { id: item.variantId },
           select: { id: true, name: true, stock: true },
         })
-        if (variant && variant.stock < item.quantity) {
+        // Skip variant stock check for jasa products
+        if (product.productType !== 'jasa' && variant && variant.stock < item.quantity) {
           return NextResponse.json(
             { success: false, error: `Stok varian tidak mencukupi untuk "${variant.name}". Tersedia: ${variant.stock}, Diminta: ${item.quantity}` },
             { status: 400 }
@@ -382,6 +419,7 @@ export async function POST(request: NextRequest) {
         quantity: number
         subtotal: number
         image: string | null
+        productType: string
       }> = []
 
       let serverSubtotal = 0
@@ -390,10 +428,14 @@ export async function POST(request: NextRequest) {
         // SECURITY: Re-validate stock inside transaction (race condition protection)
         const product = await tx.product.findUnique({
           where: { id: item.productId },
-          select: { id: true, name: true, stock: true, price: true, discountPrice: true, images: true },
+          select: { id: true, name: true, stock: true, price: true, discountPrice: true, images: true, productType: true },
         })
-        if (!product || product.stock < item.quantity) {
-          throw new Error(`Stok tidak mencukupi untuk "${product?.name || item.productId}". Tersedia: ${product?.stock ?? 0}, Diminta: ${item.quantity}`)
+        if (!product) {
+          throw new Error(`Produk tidak ditemukan: ${item.productId}`)
+        }
+        // Skip stock check for jasa (service) products — they have unlimited stock
+        if (product.productType !== 'jasa' && product.stock < item.quantity) {
+          throw new Error(`Stok tidak mencukupi untuk "${product.name}". Tersedia: ${product.stock}, Diminta: ${item.quantity}`)
         }
 
         let itemPrice = Number(product.price)
@@ -405,7 +447,8 @@ export async function POST(request: NextRequest) {
             where: { id: item.variantId },
             select: { id: true, name: true, stock: true, price: true },
           })
-          if (variant && variant.stock < item.quantity) {
+          // Skip variant stock check for jasa products
+          if (product.productType !== 'jasa' && variant && variant.stock < item.quantity) {
             throw new Error(`Stok varian tidak mencukupi untuk "${variant.name}". Tersedia: ${variant.stock}, Diminta: ${item.quantity}`)
           }
           if (variant?.price !== null && variant?.price !== undefined) {
@@ -432,6 +475,7 @@ export async function POST(request: NextRequest) {
           quantity: item.quantity,
           subtotal: itemSubtotal,
           image: itemImage,
+          productType: product.productType,
         })
       }
 
@@ -501,10 +545,11 @@ export async function POST(request: NextRequest) {
       // - shippingCost: strict bounds [0, 500000]
       // - taxAmount: computed server-side from fixed rate (not trusted from client)
       // =====================================================
-      const clientShippingCost = validatedData.shippingCost ?? 0
+      // Service orders have no shipping cost; physical orders use client-provided cost
+      const clientShippingCost = isServiceOrder ? 0 : (validatedData.shippingCost ?? 0)
 
-      // Validate shipping cost is within reasonable bounds
-      if (clientShippingCost < 0 || clientShippingCost > 500_000) {
+      // Validate shipping cost is within reasonable bounds (skip for service orders — always 0)
+      if (!isServiceOrder && (clientShippingCost < 0 || clientShippingCost > 500_000)) {
         throw new Error('Biaya pengiriman tidak valid (harus antara 0 - 500.000)')
       }
 
@@ -512,9 +557,10 @@ export async function POST(request: NextRequest) {
       const TAX_RATE = 0 // Tax rate from server config (0 if not configured)
       const serverTaxAmount = Math.floor(serverSubtotal * TAX_RATE)
 
-      // SECURITY: Compute platform fee server-side (typically 1-5% of subtotal)
+      // SECURITY: Compute platform fee server-side
       // Client should not control this value — it directly affects revenue
-      const PLATFORM_FEE_RATE = 0.03 // 3% platform fee
+      // Service orders use higher rate (8%) to cover increased risk and dispute handling
+      const PLATFORM_FEE_RATE = isServiceOrder ? 0.08 : 0.03
       const serverPlatformFee = Math.floor(serverSubtotal * PLATFORM_FEE_RATE)
 
       const serverTotalAmount = serverSubtotal + clientShippingCost + serverTaxAmount + serverPlatformFee - serverDiscountAmount
@@ -524,10 +570,11 @@ export async function POST(request: NextRequest) {
           orderNumber,
           userId,
           sellerId,
-          addressId,
+          addressId: isServiceOrder ? null : (addressId || null),
+          isServiceOrder,
           status: 'pending',
           subtotal: serverSubtotal,
-          shippingCost: clientShippingCost,
+          shippingCost: isServiceOrder ? 0 : clientShippingCost,
           discountAmount: serverDiscountAmount,
           taxAmount: serverTaxAmount,
           platformFee: serverPlatformFee,
@@ -553,8 +600,8 @@ export async function POST(request: NextRequest) {
         },
       })
 
-      // Create shipping record if provided
-      if (shipping) {
+      // Create shipping record if provided (skip for service orders — no physical shipping)
+      if (shipping && !isServiceOrder) {
         await tx.shipping.create({
           data: {
             orderId: newOrder.id,
@@ -590,20 +637,29 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Update product sold count and stock
+      // Update product sold count and stock (don't decrement stock for jasa products)
       for (const item of serverItems) {
-        await tx.product.update({
-          where: { id: item.productId },
-          data: {
-            sold: { increment: item.quantity },
-            stock: { decrement: item.quantity },
-          },
-        })
-        if (item.variantId) {
-          await tx.productVariant.update({
-            where: { id: item.variantId },
-            data: { stock: { decrement: item.quantity } },
+        const isJasa = item.productType === 'jasa'
+        if (isJasa) {
+          // Only increment sold count for jasa products — stock is unlimited
+          await tx.product.update({
+            where: { id: item.productId },
+            data: { sold: { increment: item.quantity } },
           })
+        } else {
+          await tx.product.update({
+            where: { id: item.productId },
+            data: {
+              sold: { increment: item.quantity },
+              stock: { decrement: item.quantity },
+            },
+          })
+          if (item.variantId) {
+            await tx.productVariant.update({
+              where: { id: item.variantId },
+              data: { stock: { decrement: item.quantity } },
+            })
+          }
         }
       }
 

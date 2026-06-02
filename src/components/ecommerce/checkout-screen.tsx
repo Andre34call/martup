@@ -396,37 +396,43 @@ export function CheckoutScreen() {
   // BUG 20 FIX: Ensure totalAmount never goes negative (e.g., voucher > subtotal + shipping)
   const totalAmount = Math.max(0, subtotal + shippingCost - voucherDiscount + platformFee + taxAmount)
 
+  // Check if ALL items in the checkout are jasa (service) products — no address needed
+  const isAllJasa = useMemo(() => {
+    return checkedItems.length > 0 && checkedItems.every(item => (item.product as any).productType === 'jasa')
+  }, [checkedItems])
+
   // Calculate current checkout step
   const currentStep = useMemo(() => {
+    // For all-jasa orders, skip address/shipping steps — go straight to payment
+    if (isAllJasa) return 2
     if (!defaultAddress) return 0
     if (Object.keys(shippingBySeller).length < groupedBySeller.length) return 1
     return 2
-  }, [defaultAddress, shippingBySeller, groupedBySeller])
+  }, [defaultAddress, shippingBySeller, groupedBySeller, isAllJasa])
 
   const handleShippingSelect = (sellerId: string, option: ShippingOption) => {
     setShippingBySeller(prev => ({ ...prev, [sellerId]: option }))
   }
 
   const isReadyToPay = useMemo(() => {
-    return (
-      selectedPayment !== null &&
-      defaultAddress !== null &&
-      Object.keys(shippingBySeller).length >= groupedBySeller.length &&
-      checkedCount > 0 &&
-      !(selectedPayment === 'wallet' && walletBalance < totalAmount)
-    )
-  }, [selectedPayment, defaultAddress, shippingBySeller, groupedBySeller, checkedCount, walletBalance, totalAmount])
+    const hasPayment = selectedPayment !== null
+    const hasAddressOrJasa = isAllJasa || defaultAddress !== null
+    const hasShipping = isAllJasa || Object.keys(shippingBySeller).length >= groupedBySeller.length
+    const hasItems = checkedCount > 0
+    const hasBalance = !(selectedPayment === 'wallet' && walletBalance < totalAmount)
+    return hasPayment && hasAddressOrJasa && hasShipping && hasItems && hasBalance
+  }, [selectedPayment, defaultAddress, shippingBySeller, groupedBySeller, checkedCount, walletBalance, totalAmount, isAllJasa])
 
   const handlePay = async () => {
     if (!selectedPayment) {
       showToast("Pilih metode pembayaran terlebih dahulu", "error")
       return
     }
-    if (!defaultAddress) {
+    if (!isAllJasa && !defaultAddress) {
       showToast("Tambahkan alamat pengiriman terlebih dahulu", "error")
       return
     }
-    if (Object.keys(shippingBySeller).length < groupedBySeller.length) {
+    if (!isAllJasa && Object.keys(shippingBySeller).length < groupedBySeller.length) {
       showToast("Pilih metode pengiriman untuk semua toko", "error")
       return
     }
@@ -435,8 +441,9 @@ export function CheckoutScreen() {
       return
     }
 
-    // Stock validation
+    // Stock validation (skip jasa products — unlimited stock)
     const outOfStockItem = checkedItems.find(item => {
+      if ((item.product as any).productType === 'jasa') return false // unlimited stock for services
       const maxStock = item.variant ? item.variant.stock : item.product.stock
       return item.quantity > maxStock
     })
@@ -489,12 +496,13 @@ export function CheckoutScreen() {
         const groupDiscount = subtotal > 0 ? Math.round(validatedVoucherDiscount * (groupSubtotal / subtotal)) : 0
         const groupTotal = groupSubtotal + groupShipping - groupDiscount + platformFee
 
+        const isSellerJasaOnly = isJasaOnlySeller(group.seller.id)
         const orderPayload = {
           userId: currentUser?.id || '',
           sellerId: group.seller.id,
-          addressId: defaultAddress.id,
+          addressId: isSellerJasaOnly ? null : defaultAddress?.id || null,
           subtotal: groupSubtotal,
-          shippingCost: groupShipping,
+          shippingCost: isSellerJasaOnly ? 0 : groupShipping,
           discountAmount: groupDiscount,
           taxAmount: 0,
           platformFee,
@@ -510,11 +518,14 @@ export function CheckoutScreen() {
             subtotal: (item.product.discountPrice || item.product.price) * item.quantity,
             image: item.product.images?.[0] || null,
           })),
-          shipping: {
-            provider: sellerShipping?.provider || 'JNE',
-            service: sellerShipping?.service || 'REG',
-            estimatedDays: sellerShipping?.estimatedDays || null,
-          },
+          // Skip shipping data for jasa-only seller groups
+          ...(isSellerJasaOnly ? {} : {
+            shipping: {
+              provider: sellerShipping?.provider || 'JNE',
+              service: sellerShipping?.service || 'REG',
+              estimatedDays: sellerShipping?.estimatedDays || null,
+            },
+          }),
         }
 
         const orderStatus = isImmediatePayment ? 'paid' as const : 'pending' as const
@@ -534,13 +545,14 @@ export function CheckoutScreen() {
               sellerId: group.seller.id,
               status: orderStatus,
               subtotal: groupSubtotal,
-              shippingCost: groupShipping,
+              shippingCost: isSellerJasaOnly ? 0 : groupShipping,
               discountAmount: groupDiscount,
               taxAmount: 0,
               platformFee,
               totalAmount: groupTotal,
               paymentMethod: PAYMENT_METHODS.find(m => m.id === selectedPayment)?.name || selectedPayment,
               paymentStatus: orderPaymentStatus,
+              isServiceOrder: isSellerJasaOnly,
               items: group.items.map((item) => ({
                 id: `oi${Date.now()}-${item.id}`,
                 productId: item.productId,
@@ -552,14 +564,17 @@ export function CheckoutScreen() {
                 subtotal: (item.product.discountPrice || item.product.price) * item.quantity,
                 image: item.product.images?.[0]
               })),
-              shipping: {
-                id: `sh${Date.now()}-${group.seller.id}`,
-                provider: sellerShipping?.provider || 'JNE',
-                service: sellerShipping?.service || 'REG',
-                estimatedDays: sellerShipping?.estimatedDays,
-                status: 'pending'
-              },
-              address: defaultAddress,
+              // Skip shipping info for jasa-only orders
+              ...(isSellerJasaOnly ? {} : {
+                shipping: {
+                  id: `sh${Date.now()}-${group.seller.id}`,
+                  provider: sellerShipping?.provider || 'JNE',
+                  service: sellerShipping?.service || 'REG',
+                  estimatedDays: sellerShipping?.estimatedDays,
+                  status: 'pending'
+                },
+              }),
+              address: isSellerJasaOnly ? undefined : defaultAddress,
               seller: group.seller,
               createdAt: new Date().toISOString(),
               paidAt: isImmediatePayment ? new Date().toISOString() : undefined
@@ -744,17 +759,36 @@ export function CheckoutScreen() {
         animate={{ opacity: 1 }}
         className="px-4 space-y-4"
       >
-        {/* Address Section */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.05 }}
-        >
-          <AddressCard
-            address={defaultAddress}
-            onChange={() => navigate('address')}
-          />
-        </motion.div>
+        {/* Address Section — skip for all-jasa orders */}
+        {!isAllJasa && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.05 }}
+          >
+            <AddressCard
+              address={defaultAddress}
+              onChange={() => navigate('address')}
+            />
+          </motion.div>
+        )}
+
+        {/* Service Order Notice — shown for all-jasa orders */}
+        {isAllJasa && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/50 rounded-xl p-4"
+          >
+            <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+              <span className="text-sm font-semibold">Pesanan Jasa (Tanpa Pengiriman)</span>
+            </div>
+            <p className="text-xs text-emerald-600/70 dark:text-emerald-400/70 mt-1 ml-7">
+              Pesanan jasa tidak memerlukan alamat pengiriman. Pembayaran akan ditahan (escrow) sampai jasa selesai dan dikonfirmasi.
+            </p>
+          </motion.div>
+        )}
 
         <Separator />
 

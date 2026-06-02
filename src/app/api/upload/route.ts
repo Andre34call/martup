@@ -22,6 +22,7 @@ const ALLOWED_BUCKETS: Record<string, string[]> = {
   banners: ['images'],
   streams: ['images', 'videos'],
   reviews: ['images', 'videos'],
+  services: ['images'],
 }
 
 // Bucket configuration for auto-creation — sizes aligned with centralized UPLOAD_LIMITS
@@ -50,6 +51,11 @@ const BUCKET_CONFIG: Record<string, { public: boolean; fileSizeLimit: number; al
     public: true,
     fileSizeLimit: UPLOAD_LIMITS.mbToBytes(UPLOAD_LIMITS.MAX_REVIEW_VIDEO_SIZE_MB), // 50MB
     allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/webm'],
+  },
+  services: {
+    public: true,
+    fileSizeLimit: UPLOAD_LIMITS.mbToBytes(10), // 10MB — service proof images only
+    allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
   },
 }
 

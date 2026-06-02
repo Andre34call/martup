@@ -7,7 +7,7 @@ import {
   BarChart3, Check, TrendingUp, ChevronRight, ArrowLeft, Search,
   Edit, Trash2, Truck, Printer, Calendar, Wallet, Banknote, Clock,
   Megaphone, Zap, Tag, Store, AlertTriangle, ArrowUpRight, ArrowDownLeft, Shield,
-  ShoppingBag, X, UserCheck
+  ShoppingBag, X, UserCheck, ImagePlus, CheckCircle2, Timer, Upload
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -24,7 +24,7 @@ import { PageHeader, SectionHeader, StatusBadge, SearchBar, EmptyState, WalletBa
 import type { Order } from "@/lib/types"
 import { BUYER_RATING_TAGS, TRUST_LEVEL_CONFIG } from "@/lib/types"
 import type { TrustLevel } from "@/lib/types"
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
 import { AnimatePresence } from "framer-motion"
 
 // Type aliases for apiClient generics (avoids TSX parsing ambiguity)
@@ -463,6 +463,13 @@ export function SellerOrders() {
     buyerRating: number; buyerRatingCount: number; trustLevel: string;
     cancellationRate: number; returnRate: number; totalOrders: number;
   } | null>(null)
+  // Service proof dialog state
+  const [showServiceProofDialog, setShowServiceProofDialog] = useState(false)
+  const [serviceProofOrderId, setServiceProofOrderId] = useState<string | null>(null)
+  const [serviceProofImages, setServiceProofImages] = useState<string[]>([])
+  const [serviceProofNote, setServiceProofNote] = useState("")
+  const [isUploadingProof, setIsUploadingProof] = useState(false)
+  const [isSubmittingProof, setIsSubmittingProof] = useState(false)
 
   // Derive sellerId from store seller
   const sellerId = seller?.id || ''
@@ -479,12 +486,16 @@ export function SellerOrders() {
       return {
         id: o.id,
         orderNumber: o.orderNumber,
-        buyerName: o.address.recipient,
+        buyerName: o.address?.recipient || o.buyerName || '',
         buyerUserId: o.userId,
         items: o.items.map(i => `${i.productName} x${i.quantity}`).join(', '),
         itemIds: o.items.map(i => i.id),
         amount: o.totalAmount,
         status: o.status,
+        isServiceOrder: o.isServiceOrder || false,
+        autoConfirmAt: o.autoConfirmAt,
+        serviceProofImages: o.serviceProofImages,
+        sellerCompletedAt: o.sellerCompletedAt,
         date: new Date(o.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }),
         hasUnrepliedReview: unrepliedReviews.length > 0,
         firstUnrepliedReviewId: unrepliedReviews[0]?.id || null,
@@ -505,6 +516,46 @@ export function SellerOrders() {
       : activeTab === "shipped"
         ? sellerOrders.filter(o => o.status === "shipped")
         : sellerOrders.filter(o => o.status === "delivered")
+
+  // Auto-confirm countdown helper
+  const [now, setNow] = useState(Date.now())
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 60000) // update every minute
+    return () => clearInterval(interval)
+  }, [])
+
+  const getAutoConfirmCountdown = useCallback((autoConfirmAt: string | undefined) => {
+    if (!autoConfirmAt) return null
+    const target = new Date(autoConfirmAt).getTime()
+    const diff = target - now
+    if (diff <= 0) return 'Segera dicairkan'
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+    if (days > 0) return `${days} hari ${hours} jam`
+    return `${hours} jam`
+  }, [now])
+
+  // Handle image upload for service proof
+  const handleProofImageUpload = useCallback(async (file: File) => {
+    setIsUploadingProof(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('bucket', 'services')
+      formData.append('folder', 'images')
+      const data = await apiClient.upload<{ success: boolean; data?: { url: string }; error?: string }>('/api/upload', formData)
+      if (data.success && data.data?.url) {
+        setServiceProofImages(prev => [...prev, data.data!.url])
+      } else {
+        showToast(data.error || 'Gagal mengunggah gambar', 'error')
+      }
+    } catch (err: unknown) {
+      const message = err instanceof ApiClientError ? err.message : 'Gagal mengunggah gambar'
+      showToast(message, 'error')
+    } finally {
+      setIsUploadingProof(false)
+    }
+  }, [showToast])
 
   return (
     <div className="pb-20">
@@ -549,16 +600,42 @@ export function SellerOrders() {
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
                       <p className="text-xs font-mono text-muted-foreground">{order.orderNumber}</p>
+                      {order.isServiceOrder && (
+                        <Badge className="text-[9px] px-1.5 py-0 h-4 bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 border-0 font-bold">JASA</Badge>
+                      )}
                       <StatusBadge status={order.status} size="sm" />
                     </div>
                     <p className="text-xs text-muted-foreground">{order.date}</p>
                   </div>
                   <p className="text-sm font-medium text-foreground">{order.buyerName}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">{order.items}</p>
+
+                  {/* Service order: shipped status → show waiting confirmation + countdown + proof images */}
+                  {order.isServiceOrder && order.status === "shipped" && (
+                    <div className="mt-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/50 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Timer className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                        <span className="text-xs font-semibold text-amber-700 dark:text-amber-300">Menunggu Konfirmasi Pembeli</span>
+                      </div>
+                      {order.autoConfirmAt && (
+                        <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                          Pembayaran otomatis dicairkan dalam <span className="font-bold">{getAutoConfirmCountdown(order.autoConfirmAt)}</span>
+                        </p>
+                      )}
+                      {order.serviceProofImages && order.serviceProofImages.length > 0 && (
+                        <div className="flex gap-2 mt-1 overflow-x-auto no-scrollbar">
+                          {order.serviceProofImages.map((img, idx) => (
+                            <img key={idx} src={img} alt={`Bukti ${idx + 1}`} className="w-14 h-14 rounded-lg object-cover flex-shrink-0 border border-amber-200 dark:border-amber-800/50" />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   <Separator className="my-3" />
                   <div className="flex items-center justify-between">
                     <p className="text-base font-bold text-foreground">{formatPrice(order.amount)}</p>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap justify-end">
                       {order.status === "paid" && (
                         <Button size="sm" className="h-8 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white" onClick={async () => {
                           try {
@@ -577,13 +654,23 @@ export function SellerOrders() {
                           <Package className="w-3 h-3 mr-1" /> Proses
                         </Button>
                       )}
-                      {order.status === "processing" && (
+                      {order.status === "processing" && !order.isServiceOrder && (
                         <Button size="sm" className="h-8 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white" onClick={() => {
                           setTrackingOrderId(order.id)
                           setTrackingNumber("")
                           setShowTrackingDialog(true)
                         }}>
                           <Truck className="w-3 h-3 mr-1" /> Kirim
+                        </Button>
+                      )}
+                      {order.status === "processing" && order.isServiceOrder && (
+                        <Button size="sm" className="h-8 text-xs rounded-lg bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white" onClick={() => {
+                          setServiceProofOrderId(order.id)
+                          setServiceProofImages([])
+                          setServiceProofNote("")
+                          setShowServiceProofDialog(true)
+                        }}>
+                          <ImagePlus className="w-3 h-3 mr-1" /> Kirim Bukti Penyelesaian
                         </Button>
                       )}
                       {(order.status === "paid" || order.status === "processing") && (
@@ -695,6 +782,130 @@ export function SellerOrders() {
               className="bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl h-10 flex-1"
             >
               Kirim Pesanan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Service Proof Dialog */}
+      <Dialog open={showServiceProofDialog} onOpenChange={setShowServiceProofDialog}>
+        <DialogContent className="max-w-[360px] rounded-2xl p-5">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold flex items-center gap-2">
+              <ImagePlus className="w-4 h-4 text-amber-500" />
+              Kirim Bukti Penyelesaian Jasa
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-2">
+            {/* Image Upload Area */}
+            <div>
+              <label className="text-xs font-medium text-foreground mb-2 block">
+                Bukti Gambar <span className="text-red-500">*</span>
+                <span className="text-muted-foreground font-normal ml-1">(1-5 gambar)</span>
+              </label>
+              <div className="flex gap-2 flex-wrap">
+                {serviceProofImages.map((img, idx) => (
+                  <div key={idx} className="relative w-16 h-16 rounded-lg overflow-hidden border border-border">
+                    <img src={img} alt={`Bukti ${idx + 1}`} className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => setServiceProofImages(prev => prev.filter((_, i) => i !== idx))}
+                      className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center"
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                  </div>
+                ))}
+                {serviceProofImages.length < 5 && (
+                  <label className={`w-16 h-16 rounded-lg border-2 border-dashed border-border flex flex-col items-center justify-center cursor-pointer hover:border-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/20 transition-colors ${isUploadingProof ? 'opacity-50 pointer-events-none' : ''}`}>
+                    {isUploadingProof ? (
+                      <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <>
+                        <Upload className="w-4 h-4 text-muted-foreground" />
+                        <span className="text-[9px] text-muted-foreground mt-0.5">Upload</span>
+                      </>
+                    )}
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) {
+                          if (serviceProofImages.length >= 5) {
+                            showToast('Maksimal 5 gambar', 'error')
+                            return
+                          }
+                          handleProofImageUpload(file)
+                        }
+                        e.target.value = ''
+                      }}
+                    />
+                  </label>
+                )}
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-1">{serviceProofImages.length}/5 gambar terunggah</p>
+            </div>
+
+            {/* Optional Note */}
+            <div>
+              <label className="text-xs font-medium text-foreground mb-1 block">Catatan <span className="text-muted-foreground font-normal">(opsional)</span></label>
+              <textarea
+                value={serviceProofNote}
+                onChange={(e) => setServiceProofNote(e.target.value)}
+                placeholder="Tambahkan catatan untuk pembeli..."
+                maxLength={500}
+                className="w-full min-h-[60px] rounded-xl border border-input bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 resize-none"
+              />
+              <p className="text-[10px] text-muted-foreground text-right mt-0.5">{serviceProofNote.length}/500</p>
+            </div>
+
+            {/* Info */}
+            <div className="flex items-start gap-2 p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40">
+              <CheckCircle2 className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+              <p className="text-[11px] text-amber-700 dark:text-amber-300">
+                Setelah bukti dikirim, status pesanan berubah menjadi &quot;Jasa Selesai&quot; dan pembeli akan diminta konfirmasi. Pembayaran akan otomatis dicairkan dalam 3 hari jika pembeli tidak merespon.
+              </p>
+            </div>
+          </div>
+          <DialogFooter className="mt-4 gap-2">
+            <Button variant="outline" onClick={() => setShowServiceProofDialog(false)} className="rounded-xl h-10 flex-1">
+              Batal
+            </Button>
+            <Button
+              disabled={isSubmittingProof || serviceProofImages.length === 0}
+              onClick={async () => {
+                if (serviceProofImages.length === 0) {
+                  showToast('Unggah minimal 1 gambar bukti', 'error')
+                  return
+                }
+                if (!serviceProofOrderId) return
+                setIsSubmittingProof(true)
+                try {
+                  const data = await apiClient.post<{ success: boolean; error?: string }>(
+                    `/api/orders/${serviceProofOrderId}/service-proof`,
+                    { proofImages: serviceProofImages, note: serviceProofNote.trim() || undefined }
+                  )
+                  if (!data.success) {
+                    throw new Error(data.error || 'Gagal mengirim bukti penyelesaian')
+                  }
+                  updateOrderStatus(serviceProofOrderId, 'shipped')
+                  showToast('Bukti penyelesaian jasa berhasil dikirim!', 'success')
+                  setShowServiceProofDialog(false)
+                  setServiceProofOrderId(null)
+                  setServiceProofImages([])
+                  setServiceProofNote("")
+                } catch (err: unknown) {
+                  const message = err instanceof ApiClientError ? err.message : err instanceof Error ? err.message : 'Gagal mengirim bukti penyelesaian'
+                  showToast(message, 'error')
+                } finally {
+                  setIsSubmittingProof(false)
+                }
+              }}
+              className="bg-amber-500 hover:bg-amber-600 text-white rounded-xl h-10 flex-1"
+            >
+              {isSubmittingProof ? 'Mengirim...' : 'Kirim Bukti'}
             </Button>
           </DialogFooter>
         </DialogContent>

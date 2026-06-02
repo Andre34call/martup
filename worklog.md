@@ -2827,3 +2827,217 @@ Stage Summary:
 - 5 HIGH issues fixed (comment deletion, seller promotion exploit, admin validation)
 - 5 MEDIUM issues fixed (avatar upload flow, bucket restrictions, SVG prevention, Prisma index)
 - Commit 6787ace pushed to origin/main
+
+---
+Task ID: 4
+Agent: service-proof-api
+Task: Create service proof API and auto-confirm cron
+
+Work Log:
+- Read worklog.md, order-status.ts, auth-middleware.ts, rate-limit.ts for patterns
+- Read prisma/schema.prisma to verify Order model fields (isServiceOrder, serviceProofImages, sellerCompletedAt, buyerConfirmedAt, autoConfirmAt)
+- Read existing route patterns: orders/[id]/status/route.ts, orders/[id]/cancel/route.ts, cron/auto-complete/route.ts
+- Created /src/app/api/orders/[id]/service-proof/route.ts with POST and GET handlers
+- Created /src/app/api/cron/auto-confirm-service/route.ts with GET and POST handlers
+- Lint passes ✅
+- Dev server compiles ✅
+
+Stage Summary:
+- POST /api/orders/[id]/service-proof: Seller submits proof of service completion
+  - Auth: verifyAuth + seller ownership check
+  - Validates: isServiceOrder, status=processing, no duplicate proof
+  - Validates: proofImages 1-5 URLs (http/https only, rejects blob:/data:/javascript:)
+  - Validates: note optional, max 500 chars
+  - Updates: serviceProofImages, sellerCompletedAt, autoConfirmAt (3 days), status→shipped
+  - Creates notifications for both buyer and seller
+  - Rate limited: 5 req/min per user
+- GET /api/orders/[id]/service-proof: Both buyer and seller can view proof
+  - Returns parsed proofImages, sellerCompletedAt, autoConfirmAt, buyerConfirmedAt
+- /api/cron/auto-confirm-service: Auto-confirms service orders after 3 days
+  - Finds: status=shipped + isServiceOrder + autoConfirmAt < now + buyerConfirmedAt IS NULL
+  - Sets: status=delivered, buyerConfirmedAt=now, deliveredAt=now
+  - Releases escrow (same logic as order-status.ts delivered status)
+  - Creates notifications for both buyer and seller
+  - Protected by CRON_SECRET with timing-safe comparison
+  - Rate limited: 1 call per minute
+
+---
+Task ID: 2
+Agent: order-status-updater
+Task: Update order-status.ts for service order support
+
+Work Log:
+- Read worklog.md, current order-status.ts, types.ts, and Prisma schema for context
+- Updated comment block at top of file to document both service and physical order flows
+- Modified `getCommissionRate()` to accept `isServiceOrder` parameter:
+  - Reads `serviceCommissionRate` from PlatformSetting for service orders
+  - Falls back to `commissionRate` if `serviceCommissionRate` not configured
+  - Default rate: 0.08 (8%) for service orders, 0.05 (5%) for physical
+- Added `serviceProofImages?: string[]` param to `updateOrderStatus` function signature
+- Updated shipped status validation to be conditional on `isServiceOrder`:
+  - Service orders: require `serviceProofImages` (proof images array)
+  - Physical orders: require `trackingNumber` (tracking number string)
+- Updated shipped status transaction logic for service orders:
+  - Sets `serviceProofImages` as JSON string
+  - Sets `sellerCompletedAt` to current time
+  - Sets `autoConfirmAt` to now + 72 hours (3 days)
+  - Skips Shipping record update (service orders may not have one)
+- Updated delivered status transaction logic for service orders:
+  - Sets `buyerConfirmedAt` to current time
+  - Shipping update already conditional on `order.shipping` existence (no change needed)
+- Updated escrow release in delivered handler to use `getCommissionRate(isServiceOrder)` with proper default rate fallback
+- Updated escrow reversal in cancelled handler to use service commission rate for service orders
+- Updated notification messages for service order "shipped" status:
+  - Buyer: "Jasa Selesai" with auto-confirm notice
+  - Seller: "Jasa Ditandai Selesai" with 3-day auto-confirm notice
+- Added cron job hint comments near `autoConfirmAt` assignment
+- Added `isServiceOrder` to the success log info
+- Lint passes ✅
+- Dev server compiles ✅
+
+Stage Summary:
+- `getCommissionRate` now accepts `isServiceOrder` flag; service orders use `serviceCommissionRate` (default 0.08)
+- Service order "shipped" validates `serviceProofImages` instead of `trackingNumber`, sets `sellerCompletedAt` + `autoConfirmAt`
+- Service order "delivered" sets `buyerConfirmedAt`; shipping update safely skipped if no shipping record
+- Notification messages differentiated: "Jasa Selesai" for service orders vs "Pesanan Dikirim" for physical
+- Escrow release/cancellation uses correct commission rate based on order type
+- Cron job hint added for auto-confirm functionality
+- Zero breaking changes — physical order logic preserved exactly, all new behavior is conditional on `isServiceOrder`
+
+---
+Task ID: 3
+Agent: order-api-updater
+Task: Update order creation API for service orders
+
+Work Log:
+- Read worklog.md, route.ts, validations.ts, and schema.prisma for context
+- Updated `createOrderSchema` in validations.ts: made `addressId` optional (`.optional()`) for service orders
+- Added service order detection logic in POST handler: fetches all products by ID, checks if ALL have `productType === 'jasa'` to set `isServiceOrder` flag
+- Added anti-fraud check for service orders: counts active (non-cancelled) service orders between buyer-seller pair; rejects if >= 5 with Indonesian error message
+- Made address verification conditional: service orders skip address check entirely; physical orders require addressId and verify ownership
+- Updated pre-transaction stock validation: added `productType` to product select; skips stock check for jasa products (unlimited stock)
+- Updated in-transaction stock re-validation: separated null check from stock check; skips stock re-validation for jasa products and their variants
+- Added `productType` field to `serverItems` array type and push for downstream logic
+- Set shipping cost to 0 for service orders (forced, not client-provided); skip shipping cost bounds check for service orders
+- Changed platform fee rate to 8% for service orders vs 3% for physical orders
+- Updated order creation data: `isServiceOrder` flag, `addressId: null` for service orders, `shippingCost: 0` for service orders
+- Skip Shipping record creation for service orders (`shipping && !isServiceOrder` condition)
+- Don't decrement stock for jasa products: jasa items only increment `sold` count; physical items still decrement both `sold` and `stock`
+- GET handler: new scalar fields (`isServiceOrder`, `serviceProofImages`, `autoConfirmAt`, etc.) are automatically returned by Prisma — no code change needed
+- Lint passes ✅
+- Dev server compiles successfully ✅
+
+Stage Summary:
+- Service order support fully implemented in POST /api/orders
+- Anti-fraud: max 5 active service orders per buyer-seller pair
+- Higher platform fee: 8% for service orders (vs 3% for physical)
+- No shipping for service orders: no addressId, no shipping record, shippingCost = 0
+- No stock decrement for jasa products (unlimited stock, only sold count incremented)
+- addressId made optional in Zod schema for service order compatibility
+- All existing security checks and physical order logic preserved
+- Zero breaking changes — lint passes, dev server OK
+
+---
+Task ID: 7
+Agent: order-screen-updater
+Task: Update order screen UI for service orders
+
+Work Log:
+- Read current order-screen.tsx (744 lines), types.ts, store/order.ts, and shared/display.tsx (StatusBadge component)
+- Analyzed Order type's new service fields: isServiceOrder, serviceProofImages, sellerCompletedAt, buyerConfirmedAt, autoConfirmAt, optional address
+- Added new imports: useEffect from react; Wrench, Timer, AlertTriangle, ShieldCheck, ImageIcon from lucide-react
+- Created service-aware status label constants: SERVICE_STATUS_LABELS mapping (processing → "Sedang Dikerjakan", shipped → "Jasa Selesai - Menunggu Konfirmasi", delivered → "Selesai")
+- Created STATUS_STYLES and DEFAULT_STATUS_LABELS maps for custom badge rendering
+- Added SERVICE_TRACKING_STEPS for service-specific timeline (Wrench icon for "Sedang Dikerjakan", ShieldCheck for "Menunggu Konfirmasi")
+- Created `getStatusLabel(order)` helper that returns service-specific or default status label
+- Created `ServiceAwareStatusBadge` component that renders custom badge for service orders, falls back to shared StatusBadge for regular orders
+- Created `AutoConfirmCountdown` component with real-time countdown (updates every minute) showing "Otomatis dikonfirmasi dalam X hari X jam"
+- Updated `OrderCard`: Added "JASA" badge with Wrench icon next to store name; uses ServiceAwareStatusBadge; changed secondary button from "Terima" to "Konfirmasi" for service orders; changed primary button from "Lacak" to "Detail" for shipped service orders; adjusted toast messages for service orders
+- Updated `OrderDetail`:
+  - Status banner: Service-aware icon (Wrench for processing, ShieldCheck for shipped); ServiceAwareStatusBadge; AutoConfirmCountdown for shipped service orders; conditional estimated days display
+  - Added "Seller sedang mengerjakan jasa Anda" notice for processing service orders (with service duration from product lookup)
+  - Added "Bukti Pengerjaan Jasa" section for shipped service orders showing serviceProofImages gallery with modal preview and sellerCompletedAt timestamp
+  - Conditionally hides tracking timeline for service orders
+  - Conditionally hides shipping address for service orders (checks order.address existence)
+  - Changed shipping cost display to "Tanpa Pengiriman" (italic) for service orders
+  - Added service-specific order info fields: "Jasa Selesai" (sellerCompletedAt), "Dikonfirmasi Pembeli" (buyerConfirmedAt)
+  - Changed "Konfirmasi Diterima" button to "Konfirmasi Selesai" for service orders
+  - Added "Laporkan Masalah" button (navigates to refund screen) for shipped service orders
+  - Added proof image modal dialog for viewing full-size proof images
+- Verified lint passes ✅
+- Verified dev server compiles and renders ✅ (GET / 200)
+
+Stage Summary:
+- Order screen fully supports service orders with distinct UI from physical orders
+- Service-aware status labels: processing → "Sedang Dikerjakan", shipped → "Jasa Selesai - Menunggu Konfirmasi", delivered → "Selesai"
+- JASA badge displayed on both OrderCard and OrderDetail for service orders
+- Service-specific timeline steps with Wrench/ShieldCheck icons
+- Auto-confirm countdown timer for shipped service orders
+- Proof images gallery with modal preview for shipped service orders
+- Processing notice with service duration from product lookup
+- Shipping info (timeline, address, tracking) hidden for service orders
+- Shipping cost shows "Tanpa Pengiriman" for service orders
+- "Laporkan Masalah" button navigates to refund screen
+- All existing physical order functionality preserved unchanged
+- Zero breaking changes — lint passes, dev server OK
+
+---
+Task ID: 8
+Agent: seller-orders-updater
+Task: Update seller order management for service orders
+
+Work Log:
+- Read worklog.md, seller-screens.tsx, types.ts, and API routes for context
+- Added `services` bucket to `/api/upload/route.ts` ALLOWED_BUCKETS and BUCKET_CONFIG (10MB, images only)
+- Added new imports to seller-screens.tsx: ImagePlus, CheckCircle2, Timer, Upload from lucide-react; useCallback from react
+- Added service proof dialog state variables: showServiceProofDialog, serviceProofOrderId, serviceProofImages, serviceProofNote, isUploadingProof, isSubmittingProof
+- Extended mapped order data with: isServiceOrder, autoConfirmAt, serviceProofImages, sellerCompletedAt
+- Fixed buyerName mapping with optional chaining: `o.address?.recipient || o.buyerName || ""`
+- Added auto-confirm countdown helper (getAutoConfirmCountdown) with 1-minute interval timer
+- Added handleProofImageUpload callback: uploads single image via apiClient.upload (bucket: services, folder: images)
+- Added JASA badge on order cards for service orders (amber "JASA" badge next to order number)
+- For processing + isServiceOrder: shows "Kirim Bukti Penyelesaian" button (amber) instead of "Kirim" tracking button
+- For processing + !isServiceOrder: still shows regular "Kirim" tracking number button (unchanged)
+- For shipped + isServiceOrder: shows amber info panel with "Menunggu Konfirmasi Pembeli", auto-confirm countdown, and proof image thumbnails
+- Added Service Proof Dialog with: image upload area (1-5 images with preview + remove), optional note textarea, info box about 3-day auto-release, submit via POST /api/orders/[id]/service-proof
+- Skip shipping UI for service orders (no tracking number input when isServiceOrder is true)
+- Lint passes ✅
+- Dev server compiles ✅ (GET / 200)
+
+Stage Summary:
+- Seller order screen now fully handles service (jasa) orders with distinct UI flows
+- Service orders in "processing" state show proof upload instead of tracking number
+- Service orders in "shipped" state show buyer confirmation waiting status with countdown
+- JASA badge distinguishes service orders at a glance
+- Added services upload bucket to API for service proof images
+- Zero breaking changes to existing product order flows — lint passes, dev server OK
+
+
+---
+Task ID: service-orders-main
+Agent: Main Coordinator
+Task: Implement comprehensive service/jasa product system with escrow, proof tracking, and anti-fraud
+
+Work Log:
+- Analyzed current codebase: Product model already has productType ("product" | "jasa"), serviceDuration, serviceLocation
+- Identified key gap: Order model assumes physical products (required addressId, required weight, shipping-centric flow)
+- Updated Prisma schema: weight optional, addressId optional, added isServiceOrder, serviceProofImages, sellerCompletedAt, buyerConfirmedAt, autoConfirmAt fields
+- Updated order-status.ts: service-aware status transitions (shipped for services = "jasa selesai"), 8% commission for services, auto-confirm logic
+- Updated orders API: addressId optional for services, anti-fraud check (max 5 active service orders per buyer-seller pair), 8% platform fee for services, no shipping for jasa, no stock decrement for jasa
+- Created service-proof API: POST /api/orders/[id]/service-proof (seller submits proof), GET (both parties view proof)
+- Created auto-confirm cron: /api/cron/auto-confirm-service (runs every 6 hours, auto-releases escrow for confirmed services)
+- Updated types.ts: Added isServiceOrder, serviceProofImages, sellerCompletedAt, buyerConfirmedAt, autoConfirmAt to Order interface, address now optional
+- Updated order store mapServerOrder: parse new service fields from server responses
+- Updated order screen: service-aware status labels, JASA badge, proof image gallery, "Konfirmasi Selesai" button, auto-confirm countdown, "Laporkan Masalah" button
+- Updated seller orders: "Kirim Bukti Penyelesaian" button for service orders, proof upload dialog, auto-confirm countdown display
+- Updated checkout screen: skip address for all-jasa orders, service order notice, skip shipping for jasa, jasa stock validation skip
+- Added auto-confirm-service cron to vercel.json (every 6 hours)
+- All changes pass lint ✅
+- Dev server compiles and serves ✅
+
+Stage Summary:
+- Complete service/jasa product system implemented end-to-end
+- Key anti-fraud measures: 8% commission for services (vs 3% physical), max 5 active service orders per buyer-seller pair, 3-day auto-confirm escrow, proof image requirement
+- Service order flow: paid → processing (sedang dikerjakan) → shipped (jasa selesai - seller submitted proof) → delivered (buyer confirmed / auto-confirmed after 3 days)
+- Escrow system: payment held in pendingBalance until buyer confirms or auto-confirm triggers
+- Schema will be pushed on next Vercel deploy (prisma db push in build command)

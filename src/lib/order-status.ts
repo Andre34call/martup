@@ -6,12 +6,16 @@ import { logger } from '@/lib/logger'
 // pending → cancelled (buyer or admin)
 // pending → paid (admin only, or via payment webhook)
 // paid → processing (seller only)
-// paid → shipped (seller only, requires trackingNumber)
+// paid → shipped (seller only; physical: requires trackingNumber; service: requires serviceProofImages)
 // paid → cancelled (seller or admin)
-// processing → shipped (seller only, requires trackingNumber)
+// processing → shipped (seller only; physical: requires trackingNumber; service: requires serviceProofImages)
 // processing → cancelled (seller or admin)
-// shipped → delivered (buyer only, triggers escrow release)
+// shipped → delivered (buyer only, triggers escrow release; service: buyer confirmed OR auto-confirmed)
 // shipped → cancelled (admin only, triggers refund)
+//
+// Service order flow: paid → processing (seller working) → shipped (seller submitted proof = "Jasa Selesai")
+//   → delivered (buyer confirmed OR auto-confirmed after autoConfirmAt deadline)
+// Physical order flow: paid → processing → shipped (requires trackingNumber) → delivered (buyer confirms receipt)
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
   pending: ['cancelled', 'paid'],
@@ -25,12 +29,19 @@ const VALID_STATUSES = ['processing', 'shipped', 'delivered', 'cancelled', 'paid
 /**
  * Read commissionRate from PlatformSetting table.
  * Falls back to the seller's stored commissionRate, then to 0.05 default.
+ * For service orders, reads serviceCommissionRate first (default 0.08).
  */
-async function getCommissionRate(): Promise<number> {
+async function getCommissionRate(isServiceOrder = false): Promise<number> {
   try {
     const row = await db.platformSetting.findUnique({ where: { key: 'platform_settings' } })
     if (row) {
       const settings = JSON.parse(row.value) as Record<string, number | boolean | string>
+      if (isServiceOrder) {
+        // Service orders: higher commission rate to protect marketplace from service fraud
+        if (typeof settings.serviceCommissionRate === 'number' && settings.serviceCommissionRate >= 0 && settings.serviceCommissionRate < 1) {
+          return settings.serviceCommissionRate
+        }
+      }
       if (typeof settings.commissionRate === 'number' && settings.commissionRate >= 0 && settings.commissionRate < 1) {
         return settings.commissionRate
       }
@@ -38,7 +49,7 @@ async function getCommissionRate(): Promise<number> {
   } catch {
     // Fallback to default
   }
-  return 0.05
+  return isServiceOrder ? 0.08 : 0.05
 }
 
 /**
@@ -48,22 +59,24 @@ async function getCommissionRate(): Promise<number> {
  * self-fetching via HTTP (SSRF risk, fragile in serverless, CSRF token
  * consumption issues).
  *
- * @param params.orderId        The order ID to update
- * @param params.status         The target status
- * @param params.cancelReason   Required when status is 'cancelled'
- * @param params.trackingNumber Required when status is 'shipped'
- * @param params.authUserId     The authenticated user's ID
- * @param params.authUserRole   The authenticated user's role
+ * @param params.orderId           The order ID to update
+ * @param params.status            The target status
+ * @param params.cancelReason      Required when status is 'cancelled'
+ * @param params.trackingNumber    Required when status is 'shipped' for physical orders
+ * @param params.serviceProofImages Required when status is 'shipped' for service orders
+ * @param params.authUserId        The authenticated user's ID
+ * @param params.authUserRole      The authenticated user's role
  */
 export async function updateOrderStatus(params: {
   orderId: string
   status: string
   cancelReason?: string
   trackingNumber?: string
+  serviceProofImages?: string[] // Required for service orders when status is 'shipped'
   authUserId: string
   authUserRole: string
 }): Promise<{ success: boolean; data?: any; error?: string; status?: number }> {
-  const { orderId, status, cancelReason, trackingNumber, authUserId, authUserRole } = params
+  const { orderId, status, cancelReason, trackingNumber, serviceProofImages, authUserId, authUserRole } = params
 
   // ---- Input validation ----
 
@@ -85,14 +98,9 @@ export async function updateOrderStatus(params: {
     }
   }
 
-  // Validate trackingNumber when status is 'shipped'
-  if (status === 'shipped') {
-    if (!trackingNumber || typeof trackingNumber !== 'string' || trackingNumber.trim().length === 0) {
-      return { success: false, error: 'Nomor resi wajib diisi saat mengubah status ke dikirim', status: 400 }
-    }
-    if (trackingNumber.length > 100) {
-      return { success: false, error: 'Nomor resi maksimal 100 karakter', status: 400 }
-    }
+  // Pre-fetch validation for trackingNumber (only length check; presence is validated after order fetch)
+  if (status === 'shipped' && trackingNumber && trackingNumber.length > 100) {
+    return { success: false, error: 'Nomor resi maksimal 100 karakter', status: 400 }
   }
 
   // ---- Find the order with all needed relations ----
@@ -117,6 +125,23 @@ export async function updateOrderStatus(params: {
 
   if (!order) {
     return { success: false, error: 'Pesanan tidak ditemukan', status: 404 }
+  }
+
+  const isServiceOrder = order.isServiceOrder
+
+  // ---- Service-aware validation for 'shipped' status ----
+  if (status === 'shipped') {
+    if (isServiceOrder) {
+      // Service orders require proof images instead of tracking number
+      if (!serviceProofImages || !Array.isArray(serviceProofImages) || serviceProofImages.length === 0) {
+        return { success: false, error: 'Bukti penyelesaian jasa wajib diisi saat mengubah status ke selesai', status: 400 }
+      }
+    } else {
+      // Physical orders require tracking number
+      if (!trackingNumber || typeof trackingNumber !== 'string' || trackingNumber.trim().length === 0) {
+        return { success: false, error: 'Nomor resi wajib diisi saat mengubah status ke dikirim', status: 400 }
+      }
+    }
   }
 
   // ---- Validate state transition ----
@@ -193,8 +218,22 @@ export async function updateOrderStatus(params: {
         orderUpdateData.paidAt = new Date()
       } else if (status === 'shipped') {
         orderUpdateData.shippedAt = new Date()
+        if (isServiceOrder) {
+          // Service order: seller marks service as complete
+          orderUpdateData.serviceProofImages = JSON.stringify(serviceProofImages)
+          orderUpdateData.sellerCompletedAt = new Date()
+          // Auto-confirm after 3 days (72 hours) if buyer doesn't respond
+          // CRON JOB HINT: A cron job should check orders where autoConfirmAt <= now
+          // and status = 'shipped' and isServiceOrder = true, then auto-confirm them
+          // by calling updateOrderStatus with status='delivered' and a system user.
+          orderUpdateData.autoConfirmAt = new Date(Date.now() + 72 * 60 * 60 * 1000)
+        }
       } else if (status === 'delivered') {
         orderUpdateData.deliveredAt = new Date()
+        // Service order: record buyer confirmation time
+        if (isServiceOrder) {
+          orderUpdateData.buyerConfirmedAt = new Date()
+        }
       } else if (status === 'cancelled') {
         orderUpdateData.cancelledAt = new Date()
         orderUpdateData.cancelReason = cancelReason?.trim() || null
@@ -224,8 +263,9 @@ export async function updateOrderStatus(params: {
       // ---- Status-specific logic ----
 
       if (status === 'shipped') {
-        // Update shipping with tracking number
-        if (order.shipping) {
+        // Physical orders: update shipping with tracking number
+        // Service orders: skip shipping update (may not have a shipping record)
+        if (!isServiceOrder && order.shipping) {
           await tx.shipping.update({
             where: { orderId },
             data: {
@@ -238,7 +278,7 @@ export async function updateOrderStatus(params: {
       }
 
       if (status === 'delivered') {
-        // Update shipping status
+        // Update shipping status (skip for service orders with no shipping record)
         if (order.shipping) {
           await tx.shipping.update({
             where: { orderId },
@@ -250,9 +290,11 @@ export async function updateOrderStatus(params: {
         }
 
         // Escrow release: move funds from pendingBalance to balance for seller
-        const platformCommissionRate = await getCommissionRate()
+        // Service orders use a higher commission rate (serviceCommissionRate) to protect against fraud
+        const platformCommissionRate = await getCommissionRate(isServiceOrder)
         const sellerCommissionRate = Number(order.seller.commissionRate)
-        const commissionRate = platformCommissionRate || sellerCommissionRate || 0.05
+        const defaultRate = isServiceOrder ? 0.08 : 0.05
+        const commissionRate = platformCommissionRate || sellerCommissionRate || defaultRate
         const subtotal = Number(order.subtotal)
         const commissionAmount = Math.round(subtotal * commissionRate)
         const sellerEarnings = subtotal - commissionAmount
@@ -392,9 +434,10 @@ export async function updateOrderStatus(params: {
           })
 
           if (sellerWallet) {
-            const platformCommissionRate = await getCommissionRate()
+            const platformCommissionRate = await getCommissionRate(isServiceOrder)
             const sellerCommissionRate = Number(order.seller.commissionRate)
-            const commissionRate = platformCommissionRate || sellerCommissionRate || 0.05
+            const defaultRate = isServiceOrder ? 0.08 : 0.05
+            const commissionRate = platformCommissionRate || sellerCommissionRate || defaultRate
             const subtotal = Number(order.subtotal)
             const commissionAmount = Math.round(subtotal * commissionRate)
             const sellerHoldAmount = subtotal - commissionAmount
@@ -451,12 +494,19 @@ export async function updateOrderStatus(params: {
           sellerTitle: 'Pesanan Diproses',
           sellerContent: `Pesanan ${order.orderNumber} telah Anda tandai sebagai diproses.`,
         },
-        shipped: {
-          buyerTitle: 'Pesanan Dikirim',
-          buyerContent: `Pesanan ${order.orderNumber} telah dikirim. Nomor resi: ${trackingNumber?.trim() || '-'}.`,
-          sellerTitle: 'Pesanan Dikirim',
-          sellerContent: `Pesanan ${order.orderNumber} telah Anda tandai sebagai dikirim. Nomor resi: ${trackingNumber?.trim() || '-'}.`,
-        },
+        shipped: isServiceOrder
+          ? {
+              buyerTitle: 'Jasa Selesai',
+              buyerContent: `Pesanan jasa ${order.orderNumber} telah diselesaikan oleh penjual. Silakan konfirmasi dalam 3 hari atau akan dikonfirmasi otomatis.`,
+              sellerTitle: 'Jasa Ditandai Selesai',
+              sellerContent: `Pesanan jasa ${order.orderNumber} telah Anda tandai sebagai selesai. Menunggu konfirmasi pembeli (otomatis dalam 3 hari).`,
+            }
+          : {
+              buyerTitle: 'Pesanan Dikirim',
+              buyerContent: `Pesanan ${order.orderNumber} telah dikirim. Nomor resi: ${trackingNumber?.trim() || '-'}.`,
+              sellerTitle: 'Pesanan Dikirim',
+              sellerContent: `Pesanan ${order.orderNumber} telah Anda tandai sebagai dikirim. Nomor resi: ${trackingNumber?.trim() || '-'}.`,
+            },
         delivered: {
           buyerTitle: 'Pesanan Diterima',
           buyerContent: `Pesanan ${order.orderNumber} telah dikonfirmasi diterima. Dana penjual telah dicairkan.`,
@@ -528,6 +578,7 @@ export async function updateOrderStatus(params: {
       toStatus: status,
       userId: authUserId,
       userRole: authUserRole,
+      isServiceOrder,
     }, 'Order status updated successfully')
 
     return { success: true, data: updatedOrder }

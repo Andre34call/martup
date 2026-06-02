@@ -154,9 +154,14 @@ export interface Order {
   totalAmount: number
   paymentMethod?: string
   paymentStatus: string
+  isServiceOrder?: boolean
+  serviceProofImages?: string[]
+  sellerCompletedAt?: string
+  buyerConfirmedAt?: string
+  autoConfirmAt?: string
   items: OrderItem[]
   shipping?: Shipping
-  address: Address
+  address?: Address
   seller: Seller
   buyerName?: string
   createdAt: string
