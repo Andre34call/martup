@@ -4,6 +4,11 @@ import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middle
 import { UPLOAD_LIMITS } from '@/lib/upload-limits'
 
 import { logger } from '@/lib/logger'
+
+// ==================== ROUTE SEGMENT CONFIG ====================
+// Allow large request bodies for avatar uploads
+export const bodySizeLimit = '10mb'
+
 // ==================== CONFIG ====================
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -42,6 +47,42 @@ function validateImageMagicBytes(buffer: ArrayBuffer): boolean {
 }
 
 // ==================== HELPERS ====================
+
+// Track whether we've verified RLS policies for the avatar bucket in this process
+let avatarPoliciesVerified = false
+
+/**
+ * Ensure RLS policies exist on storage.objects for the avatars bucket.
+ * This is critical because:
+ * 1. Upload uses service role key (bypasses RLS) → upload succeeds
+ * 2. But public URL access is subject to RLS → 403 if no SELECT policy
+ * 3. Without this, avatars upload "successfully" but never display
+ */
+async function ensureAvatarPolicies(): Promise<void> {
+  if (avatarPoliciesVerified) return
+
+  const policies = [
+    `CREATE POLICY IF NOT EXISTS "${AVATAR_BUCKET}_public_read" ON storage.objects FOR SELECT USING (bucket_id = '${AVATAR_BUCKET}')`,
+    `CREATE POLICY IF NOT EXISTS "${AVATAR_BUCKET}_auth_upload" ON storage.objects FOR INSERT WITH CHECK (bucket_id = '${AVATAR_BUCKET}' AND auth.uid() IS NOT NULL)`,
+    `CREATE POLICY IF NOT EXISTS "${AVATAR_BUCKET}_auth_update" ON storage.objects FOR UPDATE USING (bucket_id = '${AVATAR_BUCKET}' AND auth.uid() IS NOT NULL)`,
+    `CREATE POLICY IF NOT EXISTS "${AVATAR_BUCKET}_auth_delete" ON storage.objects FOR DELETE USING (bucket_id = '${AVATAR_BUCKET}' AND auth.uid() IS NOT NULL)`,
+  ]
+
+  let allSucceeded = true
+  for (const sql of policies) {
+    try {
+      await db.$executeRawUnsafe(sql)
+    } catch {
+      // Policy may already exist or RLS not enabled yet
+      allSucceeded = false
+    }
+  }
+
+  if (allSucceeded) {
+    avatarPoliciesVerified = true
+    logger.info({ bucket: AVATAR_BUCKET }, 'Avatar bucket RLS policies verified')
+  }
+}
 
 /**
  * Extract the file path from a Supabase public URL.
@@ -192,6 +233,22 @@ export async function POST(request: NextRequest) {
           })
 
           if (createRes.ok || createRes.status === 409) {
+            // Create RLS policies so the public URL actually works
+            try {
+              const policies = [
+                `CREATE POLICY IF NOT EXISTS "${AVATAR_BUCKET}_public_read" ON storage.objects FOR SELECT USING (bucket_id = '${AVATAR_BUCKET}')`,
+                `CREATE POLICY IF NOT EXISTS "${AVATAR_BUCKET}_auth_upload" ON storage.objects FOR INSERT WITH CHECK (bucket_id = '${AVATAR_BUCKET}' AND auth.uid() IS NOT NULL)`,
+                `CREATE POLICY IF NOT EXISTS "${AVATAR_BUCKET}_auth_update" ON storage.objects FOR UPDATE USING (bucket_id = '${AVATAR_BUCKET}' AND auth.uid() IS NOT NULL)`,
+                `CREATE POLICY IF NOT EXISTS "${AVATAR_BUCKET}_auth_delete" ON storage.objects FOR DELETE USING (bucket_id = '${AVATAR_BUCKET}' AND auth.uid() IS NOT NULL)`,
+              ]
+              for (const sql of policies) {
+                try { await db.$executeRawUnsafe(sql) } catch { /* policy may exist */ }
+              }
+              logger.info({ bucket: AVATAR_BUCKET }, 'Auto-created RLS policies for avatar bucket')
+            } catch (policyErr) {
+              logger.warn({ err: policyErr }, 'Failed to create RLS policies for avatar bucket (avatars may not be publicly accessible)')
+            }
+
             // Retry upload after bucket creation
             const retryResponse = await fetch(
               `${SUPABASE_URL}/storage/v1/object/${AVATAR_BUCKET}/${filename}`,
@@ -247,6 +304,11 @@ export async function POST(request: NextRequest) {
 
     // Construct public URL
     const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${AVATAR_BUCKET}/${filename}`
+
+    // Ensure RLS policies exist so the public URL is accessible
+    // This is critical — without a SELECT policy, the upload succeeds (service role bypasses RLS)
+    // but the browser gets 403 when trying to load the public URL
+    await ensureAvatarPolicies()
 
     // Fetch current user to check for old avatar
     const currentUser = await db.user.findUnique({

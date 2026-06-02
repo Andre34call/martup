@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
 import { logger } from '@/lib/logger'
+import { db } from '@/lib/db'
 
 // ==================== CONFIG ====================
 
@@ -66,10 +67,36 @@ async function createBucket(bucket: typeof REQUIRED_BUCKETS[number]): Promise<{ 
   return { success: true }
 }
 
-/** Create storage policy to allow public reads */
-async function createPublicReadPolicy(bucketId: string): Promise<void> {
-  const policyName = `${bucketId}_public_read`
-  logger.info({ bucketId, policyName }, 'Public read policy setup (bucket is already public)')
+/** Create RLS policies on storage.objects for a bucket to allow public reads and authenticated uploads */
+async function createStoragePolicies(bucketId: string): Promise<void> {
+  const policies = [
+    {
+      name: `${bucketId}_public_read`,
+      sql: `CREATE POLICY IF NOT EXISTS "${bucketId}_public_read" ON storage.objects FOR SELECT USING (bucket_id = '${bucketId}')`,
+    },
+    {
+      name: `${bucketId}_auth_upload`,
+      sql: `CREATE POLICY IF NOT EXISTS "${bucketId}_auth_upload" ON storage.objects FOR INSERT WITH CHECK (bucket_id = '${bucketId}' AND auth.uid() IS NOT NULL)`,
+    },
+    {
+      name: `${bucketId}_auth_update`,
+      sql: `CREATE POLICY IF NOT EXISTS "${bucketId}_auth_update" ON storage.objects FOR UPDATE USING (bucket_id = '${bucketId}' AND auth.uid() IS NOT NULL)`,
+    },
+    {
+      name: `${bucketId}_auth_delete`,
+      sql: `CREATE POLICY IF NOT EXISTS "${bucketId}_auth_delete" ON storage.objects FOR DELETE USING (bucket_id = '${bucketId}' AND auth.uid() IS NOT NULL)`,
+    },
+  ]
+
+  for (const policy of policies) {
+    try {
+      await db.$executeRawUnsafe(policy.sql)
+      logger.info({ bucketId, policy: policy.name }, 'Created storage RLS policy')
+    } catch (err) {
+      // Policy might already exist or RLS may not be enabled yet — log but don't fail
+      logger.warn({ bucketId, policy: policy.name, err }, 'RLS policy creation skipped (may already exist)')
+    }
+  }
 }
 
 // ==================== POST /api/setup/storage ====================
@@ -102,13 +129,15 @@ export async function POST(request: NextRequest) {
 
     for (const bucket of REQUIRED_BUCKETS) {
       if (existingBuckets.includes(bucket.id)) {
+        // Even if bucket exists, ensure RLS policies are in place
+        await createStoragePolicies(bucket.id)
         results.push({ bucket: bucket.id, status: 'already_exists' })
         continue
       }
 
       const result = await createBucket(bucket)
       if (result.success) {
-        await createPublicReadPolicy(bucket.id)
+        await createStoragePolicies(bucket.id)
         results.push({ bucket: bucket.id, status: 'created' })
         logger.info({ bucket: bucket.id }, 'Bucket created successfully')
       } else {

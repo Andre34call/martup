@@ -10,6 +10,7 @@ const BUCKET_CONFIG = {
   avatars: { maxSize: 10485760 },    // 10MB
   banners: { maxSize: 10485760 },    // 10MB
   streams: { maxSize: 104857600 },   // 100MB
+  reviews: { maxSize: 52428800 },    // 50MB
 } as const
 
 type BucketId = keyof typeof BUCKET_CONFIG

@@ -71,12 +71,19 @@ export function ProfileScreen() {
   const cartCount = getTotalItemCount()
   const avatarInputRef = useRef<HTMLInputElement>(null)
   const [avatarError, setAvatarError] = useState(false)
+  const [avatarRetryKey, setAvatarRetryKey] = useState(0)
 
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
 
   // Reset avatar error when URL changes
   useEffect(() => { setAvatarError(false) }, [avatarUrl])
+
+  // Retry loading avatar image (handles transient network/403 errors)
+  const handleAvatarRetry = () => {
+    setAvatarError(false)
+    setAvatarRetryKey(prev => prev + 1)
+  }
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -235,11 +242,21 @@ export function ProfileScreen() {
                   ) : avatarUrl && !avatarError ? (
                     <div className="w-16 h-16 rounded-full overflow-hidden shadow-md ring-2 ring-emerald-500/30">
                       <img
+                        key={avatarRetryKey}
                         src={avatarUrl}
                         alt="Avatar"
                         className="w-full h-full object-cover"
                         onError={() => setAvatarError(true)}
                       />
+                    </div>
+                  ) : avatarUrl && avatarError ? (
+                    <div
+                      className="w-16 h-16 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-white font-bold flex flex-col items-center justify-center text-xs shadow-md cursor-pointer"
+                      onClick={handleAvatarRetry}
+                      title="Klik untuk coba ulang memuat foto"
+                    >
+                      <Camera className="w-4 h-4 mb-0.5" />
+                      <span className="text-[8px]">Coba lagi</span>
                     </div>
                   ) : (
                     <div className="w-16 h-16 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 text-white font-bold flex items-center justify-center text-xl shadow-md">

@@ -29,12 +29,19 @@ export function SettingsScreen() {
   const [showNewPassword, setShowNewPassword] = useState(false)
   const [isChangingPassword, setIsChangingPassword] = useState(false)
   const [avatarError, setAvatarError] = useState(false)
+  const [avatarRetryKey, setAvatarRetryKey] = useState(0)
   const avatarInputRef = useRef<HTMLInputElement>(null)
 
   // Reset avatarError when avatarUrl changes (e.g. after successful re-upload)
   useEffect(() => {
     if (avatarUrl) setAvatarError(false)
   }, [avatarUrl])
+
+  // Retry loading avatar image (handles transient network/403 errors)
+  const handleAvatarRetry = () => {
+    setAvatarError(false)
+    setAvatarRetryKey(prev => prev + 1)
+  }
 
   // 2FA state
   const [twoFAEnabled, setTwoFAEnabled] = useState(false)
@@ -347,11 +354,21 @@ export function SettingsScreen() {
                 ) : avatarUrl && !avatarError ? (
                   <div className="w-20 h-20 rounded-full overflow-hidden shadow-md ring-2 ring-emerald-500/30">
                     <img
+                      key={avatarRetryKey}
                       src={avatarUrl}
                       alt="Avatar"
                       className="w-full h-full object-cover"
                       onError={() => setAvatarError(true)}
                     />
+                  </div>
+                ) : avatarUrl && avatarError ? (
+                  <div
+                    className="w-20 h-20 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-white font-bold flex flex-col items-center justify-center text-xs shadow-md cursor-pointer"
+                    onClick={handleAvatarRetry}
+                    title="Klik untuk coba ulang memuat foto"
+                  >
+                    <Camera className="w-5 h-5 mb-0.5" />
+                    <span className="text-[9px]">Coba lagi</span>
                   </div>
                 ) : (
                   <div className="w-20 h-20 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 text-white font-bold flex items-center justify-center text-2xl shadow-md">
