@@ -109,6 +109,16 @@ export async function POST(request: NextRequest) {
       logger.warn('Failed to fetch platform settings for deposit destination')
     }
 
+    // SECURITY: Warn (but don't block) if no matching destination account found.
+    // The deposit is still created so admin can manually verify.
+    // The UI will show a warning to the user to contact admin.
+    if (!destinationAccount) {
+      logger.warn({
+        userId: authResult.user.id,
+        method,
+      }, 'No matching destination account found for deposit method')
+    }
+
     // Set expiry to 24 hours from now
     const expiredAt = new Date()
     expiredAt.setHours(expiredAt.getHours() + 24)

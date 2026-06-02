@@ -9,7 +9,7 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import {
   Wallet, CreditCard, Check, ChevronRight, ChevronLeft,
   Upload, Copy, CheckCircle, Clock, Building2, Smartphone,
-  ArrowRight, Info, ImageIcon
+  ArrowRight, Info, ImageIcon, AlertCircle
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -42,20 +42,22 @@ const paymentMethods = [
 
 // ==================== TYPES ====================
 
+interface DestinationAccount {
+  type: 'bank' | 'ewallet'
+  bankName?: string
+  accountNumber?: string
+  accountHolder?: string
+  ewalletName?: string  // Fallback: uses bankName if not set
+  phoneNumber?: string  // Fallback: uses accountNumber if not set
+}
+
 interface DepositData {
   depositId: string
   amount: number
   method: string
   methodLabel: string
   status: string
-  destinationAccount: {
-    type: 'bank' | 'ewallet'
-    bankName?: string
-    accountNumber?: string
-    accountHolder?: string
-    ewalletName?: string
-    phoneNumber?: string
-  }
+  destinationAccount: DestinationAccount | null
   expiredAt: string
   message?: string
 }
@@ -531,7 +533,13 @@ export function DepositScreen() {
     if (!depositData) return null
 
     const { destinationAccount } = depositData
-    const isBank = destinationAccount.type === "bank"
+    const isBank = destinationAccount?.type === "bank"
+    const isEwallet = destinationAccount?.type === "ewallet"
+
+    // Resolve e-wallet display name: ewalletName takes priority, falls back to bankName
+    const ewalletDisplayName = destinationAccount?.ewalletName || destinationAccount?.bankName || "-"
+    // Resolve phone/account: phoneNumber takes priority, falls back to accountNumber
+    const ewalletNumber = destinationAccount?.phoneNumber || destinationAccount?.accountNumber || "-"
 
     return (
       <motion.div
@@ -575,86 +583,140 @@ export function DepositScreen() {
         </motion.div>
 
         {/* Destination Account */}
-        <motion.div {...fadeIn}>
-          <SectionHeader
-            title="Tujuan Transfer"
-            subtitle={depositData.methodLabel}
-            icon={isBank ? <Building2 className="w-4 h-4" /> : <Smartphone className="w-4 h-4" />}
-          />
-          <Card className="mt-3 p-4 space-y-3">
-            {isBank ? (
-              <>
-                {/* Bank Name */}
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Nama Bank</span>
-                  <span className="text-sm font-semibold text-foreground">
-                    {destinationAccount.bankName || "-"}
-                  </span>
-                </div>
-                <div className="h-px bg-border" />
-                {/* Account Number */}
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Nomor Rekening</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-foreground tracking-wide">
-                      {destinationAccount.accountNumber || "-"}
+        {destinationAccount ? (
+          <motion.div {...fadeIn}>
+            <SectionHeader
+              title="Tujuan Transfer"
+              subtitle={depositData.methodLabel}
+              icon={isBank ? <Building2 className="w-4 h-4" /> : <Smartphone className="w-4 h-4" />}
+            />
+            <Card className="mt-3 p-4 space-y-3">
+              {isBank ? (
+                <>
+                  {/* Bank Name */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Nama Bank</span>
+                    <span className="text-sm font-semibold text-foreground">
+                      {destinationAccount.bankName || "-"}
                     </span>
-                    <motion.button
-                      whileTap={{ scale: 0.9 }}
-                      onClick={() => copyToClipboard(destinationAccount.accountNumber || "")}
-                      className="w-7 h-7 rounded-lg bg-muted hover:bg-emerald-100 dark:hover:bg-emerald-900/30 flex items-center justify-center transition-colors"
-                    >
-                      <Copy className="w-3.5 h-3.5 text-emerald-600" />
-                    </motion.button>
                   </div>
-                </div>
-                <div className="h-px bg-border" />
-                {/* Account Holder */}
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Atas Nama</span>
-                  <span className="text-sm font-semibold text-foreground">
-                    {destinationAccount.accountHolder || "-"}
-                  </span>
-                </div>
-              </>
-            ) : (
-              <>
-                {/* E-Wallet Name */}
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">E-Wallet</span>
-                  <span className="text-sm font-semibold text-foreground">
-                    {destinationAccount.ewalletName || "-"}
-                  </span>
-                </div>
-                <div className="h-px bg-border" />
-                {/* Phone/Account */}
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">No. HP / Akun</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-foreground tracking-wide">
-                      {destinationAccount.phoneNumber || destinationAccount.accountNumber || "-"}
+                  <div className="h-px bg-border" />
+                  {/* Account Number */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Nomor Rekening</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-foreground tracking-wide">
+                        {destinationAccount.accountNumber || "-"}
+                      </span>
+                      <motion.button
+                        whileTap={{ scale: 0.9 }}
+                        onClick={() => copyToClipboard(destinationAccount.accountNumber || "")}
+                        className="w-7 h-7 rounded-lg bg-muted hover:bg-emerald-100 dark:hover:bg-emerald-900/30 flex items-center justify-center transition-colors"
+                      >
+                        <Copy className="w-3.5 h-3.5 text-emerald-600" />
+                      </motion.button>
+                    </div>
+                  </div>
+                  <div className="h-px bg-border" />
+                  {/* Account Holder */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Atas Nama</span>
+                    <span className="text-sm font-semibold text-foreground">
+                      {destinationAccount.accountHolder || "-"}
                     </span>
-                    <motion.button
-                      whileTap={{ scale: 0.9 }}
-                      onClick={() => copyToClipboard(destinationAccount.phoneNumber || destinationAccount.accountNumber || "")}
-                      className="w-7 h-7 rounded-lg bg-muted hover:bg-emerald-100 dark:hover:bg-emerald-900/30 flex items-center justify-center transition-colors"
-                    >
-                      <Copy className="w-3.5 h-3.5 text-emerald-600" />
-                    </motion.button>
                   </div>
-                </div>
-                <div className="h-px bg-border" />
-                {/* Account Holder */}
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Atas Nama</span>
-                  <span className="text-sm font-semibold text-foreground">
-                    {destinationAccount.accountHolder || "-"}
-                  </span>
-                </div>
-              </>
-            )}
-          </Card>
-        </motion.div>
+                </>
+              ) : isEwallet ? (
+                <>
+                  {/* E-Wallet Name */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">E-Wallet</span>
+                    <span className="text-sm font-semibold text-foreground">
+                      {ewalletDisplayName}
+                    </span>
+                  </div>
+                  <div className="h-px bg-border" />
+                  {/* Phone/Account */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">No. HP / Akun</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-foreground tracking-wide">
+                        {ewalletNumber}
+                      </span>
+                      <motion.button
+                        whileTap={{ scale: 0.9 }}
+                        onClick={() => copyToClipboard(ewalletNumber)}
+                        className="w-7 h-7 rounded-lg bg-muted hover:bg-emerald-100 dark:hover:bg-emerald-900/30 flex items-center justify-center transition-colors"
+                      >
+                        <Copy className="w-3.5 h-3.5 text-emerald-600" />
+                      </motion.button>
+                    </div>
+                  </div>
+                  <div className="h-px bg-border" />
+                  {/* Account Holder */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Atas Nama</span>
+                    <span className="text-sm font-semibold text-foreground">
+                      {destinationAccount.accountHolder || "-"}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                /* Unknown type fallback — show all fields */
+                <>
+                  {destinationAccount.bankName && (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-muted-foreground">Bank/E-Wallet</span>
+                        <span className="text-sm font-semibold text-foreground">{destinationAccount.bankName}</span>
+                      </div>
+                      <div className="h-px bg-border" />
+                    </>
+                  )}
+                  {destinationAccount.accountNumber && (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-muted-foreground">Nomor Rekening</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-bold text-foreground tracking-wide">{destinationAccount.accountNumber}</span>
+                          <motion.button
+                            whileTap={{ scale: 0.9 }}
+                            onClick={() => copyToClipboard(destinationAccount.accountNumber || "")}
+                            className="w-7 h-7 rounded-lg bg-muted hover:bg-emerald-100 dark:hover:bg-emerald-900/30 flex items-center justify-center transition-colors"
+                          >
+                            <Copy className="w-3.5 h-3.5 text-emerald-600" />
+                          </motion.button>
+                        </div>
+                      </div>
+                      <div className="h-px bg-border" />
+                    </>
+                  )}
+                  {destinationAccount.accountHolder && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">Atas Nama</span>
+                      <span className="text-sm font-semibold text-foreground">{destinationAccount.accountHolder}</span>
+                    </div>
+                  )}
+                </>
+              )}
+            </Card>
+          </motion.div>
+        ) : (
+          /* No destination account configured */
+          <motion.div {...fadeIn}>
+            <div className="flex gap-2 p-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+              <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p className="text-xs text-amber-700 dark:text-amber-300 font-medium">
+                  Rekening tujuan belum dikonfigurasi
+                </p>
+                <p className="text-xs text-amber-600/70 dark:text-amber-400/60">
+                  Silakan hubungi admin untuk mendapatkan informasi rekening tujuan transfer.
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
 
         {/* Info note */}
         <motion.div {...fadeIn}>

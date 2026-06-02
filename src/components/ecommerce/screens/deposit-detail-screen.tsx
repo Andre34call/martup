@@ -20,6 +20,8 @@ import {
   Timer,
   ArrowLeft,
   Eye,
+  Building2,
+  Smartphone,
 } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -458,52 +460,104 @@ export function DepositDetailScreen() {
           </Card>
         </motion.div>
 
-        {/* Destination Account (for pending) */}
-        {deposit.status === 'pending' && destInfo && (
-          <motion.div {...fadeIn}>
-            <SectionHeader title="Rekening Tujuan" icon={<Upload className="w-4 h-4" />} />
-            <Card className="mt-3 p-4 space-y-3">
-              {destInfo.bankName && (
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Bank</span>
-                  <span className="text-sm font-bold text-foreground">{destInfo.bankName}</span>
+        {/* Destination Account (for pending & proof_uploaded) */}
+        {(deposit.status === 'pending' || deposit.status === 'proof_uploaded') && (
+          destInfo ? (
+            <motion.div {...fadeIn}>
+              <SectionHeader
+                title="Rekening Tujuan"
+                icon={destInfo.type === 'ewallet' ? <Smartphone className="w-4 h-4" /> : <Building2 className="w-4 h-4" />}
+              />
+              <Card className="mt-3 p-4 space-y-3">
+                {destInfo.type === 'ewallet' ? (
+                  <>
+                    {/* E-Wallet Name: prefer ewalletName, fallback to bankName */}
+                    {(destInfo.ewalletName || destInfo.bankName) && (
+                      <>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-muted-foreground">E-Wallet</span>
+                          <span className="text-sm font-bold text-foreground">
+                            {destInfo.ewalletName || destInfo.bankName}
+                          </span>
+                        </div>
+                        <div className="h-px bg-border" />
+                      </>
+                    )}
+                    {/* Phone/Account Number */}
+                    {(destInfo.phoneNumber || destInfo.accountNumber) && (
+                      <>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-muted-foreground">No. HP / Akun</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-bold text-foreground font-mono">
+                              {destInfo.phoneNumber || destInfo.accountNumber}
+                            </span>
+                            <CopyButton text={destInfo.phoneNumber || destInfo.accountNumber || ''} />
+                          </div>
+                        </div>
+                        <div className="h-px bg-border" />
+                      </>
+                    )}
+                    {/* Account Holder */}
+                    {destInfo.accountHolder && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-muted-foreground">Atas Nama</span>
+                        <span className="text-sm font-bold text-foreground">{destInfo.accountHolder}</span>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    {/* Bank account rendering */}
+                    {destInfo.bankName && (
+                      <>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-muted-foreground">Bank</span>
+                          <span className="text-sm font-bold text-foreground">{destInfo.bankName}</span>
+                        </div>
+                        <div className="h-px bg-border" />
+                      </>
+                    )}
+                    {destInfo.accountNumber && (
+                      <>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-muted-foreground">Nomor Rekening</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-bold text-foreground font-mono">{destInfo.accountNumber}</span>
+                            <CopyButton text={destInfo.accountNumber} />
+                          </div>
+                        </div>
+                        <div className="h-px bg-border" />
+                      </>
+                    )}
+                    {destInfo.accountHolder && (
+                      <>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-muted-foreground">Atas Nama</span>
+                          <span className="text-sm font-bold text-foreground">{destInfo.accountHolder}</span>
+                        </div>
+                      </>
+                    )}
+                  </>
+                )}
+              </Card>
+            </motion.div>
+          ) : (
+            /* No destination account — show warning */
+            <motion.div {...fadeIn}>
+              <div className="flex gap-2 p-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="text-xs text-amber-700 dark:text-amber-300 font-medium">
+                    Rekening tujuan tidak tersedia
+                  </p>
+                  <p className="text-xs text-amber-600/70 dark:text-amber-400/60">
+                    Hubungi admin untuk informasi rekening tujuan transfer.
+                  </p>
                 </div>
-              )}
-              {destInfo.accountNumber && (
-                <>
-                  <div className="h-px bg-border" />
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">Nomor Rekening</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold text-foreground font-mono">{destInfo.accountNumber}</span>
-                      <CopyButton text={destInfo.accountNumber} />
-                    </div>
-                  </div>
-                </>
-              )}
-              {destInfo.accountHolder && (
-                <>
-                  <div className="h-px bg-border" />
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">Atas Nama</span>
-                    <span className="text-sm font-bold text-foreground">{destInfo.accountHolder}</span>
-                  </div>
-                </>
-              )}
-              {destInfo.amount && (
-                <>
-                  <div className="h-px bg-border" />
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">Jumlah Transfer</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold text-emerald-600">{formatPrice(destInfo.amount)}</span>
-                      <CopyButton text={String(destInfo.amount)} label="Salin" />
-                    </div>
-                  </div>
-                </>
-              )}
-            </Card>
-          </motion.div>
+              </div>
+            </motion.div>
+          )
         )}
 
         {/* Upload Proof Section (for pending) */}
