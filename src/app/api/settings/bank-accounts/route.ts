@@ -1,0 +1,53 @@
+import { NextResponse } from 'next/server'
+import { db } from '@/lib/db'
+import { logger } from '@/lib/logger'
+
+const SETTINGS_KEY = 'platform_settings'
+
+// GET /api/settings/bank-accounts - Public endpoint for MartUp escrow bank accounts
+// Buyers need this info to know where to transfer for escrow payments
+export async function GET() {
+  try {
+    const row = await db.platformSetting.findUnique({ where: { key: SETTINGS_KEY } })
+    if (!row) {
+      return NextResponse.json({ success: true, data: [] })
+    }
+
+    const saved = JSON.parse(row.value) as Record<string, unknown>
+    let accounts = saved.martupBankAccounts
+
+    // Parse from JSON string if needed
+    if (typeof accounts === 'string') {
+      try {
+        accounts = JSON.parse(accounts as string)
+      } catch {
+        accounts = []
+      }
+    }
+
+    if (!Array.isArray(accounts)) {
+      return NextResponse.json({ success: true, data: [] })
+    }
+
+    // Only return valid, complete bank accounts (all 3 fields required)
+    const validAccounts = accounts.filter(
+      (acc: unknown) =>
+        acc &&
+        typeof acc === 'object' &&
+        'bankName' in acc &&
+        'accountNumber' in acc &&
+        'accountHolder' in acc &&
+        typeof (acc as { bankName: unknown }).bankName === 'string' &&
+        typeof (acc as { accountNumber: unknown }).accountNumber === 'string' &&
+        typeof (acc as { accountHolder: unknown }).accountHolder === 'string' &&
+        (acc as { bankName: string }).bankName.trim() !== '' &&
+        (acc as { accountNumber: string }).accountNumber.trim() !== '' &&
+        (acc as { accountHolder: string }).accountHolder.trim() !== ''
+    ) as { bankName: string; accountNumber: string; accountHolder: string }[]
+
+    return NextResponse.json({ success: true, data: validAccounts })
+  } catch (error: unknown) {
+    logger.error({ err: error }, 'Bank accounts GET error')
+    return NextResponse.json({ success: true, data: [] })
+  }
+}

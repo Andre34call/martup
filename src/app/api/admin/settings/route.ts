@@ -20,6 +20,7 @@ const DEFAULT_SETTINGS: Record<string, number | boolean | string> = {
   flashSaleEnabled: true,
   autoConfirmDays: 3,      // auto-confirm delivery after N days
   returnWindowDays: 7,     // return window after delivery
+  martupBankAccounts: [],   // JSON array: [{ bankName, accountNumber, accountHolder }]
 }
 
 // Validation rules for numeric settings
@@ -42,7 +43,19 @@ async function readSettings(): Promise<Record<string, number | boolean | string>
     const row = await db.platformSetting.findUnique({ where: { key: SETTINGS_KEY } })
     if (row) {
       const saved = JSON.parse(row.value) as Record<string, number | boolean | string>
-      return { ...DEFAULT_SETTINGS, ...saved }
+      const merged = { ...DEFAULT_SETTINGS, ...saved }
+      // Parse martupBankAccounts from JSON string if stored as string
+      if (typeof merged.martupBankAccounts === 'string') {
+        try {
+          merged.martupBankAccounts = JSON.parse(merged.martupBankAccounts as string)
+        } catch {
+          merged.martupBankAccounts = []
+        }
+      }
+      if (!Array.isArray(merged.martupBankAccounts)) {
+        merged.martupBankAccounts = []
+      }
+      return merged
     }
   } catch {
     // If DB read fails or JSON is corrupted, return defaults
@@ -95,6 +108,41 @@ export async function PUT(request: NextRequest) {
 
     for (const key of allowedKeys) {
       if (body[key] !== undefined) {
+        // Validate martupBankAccounts (JSON array of bank account objects)
+        if (key === 'martupBankAccounts') {
+          const accounts = body[key]
+          if (!Array.isArray(accounts)) {
+            validationErrors.push('martupBankAccounts: must be an array')
+            continue
+          }
+          // Validate each bank account object
+          for (let i = 0; i < accounts.length; i++) {
+            const acc = accounts[i]
+            if (!acc || typeof acc !== 'object') {
+              validationErrors.push(`martupBankAccounts[${i}]: must be an object`)
+              continue
+            }
+            if (!acc.bankName || typeof acc.bankName !== 'string' || acc.bankName.trim().length === 0) {
+              validationErrors.push(`martupBankAccounts[${i}].bankName: required`)
+            }
+            if (!acc.accountNumber || typeof acc.accountNumber !== 'string' || acc.accountNumber.trim().length === 0) {
+              validationErrors.push(`martupBankAccounts[${i}].accountNumber: required`)
+            }
+            if (!acc.accountHolder || typeof acc.accountHolder !== 'string' || acc.accountHolder.trim().length === 0) {
+              validationErrors.push(`martupBankAccounts[${i}].accountHolder: required`)
+            }
+            // Sanitize: only allow expected fields
+            accounts[i] = {
+              bankName: String(acc.bankName || '').trim().slice(0, 50),
+              accountNumber: String(acc.accountNumber || '').trim().slice(0, 30),
+              accountHolder: String(acc.accountHolder || '').trim().slice(0, 100),
+            }
+          }
+          if (validationErrors.length === 0) {
+            updates[key] = JSON.stringify(accounts)
+          }
+          continue
+        }
         // Validate numeric fields
         if (typeof DEFAULT_SETTINGS[key] === 'number') {
           const numVal = parseFloat(String(body[key]))

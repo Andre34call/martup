@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion"
 import {
-  Settings, Banknote, Box, ToggleLeft, Gift, Clock, Save
+  Settings, Banknote, Box, ToggleLeft, Gift, Clock, Save, Landmark, Plus, Trash2
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -16,6 +16,12 @@ import { useState, useEffect, useCallback } from "react"
 import { apiClient, ApiClientError } from '@/lib/api-client'
 
 // ==================== TYPE DEFINITIONS ====================
+interface MartUpBankAccount {
+  bankName: string
+  accountNumber: string
+  accountHolder: string
+}
+
 interface PlatformSettings {
   commissionRate: number
   minWithdrawal: number
@@ -32,6 +38,7 @@ interface PlatformSettings {
   flashSaleEnabled: boolean
   autoConfirmDays: number
   returnWindowDays: number
+  martupBankAccounts: MartUpBankAccount[]
 }
 
 // ==================== TYPE ALIASES (avoid TSX generic ambiguity) ====================
@@ -84,9 +91,29 @@ export function AdminSettings() {
     }
   }
 
-  const updateSetting = (key: keyof PlatformSettings, value: number | boolean) => {
+  const updateSetting = (key: keyof PlatformSettings, value: number | boolean | MartUpBankAccount[]) => {
     if (!settings) return
     setSettings({ ...settings, [key]: value })
+  }
+
+  const addBankAccount = () => {
+    if (!settings) return
+    const updated = [...(settings.martupBankAccounts || []), { bankName: '', accountNumber: '', accountHolder: '' }]
+    updateSetting('martupBankAccounts', updated)
+  }
+
+  const removeBankAccount = (index: number) => {
+    if (!settings) return
+    const updated = settings.martupBankAccounts.filter((_, i) => i !== index)
+    updateSetting('martupBankAccounts', updated)
+  }
+
+  const updateBankAccount = (index: number, field: keyof MartUpBankAccount, value: string) => {
+    if (!settings) return
+    const updated = settings.martupBankAccounts.map((acc, i) =>
+      i === index ? { ...acc, [field]: value } : acc
+    )
+    updateSetting('martupBankAccounts', updated)
   }
 
   if (loading) {
@@ -264,6 +291,89 @@ export function AdminSettings() {
                 min={0}
               />
             </div>
+          </Card>
+        </motion.div>
+
+        {/* Rekening MartUp (Escrow) */}
+        <motion.div {...fadeIn}>
+          <SectionHeader title="Rekening MartUp" icon={<Landmark className="w-4 h-4" />} />
+          <p className="text-[10px] text-muted-foreground mt-1 px-1">
+            Rekening tujuan escrow — buyer transfer ke rekening ini, dana ditahan sampai pesanan selesai
+          </p>
+          <Card className="mt-3 p-4 space-y-3">
+            {(settings.martupBankAccounts || []).length === 0 && (
+              <div className="text-center py-4">
+                <Landmark className="w-8 h-8 mx-auto text-muted-foreground/40 mb-2" />
+                <p className="text-xs text-muted-foreground">Belum ada rekening MartUp</p>
+                <p className="text-[10px] text-muted-foreground">Tambahkan rekening untuk menerima pembayaran escrow</p>
+              </div>
+            )}
+            {(settings.martupBankAccounts || []).map((acc, idx) => (
+              <div key={idx} className="relative border rounded-lg p-3 space-y-3 bg-muted/30">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold text-amber-600">Rekening #{idx + 1}</p>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 text-destructive hover:bg-destructive/10"
+                    onClick={() => removeBankAccount(idx)}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  <div>
+                    <label className="text-[10px] text-muted-foreground">Nama Bank</label>
+                    <select
+                      value={acc.bankName}
+                      onChange={(e) => updateBankAccount(idx, 'bankName', e.target.value)}
+                      className="w-full h-8 text-sm rounded-md border bg-background px-2 mt-0.5"
+                    >
+                      <option value="">-- Pilih Bank --</option>
+                      <option value="BCA">BCA</option>
+                      <option value="Mandiri">Mandiri</option>
+                      <option value="BNI">BNI</option>
+                      <option value="BRI">BRI</option>
+                      <option value="BSI">BSI</option>
+                      <option value="CIMB Niaga">CIMB Niaga</option>
+                      <option value="Danamon">Danamon</option>
+                      <option value="Permata">Permata</option>
+                      <option value="BTN">BTN</option>
+                      <option value="Maybank">Maybank</option>
+                      <option value="OCBC NISP">OCBC NISP</option>
+                      <option value="Panin Bank">Panin Bank</option>
+                      <option value="Lainnya">Lainnya</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground">Nomor Rekening</label>
+                    <Input
+                      value={acc.accountNumber}
+                      onChange={(e) => updateBankAccount(idx, 'accountNumber', e.target.value)}
+                      placeholder="Contoh: 1234567890"
+                      className="h-8 text-sm mt-0.5"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground">Atas Nama</label>
+                    <Input
+                      value={acc.accountHolder}
+                      onChange={(e) => updateBankAccount(idx, 'accountHolder', e.target.value)}
+                      placeholder="Contoh: PT MartUp Indonesia"
+                      className="h-8 text-sm mt-0.5"
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+            <Button
+              variant="outline"
+              className="w-full h-9 text-xs rounded-lg border-dashed border-amber-600/50 text-amber-600 hover:bg-amber-50"
+              onClick={addBankAccount}
+            >
+              <Plus className="w-3.5 h-3.5 mr-1" />
+              Tambah Rekening
+            </Button>
           </Card>
         </motion.div>
 
