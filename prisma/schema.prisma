@@ -154,29 +154,23 @@ model WalletMutation {
 }
 
 model Deposit {
-  id                     String    @id @default(cuid())
-  userId                 String
-  amount                 Decimal
-  method                 String    // bank_transfer, gopay, ovo, dana, shopeepay, linkaja, midtrans
-  status                 String    @default("pending") // pending, proof_uploaded, success, failed, expired
-  proofUrl               String?
-  adminNote              String?
-  destinationAccount     String?   // JSON string: MartUp bank/e-wallet account user should transfer to
-  senderName             String?   // Name of the sender (for verification)
-  expiredAt              DateTime? // Deposit expiration time (24 hours from creation)
-  verifiedAt             DateTime? // When admin approved/rejected
-  verifiedBy             String?   // Admin user ID who verified
-  // Midtrans integration fields
-  snapToken              String?   // Midtrans Snap token for popup payment
-  midtransOrderId        String?   // Midtrans order_id (format: DEPOSIT-{cuid})
-  paymentType            String?   // Actual payment type from Midtrans webhook (e.g., bank_transfer, gopay)
-  midtransTransactionId  String?   // Midtrans's transaction_id from webhook
-  createdAt              DateTime  @default(now())
-  updatedAt              DateTime  @updatedAt
+  id                String    @id @default(cuid())
+  userId            String
+  amount            Decimal
+  method            String    // bank_transfer, gopay, ovo, dana, shopeepay, linkaja
+  status            String    @default("pending") // pending, proof_uploaded, success, failed, expired
+  proofUrl          String?
+  adminNote         String?
+  destinationAccount String?  // JSON string: MartUp bank/e-wallet account user should transfer to
+  senderName        String?   // Name of the sender (for verification)
+  expiredAt         DateTime? // Deposit expiration time (24 hours from creation)
+  verifiedAt        DateTime? // When admin approved/rejected
+  verifiedBy        String?   // Admin user ID who verified
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
-  user                   User      @relation(fields: [userId], references: [id])
+  user              User      @relation(fields: [userId], references: [id])
 
-  @@unique([midtransOrderId])
   @@index([userId, status])
   @@index([status, createdAt])
   @@index([expiredAt])

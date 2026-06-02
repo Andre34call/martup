@@ -57,11 +57,6 @@ export async function GET(
       expiredAt: deposit.expiredAt?.toISOString() || null,
       createdAt: deposit.createdAt.toISOString(),
       updatedAt: deposit.updatedAt.toISOString(),
-      // Midtrans fields
-      snapToken: deposit.snapToken || null,
-      midtransOrderId: deposit.midtransOrderId || null,
-      paymentType: deposit.paymentType || null,
-      midtransTransactionId: deposit.midtransTransactionId || null,
     }
 
     return NextResponse.json(serializeDecimal({

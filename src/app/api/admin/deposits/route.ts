@@ -63,11 +63,6 @@ export async function GET(request: NextRequest) {
       verifiedBy: d.verifiedBy,
       createdAt: d.createdAt.toISOString(),
       updatedAt: d.updatedAt.toISOString(),
-      // Midtrans fields
-      snapToken: d.snapToken || null,
-      midtransOrderId: d.midtransOrderId || null,
-      paymentType: d.paymentType || null,
-      midtransTransactionId: d.midtransTransactionId || null,
     }))
 
     return NextResponse.json(serializeDecimal({

@@ -22,13 +22,9 @@ import {
   Eye,
   Building2,
   Smartphone,
-  CreditCard,
-  RefreshCw,
-  Zap,
 } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { openSnapPayment } from '@/lib/midtrans'
 
 // ==================== Types ====================
 
@@ -44,11 +40,6 @@ interface DepositDetail {
   expiredAt: string | null
   createdAt: string
   updatedAt: string
-  // Midtrans fields
-  snapToken?: string | null
-  midtransOrderId?: string | null
-  paymentType?: string | null
-  midtransTransactionId?: string | null
 }
 
 interface DepositDetailResponse {
@@ -76,7 +67,6 @@ const methodConfig: Record<string, { label: string; icon: string; color: string 
   dana: { label: 'DANA', icon: '🔵', color: 'bg-sky-50 text-sky-600 dark:bg-sky-900/30 dark:text-sky-400' },
   shopeepay: { label: 'ShopeePay', icon: '🧡', color: 'bg-orange-50 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400' },
   linkaja: { label: 'LinkAja', icon: '🔴', color: 'bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400' },
-  midtrans: { label: 'Midtrans (Otomatis)', icon: '⚡', color: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400' },
 }
 
 const statusConfig: Record<string, { label: string; className: string }> = {
@@ -206,12 +196,6 @@ export function DepositDetailScreen() {
   const [senderNameInput, setSenderNameInput] = useState('')
   const [isUploading, setIsUploading] = useState(false)
   const [uploadSuccess, setUploadSuccess] = useState(false)
-  // Midtrans state
-  const [isSnapProcessing, setIsSnapProcessing] = useState(false)
-  const [isPollingDeposit, setIsPollingDeposit] = useState(false)
-
-  // Check if this is a Midtrans deposit
-  const isMidtrans = deposit?.method === 'midtrans' || !!deposit?.snapToken
 
   const fetchDepositDetail = useCallback(async () => {
     if (!selectedDepositId) {
@@ -321,59 +305,6 @@ export function DepositDetailScreen() {
       }
     } finally {
       setIsUploading(false)
-    }
-  }
-
-  // ==================== MIDTRANS: Deposit status polling ====================
-  useEffect(() => {
-    if (!isPollingDeposit || !deposit) return
-
-    const pollInterval = setInterval(async () => {
-      try {
-        const res = await apiClient.get<{ success: boolean; data: { status: string } }>(
-          `/api/deposit/status?depositId=${deposit.id}`
-        )
-        if (res.data?.status === 'success') {
-          setIsPollingDeposit(false)
-          // Refresh deposit detail
-          fetchDepositDetail()
-          showToast('Pembayaran berhasil! Saldo telah ditambahkan.', 'success')
-        } else if (res.data?.status === 'failed' || res.data?.status === 'expired') {
-          setIsPollingDeposit(false)
-          fetchDepositDetail()
-          showToast(res.data?.status === 'expired' ? 'Waktu pembayaran habis.' : 'Pembayaran gagal.', 'error')
-        }
-      } catch {
-        // Silently fail — will retry on next poll
-      }
-    }, 5000)
-
-    return () => clearInterval(pollInterval)
-  }, [isPollingDeposit, deposit, fetchDepositDetail, showToast])
-
-  // ==================== MIDTRANS: Open Snap ====================
-  const handleOpenSnap = async () => {
-    if (!deposit?.snapToken) return
-    setIsSnapProcessing(true)
-
-    try {
-      const result = await openSnapPayment(deposit.snapToken)
-
-      if (result.status === 'success') {
-        // Refresh deposit detail
-        fetchDepositDetail()
-        showToast('Pembayaran berhasil!', 'success')
-      } else if (result.status === 'pending') {
-        setIsPollingDeposit(true)
-        showToast('Pembayaran sedang diproses. Menunggu konfirmasi...', 'info')
-      } else if (result.status === 'error') {
-        showToast('Pembayaran gagal. Silakan coba lagi.', 'error')
-      }
-      // 'closed' — user closed popup, no action needed
-    } catch {
-      showToast('Gagal membuka halaman pembayaran. Coba lagi.', 'error')
-    } finally {
-      setIsSnapProcessing(false)
     }
   }
 
@@ -526,89 +457,8 @@ export function DepositDetailScreen() {
                 </div>
               </>
             )}
-            {deposit.paymentType && (
-              <>
-                <div className="h-px bg-border" />
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Tipe Pembayaran</span>
-                  <span className="text-sm font-medium text-foreground">{deposit.paymentType}</span>
-                </div>
-              </>
-            )}
-            {deposit.midtransOrderId && (
-              <>
-                <div className="h-px bg-border" />
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Order ID</span>
-                  <CopyButton text={deposit.midtransOrderId} label={deposit.midtransOrderId.slice(0, 20) + '...'} />
-                </div>
-              </>
-            )}
           </Card>
         </motion.div>
-
-        {/* MIDTRANS: Pay Now Button (for pending Midtrans deposits) */}
-        {isMidtrans && deposit.status === 'pending' && deposit.snapToken && (
-          <motion.div {...fadeIn}>
-            <Card className="p-5 border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-900/10">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-xl bg-emerald-500 flex items-center justify-center">
-                  <Zap className="w-5 h-5 text-white" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-foreground">Pembayaran Midtrans</p>
-                  <p className="text-xs text-muted-foreground">Klik untuk membuka halaman pembayaran</p>
-                </div>
-              </div>
-
-              {isPollingDeposit && (
-                <div className="flex items-center gap-2 text-xs text-emerald-600 mb-3">
-                  <InlineSpinner className="w-3 h-3" />
-                  <span>Memeriksa status pembayaran...</span>
-                </div>
-              )}
-
-              <PrimaryButton
-                onClick={handleOpenSnap}
-                disabled={isSnapProcessing}
-                className="w-full rounded-xl h-12"
-              >
-                {isSnapProcessing ? (
-                  <>
-                    <InlineSpinner className="w-4 h-4 mr-2" />
-                    Membuka...
-                  </>
-                ) : (
-                  <>
-                    <CreditCard className="w-4 h-4 mr-2" />
-                    Bayar Sekarang
-                  </>
-                )}
-              </PrimaryButton>
-
-              <p className="text-[10px] text-muted-foreground text-center mt-2">
-                Pembayaran otomatis diverifikasi melalui Midtrans
-              </p>
-            </Card>
-          </motion.div>
-        )}
-
-        {/* MIDTRANS: Pending info (no snap token — waiting for webhook) */}
-        {isMidtrans && deposit.status === 'pending' && !deposit.snapToken && (
-          <motion.div {...fadeIn}>
-            <div className="flex gap-2 p-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
-              <Clock className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
-              <div className="space-y-1">
-                <p className="text-xs text-amber-700 dark:text-amber-300 font-medium">
-                  Menunggu pembayaran
-                </p>
-                <p className="text-xs text-amber-600/70 dark:text-amber-400/60">
-                  Selesaikan pembayaran melalui Midtrans. Saldo akan otomatis ditambahkan setelah pembayaran berhasil.
-                </p>
-              </div>
-            </div>
-          </motion.div>
-        )}
 
         {/* Destination Account (for pending & proof_uploaded) */}
         {(deposit.status === 'pending' || deposit.status === 'proof_uploaded') && (
@@ -710,8 +560,8 @@ export function DepositDetailScreen() {
           )
         )}
 
-        {/* Upload Proof Section (for pending NON-Midtrans deposits only) */}
-        {!isMidtrans && deposit.status === 'pending' && !uploadSuccess && (
+        {/* Upload Proof Section (for pending) */}
+        {deposit.status === 'pending' && !uploadSuccess && (
           <motion.div {...fadeIn}>
             <SectionHeader title="Upload Bukti Pembayaran" icon={<ImagePlus className="w-4 h-4" />} />
             <Card className="mt-3 p-4 space-y-4">
