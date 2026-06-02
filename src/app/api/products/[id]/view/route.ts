@@ -13,7 +13,7 @@ export async function POST(
 
     // Rate limit: 1 view per product per IP per minute
     const clientIp = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
-    if (!checkRateLimit(`product-view:${clientIp}:${id}`, 1, 60)) {
+    if (!checkRateLimit(`product-view:${clientIp}:${id}`, 1)) {
       return NextResponse.json({ success: true, viewed: false })
     }
 

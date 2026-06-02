@@ -87,6 +87,7 @@ export interface Product {
   isFeatured: boolean
   isPromoted: boolean
   promotedUntil?: string
+  promotedBy?: string
   isFlashSale: boolean
   flashSaleEnd?: string
   tags?: string[]

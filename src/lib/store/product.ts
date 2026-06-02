@@ -47,6 +47,7 @@ export const createProductSlice: StateCreator<AppStore, [], [], ProductSlice> = 
         isFeatured: p.isFeatured,
         isPromoted: p.isPromoted || false,
         promotedUntil: p.promotedUntil || undefined,
+        promotedBy: p.promotedBy || undefined,
         isFlashSale: p.isFlashSale,
         flashSaleEnd: p.flashSaleEnd || undefined,
         tags: Array.isArray(p.tags) ? p.tags : (typeof p.tags === 'string' ? JSON.parse(p.tags) : undefined),

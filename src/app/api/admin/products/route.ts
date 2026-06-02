@@ -101,7 +101,7 @@ export async function PUT(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { productId, status, isFeatured, name, description, price, discountPrice, images, videoUrl, categoryId, condition, weight, stock, tags } = body
+    const { productId, status, isFeatured, isPromoted, promotedUntil, name, description, price, discountPrice, images, videoUrl, categoryId, condition, weight, stock, tags } = body
 
     if (!productId) {
       return NextResponse.json(
@@ -124,6 +124,8 @@ export async function PUT(request: NextRequest) {
     // Status & featured flags
     if (status !== undefined) updateData.status = status
     if (isFeatured !== undefined) updateData.isFeatured = isFeatured
+    if (isPromoted !== undefined) updateData.isPromoted = isPromoted
+    if (promotedUntil !== undefined) updateData.promotedUntil = promotedUntil || null
 
     // Content fields for moderation
     if (name !== undefined) {

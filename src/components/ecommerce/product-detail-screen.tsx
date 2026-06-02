@@ -248,6 +248,14 @@ export function ProductDetailScreen() {
 
   const product = products.find(p => p.id === selectedProductId)
 
+  // Track product view when entering detail screen
+  useEffect(() => {
+    if (selectedProductId) {
+      // Fire and forget — don't block rendering
+      apiClient.post<any>(`/api/products/${selectedProductId}/view`, {}).catch(() => {})
+    }
+  }, [selectedProductId])
+
   // Fetch reviews from API when product changes
   useEffect(() => {
     if (selectedProductId) {

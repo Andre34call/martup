@@ -74,7 +74,9 @@ export async function GET(
 
     // Track view in background (non-blocking) with rate limit per IP
     const clientIp = _request.headers.get('x-forwarded-for') || _request.headers.get('x-real-ip') || 'unknown'
-    if (checkRateLimit(`product-view:${clientIp}:${id}`, 1, 60)) {
+    if (!checkRateLimit(`product-view:${clientIp}:${id}`, 1)) {
+      // Rate limited — skip view tracking for this IP+product combo
+    } else {
       // Fire and forget - don't await
       db.product.update({
         where: { id },
