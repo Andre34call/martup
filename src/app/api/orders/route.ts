@@ -435,7 +435,6 @@ export async function POST(request: NextRequest) {
           where: {
             code: {
               equals: voucherCode.toUpperCase(),
-              mode: 'insensitive',
             },
           },
         })

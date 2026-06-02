@@ -59,8 +59,8 @@ export async function GET(request: NextRequest) {
     if (searchQuery && searchQuery.trim().length >= 2) {
       // Search in post content and user name
       where.OR = [
-        { content: { contains: searchQuery.trim(), mode: 'insensitive' } },
-        { user: { name: { contains: searchQuery.trim(), mode: 'insensitive' } } },
+        { content: { contains: searchQuery.trim() } },
+        { user: { name: { contains: searchQuery.trim() } } },
       ]
     }
     if (cursor) {

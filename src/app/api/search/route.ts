@@ -149,10 +149,10 @@ export async function GET(request: NextRequest) {
       ...categoryFilter,
       AND: priceConditions.length > 0 ? priceConditions : undefined,
       OR: [
-        { name: { contains: q, mode: 'insensitive' } },
-        { description: { contains: q, mode: 'insensitive' } },
-        { tags: { contains: q, mode: 'insensitive' } },
-        { category: { name: { contains: q, mode: 'insensitive' } } },
+        { name: { contains: q } },
+        { description: { contains: q } },
+        { tags: { contains: q } },
+        { category: { name: { contains: q } } },
       ],
     }
 
