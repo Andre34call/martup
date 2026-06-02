@@ -341,7 +341,7 @@ export function RefundScreen() {
               <EmptyState
                 icon={<RotateCcw className="w-10 h-10 text-muted-foreground" />}
                 title="Belum ada pengajuan aktif"
-                description="Ajukan pengembalian jika ada masalah dengan pesanan Anda"
+                subtitle="Ajukan pengembalian jika ada masalah dengan pesanan Anda"
               />
             ) : (
               <div className="space-y-3">
@@ -516,7 +516,7 @@ export function RefundScreen() {
               <EmptyState
                 icon={<RotateCcw className="w-10 h-10 text-muted-foreground" />}
                 title="Belum ada riwayat pengembalian"
-                description="Riwayat pengajuan yang sudah selesai akan muncul di sini"
+                subtitle="Riwayat pengajuan yang sudah selesai akan muncul di sini"
               />
             ) : (
               <div className="space-y-3">
