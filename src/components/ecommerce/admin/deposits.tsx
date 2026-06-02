@@ -12,11 +12,12 @@ import { Separator } from "@/components/ui/separator"
 import { useAppStore } from "@/lib/store"
 import { formatPrice, formatRelativeTime } from "@/lib/utils"
 import { fadeIn, stagger } from '@/lib/animations'
-import { PageHeader, EmptyState } from "../shared"
+import { PageHeader, EmptyState, PrimaryButton } from "../shared"
 import { useState, useEffect, useCallback } from "react"
 import { ConfirmDialog } from "../confirm-dialog"
 import { LoadingSpinner } from "../loading-spinner"
 import { apiClient, ApiClientError } from '@/lib/api-client'
+import { handleApiError } from '@/lib/handle-api-error'
 
 // ==================== TYPE DEFINITIONS ====================
 interface DepositItem {
@@ -56,8 +57,8 @@ export function AdminDeposits() {
       if (data.success) {
         setDeposits(data.data)
       }
-    } catch {
-      showToast("Gagal memuat deposit", "error")
+    } catch (err) {
+      handleApiError(err, "deposit")
     } finally {
       setLoading(false)
     }
@@ -261,13 +262,13 @@ export function AdminDeposits() {
                   </div>
                   {deposit.status === "pending" && (
                     <div className="flex gap-2 mt-3 pt-3 border-t border-border/50">
-                      <Button
+                      <PrimaryButton
                         size="sm"
-                        className="flex-1 h-8 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white"
+                        className="flex-1 h-8 text-xs rounded-lg"
                         onClick={() => handleApprove(deposit.id)}
                       >
                         <Check className="w-3 h-3 mr-1" /> Setujui
-                      </Button>
+                      </PrimaryButton>
                       <Button
                         variant="outline"
                         size="sm"

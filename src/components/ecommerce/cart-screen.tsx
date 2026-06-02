@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { useAppStore, useCartStore } from "@/lib/store"
 import { formatPrice } from "@/lib/utils"
+import { PrimaryButton } from "./shared"
 import {
   PageHeader, QuantitySelector, PriceDisplay, EmptyState
 } from "./shared"
@@ -487,14 +488,14 @@ export function CartScreen() {
                 <p className="text-xs text-muted-foreground">Total Harga</p>
                 <p className="text-lg font-bold text-emerald-600">{formatPrice(Math.max(0, totalAmount))}</p>
               </div>
-              <Button
-                className="h-11 px-6 text-sm font-bold rounded-xl bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white disabled:opacity-50 gap-1.5"
+              <PrimaryButton
+                className="h-11 px-6 text-sm font-bold rounded-xl disabled:opacity-50 gap-1.5"
                 disabled={checkedCount === 0}
                 onClick={handleCheckout}
               >
                 Checkout ({checkedCount})
                 <ArrowRight className="w-4 h-4" />
-              </Button>
+              </PrimaryButton>
             </div>
           </div>
         </div>

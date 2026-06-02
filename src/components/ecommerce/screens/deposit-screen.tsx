@@ -4,7 +4,7 @@ import { motion } from "framer-motion"
 import { useAppStore } from "@/lib/store"
 import { formatPrice } from "@/lib/utils"
 import { fadeIn } from '@/lib/animations'
-import { PageHeader, SectionHeader, WalletBalanceCard } from "../shared"
+import { PageHeader, SectionHeader, WalletBalanceCard, PrimaryButton } from "../shared"
 import { useState } from "react"
 import { CreditCard, Wallet, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -128,13 +128,13 @@ export function DepositScreen() {
 
         {/* Deposit Button */}
         <motion.div {...fadeIn}>
-          <Button
+          <PrimaryButton
             disabled={!selectedAmount && !customAmount}
             onClick={handleTopUp}
-            className="w-full bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl h-11 disabled:opacity-40"
+            className="w-full rounded-xl h-11 disabled:opacity-40"
           >
             <Wallet className="w-4 h-4 mr-2" /> Top Up Sekarang
-          </Button>
+          </PrimaryButton>
         </motion.div>
       </div>
     </div>

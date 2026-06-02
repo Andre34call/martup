@@ -1,20 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middleware'
+import { parseJsonField } from '@/lib/api-utils'
 import { sanitizeInput } from '@/lib/sanitize'
 import { serializeDecimal } from '@/lib/decimal-utils'
 
 import { logger } from '@/lib/logger'
-// Helper to safely parse JSON fields
-function parseJsonField(value: string | null | undefined): unknown[] {
-  if (!value) return []
-  try {
-    const parsed = JSON.parse(value)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
 
 // GET /api/seller/products - Fetch products for a specific seller
 // SECURITY: Only the seller themselves (or admins) can see all products including drafts.

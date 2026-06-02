@@ -61,8 +61,12 @@ export async function GET(request: NextRequest) {
             totalProducts: true,
           },
         },
+        _count: {
+          select: { orders: true },
+        },
         orders: {
           select: { totalAmount: true },
+          where: { status: { notIn: ['CANCELLED', 'cancelled'] } },
         },
       },
       orderBy: { createdAt: 'desc' },
@@ -73,7 +77,7 @@ export async function GET(request: NextRequest) {
         (sum, order) => sum + Number(order.totalAmount),
         0
       )
-      const totalOrders = user.orders.length
+      const totalOrders = user._count.orders
 
       return {
         id: user.id,

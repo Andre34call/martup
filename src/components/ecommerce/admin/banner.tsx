@@ -9,11 +9,11 @@ import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { useAppStore } from "@/lib/store"
-import { PageHeader, SectionHeader, EmptyState } from "../shared"
+import { PageHeader, SectionHeader, EmptyState, AdminScreenWrapper } from "../shared"
 import { fadeIn, stagger } from '@/lib/animations'
 import { useState, useRef, useEffect } from "react"
 import { ConfirmDialog } from "../confirm-dialog"
-import { LoadingSpinner } from "../loading-spinner"
+
 import { apiClient, ApiClientError } from '@/lib/api-client'
 
 const BANNER_POSITIONS = [
@@ -154,10 +154,8 @@ export function AdminBanner() {
     return found ? found.label : position
   }
 
-  if (isLoading) return <div className="pb-20"><PageHeader title="Kelola Banner" /><LoadingSpinner message="Memuat banner..." /></div>
-
   return (
-    <div className="pb-20">
+    <AdminScreenWrapper title="Kelola Banner" isLoading={isLoading}>
       <PageHeader title="Kelola Banner" rightAction={
         <Button
           onClick={() => setShowAdd(!showAdd)}
@@ -337,6 +335,6 @@ export function AdminBanner() {
         title={confirmAction?.title || ''}
         message={confirmAction?.message || ''}
       />
-    </div>
+    </AdminScreenWrapper>
   )
 }

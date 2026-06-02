@@ -1,19 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middleware'
+import { parseJsonField } from '@/lib/api-utils'
 import { sanitizeInput, sanitizeRichContent } from '@/lib/sanitize'
 
 import { logger } from '@/lib/logger'
-// Helper: safely parse JSON field
-function safeJsonParse(value: string | null | undefined): unknown[] {
-  if (!value) return []
-  try {
-    const parsed = JSON.parse(value)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
 
 // GET /api/products/[id] - Get product detail (PUBLIC, no auth required)
 export async function GET(
@@ -75,11 +66,11 @@ export async function GET(
     // Parse JSON fields safely (no more try/catch crash risk)
     const responseProduct = {
       ...product,
-      images: safeJsonParse(product.images),
-      tags: safeJsonParse(product.tags),
+      images: parseJsonField(product.images),
+      tags: parseJsonField(product.tags),
       reviews: product.reviews.map((review) => ({
         ...review,
-        images: safeJsonParse(review.images),
+        images: parseJsonField(review.images),
       })),
     }
 
@@ -102,7 +93,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // SECURITY: Unified auth using verifyAuth (not requireSeller from auth-helpers)
+    // SECURITY: Unified auth using verifyAuth (supports both session and bearer token)
     const authResult = await verifyAuth(request)
     if (!authResult.success) return authErrorResponse(authResult)
 
@@ -270,8 +261,8 @@ export async function PUT(
     // Parse JSON fields safely for response
     const responseProduct = {
       ...updated,
-      images: safeJsonParse(updated.images),
-      tags: safeJsonParse(updated.tags),
+      images: parseJsonField(updated.images),
+      tags: parseJsonField(updated.tags),
     }
 
     return NextResponse.json({

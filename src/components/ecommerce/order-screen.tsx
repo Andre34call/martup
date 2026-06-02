@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { useAppStore, useCartStore } from "@/lib/store"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { formatPrice, formatRelativeTime } from "@/lib/utils"
-import { PageHeader, EmptyState, StatusBadge, TabBar } from "./shared"
+import { PageHeader, EmptyState, StatusBadge, TabBar, PrimaryButton } from "./shared"
 import type { Order, OrderStatus } from "@/lib/types"
 import { useState, useMemo, useCallback } from "react"
 import {
@@ -180,10 +180,9 @@ function OrderCard({ order, onTap }: { order: Order; onTap: () => void }) {
             </Button>
           )}
           {primaryBtn && (
-            <Button
+            <PrimaryButton
               size="sm"
-              variant={primaryBtn.variant}
-              className="h-8 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white"
+              className="h-8 text-xs rounded-lg"
               onClick={async (e) => {
                 e.stopPropagation()
                 if (order.status === "pending") {
@@ -222,7 +221,7 @@ function OrderCard({ order, onTap }: { order: Order; onTap: () => void }) {
             >
               {primaryBtn.icon}
               <span className="ml-1">{primaryBtn.label}</span>
-            </Button>
+            </PrimaryButton>
           )}
         </div>
       )}
@@ -687,8 +686,8 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
         <div className="px-4 pb-4 space-y-3">
           {order.status === "pending" && (
             <>
-              <Button
-                className="w-full h-12 rounded-xl bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white text-sm font-semibold"
+              <PrimaryButton
+                className="w-full h-12 rounded-xl text-sm font-semibold"
                 onClick={async () => {
                   const result = await payForOrder(order.id)
                   if (result?.token) {
@@ -716,7 +715,7 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
               >
                 <CreditCard className="w-4 h-4 mr-2" />
                 Bayar Sekarang
-              </Button>
+              </PrimaryButton>
               <Button
                 variant="outline"
                 className="w-full h-12 rounded-xl text-red-500 border-red-200 dark:border-red-900/50 hover:bg-red-50 dark:hover:bg-red-900/20 text-sm font-semibold"
@@ -727,8 +726,8 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
             </>
           )}
           {order.status === "shipped" && (
-            <Button
-              className="w-full h-12 rounded-xl bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white text-sm font-semibold"
+            <PrimaryButton
+              className="w-full h-12 rounded-xl text-sm font-semibold"
               // BUG 19 FIX: Sync status update to server via API
               onClick={() => {
                 updateOrderStatus(order.id, "delivered")
@@ -738,7 +737,7 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
             >
               <CheckCircle2 className="w-4 h-4 mr-2" />
               Konfirmasi Diterima
-            </Button>
+            </PrimaryButton>
           )}
           {order.status === "delivered" && (
             <div className="flex gap-3">
@@ -756,13 +755,13 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
                 <RotateCcw className="w-4 h-4 mr-2" />
                 Beli Lagi
               </Button>
-              <Button
-                className="flex-1 h-12 rounded-xl bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white text-sm font-semibold"
+              <PrimaryButton
+                className="flex-1 h-12 rounded-xl text-sm font-semibold"
                 onClick={() => { setSelectedOrder(order.id); navigate("review") }}
               >
                 <Star className="w-4 h-4 mr-2" />
                 Beri Rating
-              </Button>
+              </PrimaryButton>
             </div>
           )}
         </div>

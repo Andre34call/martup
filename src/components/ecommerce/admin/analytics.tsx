@@ -10,9 +10,8 @@ import { Card } from "@/components/ui/card"
 import { useAppStore } from "@/lib/store"
 import { formatPrice } from "@/lib/utils"
 import { fadeIn } from '@/lib/animations'
-import { PageHeader, SectionHeader } from "../shared"
+import { PageHeader, SectionHeader, AdminScreenWrapper } from "../shared"
 import { useState, useEffect } from "react"
-import { LoadingSpinner } from "../loading-spinner"
 
 // ==================== HELPER: Compute top sellers from store data ====================
 function computeTopSellers(products: { sellerId: string; seller: { storeName: string }; price: number; sold: number; rating: number; reviewCount: number }[]) {
@@ -94,10 +93,8 @@ export function AdminAnalytics() {
   }
   const [dateRange, setDateRange] = useState("30d")
 
-  if (isLoading) return <div className="pb-20"><PageHeader title="Analitik Lengkap" /><LoadingSpinner message="Memuat analitik..." /></div>
-
   return (
-    <div className="pb-20">
+    <AdminScreenWrapper title="Analitik Lengkap" isLoading={isLoading}>
       <PageHeader title="Analitik Lengkap" />
 
       <div className="px-4 space-y-4">
@@ -248,6 +245,6 @@ export function AdminAnalytics() {
           </Card>
         </motion.div>
       </div>
-    </div>
+    </AdminScreenWrapper>
   )
 }

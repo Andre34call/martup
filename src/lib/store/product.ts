@@ -1,12 +1,90 @@
 import type { StateCreator } from 'zustand'
 import { logger } from '@/lib/logger'
 import type { ProductSlice, AppStore } from './types'
-import type { Product } from '../types'
+import type { Product, ProductVariant, Category, Seller } from '../types'
 import { apiClient } from '@/lib/api-client'
 
+// Raw API types for product and category data
+interface RawProductVariant {
+  id: string
+  productId: string
+  name: string
+  value: string
+  sku?: string
+  price?: number
+  stock: number
+  image?: string
+}
+
+interface RawProductSeller {
+  id: string
+  userId: string
+  storeName: string
+  storeSlug: string
+  storeAvatar?: string
+  storeDesc?: string
+  isVerified: boolean
+  isPremium: boolean
+  rating: number
+  totalSales: number
+  totalProducts: number
+  responseTime?: number
+  bankName?: string
+  bankAccount?: string
+  bankHolder?: string
+  autoReply?: string
+}
+
+interface RawProductCategory {
+  id: string
+  name: string
+  slug: string
+  icon?: string
+  image?: string
+}
+
+interface RawProduct {
+  id: string
+  sellerId: string
+  categoryId: string
+  name: string
+  slug: string
+  description: string
+  price: number
+  discountPrice?: number
+  images: string[] | string
+  stock: number
+  sold: number
+  minOrder?: number
+  weight: number
+  condition?: string
+  status: string
+  rating: number
+  reviewCount: number
+  isFeatured: boolean
+  isFlashSale: boolean
+  flashSaleEnd?: string
+  tags?: string[] | string
+  variants?: RawProductVariant[]
+  seller?: RawProductSeller
+  category?: RawProductCategory
+}
+
+interface RawCategory {
+  id: string
+  name: string
+  slug: string
+  icon?: string
+  image?: string
+  parentId?: string | null
+  productCount?: number
+  _count?: { products?: number }
+  children?: RawCategory[]
+}
+
 // API response types
-type ProductsApiResponse = { data?: any[]; products?: any[]; [key: string]: any }
-type CategoriesApiResponse = { data?: any[]; categories?: any[]; [key: string]: any }
+type ProductsApiResponse = { data?: RawProduct[]; products?: RawProduct[]; [key: string]: unknown }
+type CategoriesApiResponse = { data?: RawCategory[]; categories?: RawCategory[]; [key: string]: unknown }
 
 export const createProductSlice: StateCreator<AppStore, [], [], ProductSlice> = (set, get) => ({
   products: [],
@@ -24,7 +102,7 @@ export const createProductSlice: StateCreator<AppStore, [], [], ProductSlice> = 
     try {
       const data = await apiClient.get<ProductsApiResponse>('/api/products', { limit: '100' })
 
-      const products: Product[] = (data.data || data.products || []).map((p: any) => ({
+      const products: Product[] = (data.data || data.products || []).map((p: RawProduct): Product => ({
         id: p.id,
         sellerId: p.sellerId,
         categoryId: p.categoryId,
@@ -46,7 +124,7 @@ export const createProductSlice: StateCreator<AppStore, [], [], ProductSlice> = 
         isFlashSale: p.isFlashSale,
         flashSaleEnd: p.flashSaleEnd || undefined,
         tags: Array.isArray(p.tags) ? p.tags : (typeof p.tags === 'string' ? JSON.parse(p.tags) : undefined),
-        variants: (p.variants || []).map((v: any) => ({
+        variants: (p.variants || []).map((v: RawProductVariant): ProductVariant => ({
           id: v.id,
           productId: v.productId,
           name: v.name,
@@ -73,7 +151,7 @@ export const createProductSlice: StateCreator<AppStore, [], [], ProductSlice> = 
           bankAccount: p.seller.bankAccount || undefined,
           bankHolder: p.seller.bankHolder || undefined,
           autoReply: p.seller.autoReply || undefined,
-        } : {
+        } as Seller : {
           id: '',
           userId: '',
           storeName: 'Unknown Seller',
@@ -106,13 +184,13 @@ export const createProductSlice: StateCreator<AppStore, [], [], ProductSlice> = 
     try {
       const data = await apiClient.get<CategoriesApiResponse>('/api/categories')
 
-      const mapCategory = (c: any): any => ({
+      const mapCategory = (c: RawCategory): Category => ({
         id: c.id,
         name: c.name,
         slug: c.slug,
         icon: c.icon || undefined,
         image: c.image || undefined,
-        parentId: c.parentId || null,
+        parentId: c.parentId || undefined,
         productCount: c.productCount || c._count?.products || 0,
         children: (c.children || []).map(mapCategory),
       })

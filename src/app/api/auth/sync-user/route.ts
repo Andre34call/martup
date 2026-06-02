@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { checkRateLimit, generateAuthToken } from '@/lib/auth-middleware'
+import { generateAuthToken } from '@/lib/auth-middleware'
+import { authLimiter } from '@/lib/rate-limit'
 import { sanitizeInput } from '@/lib/sanitize'
 import crypto from 'crypto'
 
@@ -22,9 +23,10 @@ function safeCompare(a: string, b: string): boolean {
 // SECURITY: Phone OTP login no longer goes through this endpoint.
 export async function POST(request: NextRequest) {
   try {
-    // Rate limit check
+    // Rate limit check (distributed)
     const clientIp = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
-    if (!checkRateLimit(`sync-user:${clientIp}`)) {
+    const rateLimitResult = await authLimiter.check(`sync-user:${clientIp}`)
+    if (!rateLimitResult.allowed) {
       return NextResponse.json(
         { success: false, error: 'Too many requests. Please try again later.' },
         { status: 429 }

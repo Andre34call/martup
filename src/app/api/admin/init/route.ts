@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { checkRateLimit, generateAuthToken } from '@/lib/auth-middleware'
+import { generateAuthToken } from '@/lib/auth-middleware'
+import { sensitiveLimiter } from '@/lib/rate-limit'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
 import { logger } from '@/lib/logger'
@@ -22,9 +23,10 @@ function safeCompare(a: string, b: string): boolean {
 // Requires ADMIN_SETUP_SECRET env var for authentication.
 export async function POST(request: NextRequest) {
   try {
-    // Rate limit - very strict (2 per minute)
+    // Rate limit - very strict (2 per minute, distributed)
     const clientIp = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
-    if (!checkRateLimit(`admin-init:${clientIp}`, 2)) {
+    const rateLimitResult = await sensitiveLimiter.check(`admin-init:${clientIp}`)
+    if (!rateLimitResult.allowed) {
       return NextResponse.json(
         { success: false, error: 'Terlalu banyak percobaan. Coba lagi nanti.' },
         { status: 429 }

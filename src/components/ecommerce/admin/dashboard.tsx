@@ -18,10 +18,10 @@ import { Card } from "@/components/ui/card"
 import { useAppStore } from "@/lib/store"
 import { formatPrice } from "@/lib/utils"
 import { fadeIn, stagger } from '@/lib/animations'
-import { PageHeader, SectionHeader } from "../shared"
+import { PageHeader, SectionHeader, AdminScreenWrapper } from "../shared"
 import { useState, useRef, useEffect } from "react"
 import { AnimatePresence } from "framer-motion"
-import { LoadingSpinner } from "../loading-spinner"
+
 import { ELEVATED_ROLES } from "@/lib/types"
 
 export function AdminDashboard() {
@@ -80,10 +80,8 @@ export function AdminDashboard() {
     manager: "bg-violet-500",
   }
 
-  if (isLoading) return <div className="pb-20"><PageHeader title="MartUp Admin" /><div className="px-4"><LoadingSpinner message="Memuat dashboard..." /></div></div>
-
   return (
-    <div className="pb-20">
+    <AdminScreenWrapper title="MartUp Admin" isLoading={isLoading}>
       {/* Top Header */}
       <motion.div {...fadeIn} className="sticky top-0 z-40 glass">
         <div className="flex items-center justify-between h-14 px-4">
@@ -316,6 +314,6 @@ export function AdminDashboard() {
           </div>
         </motion.div>
       </div>
-    </div>
+    </AdminScreenWrapper>
   )
 }

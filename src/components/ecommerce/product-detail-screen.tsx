@@ -16,7 +16,7 @@ import { SHIPPING_OPTIONS } from "@/lib/constants"
 import { apiClient } from "@/lib/api-client"
 import {
   PageHeader, QuantitySelector, PriceDisplay, ProductCard, EmptyState,
-  FlashSaleTimer, RatingStars, AvatarWithName, SellerBadge
+  FlashSaleTimer, RatingStars, AvatarWithName, SellerBadge, PrimaryButton
 } from "./shared"
 import type { Product, ProductVariant } from "@/lib/types"
 import { useState, useRef, useCallback, useMemo, useEffect } from "react"
@@ -912,12 +912,12 @@ export function ProductDetailScreen() {
             Keranjang
           </Button>
 
-          <Button
-            className="flex-1 h-11 text-sm font-bold rounded-xl bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white"
+          <PrimaryButton
+            className="flex-1 h-11 text-sm font-bold rounded-xl"
             onClick={handleBuyNow}
           >
             Beli Sekarang
-          </Button>
+          </PrimaryButton>
         </div>
       </div>
     </div>

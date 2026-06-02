@@ -1,22 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAuth, checkRateLimit } from '@/lib/auth-middleware'
+import { parseJsonField } from '@/lib/api-utils'
 import { sanitizeInput } from '@/lib/sanitize'
 import { serializeDecimal } from '@/lib/decimal-utils'
 
 import { logger } from '@/lib/logger'
-// ==================== HELPERS ====================
-
-// Safely parse a JSON field (images stored as JSON string)
-function parseJsonField(value: string | null | undefined): unknown[] {
-  if (!value) return []
-  try {
-    const parsed = JSON.parse(value)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
 
 // Recalculate the product's average rating and review count
 async function recalculateProductRating(productId: string) {

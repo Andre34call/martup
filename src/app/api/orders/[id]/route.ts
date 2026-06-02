@@ -4,17 +4,8 @@ import { verifyAuth } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
 import { updateOrderStatus } from '@/lib/order-status'
 
+import { parseJsonField } from '@/lib/api-utils'
 import { logger } from '@/lib/logger'
-// Helper to safely parse JSON fields
-function parseJsonField(value: string | null | undefined): unknown[] {
-  if (!value) return []
-  try {
-    const parsed = JSON.parse(value)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
 
 // GET /api/orders/[id] — Get single order detail
 export async function GET(
@@ -25,7 +16,7 @@ export async function GET(
     // SECURITY: Unified auth using verifyAuth (supports both session and bearer token)
     const authResult = await verifyAuth(request)
     if (!authResult.success) {
-      return NextResponse.json({ error: authResult.error }, { status: authResult.status })
+      return NextResponse.json({ success: false, error: authResult.error }, { status: authResult.status })
     }
     const user = authResult.user
 
@@ -71,7 +62,7 @@ export async function GET(
     })
 
     if (!order) {
-      return NextResponse.json({ error: 'Order not found' }, { status: 404 })
+      return NextResponse.json({ success: false, error: 'Order not found' }, { status: 404 })
     }
 
     // Only buyer, seller, or admin can view the order
@@ -81,7 +72,7 @@ export async function GET(
     const isAdmin = ['admin', 'manager'].includes(user.role)
 
     if (!isBuyer && !isSeller && !isAdmin) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 })
     }
 
     // Parse product images
@@ -98,11 +89,11 @@ export async function GET(
       })),
     }
 
-    return NextResponse.json(serializeDecimal(responseOrder))
+    return NextResponse.json({ success: true, data: serializeDecimal(responseOrder) })
   } catch (error) {
     logger.error({ err: error }, 'GET /api/orders/[id] error')
     return NextResponse.json(
-      { error: 'Gagal mengambil detail pesanan' },
+      { success: false, error: 'Gagal mengambil detail pesanan' },
       { status: 500 }
     )
   }
@@ -119,7 +110,7 @@ export async function PUT(
     // SECURITY: Unified auth using verifyAuth (supports both session and bearer token)
     const authResult = await verifyAuth(request)
     if (!authResult.success) {
-      return NextResponse.json({ error: authResult.error }, { status: authResult.status })
+      return NextResponse.json({ success: false, error: authResult.error }, { status: authResult.status })
     }
 
     const { id } = await params
@@ -142,7 +133,7 @@ export async function PUT(
 
     if (!result.success) {
       return NextResponse.json(
-        { error: result.error },
+        { success: false, error: result.error },
         { status: result.status || 400 }
       )
     }
@@ -154,7 +145,7 @@ export async function PUT(
   } catch (error) {
     logger.error({ err: error }, 'PUT /api/orders/[id] error')
     return NextResponse.json(
-      { error: 'Gagal mengubah status pesanan' },
+      { success: false, error: 'Gagal mengubah status pesanan' },
       { status: 500 }
     )
   }

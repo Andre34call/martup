@@ -5,17 +5,8 @@ import { serializeDecimal } from '@/lib/decimal-utils'
 import { validateBody, createOrderSchema, updateOrderSchema } from '@/lib/validations'
 import { updateOrderStatus } from '@/lib/order-status'
 
+import { parseJsonField } from '@/lib/api-utils'
 import { logger } from '@/lib/logger'
-// Helper to safely parse JSON fields
-function parseJsonField(value: string | null | undefined): unknown[] {
-  if (!value) return []
-  try {
-    const parsed = JSON.parse(value)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
 
 // GET /api/orders - Fetch orders for a user
 export async function GET(request: NextRequest) {

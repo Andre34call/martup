@@ -10,7 +10,7 @@ import { apiClient } from "@/lib/api-client"
 import { uploadFile } from "@/lib/upload"
 import { formatPrice } from "@/lib/utils"
 import { fadeIn } from '@/lib/animations'
-import { PageHeader } from "./shared"
+import { PageHeader, PrimaryButton, InlineSpinner } from "./shared"
 import type { Product } from "@/lib/types"
 import { logger } from '@/lib/logger'
 import { mapSeller } from '@/lib/mappers'
@@ -1149,10 +1149,10 @@ export function SellerAddProductScreen() {
               </div>
             </div>
           )}
-          <Button
+          <PrimaryButton
             onClick={handleSubmit}
             disabled={isUploading || isRegisteringSeller}
-            className="w-full h-12 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl text-sm font-bold shadow-lg shadow-emerald-500/25 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full h-12 rounded-xl text-sm font-bold shadow-lg shadow-emerald-500/25 disabled:cursor-not-allowed"
           >
             {isRegisteringSeller ? (
               <>
@@ -1170,7 +1170,7 @@ export function SellerAddProductScreen() {
                 Publikasikan Produk
               </>
             )}
-          </Button>
+          </PrimaryButton>
 
           <Button
             variant="outline"

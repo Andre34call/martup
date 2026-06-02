@@ -2,17 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
+import { parseJsonField } from '@/lib/api-utils'
 import { logger } from '@/lib/logger'
-
-function parseJsonField(value: string | null | undefined): unknown[] {
-  if (!value) return []
-  try {
-    const parsed = JSON.parse(value)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
 
 // GET /api/admin/reviews - List all reviews with filters
 export async function GET(request: NextRequest) {

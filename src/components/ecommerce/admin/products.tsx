@@ -11,12 +11,12 @@ import { Input } from "@/components/ui/input"
 import { useAppStore } from "@/lib/store"
 import { formatPrice } from "@/lib/utils"
 import { fadeIn, stagger } from '@/lib/animations'
-import { PageHeader, SectionHeader, SearchBar, EmptyState } from "../shared"
+import { PageHeader, SectionHeader, SearchBar, EmptyState, AdminScreenWrapper, PrimaryButton } from "../shared"
 import { useState, useEffect, useCallback } from "react"
 import { ConfirmDialog } from "../confirm-dialog"
-import { LoadingSpinner } from "../loading-spinner"
 import { apiClient } from '@/lib/api-client'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { handleApiError } from '@/lib/handle-api-error'
 
 interface AdminProductItem {
   id: string
@@ -87,8 +87,8 @@ export function AdminProducts() {
         }))
         setAdminProducts(mapped)
       }
-    } catch {
-      showToast("Gagal memuat produk", "error")
+    } catch (err) {
+      handleApiError(err, "produk")
     } finally {
       setLoading(false)
     }
@@ -213,10 +213,8 @@ export function AdminProducts() {
 
   const flaggedProducts = adminProducts.filter(p => p.status === "blocked")
 
-  if (loading) return <div className="pb-20"><PageHeader title="Moderasi Produk" /><LoadingSpinner message="Memuat produk..." /></div>
-
   return (
-    <div className="pb-20">
+    <AdminScreenWrapper title="Moderasi Produk" isLoading={loading}>
       <PageHeader title="Moderasi Produk" />
 
       <div className="px-4 space-y-4">
@@ -270,9 +268,9 @@ export function AdminProducts() {
                       </div>
                     </div>
                     <div className="flex gap-2 mt-3 pt-2 border-t border-red-100 dark:border-red-900/30">
-                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white" onClick={() => handleStatusChange(product.id, 'active')}>
+                      <PrimaryButton size="sm" className="h-7 text-[11px] rounded-lg" onClick={() => handleStatusChange(product.id, 'active')}>
                         <Check className="w-3 h-3 mr-0.5" /> Approve
-                      </Button>
+                      </PrimaryButton>
                       <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-blue-500" onClick={() => {
                         setEditProduct(product)
                         setEditName(product.name)
@@ -357,9 +355,9 @@ export function AdminProducts() {
                       <Edit className="w-3 h-3 mr-0.5" /> Edit
                     </Button>
                     {product.status === "blocked" ? (
-                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white" onClick={() => handleStatusChange(product.id, 'active')}>
+                      <PrimaryButton size="sm" className="h-7 text-[11px] rounded-lg" onClick={() => handleStatusChange(product.id, 'active')}>
                         <Check className="w-3 h-3 mr-0.5" /> Approve
-                      </Button>
+                      </PrimaryButton>
                     ) : (
                       <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500" onClick={() => setConfirmAction({
                         action: () => handleStatusChange(product.id, 'blocked'),
@@ -520,7 +518,7 @@ export function AdminProducts() {
             <Button variant="outline" onClick={() => setEditProduct(null)} className="rounded-xl h-10 flex-1">
               Batal
             </Button>
-            <Button
+            <PrimaryButton
               onClick={async () => {
                 if (!editProduct) return
                 const tagArray = editTags.split(',').map(t => t.trim()).filter(t => t.length > 0)
@@ -539,10 +537,10 @@ export function AdminProducts() {
                 })
                 if (success) setEditProduct(null)
               }}
-              className="bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl h-10 flex-1"
+              className="rounded-xl h-10 flex-1"
             >
               Simpan
-            </Button>
+            </PrimaryButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -553,6 +551,6 @@ export function AdminProducts() {
         title={confirmAction?.title || ''}
         message={confirmAction?.message || ''}
       />
-    </div>
+    </AdminScreenWrapper>
   )
 }

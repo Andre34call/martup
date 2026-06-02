@@ -14,7 +14,7 @@ import { logger } from '@/lib/logger'
  */
 export async function POST(request: NextRequest) {
   if (process.env.NODE_ENV === 'production') {
-    return NextResponse.json({ success: false, error: 'Not available in production' }, { status: 404 })
+    return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 })
   }
 
   // Super-admin-only: verify via auth middleware

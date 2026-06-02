@@ -10,11 +10,11 @@ import { useAppStore } from "@/lib/store"
 import { apiClient, ApiClientError } from '@/lib/api-client'
 import { formatPrice, formatDate } from "@/lib/utils"
 import { fadeIn, stagger } from '@/lib/animations'
-import { PageHeader, StatusBadge, EmptyState } from "./shared"
+import { PageHeader, StatusBadge, EmptyState, AdminScreenWrapper } from "./shared"
 import type { OrderStatus, Order } from "@/lib/types"
 import { useState, useMemo, useEffect } from "react"
 import { ConfirmDialog } from "./confirm-dialog"
-import { LoadingSpinner } from "./loading-spinner"
+
 
 // ==================== TYPES ====================
 type AdminOrderStatus = "pending" | "processing" | "shipped" | "delivered" | "cancelled"
@@ -175,10 +175,8 @@ export function AdminOrdersScreen() {
     { label: "Selesai", count: deliveredCount, icon: Check, color: "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 dark:text-emerald-400" },
   ]
 
-  if (isLoading) return <div className="pb-20"><PageHeader title="Kelola Pesanan" /><LoadingSpinner message="Memuat pesanan..." /></div>
-
   return (
-    <div className="pb-20">
+    <AdminScreenWrapper title="Kelola Pesanan" isLoading={isLoading}>
       <PageHeader title="Kelola Pesanan" />
 
       <div className="px-4 space-y-4">
@@ -354,6 +352,6 @@ export function AdminOrdersScreen() {
         title={confirmAction?.title || ''}
         message={confirmAction?.message || ''}
       />
-    </div>
+    </AdminScreenWrapper>
   )
 }

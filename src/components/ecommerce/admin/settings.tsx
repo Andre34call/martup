@@ -14,6 +14,7 @@ import { PageHeader, SectionHeader } from "../shared"
 import { fadeIn } from '@/lib/animations'
 import { useState, useEffect, useCallback } from "react"
 import { apiClient, ApiClientError } from '@/lib/api-client'
+import { handleApiError } from '@/lib/handle-api-error'
 
 // ==================== TYPE DEFINITIONS ====================
 interface MartUpBankAccount {
@@ -60,8 +61,8 @@ export function AdminSettings() {
         // Sync to global store so other components (checkout, etc.) can use settings
         fetchPlatformSettings()
       }
-    } catch {
-      showToast("Gagal memuat pengaturan", "error")
+    } catch (err) {
+      handleApiError(err, "pengaturan")
     } finally {
       setLoading(false)
     }

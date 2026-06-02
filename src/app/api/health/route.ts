@@ -1,5 +1,6 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 import { logger } from '@/lib/logger'
 
 // ==================== HEALTH CHECK ENDPOINT ====================
@@ -19,7 +20,11 @@ interface HealthCheckResult {
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  // Require admin auth for health info
+  const authResult = await verifyAdmin(request)
+  if (!authResult.success) return authErrorResponse(authResult)
+
   const startTime = Date.now()
   const checks: HealthCheckResult['checks'] = {
     database: { status: 'error' },

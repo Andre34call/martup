@@ -13,10 +13,10 @@ import { useAppStore } from "@/lib/store"
 import type { WithdrawStatus } from "@/lib/types"
 import { formatPrice, formatRelativeTime } from "@/lib/utils"
 import { stagger } from '@/lib/animations'
-import { PageHeader, SectionHeader, EmptyState } from "../shared"
+import { PageHeader, SectionHeader, EmptyState, AdminScreenWrapper, PrimaryButton } from "../shared"
 import { useState, useEffect } from "react"
 import { ConfirmDialog } from "../confirm-dialog"
-import { LoadingSpinner } from "../loading-spinner"
+
 
 export function AdminWithdraw() {
   const { showToast, withdrawRequests, updateWithdrawStatus, fetchAdminWithdrawals } = useAppStore()
@@ -74,10 +74,8 @@ export function AdminWithdraw() {
     rejected: "Ditolak",
   }
 
-  if (isLoading) return <div className="pb-20"><PageHeader title="Penarikan Dana" /><LoadingSpinner message="Memuat penarikan..." /></div>
-
   return (
-    <div className="pb-20">
+    <AdminScreenWrapper title="Penarikan Dana" isLoading={isLoading}>
       <PageHeader title="Penarikan Dana" rightAction={
         <span className="text-xs text-muted-foreground">{pendingWithdrawals.length} pending</span>
       } />
@@ -182,9 +180,9 @@ export function AdminWithdraw() {
                   </div>
                   {withdrawal.status === 'pending' && (
                     <div className="flex gap-2 mt-3 pt-3 border-t border-border/50">
-                      <Button size="sm" className="flex-1 h-8 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white" onClick={() => handleApprove(withdrawal.id)}>
+                      <PrimaryButton size="sm" className="flex-1 h-8 text-xs rounded-lg" onClick={() => handleApprove(withdrawal.id)}>
                         <Check className="w-3 h-3 mr-1" /> Approve
-                      </Button>
+                      </PrimaryButton>
                       <Button variant="outline" size="sm" className="flex-1 h-8 text-xs rounded-lg text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20" onClick={() => setShowRejectModal(withdrawal.id)}>
                         <X className="w-3 h-3 mr-1" /> Reject
                       </Button>
@@ -260,6 +258,6 @@ export function AdminWithdraw() {
         title={confirmAction?.title || ''}
         message={confirmAction?.message || ''}
       />
-    </div>
+    </AdminScreenWrapper>
   )
 }

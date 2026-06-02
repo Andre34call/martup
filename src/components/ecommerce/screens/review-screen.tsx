@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { useAppStore } from "@/lib/store"
 import { formatPrice } from "@/lib/utils"
 import { fadeIn, stagger } from '@/lib/animations'
-import { PageHeader, SectionHeader, EmptyState } from "../shared"
+import { PageHeader, SectionHeader, EmptyState, PrimaryButton } from "../shared"
 import { useState, useRef, useCallback } from "react"
 import { Star, Camera, Send, Lock, Package, ImagePlus, Video, Play, X, Eye, ThumbsUp, ThumbsDown, Meh, CheckCircle2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -566,13 +566,13 @@ export function ReviewScreen() {
                       </div>
 
                       {/* Submit Button */}
-                      <Button
+                      <PrimaryButton
                         disabled={!rating}
                         onClick={() => handleSubmitReview(order.id)}
-                        className="w-full bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl h-10 disabled:opacity-40 text-sm font-semibold"
+                        className="w-full rounded-xl h-10 disabled:opacity-40 text-sm font-semibold"
                       >
                         <Send className="w-4 h-4 mr-1.5" /> Kirim Ulasan
-                      </Button>
+                      </PrimaryButton>
                     </Card>
                   </motion.div>
                 )

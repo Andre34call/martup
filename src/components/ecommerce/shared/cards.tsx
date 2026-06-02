@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { formatPrice } from "@/lib/utils"
 import { SellerBadge } from "./display"
+import { PrimaryButton } from "./buttons"
 
 // ==================== CATEGORY PILL ====================
 interface CategoryPillProps {
@@ -106,13 +107,13 @@ export function VoucherCard({
             s/d {new Date(validUntil).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
           </p>
           {onClaim && !isClaimed && isActive && (
-            <Button
+            <PrimaryButton
               size="sm"
               onClick={onClaim}
-              className="h-7 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white"
+              className="h-7 text-xs rounded-lg"
             >
               Pakai
-            </Button>
+            </PrimaryButton>
           )}
           {isClaimed && (
             <span className="text-xs text-emerald-600 font-medium flex items-center gap-1">

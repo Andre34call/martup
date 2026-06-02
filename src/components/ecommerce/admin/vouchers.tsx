@@ -16,6 +16,7 @@ import { useState, useEffect, useCallback } from "react"
 import { ConfirmDialog } from "../confirm-dialog"
 import { LoadingSpinner } from "../loading-spinner"
 import { apiClient, ApiClientError } from '@/lib/api-client'
+import { handleApiError } from '@/lib/handle-api-error'
 
 // ==================== TYPE DEFINITIONS ====================
 interface VoucherItem {
@@ -65,8 +66,8 @@ export function AdminVouchers() {
       if (data.success) {
         setVouchers(data.data)
       }
-    } catch {
-      showToast("Gagal memuat voucher", "error")
+    } catch (err) {
+      handleApiError(err, "voucher")
     } finally {
       setLoading(false)
     }
