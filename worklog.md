@@ -2312,3 +2312,36 @@ Stage Summary:
 - **Clickable @mention**: Works in feed, comments, and profile screens — resolves username to user ID before navigating
 - Backward compatible — `MentionText` without `onMentionClick` renders same as before
 - Deployed to Vercel auto-deploy
+
+---
+Task ID: buyer-rating-jasa
+Agent: Main
+Task: Add Buyer Rating System + MartUp Jasa (service marketplace)
+
+Work Log:
+- Updated Prisma schema:
+  - BuyerRating model: orderId (unique), sellerId, buyerId, rating (1-5), content, tags
+  - User model: added buyerRating, buyerRatingCount, cancellationCount, returnCount
+  - Product model: added productType (product/jasa), serviceDuration, serviceLocation
+  - Order model: added buyerRating relation
+- Created API routes:
+  - POST /api/buyer-ratings (seller rates buyer, only for delivered orders, one per order)
+  - GET /api/buyer-ratings?buyerId= (view ratings + trust score summary)
+  - GET /api/buyer-ratings/can-rate (list rateable orders for seller)
+- Buyer Trust Score: 5 levels (excellent/good/fair/poor/new) based on avg rating
+- 8 rating tags: Bayar Cepat, Komunikatif, Ramah, Mudah Diajak Kerja Sama, Terlambat Bayar, Tidak Respon, Cancel Sepihak, Return Bermasalah
+- Seller Orders: added "Rating Pembeli" button on delivered orders
+- Rating dialog: star selector + tags + optional comment + buyer trust badge
+- Transaction-based: recalculates buyer avg rating atomically on every new rating
+- Security: only seller can rate, only for delivered orders, one rating per order
+- MartUp Jasa: product type toggle (Barang/Jasa) in add-product screen
+- Jasa mode: hides weight/stock, shows serviceDuration + serviceLocation
+- API: POST/PUT /api/seller/products accepts productType + jasa fields
+- Types: Product interface includes productType, serviceDuration, serviceLocation
+- Build passes ✅
+- Pushed to production (commit 4798a0b)
+
+Stage Summary:
+- Buyer Rating System fully implemented — sellers can rate buyers, trust scores visible
+- MartUp Jasa marketplace type added — sellers can list services alongside products
+- Both features deployed to Vercel auto-deploy
