@@ -45,9 +45,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate amount
-    if (!amount || typeof amount !== 'number' || amount <= 0) {
+    if (!amount || typeof amount !== 'number' || amount <= 0 || !Number.isInteger(amount)) {
       return NextResponse.json(
-        { success: false, error: 'Jumlah penarikan harus lebih dari 0' },
+        { success: false, error: 'Jumlah penarikan harus berupa bilangan bulat lebih dari 0' },
         { status: 400 }
       )
     }
@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
     // SECURITY: Check sufficient balance (only available balance, not hold/pending)
     if (Number(wallet.balance) < amount) {
       return NextResponse.json(
-        { success: false, error: `Saldo tidak mencukupi. Saldo tersedia: Rp ${Number(wallet.balance).toLocaleString('id-ID')}` },
+        { success: false, error: 'Saldo tidak mencukupi' },
         { status: 400 }
       )
     }
@@ -120,6 +120,11 @@ export async function POST(request: NextRequest) {
           holdBalance: { increment: amount },
         },
       })
+
+      // SECURITY: Verify balance didn't go negative (safety net)
+      if (updatedWallet.balance.lessThan(0)) {
+        throw new Error('INSUFFICIENT_BALANCE')
+      }
 
       // Create withdrawal record with PENDING status — admin must approve
       const newWithdrawal = await tx.withdrawal.create({

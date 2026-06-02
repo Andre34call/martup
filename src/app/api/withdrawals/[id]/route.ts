@@ -39,44 +39,46 @@ export async function PUT(
       )
     }
 
-    const withdrawal = await db.withdrawal.findUnique({ where: { id } })
-    if (!withdrawal) {
-      return NextResponse.json(
-        { success: false, error: 'Penarikan dana tidak ditemukan' },
-        { status: 404 }
-      )
-    }
-
-    // SECURITY: Only allow status changes from 'pending' (prevent double-processing)
-    if (withdrawal.status !== 'pending') {
-      return NextResponse.json(
-        { success: false, error: `Penarikan sudah berstatus "${withdrawal.status}". Hanya penarikan "pending" yang bisa diproses.` },
-        { status: 400 }
-      )
-    }
-
-    const updateData: Record<string, unknown> = { status }
-    if (adminNote) updateData.adminNote = adminNote
-    if (status === 'approved' || status === 'processed') {
-      updateData.processedAt = new Date()
-    }
-
+    // SECURITY: Entire operation including status check is inside $transaction to prevent race conditions
     const updated = await db.$transaction(async (tx) => {
+      // Fetch withdrawal INSIDE transaction with lock
+      const withdrawal = await tx.withdrawal.findUnique({
+        where: { id },
+      })
+
+      if (!withdrawal) {
+        throw new Error('NOT_FOUND')
+      }
+
+      // SECURITY: Check status INSIDE transaction to prevent double-processing
+      if (withdrawal.status !== 'pending') {
+        throw new Error(`ALREADY_PROCESSED:${withdrawal.status}`)
+      }
+
+      const updateData: Record<string, unknown> = { status }
+      if (adminNote) updateData.adminNote = adminNote
+      if (status === 'approved' || status === 'processed') {
+        updateData.processedAt = new Date()
+      }
+
       const updatedWithdrawal = await tx.withdrawal.update({
         where: { id },
         data: updateData,
       })
 
-      // If rejected, refund the amount to seller wallet
+      // If rejected, refund the amount from holdBalance back to balance
       if (status === 'rejected') {
         const wallet = await tx.wallet.findUnique({
           where: { sellerId: withdrawal.sellerId },
         })
         if (wallet) {
-          const newBalance = Number(wallet.balance) + Number(withdrawal.amount)
-          await tx.wallet.update({
+          // SECURITY: Decrement holdBalance AND increment balance to prevent phantom funds
+          const updatedWallet = await tx.wallet.update({
             where: { id: wallet.id },
-            data: { balance: { increment: withdrawal.amount } },
+            data: {
+              balance: { increment: withdrawal.amount },
+              holdBalance: { decrement: withdrawal.amount },
+            },
           })
 
           await tx.walletMutation.create({
@@ -84,7 +86,7 @@ export async function PUT(
               walletId: wallet.id,
               type: 'credit',
               amount: withdrawal.amount,
-              balance: newBalance,
+              balance: updatedWallet.balance,
               description: `Pengembalian dana penarikan yang ditolak${adminNote ? `: ${adminNote}` : ''}`,
               refType: 'withdraw',
               refId: withdrawal.id,
@@ -107,7 +109,22 @@ export async function PUT(
       data: updated,
     }))
   } catch (error: unknown) {
-    // Error logged above — generic message returned to client
+    // Handle transaction-level errors (NOT_FOUND, ALREADY_PROCESSED)
+    if (error instanceof Error) {
+      if (error.message === 'NOT_FOUND') {
+        return NextResponse.json(
+          { success: false, error: 'Penarikan dana tidak ditemukan' },
+          { status: 404 }
+        )
+      }
+      if (error.message.startsWith('ALREADY_PROCESSED:')) {
+        const currentStatus = error.message.split(':')[1]
+        return NextResponse.json(
+          { success: false, error: `Penarikan sudah berstatus "${currentStatus}". Hanya penarikan "pending" yang bisa diproses.` },
+          { status: 400 }
+        )
+      }
+    }
     logger.error({ err: error }, 'Update withdrawal error')
     return NextResponse.json(
       { success: false, error: 'Terjadi kesalahan server' },

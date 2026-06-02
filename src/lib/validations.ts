@@ -118,6 +118,12 @@ export const adminDepositActionSchema = z.object({
   adminNote: z.string().max(500).optional(),
 })
 
+export const adminWithdrawalActionSchema = z.object({
+  withdrawalId: z.string().min(1, 'Withdrawal ID wajib diisi'),
+  status: z.enum(['approved', 'rejected', 'processed']),
+  adminNote: z.string().max(500).optional(),
+})
+
 // ==================== Wallet ====================
 export const walletDebitSchema = z.object({
   orderId: z.string().min(1, 'orderId wajib diisi'),

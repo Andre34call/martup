@@ -41,9 +41,9 @@ export async function POST(request: NextRequest) {
     const { amount, method, senderName } = body as { amount?: number; method?: string; senderName?: string }
 
     // Validate amount
-    if (!amount || typeof amount !== 'number' || amount <= 0) {
+    if (!amount || typeof amount !== 'number' || amount <= 0 || !Number.isInteger(amount)) {
       return NextResponse.json(
-        { success: false, error: 'Jumlah deposit harus lebih dari 0' },
+        { success: false, error: 'Jumlah deposit harus berupa bilangan bulat lebih dari 0' },
         { status: 400 }
       )
     }
@@ -101,6 +101,11 @@ export async function POST(request: NextRequest) {
       logger.warn('Failed to fetch platform settings for deposit destination')
     }
 
+    // SECURITY: Sanitize senderName to prevent XSS
+    const sanitizedSenderName = senderName
+      ? String(senderName).trim().slice(0, 100).replace(/[<>"'&]/g, '')
+      : undefined
+
     // Set expiry to 24 hours from now
     const expiredAt = new Date()
     expiredAt.setHours(expiredAt.getHours() + 24)
@@ -113,7 +118,7 @@ export async function POST(request: NextRequest) {
         method,
         status: 'pending',
         destinationAccount,
-        senderName: senderName || null,
+        senderName: sanitizedSenderName || null,
         expiredAt,
       },
     })

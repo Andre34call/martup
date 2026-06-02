@@ -39,10 +39,15 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { amount, method, senderName } = body as { amount?: number; method?: string; senderName?: string }
 
+    // SECURITY: Sanitize senderName
+    const sanitizedSenderName = senderName
+      ? String(senderName).trim().slice(0, 100).replace(/[<>"'&]/g, '')
+      : undefined
+
     // Validate amount
-    if (!amount || typeof amount !== 'number' || amount <= 0) {
+    if (!amount || typeof amount !== 'number' || amount <= 0 || !Number.isInteger(amount)) {
       return NextResponse.json(
-        { success: false, error: 'Jumlah top up harus lebih dari 0' },
+        { success: false, error: 'Jumlah top up harus berupa bilangan bulat lebih dari 0' },
         { status: 400 }
       )
     }
@@ -131,7 +136,7 @@ export async function POST(request: NextRequest) {
         method,
         status: 'pending',
         destinationAccount,
-        senderName: senderName || null,
+        senderName: sanitizedSenderName || null,
         expiredAt,
       },
     })

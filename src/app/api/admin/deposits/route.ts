@@ -101,27 +101,27 @@ export async function PUT(request: NextRequest) {
     }
     const { depositId, status, adminNote } = validation.data
 
-    // Fetch the deposit to verify it exists and is currently pending/proof_uploaded
-    const deposit = await db.deposit.findUnique({
-      where: { id: depositId },
-    })
-
-    if (!deposit) {
-      return NextResponse.json(
-        { success: false, error: 'Deposit tidak ditemukan' },
-        { status: 404 }
-      )
-    }
-
-    if (deposit.status !== 'pending' && deposit.status !== 'proof_uploaded') {
-      return NextResponse.json(
-        { success: false, error: `Deposit sudah diproses dengan status "${deposit.status}"` },
-        { status: 400 }
-      )
-    }
-
-    // SECURITY: Use $transaction for atomic deposit approval + wallet credit
+    // SECURITY: Entire operation including status check is inside $transaction to prevent race conditions
+    // (double-credit if two admins approve simultaneously)
+    let depositUserId: string | undefined
     const updatedDeposit = await db.$transaction(async (tx) => {
+      // Fetch deposit INSIDE transaction to get locked row
+      const deposit = await tx.deposit.findUnique({
+        where: { id: depositId },
+      })
+
+      if (!deposit) {
+        throw new Error('NOT_FOUND')
+      }
+
+      // Save for logging after transaction
+      depositUserId = deposit.userId
+
+      // SECURITY: Check status INSIDE transaction to prevent double-processing
+      if (deposit.status !== 'pending' && deposit.status !== 'proof_uploaded') {
+        throw new Error(`ALREADY_PROCESSED:${deposit.status}`)
+      }
+
       // If approving, credit the user's wallet atomically
       if (status === 'success') {
         const wallet = await tx.wallet.findUnique({
@@ -198,11 +198,27 @@ export async function PUT(request: NextRequest) {
     logBusinessEvent({
       event: 'DEPOSIT_STATUS_CHANGED',
       userId: authResult.user.id,
-      details: { depositId, newStatus: status, adminNote, depositUserId: deposit.userId },
+      details: { depositId, newStatus: status, adminNote, depositUserId },
     })
 
     return NextResponse.json(serializeDecimal({ success: true, data: updatedDeposit }))
   } catch (error: unknown) {
+    // Handle transaction-level errors (NOT_FOUND, ALREADY_PROCESSED)
+    if (error instanceof Error) {
+      if (error.message === 'NOT_FOUND') {
+        return NextResponse.json(
+          { success: false, error: 'Deposit tidak ditemukan' },
+          { status: 404 }
+        )
+      }
+      if (error.message.startsWith('ALREADY_PROCESSED:')) {
+        const currentStatus = error.message.split(':')[1]
+        return NextResponse.json(
+          { success: false, error: `Deposit sudah diproses dengan status "${currentStatus}"` },
+          { status: 400 }
+        )
+      }
+    }
     logger.error({ err: error }, 'Admin deposits PUT error')
     return NextResponse.json(
       { success: false, error: 'Terjadi kesalahan server' },
