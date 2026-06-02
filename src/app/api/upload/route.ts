@@ -232,6 +232,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // SECURITY: Restrict avatars bucket to the dedicated /api/user/avatar endpoint
+    // The generic upload route should NOT be used for avatars because it
+    // doesn't update the User record or clean up old avatars.
+    if (bucket === 'avatars') {
+      return NextResponse.json(
+        { success: false, error: 'Avatar uploads must use the dedicated /api/user/avatar endpoint' },
+        { status: 400 }
+      )
+    }
+
     // SECURITY: Validate file MIME type
     const mimeType = file.type
     const isImage = isImageType(mimeType)

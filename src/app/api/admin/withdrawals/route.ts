@@ -84,9 +84,28 @@ export async function PUT(request: NextRequest) {
     const body = await request.json()
     const { withdrawalId, status, adminNote } = body
 
-    if (!withdrawalId || !status) {
+    // Input validation
+    if (!withdrawalId || typeof withdrawalId !== 'string') {
       return NextResponse.json(
-        { success: false, error: 'withdrawalId and status are required' },
+        { success: false, error: 'withdrawalId is required and must be a string' },
+        { status: 400 }
+      )
+    }
+    if (!status || typeof status !== 'string') {
+      return NextResponse.json(
+        { success: false, error: 'status is required and must be a string' },
+        { status: 400 }
+      )
+    }
+    if (adminNote !== undefined && typeof adminNote !== 'string') {
+      return NextResponse.json(
+        { success: false, error: 'adminNote must be a string' },
+        { status: 400 }
+      )
+    }
+    if (adminNote && adminNote.length > 500) {
+      return NextResponse.json(
+        { success: false, error: 'adminNote must be at most 500 characters' },
         { status: 400 }
       )
     }

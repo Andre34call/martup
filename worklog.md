@@ -2488,3 +2488,308 @@ Stage Summary:
 - View tracking: automatic on product detail page + explicit POST endpoint
 - Promoted products auto-expire based on promotedUntil timestamp
 - Deployed to production as commit 135c760
+
+---
+Task ID: 3
+Agent: Full App Auditor
+Task: Comprehensive app audit
+
+Work Log:
+- Read auth-middleware.ts, csrf.ts, rate-limit.ts, validations.ts, sanitize.ts — core security infrastructure
+- Audited auth routes: login, register, forgot-password, reset-password, user/password, user/2fa
+- Audited product routes: /api/products, /api/products/[id], /api/seller/products, /api/seller/register, /api/seller/profile, /api/seller/orders
+- Audited admin routes: /api/admin/users, /api/admin/orders, /api/admin/withdrawals, /api/admin/init
+- Audited order/payment routes: /api/orders, /api/orders/[id]/status, /api/payment/create, /api/payment/notification
+- Audited wallet routes: /api/wallet/debit, /api/wallet/withdraw
+- Audited stream routes: /api/stream, /api/stream/[id], /api/stream/[id]/comments/[commentId]
+- Audited chat routes: /api/chat/rooms
+- Audited diagnostic/debug routes: /api/auth/diagnostic, /api/auth/login-diagnostic, /api/test-db, /api/debug/health
+- Audited upload route: /api/upload
+- Audited proxy middleware (src/proxy.ts)
+- Audited Prisma schema: all 30+ models, indexes, relations
+- Audited Zustand stores: wallet.ts, order.ts
+- Audited types.ts for TypeScript completeness
+- Checked for hardcoded URLs (localhost:3000 fallbacks in 7 files)
+- Checked for SQL injection vectors ($queryRawUnsafe usage)
+
+Stage Summary:
+
+## CRITICAL Issues (3)
+
+### C-1: SQL Injection via $queryRawUnsafe in Products GET route
+- **Severity**: CRITICAL
+- **Category**: Security
+- **File**: src/app/api/products/route.ts, lines 100-116
+- **Description**: The viral-sort query uses `$queryRawUnsafe()` with string-interpolated WHERE conditions. While the parameters are passed via the spread operator (not direct string concat), `$queryRawUnsafe` does NOT parameterize the WHERE clause string itself — it embeds it directly into the SQL. The `search` parameter is interpolated into the conditions string via `conditions.push(...)` with `$${paramIdx++}` which is safe for the VALUES, but the `WHERE ${whereClause}` part is built from string concatenation of conditions. The `search` value is used in an ILIKE pattern: `p.name ILIKE $${paramIdx}` with the `%${search}%` value passed as a param. This part is safe. However, the categoryId and sellerId are injected directly into condition strings: `conditions.push(\`p.category_id = $${paramIdx++}\`)` with `params.push(categoryId)` — this is also safe because they're parameterized. **Actual risk: LOW** because all user inputs are passed as params, not concatenated into the SQL string. However, `$queryRawUnsafe` is still a code smell and should be replaced with `$queryRaw` tagged template for defense-in-depth.
+- **Suggested fix**: Replace `$queryRawUnsafe(query, ...params)` with `$queryRaw` tagged template literal, or use Prisma's raw query with explicit parameter binding. This eliminates the risk of future developers accidentally introducing injection when modifying the conditions.
+
+### C-2: Wallet debit amount mismatch allows partial payment
+- **Severity**: CRITICAL
+- **Category**: Security
+- **File**: src/app/api/wallet/debit/route.ts, line 107
+- **Description**: The wallet debit endpoint allows a 1-rupiah rounding tolerance (`Math.abs(Number(order.totalAmount) - amount) > 1`). However, the actual `amount` deducted from the wallet is the CLIENT-PROVIDED `amount`, not the server-computed `order.totalAmount`. A malicious client could send `amount = order.totalAmount - 1` and pay 1 rupiah less. While the tolerance is small, this creates a financial inconsistency — the wallet is debited less than the order total.
+- **Suggested fix**: Always use `order.totalAmount` as the debit amount inside the transaction, not the client-provided `amount`. The client amount check should only validate that they match, not set the debit value:
+  ```typescript
+  const debitAmount = Number(order.totalAmount); // ALWAYS use server value
+  ```
+
+### C-3: Seller can set `status: 'blocked'` via PUT /api/seller/products
+- **Severity**: HIGH (escalated from MEDIUM due to business logic bypass)
+- **Category**: Security
+- **File**: src/app/api/seller/products/route.ts, lines 374-379
+- **Description**: The PUT handler validates `status` must be one of `'active', 'draft', 'blocked'` but does NOT restrict which statuses a seller can set. A seller could set a blocked product back to `active`, bypassing admin moderation. The `blocked` status is meant to be admin-only (admin can block products for policy violations). A seller setting `status: 'blocked'` also incorrectly decrements `totalProducts`. The status validation should restrict sellers to only `'active'` and `'draft'`.
+- **Suggested fix**: Add authorization check — only admin can set `status: 'blocked'`:
+  ```typescript
+  if (status === 'blocked' && !['admin', 'manager'].includes(authResult.user.role)) {
+    return NextResponse.json({ success: false, error: 'Only admin can block products' }, { status: 403 })
+  }
+  ```
+
+## HIGH Issues (5)
+
+### H-1: Stream comment deletion only allows author — post owner cannot delete comments on their posts
+- **Severity**: HIGH
+- **Category**: Security
+- **File**: src/app/api/stream/[id]/comments/[commentId]/route.ts, line 81
+- **Description**: Only the comment author can delete their own comment. Post owners (or admins) cannot delete comments on their own posts. This is a moderation gap — if someone posts spam/abusive comments on another user's post, the post owner has no recourse except reporting. The admin CAN delete the entire post (soft-delete via stream/[id] DELETE), but not individual comments.
+- **Suggested fix**: Allow post owner to delete comments on their own posts:
+  ```typescript
+  const isPostOwner = comment.userId !== authResult.user.id && post.userId === authResult.user.id
+  const isAdmin = ELEVATED_ROLES.includes(authResult.user.role)
+  if (!isAuthor && !isPostOwner && !isAdmin) { ... }
+  ```
+
+### H-2: Legacy rate limiter (checkRateLimit) has memory leak in serverless
+- **Severity**: HIGH
+- **Category**: Performance / Security
+- **File**: src/lib/auth-middleware.ts, lines 62-97
+- **Description**: The legacy `checkRateLimit()` function uses an in-memory Map that never cleans up in serverless environments. While there's a cleanup at 10,000 entries, each cold start creates a fresh empty map — meaning rate limiting is completely ineffective in serverless (Vercel). Many routes still use this legacy function (user/password, 2fa, seller/products, stream, etc.). The `checkRateLimitAdvanced()` function with distributed backend exists but is rarely used.
+- **Suggested fix**: Migrate all routes from `checkRateLimit()` to `checkRateLimitAdvanced()` or the pre-configured limiters from rate-limit.ts. Deprecate and eventually remove `checkRateLimit()`.
+
+### H-3: Seller products POST lacks Zod validation for many fields
+- **Severity**: HIGH
+- **Category**: Security
+- **File**: src/app/api/seller/products/route.ts, POST handler
+- **Description**: While name and description are sanitized, many fields (price, discountPrice, stock, weight, condition, productType, status, isFeatured, isFlashSale, flashSaleEnd, tags, variants) are taken directly from the request body with only basic type/range checks. A seller could set `isFeatured: true` or `isFlashSale: true` on their own products to get free promotion, or set `status: 'active'` on a draft that should be reviewed.
+- **Suggested fix**: Create a `sellerProductCreateSchema` Zod schema that restricts write-once/admin-only fields. Remove `isFeatured`, `isPromoted`, and `isFlashSale` from seller-settable fields or default them to false.
+
+### H-4: Admin users PATCH (promote) lacks Zod validation
+- **Severity**: HIGH
+- **Category**: Security
+- **File**: src/app/api/admin/users/route.ts, PATCH handler
+- **Description**: The promote endpoint (PATCH) takes `userId`, `divisionId`, and `promoteToManager` from the request body with only `!userId` validation. The `divisionId` is used directly in `db.division.findUnique({ where: { id: divisionId } })` — while Prisma parameterizes queries (no SQL injection), an invalid/malicious UUID could cause unexpected behavior. More importantly, `promoteToManager` is a boolean that directly grants manager access with only a `verifyManager` check (any manager can promote others to admin roles).
+- **Suggested fix**: Add Zod schema for the PATCH body and verify divisionId is a valid CUID format.
+
+### H-5: Admin withdrawals PUT lacks Zod validation and admin-only status enforcement
+- **Severity**: HIGH
+- **Category**: Security
+- **File**: src/app/api/admin/withdrawals/route.ts
+- **Description**: The PUT handler takes `withdrawalId`, `status`, and `adminNote` from the body without Zod validation. The `adminNote` field (up to 500 chars per the deposit schema) has no length validation here. More critically, any admin (including division roles like 'pr', 'tech') can approve/reject withdrawals — this should be restricted to finance division or super admin.
+- **Suggested fix**: Add Zod validation and restrict withdrawal processing to finance division or super admin only.
+
+## MEDIUM Issues (8)
+
+### M-1: Hardcoded localhost:3000 fallbacks in 7 API route files
+- **Severity**: MEDIUM
+- **Category**: Bug / Configuration
+- **Files**: auth/register, auth/forgot-password, auth/resend-verification, payment/create, lib/auth.ts, lib/env.ts
+- **Description**: Multiple API routes fall back to `http://localhost:3000` when NEXTAUTH_URL and VERCEL_URL are not set. This is fine for development but could produce incorrect callback URLs if deployed without proper env vars. The centralized `env.ts` already handles this, but some routes duplicate the fallback logic instead of using `env.NEXTAUTH_URL`.
+- **Suggested fix**: Use `env.NEXTAUTH_URL` from `@/lib/env` in all routes instead of inline fallback chains.
+
+### M-2: Wallet type incomplete — missing `pendingBalance` field
+- **Severity**: MEDIUM
+- **Category**: Architecture
+- **File**: src/lib/types.ts, line 254-258
+- **Description**: The `Wallet` TypeScript interface only has `balance` and `holdBalance`, but the Prisma schema has a `pendingBalance` field. The seller profile response and wallet store use `pendingBalance`, but the type doesn't reflect this. This causes type mismatches where `pendingBalance` is accessed via `any` casts or implicit types.
+- **Suggested fix**: Add `pendingBalance?: number` to the `Wallet` interface in types.ts.
+
+### M-3: Inconsistent auth patterns — some routes use verifyAuth + seller lookup, others don't
+- **Severity**: MEDIUM
+- **Category**: Architecture
+- **Description**: Routes that should require seller access have inconsistent patterns:
+  - `/api/seller/products` POST — uses verifyAuth + db.seller.findFirst (correct)
+  - `/api/seller/orders` GET — uses verifyAuth + db.seller.findUnique (correct but different method)
+  - `/api/wallet/withdraw` POST — uses verifyAuth + db.seller.findUnique (correct)
+  - `/api/orders/[id]/status` PUT — uses verifyAuth then checks role with inline `if` chains (inconsistent)
+  - `/api/stream/[id]` DELETE — uses ELEVATED_ROLES check (correct but different pattern)
+  - No centralized "requireSeller" middleware function exists.
+- **Suggested fix**: Create a `verifySeller()` helper in auth-middleware.ts that combines verifyAuth + seller lookup, similar to verifyAdmin/verifyManager. Use it consistently across all seller-only endpoints.
+
+### M-4: Order store optimistic update for "paid" status bypasses server validation
+- **Severity**: MEDIUM
+- **Category**: Security / UX
+- **File**: src/lib/store/order.ts, lines 190-293 (payForOrder)
+- **Description**: The `payForOrder` function optimistically updates the order to "paid" status in local state BEFORE the API call completes. For Midtrans payments, it then rolls back (correct). But for wallet payments, the code attempts to call `/api/wallet` with a raw amount (`-Math.max(0, order.totalAmount)`) — this is the old wallet API pattern and may not work. The actual wallet payment should go through `/api/wallet/debit` which has proper authorization and idempotency checks. If the wallet deduction fails (caught silently), the order status update to 'paid' still proceeds.
+- **Suggested fix**: Remove the wallet deduction call from the order store — checkout-screen.tsx already handles this properly via `/api/wallet/debit`. The store should not attempt its own payment flow.
+
+### M-5: Seed endpoint accessible to any admin in non-production
+- **Severity**: MEDIUM
+- **Category**: Security
+- **File**: src/app/api/seed/route.ts
+- **Description**: The seed endpoint requires admin auth and is disabled in production (unless ENABLE_SEED=true). However, in staging/preview deployments (which run with NODE_ENV=production), the check `process.env.NODE_ENV === 'production'` would block it. But in development, any admin can trigger seeding, which could overwrite real data with demo data. There's no confirmation prompt or protection against accidental re-seeding.
+- **Suggested fix**: Add a dry-run mode or confirmation token. Consider requiring a specific `SEED_CONFIRM=true` body parameter.
+
+### M-6: Upload route allows any authenticated user to upload to any whitelisted bucket
+- **Severity**: MEDIUM
+- **Category**: Security
+- **File**: src/app/api/upload/route.ts
+- **Description**: Any authenticated user can upload to any whitelisted bucket (products, avatars, banners, streams, reviews). A buyer could upload images to the "products" bucket even though they don't own any products. While the bucket+folder whitelist prevents arbitrary uploads, there's no ownership check — e.g., only sellers should upload to "products", only admins to "banners".
+- **Suggested fix**: Add role-based bucket restrictions: only sellers/admins can upload to "products", only admins to "banners", etc.
+
+### M-7: Prisma schema missing index on ChatRoom.updatedAt
+- **Severity**: MEDIUM
+- **Category**: Performance
+- **File**: prisma/schema.prisma, ChatRoom model
+- **Description**: Chat rooms are ordered by `updatedAt DESC` in the listing query, but there's no index on this field. As the number of chat rooms grows, this will cause slow sorts.
+- **Suggested fix**: Add `@@index([updatedAt])` to the ChatRoom model.
+
+### M-8: Missing index on StreamPost for user feed queries
+- **Severity**: MEDIUM
+- **Category**: Performance
+- **File**: prisma/schema.prisma, StreamPost model
+- **Description**: The feed query filters by `isActive, isHidden, isPrivate, createdAt` but the existing composite indexes don't cover the common `{ isActive: true, isHidden: false, isPrivate: false }` + `ORDER BY createdAt DESC` pattern efficiently. The existing `@@index([isActive, createdAt])` helps but doesn't cover the `isHidden` filter.
+- **Suggested fix**: Add `@@index([isActive, isHidden, isPrivate, createdAt])` for the feed query pattern.
+
+## LOW Issues (7)
+
+### L-1: `sanitizeInput` used for product description — strips all formatting
+- **Severity**: LOW
+- **Category**: UX
+- **File**: src/app/api/products/[id]/route.ts, line 191
+- **Description**: Product descriptions are sanitized with `sanitizeInput()` which strips ALL HTML tags. However, `sanitizeRichContent()` exists and allows basic formatting (bold, italic, links). The product detail page likely renders descriptions as plain text, so this is correct for now but could be a UX limitation if rich descriptions are desired.
+- **Suggested fix**: Consider using `sanitizeRichContent()` for product descriptions if rich formatting is desired, and ensure the frontend renders it safely.
+
+### L-2: Wallet store `deductWallet` is a local-only operation with no API sync
+- **Severity**: LOW
+- **Category**: Architecture
+- **File**: src/lib/store/wallet.ts, line 97-112
+- **Description**: `deductWallet` only updates local Zustand state without calling the server. The comment says "The actual API call happens in checkout-screen.tsx" but if the checkout API call fails, the local state will be inconsistent with the server. The `fetchWalletBalance` call in the post-checkout flow should correct this, but there's a window of inconsistency.
+- **Suggested fix**: After checkout completion, always call `fetchWalletBalance()` to resync. Add a comment documenting the sync strategy.
+
+### L-3: User type missing several fields from Prisma schema
+- **Severity**: LOW
+- **Category**: Architecture
+- **File**: src/lib/types.ts, User interface
+- **Description**: The TypeScript `User` type is missing: `isActive`, `tokenVersion`, `failedLoginAttempts`, `dailyCheckIn`, `fcmToken`, `divisionId`, `buyerRating`, `buyerRatingCount`, `cancellationCount`, `returnCount`. While not all fields are needed on the frontend, some (like `isActive`, `divisionId`) are used in admin UI and accessed via `any` casts.
+- **Suggested fix**: Add commonly-used fields to the User type, or create an `AdminUserView` type that extends User with admin-specific fields.
+
+### L-4: Duplicate `maskPhone` function in login and 2fa routes
+- **Severity**: LOW
+- **Category**: Architecture
+- **File**: src/app/api/auth/login/route.ts (line 23), src/app/api/user/2fa/route.ts (line 304)
+- **Description**: The same `maskPhone` function is defined identically in both files. This should be extracted to a shared utility.
+- **Suggested fix**: Move `maskPhone` to `@/lib/utils.ts` or `@/lib/format.ts` and import it.
+
+### L-5: Debug/diagnostic routes return too much info even in dev
+- **Severity**: LOW
+- **Category**: Security
+- **File**: src/app/api/debug/health/route.ts, src/app/api/auth/diagnostic/route.ts
+- **Description**: Even restricted to dev + admin, these routes expose: env var names, API key prefixes, database error messages, VERCEL_URL, super admin email. In a shared dev/staging environment, less-privileged admins could gain info about infrastructure. The routes are already disabled in production, so risk is limited.
+- **Suggested fix**: Remove API key prefix leakage (`resendApiKeyPrefix`, `clientIdPrefix`) from diagnostic output.
+
+### L-6: CSRF exempt list includes `/api/seller/register` which is authenticated
+- **Severity**: LOW
+- **Category**: Security
+- **File**: src/lib/csrf.ts, line 34
+- **Description**: `/api/seller/register` is listed as CSRF-exempt with the comment "requires auth, non-destructive, prone to CSRF race condition". However, this route IS authenticated (requires verifyAuth) and IS destructive (changes user role, creates seller record, modifies wallet). The CSRF exemption could allow a CSRF attack where an authenticated user is tricked into registering as a seller.
+- **Suggested fix**: Remove `/api/seller/register` from the CSRF exempt list. If there's a race condition issue, fix it with proper idempotency rather than disabling CSRF.
+
+### L-7: Register route logs PII in development mode (devVerifyUrl)
+- **Severity**: LOW
+- **Category**: Security
+- **File**: src/app/api/auth/register/route.ts, lines 141, 261
+- **Description**: In development mode, the register response includes `devVerifyUrl` which contains the raw verification token. While this is development-only, it exposes the verification token in the HTTP response which could be logged by proxies or browser extensions.
+- **Suggested fix**: Accept as dev-only convenience, but consider logging a warning when this feature is active.
+
+---
+Task ID: 2
+Agent: Avatar Upload Auditor
+Task: Audit avatar upload flow for bugs
+
+Work Log:
+- Read and analyzed 12+ files in the avatar upload flow end-to-end
+- Files audited:
+  - `src/app/api/user/avatar/route.ts` — Dedicated avatar upload/delete API route
+  - `src/app/api/upload/route.ts` — Generic file upload API route
+  - `src/app/api/user/profile/route.ts` — Profile update API route
+  - `src/components/ecommerce/screens/settings-screen.tsx` — Settings screen with avatar upload UI
+  - `src/components/ecommerce/profile-screen.tsx` — Profile screen with avatar upload UI
+  - `src/lib/store/profile.ts` — Zustand profile slice (uploadAvatar, removeAvatar, avatarUrl)
+  - `src/lib/store/auth.ts` — Zustand auth slice (login sets avatarUrl)
+  - `src/lib/store/data-fetch.ts` — Zustand data fetch slice (fetchUserData sets avatarUrl)
+  - `src/lib/store/types.ts` — Store type definitions
+  - `src/lib/api-client.ts` — API client with upload method
+  - `src/lib/ensure-bucket.ts` — Supabase bucket creation helper
+  - `src/lib/upload-limits.ts` — Centralized upload limits
+  - `src/app/api/setup/storage/route.ts` — Storage setup endpoint
+  - `src/lib/types.ts` — User type definition
+  - `src/lib/mappers.ts` — Data mappers including mapUser
+  - Searched all frontend components referencing avatar (20+ files)
+
+Stage Summary:
+- Found 8 issues (1 HIGH, 4 MEDIUM, 3 LOW)
+
+## ISSUE 1: Settings screen missing avatarError reset on avatarUrl change
+- Severity: HIGH
+- Category: Bug
+- File: `src/components/ecommerce/screens/settings-screen.tsx`, line 31
+- Description: The `avatarError` state is set to `true` when an avatar image fails to load (`onError`), but is NEVER reset back to `false`. The profile-screen has `useEffect(() => { setAvatarError(false) }, [avatarUrl])` (line 79) but the settings-screen is missing this effect. After a failed avatar load, even a successful new upload won't display the avatar — the user sees the initial letter fallback permanently until they navigate away and come back.
+- Suggested fix: Add `useEffect(() => { setAvatarError(false) }, [avatarUrl])` to SettingsScreen (after line 32).
+
+## ISSUE 2: avatarUrl state can go out of sync with currentUser.avatar
+- Severity: MEDIUM
+- Category: Bug / Architecture
+- File: `src/lib/store/profile.ts`, lines 13-37
+- Description: `avatarUrl` and `currentUser.avatar` are maintained as two separate state fields that must be kept in sync. The `updateProfile` action updates `currentUser` (including `avatar` field) from the server response but does NOT update `avatarUrl`. If the server returns a different avatar URL than what's in the store (e.g., avatar changed on another device/session), `currentUser.avatar` gets updated but `avatarUrl` stays stale. Since all avatar display components use `avatarUrl` (not `currentUser.avatar`), the visual display will be wrong.
+- Suggested fix: In `updateProfile`'s success handler, also sync `avatarUrl`: `avatarUrl: response.data.avatar || null`. Long-term: consider deriving `avatarUrl` from `currentUser.avatar` with a selector instead of maintaining separate state.
+
+## ISSUE 3: Generic upload route allows avatars bucket uploads without database update
+- Severity: MEDIUM
+- Category: Security / Architecture
+- File: `src/app/api/upload/route.ts`, lines 16-22
+- Description: The generic `/api/upload` route allows `bucket=avatars, folder=profiles`. It uploads the file to Supabase Storage but does NOT update the User record. This means: (1) orphaned files accumulate in the avatars bucket with no DB reference, (2) if a caller combines this with `updateProfile`, they could bypass the dedicated avatar route's old-avatar-cleanup logic. The dedicated `/api/user/avatar` route is the correct entry point for avatar uploads.
+- Suggested fix: Remove `avatars` from `ALLOWED_BUCKETS` in the generic upload route, forcing all avatar uploads through the dedicated route that handles DB updates and old file cleanup.
+
+## ISSUE 4: Inconsistent avatar bucket size limit across configurations
+- Severity: MEDIUM
+- Category: Architecture
+- Files: `src/app/api/user/avatar/route.ts` line 14 (5MB), `src/app/api/upload/route.ts` line 33 (5MB), `src/app/api/setup/storage/route.ts` line 13 (10MB), `src/lib/ensure-bucket.ts` line 9 (10MB)
+- Description: The application-level validation in the avatar route and upload route enforces 5MB (from `UPLOAD_LIMITS.MAX_AVATAR_SIZE_MB`). However, the bucket creation in `setup/storage/route.ts` and `ensure-bucket.ts` sets the Supabase bucket-level `fileSizeLimit` to 10MB. While the app-level check is correct, the bucket-level limit is inconsistent. If someone uploads directly to Supabase (bypassing the app routes), they could upload 10MB avatars.
+- Suggested fix: Change `setup/storage/route.ts` line 13 from `10 * 1024 * 1024` to `5 * 1024 * 1024`, and `ensure-bucket.ts` line 9 from `10485760` to `5242880`, to match `UPLOAD_LIMITS.MAX_AVATAR_SIZE_MB`.
+
+## ISSUE 5: uploadAvatar response extraction is fragile with type coercion
+- Severity: MEDIUM
+- Category: Bug
+- File: `src/lib/store/profile.ts`, line 46
+- Description: `const avatarUrl: string = data.data?.avatar ?? data.data` — The fallback `data.data` could be an object (e.g., the full user record) if the API response shape changes unexpectedly. The TypeScript type annotation `string` wouldn't catch this at runtime. The `AvatarUploadResponse` type is defined as `{ data?: any; [key: string]: any }` which provides no type safety.
+- Suggested fix: Define a proper response type: `type AvatarUploadResponse = { success: boolean; data: { avatar: string } }` and extract with `data.data.avatar` directly (no fallback). If the avatar field is missing, the upload has failed and the error should propagate.
+
+## ISSUE 6: removeAvatar store action and DELETE API endpoint have no UI
+- Severity: LOW
+- Category: UX
+- File: `src/lib/store/profile.ts` lines 58-72, `src/app/api/user/avatar/route.ts` lines 288-340
+- Description: The `removeAvatar()` action and `DELETE /api/user/avatar` endpoint are fully implemented but no component exposes them. Users cannot remove their avatar — only replace it. Both the settings screen and profile screen have upload-only UI.
+- Suggested fix: Add a "Remove photo" button in the settings screen avatar section, perhaps as a long-press or as an option alongside the camera icon.
+
+## ISSUE 7: Three separate bucket-creation implementations can diverge
+- Severity: LOW
+- Category: Architecture
+- Files: `src/app/api/user/avatar/route.ts` lines 173-235, `src/app/api/upload/route.ts` lines 60-101, `src/lib/ensure-bucket.ts` lines 26-84
+- Description: There are three separate implementations of Supabase bucket auto-creation: inline in the avatar route, as a local function in the upload route, and as an exported function in `ensure-bucket.ts`. They have different configurations (the avatar route creates with 5MB limit, the upload route uses BUCKET_CONFIG, ensure-bucket uses its own BUCKET_CONFIG with 10MB for avatars). This divergence is already causing the size limit inconsistency (Issue 4).
+- Suggested fix: Consolidate to use `ensureBucketExists` from `src/lib/ensure-bucket.ts` in both API routes, fixing the configuration inconsistency at the same time.
+
+## ISSUE 8: Client-side avatar type validation allows SVG (server rejects it)
+- Severity: LOW
+- Category: Security / UX
+- File: `src/components/ecommerce/screens/settings-screen.tsx` line 247, `src/components/ecommerce/profile-screen.tsx` line 84
+- Description: Client-side validation only checks `file.type.startsWith("image/")`, which allows `image/svg+xml` files. The server correctly rejects SVGs (not in `ALLOWED_IMAGE_TYPES`), but this results in a wasted upload and a confusing "invalid file type" error after the user waited for the upload. SVG files could also contain XSS payloads (though the server prevents storage).
+- Suggested fix: Replace `!file.type.startsWith("image/")` with a more specific check: `const ALLOWED = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']; if (!ALLOWED.includes(file.type))`. This matches the server-side validation and gives immediate feedback.
+
+## POSITIVE FINDINGS (no issues):
+- Server-side security is strong: file type validation, size limits, magic byte validation, path traversal prevention, rate limiting, auth required, CSRF protection
+- Old avatar cleanup works correctly (extracts Supabase path, deletes old file before updating DB)
+- Auto-bucket creation on 404 is a good resilience pattern
+- The dedicated `/api/user/avatar` route properly updates the User record in the DB
+- Profile update route correctly does NOT accept `avatar` field (prevents arbitrary URL injection)
+- `apiClient.upload()` properly handles CSRF with retry for avatar uploads
+- Both upload screens have loading states during avatar upload

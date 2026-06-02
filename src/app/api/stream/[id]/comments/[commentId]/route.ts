@@ -77,16 +77,24 @@ export async function DELETE(
       )
     }
 
-    // SECURITY: Only the comment author can delete their own comment
+    // SECURITY: The comment author OR the post owner can delete the comment
+    // Post owners should be able to moderate their own posts' comments
     if (comment.userId !== authResult.user.id) {
-      logger.warn(
-        { userId: authResult.user.id, commentId, commentAuthorId: comment.userId, postId },
-        'Unauthorized comment deletion attempt'
-      )
-      return NextResponse.json(
-        { success: false, error: 'You can only delete your own comments' },
-        { status: 403 }
-      )
+      // Check if the user is the post owner
+      const post = await db.streamPost.findUnique({
+        where: { id: postId },
+        select: { userId: true },
+      })
+      if (!post || post.userId !== authResult.user.id) {
+        logger.warn(
+          { userId: authResult.user.id, commentId, commentAuthorId: comment.userId, postId },
+          'Unauthorized comment deletion attempt'
+        )
+        return NextResponse.json(
+          { success: false, error: 'You can only delete your own comments or comments on your posts' },
+          { status: 403 }
+        )
+      }
     }
 
     // Use a transaction to:

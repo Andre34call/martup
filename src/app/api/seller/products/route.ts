@@ -118,8 +118,12 @@ export async function POST(request: NextRequest) {
       serviceDuration,
       serviceLocation,
       status = 'active',
-      isFeatured = false,
-      isFlashSale = false,
+      // SECURITY: isFeatured and isFlashSale are admin-only fields.
+      // Sellers cannot set these — they would get free promotion.
+      // isFeatured is set by admin only.
+      // isFlashSale requires admin approval.
+      isFeatured = false, // Ignored below — forced to false
+      isFlashSale = false, // Ignored below — forced to false
       flashSaleEnd,
       tags,
       variants = [],
@@ -203,6 +207,10 @@ export async function POST(request: NextRequest) {
     // SECURITY: Block blob: video URLs
     const safeVideoUrl = (typeof videoUrl === 'string' && !videoUrl.startsWith('blob:')) ? videoUrl : null
 
+    // SECURITY: Sellers can only set status to 'active' or 'draft'
+    // 'blocked' is admin-only for moderation
+    const safeStatus = ['active', 'draft'].includes(status) ? status : 'active'
+
     const product = await db.product.create({
       data: {
         sellerId: verifiedSellerId,
@@ -221,10 +229,10 @@ export async function POST(request: NextRequest) {
         productType,
         serviceDuration: productType === 'jasa' ? (serviceDuration || null) : null,
         serviceLocation: productType === 'jasa' ? (serviceLocation || null) : null,
-        status,
-        isFeatured,
-        isFlashSale,
-        flashSaleEnd: flashSaleEnd ? new Date(flashSaleEnd) : null,
+        status: safeStatus,
+        isFeatured: false, // SECURITY: Always false — admin sets this
+        isFlashSale: false, // SECURITY: Always false — admin sets this
+        flashSaleEnd: null, // No flash sale without admin approval
         tags: tagsStr,
         variants: {
           create: variants.map((v: {
@@ -372,9 +380,11 @@ export async function PUT(request: NextRequest) {
     }
 
     // Validate status if provided
-    if (status !== undefined && !['active', 'draft', 'blocked'].includes(status)) {
+    // SECURITY: Sellers can only set 'active' or 'draft'. The 'blocked' status
+    // is reserved for admin soft-delete only (prevents sellers from hiding problematic products)
+    if (status !== undefined && !['active', 'draft'].includes(status)) {
       return NextResponse.json(
-        { success: false, error: 'status must be "active", "draft", or "blocked"' },
+        { success: false, error: 'Status harus "active" atau "draft". Status "blocked" hanya bisa diatur oleh admin.' },
         { status: 400 }
       )
     }
@@ -441,9 +451,11 @@ export async function PUT(request: NextRequest) {
         updateData.serviceLocation = null
       }
     }
-    if (isFeatured !== undefined) updateData.isFeatured = isFeatured
-    if (isFlashSale !== undefined) updateData.isFlashSale = isFlashSale
-    if (flashSaleEnd !== undefined) updateData.flashSaleEnd = flashSaleEnd ? new Date(flashSaleEnd) : null
+    // SECURITY: Sellers cannot modify isFeatured, isFlashSale, or flashSaleEnd
+    // These are admin-only fields. Remove them from updateData if present.
+    delete updateData.isFeatured
+    delete updateData.isFlashSale
+    delete updateData.flashSaleEnd
 
     // Stringify JSON fields for storage
     // SECURITY: Filter out blob: URLs that can never be served to other users

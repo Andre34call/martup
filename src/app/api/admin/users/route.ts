@@ -125,9 +125,34 @@ export async function PUT(request: NextRequest) {
     const body = await request.json()
     const { userId, isVerified, isActive, role, updates } = body
 
-    if (!userId) {
+    // Input validation
+    if (!userId || typeof userId !== 'string') {
       return NextResponse.json(
-        { success: false, error: 'userId is required' },
+        { success: false, error: 'userId is required and must be a string' },
+        { status: 400 }
+      )
+    }
+    if (isVerified !== undefined && typeof isVerified !== 'boolean') {
+      return NextResponse.json(
+        { success: false, error: 'isVerified must be a boolean' },
+        { status: 400 }
+      )
+    }
+    if (isActive !== undefined && typeof isActive !== 'boolean') {
+      return NextResponse.json(
+        { success: false, error: 'isActive must be a boolean' },
+        { status: 400 }
+      )
+    }
+    if (role !== undefined && typeof role !== 'string') {
+      return NextResponse.json(
+        { success: false, error: 'role must be a string' },
+        { status: 400 }
+      )
+    }
+    if (updates && typeof updates !== 'object') {
+      return NextResponse.json(
+        { success: false, error: 'updates must be an object' },
         { status: 400 }
       )
     }

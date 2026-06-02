@@ -31,6 +31,11 @@ export function SettingsScreen() {
   const [avatarError, setAvatarError] = useState(false)
   const avatarInputRef = useRef<HTMLInputElement>(null)
 
+  // Reset avatarError when avatarUrl changes (e.g. after successful re-upload)
+  useEffect(() => {
+    if (avatarUrl) setAvatarError(false)
+  }, [avatarUrl])
+
   // 2FA state
   const [twoFAEnabled, setTwoFAEnabled] = useState(false)
   const [twoFALoading, setTwoFALoading] = useState(true)
@@ -325,7 +330,7 @@ export function SettingsScreen() {
               <input
                 ref={avatarInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/jpeg,image/png,image/webp,image/gif"
                 className="hidden"
                 onChange={handleAvatarUpload}
               />

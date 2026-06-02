@@ -103,11 +103,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verify amount matches order total
-    if (Math.abs(Number(order.totalAmount) - amount) > 1) {
-      // Allow 1 rupiah rounding difference
+    // SECURITY: Verify amount matches order total EXACTLY
+    // The client-provided amount is ignored — we use the server-side order total
+    const serverTotalAmount = Number(order.totalAmount)
+    if (amount !== serverTotalAmount) {
       return NextResponse.json(
-        { success: false, error: `Jumlah pembayaran tidak sesuai. Total pesanan: Rp ${Number(order.totalAmount).toLocaleString('id-ID')}` },
+        { success: false, error: `Jumlah pembayaran tidak sesuai. Total pesanan: Rp ${serverTotalAmount.toLocaleString('id-ID')}` },
         { status: 400 }
       )
     }

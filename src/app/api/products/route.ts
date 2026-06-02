@@ -63,61 +63,38 @@ export async function GET(request: NextRequest) {
       orderBy = { promotedUntil: 'asc' }
     }
 
-    // For viral sort, use raw SQL to compute viral score
+    // For viral sort, use Prisma (safe from SQL injection) + in-memory viral score sort
     if (sort === 'viral') {
-      // Build WHERE clause for raw SQL
-      const conditions: string[] = ['p.status = \'active\'']
-      const params: unknown[] = []
-      let paramIdx = 1
+      // SECURITY: Use Prisma's built-in query builder instead of raw SQL
+      // to eliminate any SQL injection risk. All user inputs are properly
+      // parameterized by Prisma's query engine.
+      const [allProducts, total] = await Promise.all([
+        db.product.findMany({
+          where,
+          select: {
+            id: true,
+            sold: true,
+            rating: true,
+            reviewCount: true,
+            viewCount: true,
+            viralScore: true,
+            createdAt: true,
+          },
+        }),
+        db.product.count({ where }),
+      ])
 
-      if (categoryId) {
-        conditions.push(`p.category_id = $${paramIdx++}`)
-        params.push(categoryId)
-      }
-      if (sellerId) {
-        conditions.push(`p.seller_id = $${paramIdx++}`)
-        params.push(sellerId)
-      }
-      if (isFlashSale === 'true') {
-        conditions.push('p.is_flash_sale = true')
-      }
-      if (isPromoted === 'true') {
-        conditions.push('p.is_promoted = true')
-        conditions.push('p.promoted_until > NOW()')
-      }
-      if (isFeatured === 'true') {
-        conditions.push('p.is_featured = true')
-      }
-      if (search) {
-        conditions.push(`(p.name ILIKE $${paramIdx} OR p.description ILIKE $${paramIdx} OR p.tags ILIKE $${paramIdx})`)
-        params.push(`%${search}%`)
-        paramIdx++
-      }
+      // Sort by viral score in-memory (computed field not sortable via Prisma)
+      // Formula: sold * 3 + rating * reviewCount * 5 + viewCount * 0.1
+      const scored = allProducts.map(p => ({
+        id: p.id,
+        viralScore: p.sold * 3 + (p.rating || 0) * p.reviewCount * 5 + p.viewCount * 0.1,
+      }))
+      scored.sort((a, b) => b.viralScore - a.viralScore || Number(b.createdAt) - Number(a.createdAt))
 
-      const whereClause = conditions.join(' AND ')
-
-      // Get total count
-      const countResult = await db.$queryRawUnsafe(
-        `SELECT COUNT(*) as count FROM products p WHERE ${whereClause}`,
-        ...params
-      )
-      const total = Number((countResult as Array<Record<string, unknown>>)[0]?.count || 0)
-
-      // Get product IDs sorted by viral score
-      const limitParam = paramIdx++
-      const offsetParam = paramIdx++
-      const viralProducts = await db.$queryRawUnsafe(
-        `SELECT p.id, 
-          (p.sold * 3 + COALESCE(p.rating, 0) * p.review_count * 5 + p.view_count * 0.1) as viral_score
-         FROM products p 
-         WHERE ${whereClause}
-         ORDER BY viral_score DESC NULLS LAST, p.created_at DESC
-         LIMIT $${limitParam} OFFSET $${offsetParam}`,
-        ...params, limit, offset
-      ) as Array<{ id: string; viral_score: number }>
-
-      // Fetch full products with relations using the IDs
-      const productIds = viralProducts.map(p => p.id)
+      // Apply pagination
+      const paginated = scored.slice(offset, offset + limit)
+      const productIds = paginated.map(p => p.id)
 
       if (productIds.length === 0) {
         return NextResponse.json(serializeDecimal({
@@ -127,6 +104,7 @@ export async function GET(request: NextRequest) {
         }))
       }
 
+      // Fetch full products with relations using the paginated IDs
       const products = await db.product.findMany({
         where: { id: { in: productIds } },
         include: {
@@ -142,15 +120,15 @@ export async function GET(request: NextRequest) {
         },
       })
 
-      // Re-sort to match viral order from raw SQL
-      const viralScoreMap = new Map(viralProducts.map(p => [p.id, Number(p.viral_score)]))
+      // Re-sort to match viral order
+      const viralScoreMap = new Map(paginated.map(p => [p.id, p.viralScore]))
       products.sort((a, b) => {
         const scoreA = viralScoreMap.get(a.id) || 0
         const scoreB = viralScoreMap.get(b.id) || 0
         return scoreB - scoreA
       })
 
-      // Update viralScore on the products and parse JSON fields
+      // Attach viral scores and parse JSON fields
       const parsedProducts = products.map((product) => ({
         ...product,
         viralScore: viralScoreMap.get(product.id) || 0,

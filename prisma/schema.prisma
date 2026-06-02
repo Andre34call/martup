@@ -504,6 +504,7 @@ model ChatRoom {
   messages     ChatMessage[]
 
   @@index([productId])
+  @@index([updatedAt])
 }
 
 model ChatParticipant {

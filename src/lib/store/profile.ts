@@ -7,9 +7,15 @@ import { apiClient } from '@/lib/api-client'
 type AvatarUploadResponse = { data?: any; [key: string]: any }
 type ProfileUpdateResponse = { success: boolean; data?: any; error?: string }
 
-export const createProfileSlice: StateCreator<AppStore, [], [], ProfileSlice> = (set) => ({
+export const createProfileSlice: StateCreator<AppStore, [], [], ProfileSlice> = (set, get) => ({
   avatarUrl: null,
-  updateAvatar: (url) => set({ avatarUrl: url }),
+  updateAvatar: (url) => set({
+    avatarUrl: url,
+    // Keep currentUser.avatar in sync with avatarUrl
+    currentUser: get().currentUser
+      ? { ...get().currentUser, avatar: url }
+      : null,
+  }),
   updateProfile: async (data) => {
     // Optimistic update — update UI immediately
     set((state) => ({
@@ -23,10 +29,13 @@ export const createProfileSlice: StateCreator<AppStore, [], [], ProfileSlice> = 
       const response = await apiClient.put<ProfileUpdateResponse>('/api/user/profile', data)
       if (response.success && response.data) {
         // Update with server-returned data to stay in sync
+        const serverData = response.data
         set((state) => ({
           currentUser: state.currentUser
-            ? { ...state.currentUser, ...response.data }
+            ? { ...state.currentUser, ...serverData }
             : null,
+          // Keep avatarUrl in sync if server returned an avatar
+          ...(serverData.avatar ? { avatarUrl: serverData.avatar } : {}),
         }))
       }
     } catch (error) {
@@ -43,7 +52,15 @@ export const createProfileSlice: StateCreator<AppStore, [], [], ProfileSlice> = 
 
       // apiClient.upload handles auth + CSRF + Content-Type (omits Content-Type for FormData)
       const data = await apiClient.upload<AvatarUploadResponse>('/api/user/avatar', formData)
-      const avatarUrl: string = data.data?.avatar ?? data.data
+      // SECURITY: Type-safe extraction of avatar URL from API response
+      const avatarUrl: string = typeof data.data?.avatar === 'string'
+        ? data.data.avatar
+        : typeof data.data === 'string'
+          ? data.data
+          : ''
+      if (!avatarUrl) {
+        throw new Error('Avatar upload succeeded but no URL returned')
+      }
       set((state) => ({
         avatarUrl,
         currentUser: state.currentUser
@@ -62,7 +79,7 @@ export const createProfileSlice: StateCreator<AppStore, [], [], ProfileSlice> = 
       set((state) => ({
         avatarUrl: null,
         currentUser: state.currentUser
-          ? { ...state.currentUser, avatar: undefined }
+          ? { ...state.currentUser, avatar: null }
           : null,
       }))
     } catch (error) {
