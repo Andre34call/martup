@@ -7,8 +7,6 @@ export const createUISlice: StateCreator<AppStore, [], [], UISlice> = (set) => (
   isLoading: false,
   showSplash: true,
   setShowSplash: (v) => set({ showSplash: v }),
-  isOverlayOpen: false,
-  setOverlayOpen: (open) => set({ isOverlayOpen: open }),
   toast: null,
   showToast: (message, type = 'success') => {
     if (toastTimer) clearTimeout(toastTimer)

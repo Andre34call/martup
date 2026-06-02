@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { useAppStore } from "@/lib/store"
 import { formatPrice, formatRelativeTime } from "@/lib/utils"
-import { PageHeader, SectionHeader, EmptyState } from "./shared"
+import { PageHeader, SectionHeader, EmptyState, PrimaryButton, InlineSpinner } from "./shared"
 import type { BankAccount, WithdrawRequest, WithdrawStatus } from "@/lib/types"
 import { useState, useMemo } from "react"
 
@@ -278,7 +278,7 @@ export function SellerWithdrawScreen() {
   const selectedBank = sellerBankAccounts.find(a => a.id === selectedBankId)
 
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div className="min-h-screen bg-background pb-8">
       <PageHeader title="Tarik Dana" />
 
       <WithdrawStepIndicator currentStep={currentStep} />
@@ -367,14 +367,14 @@ export function SellerWithdrawScreen() {
               )}
             </div>
 
-            <Button
-              className="w-full h-12 rounded-xl bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white font-bold text-sm gap-1.5"
+            <PrimaryButton
+              className="w-full h-12 rounded-xl font-bold text-sm gap-1.5"
               disabled={!canProceedToStep1}
               onClick={() => setCurrentStep(1)}
             >
               Lanjut Pilih Rekening
               <ArrowRight className="w-4 h-4" />
-            </Button>
+            </PrimaryButton>
           </motion.div>
         )}
 
@@ -436,12 +436,12 @@ export function SellerWithdrawScreen() {
                       onChange={(e) => setNewAccountHolder(e.target.value)}
                       className="rounded-xl h-10"
                     />
-                    <Button
-                      className="w-full h-10 rounded-xl bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white text-sm font-bold"
+                    <PrimaryButton
+                      className="w-full h-10 rounded-xl text-sm font-bold"
                       onClick={handleAddBank}
                     >
                       Simpan Rekening
-                    </Button>
+                    </PrimaryButton>
                   </div>
                 </motion.div>
               )}
@@ -455,14 +455,14 @@ export function SellerWithdrawScreen() {
               >
                 Kembali
               </Button>
-              <Button
-                className="flex-1 h-12 rounded-xl bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white font-bold text-sm gap-1.5"
+              <PrimaryButton
+                className="flex-1 h-12 rounded-xl font-bold text-sm gap-1.5"
                 disabled={!canProceedToStep2}
                 onClick={() => setCurrentStep(2)}
               >
                 Lanjut Konfirmasi
                 <ArrowRight className="w-4 h-4" />
-              </Button>
+              </PrimaryButton>
             </div>
           </motion.div>
         )}
@@ -540,18 +540,14 @@ export function SellerWithdrawScreen() {
               >
                 Kembali
               </Button>
-              <Button
-                className="flex-1 h-12 rounded-xl bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white font-bold text-sm gap-1.5"
+              <PrimaryButton
+                className="flex-1 h-12 rounded-xl font-bold text-sm gap-1.5"
                 disabled={!canSubmit || isSubmitting}
                 onClick={handleSubmit}
               >
                 {isSubmitting ? (
                   <>
-                    <motion.div
-                      animate={{ rotate: 360 }}
-                      transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                      className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full"
-                    />
+                    <InlineSpinner className="w-4 h-4" />
                     Memproses...
                   </>
                 ) : (
@@ -560,7 +556,7 @@ export function SellerWithdrawScreen() {
                     Ajukan Penarikan
                   </>
                 )}
-              </Button>
+              </PrimaryButton>
             </div>
           </motion.div>
         )}
@@ -606,7 +602,7 @@ export function SellerWithdrawHistoryScreen() {
   ]
 
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div className="min-h-screen bg-background pb-8">
       <PageHeader title="Riwayat Penarikan" />
 
       <div className="px-4 space-y-4">

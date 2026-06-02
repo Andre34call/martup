@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { checkRateLimit, verifyAuth, verifyAdmin, authErrorResponse, AuthResult } from '@/lib/auth-middleware'
+import { verifyAuth, verifyAdmin, authErrorResponse, AuthResult } from '@/lib/auth-middleware'
+import { authLimiter } from '@/lib/rate-limit'
 import crypto from 'crypto'
 
 import { logger } from '@/lib/logger'
@@ -21,9 +22,10 @@ function safeCompare(a: string, b: string): boolean {
 // Once at least one admin exists, the secret key method is DISABLED
 export async function POST(request: NextRequest) {
   try {
-    // Rate limit - very strict for admin setup (2 per minute)
+    // Rate limit - very strict for admin setup (2 per minute, distributed)
     const clientIp = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
-    if (!checkRateLimit(`admin-setup:${clientIp}`, 2)) {
+    const rateLimitResult = await authLimiter.check(`admin-setup:${clientIp}`)
+    if (!rateLimitResult.allowed) {
       return NextResponse.json(
         { success: false, error: 'Terlalu banyak percobaan. Coba lagi nanti.' },
         { status: 429 }

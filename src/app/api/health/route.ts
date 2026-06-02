@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 import { logger } from '@/lib/logger'
-import { verifyAdmin } from '@/lib/auth-middleware'
 
 // ==================== HEALTH CHECK ENDPOINT ====================
 // Provides detailed health status for monitoring and load balancers.
 // Includes: database, memory, uptime checks.
-// SECURITY: Detailed info only for admin users; unauthenticated users see { status: "ok" }
 
 export const dynamic = 'force-dynamic'
 
@@ -22,23 +21,10 @@ interface HealthCheckResult {
 }
 
 export async function GET(request: NextRequest) {
-  // SECURITY: Check if the request is from an admin user.
-  // Unauthenticated users only receive a simple status response.
+  // Require admin auth for health info
   const authResult = await verifyAdmin(request)
+  if (!authResult.success) return authErrorResponse(authResult)
 
-  if (!authResult.success) {
-    return NextResponse.json(
-      { status: 'ok' },
-      {
-        status: 200,
-        headers: {
-          'Cache-Control': 'no-store, no-cache, must-revalidate',
-        },
-      }
-    )
-  }
-
-  // ===== Admin: Return detailed health information =====
   const startTime = Date.now()
   const checks: HealthCheckResult['checks'] = {
     database: { status: 'error' },

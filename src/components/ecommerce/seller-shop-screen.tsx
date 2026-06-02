@@ -72,7 +72,7 @@ export function SellerShopScreen() {
 
   if (!seller) {
     return (
-      <div className="min-h-screen bg-background pb-20">
+      <div className="min-h-screen bg-background">
         <PageHeader title="Toko" onBack={handleBack} />
         <EmptyState
           icon={<Store className="w-10 h-10 text-muted-foreground" />}
@@ -159,7 +159,7 @@ export function SellerShopScreen() {
                 size="sm"
                 className="flex-1 h-9 text-xs rounded-lg"
                 onClick={() => {
-                  const chatRoom = chatRooms.find(r => r.seller?.id === selectedSellerId || r.otherUser?.id === selectedSellerId)
+                  const chatRoom = chatRooms.find(r => r.seller.id === selectedSellerId)
                   if (chatRoom) setSelectedChatRoom(chatRoom.id)
                   navigate('chat-room')
                 }}

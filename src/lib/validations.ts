@@ -118,10 +118,16 @@ export const adminDepositActionSchema = z.object({
   adminNote: z.string().max(500).optional(),
 })
 
+export const adminWithdrawalActionSchema = z.object({
+  withdrawalId: z.string().min(1, 'Withdrawal ID wajib diisi'),
+  status: z.enum(['approved', 'rejected', 'processed']),
+  adminNote: z.string().max(500).optional(),
+})
+
 // ==================== Wallet ====================
 export const walletDebitSchema = z.object({
   orderId: z.string().min(1, 'orderId wajib diisi'),
-  amount: z.number().positive('Jumlah debit harus lebih dari 0'),
+  amount: z.number().int().positive('Jumlah debit harus bilangan bulat lebih dari 0'),
   description: z.string().optional(),
 })
 
@@ -144,7 +150,7 @@ export const createOrderSchema = z.object({
     variantName: z.string().nullable().optional(),
     image: z.string().nullable().optional(),
   })).min(1, 'Items tidak boleh kosong'),
-  addressId: z.string().min(1, 'addressId wajib diisi').optional(),
+  addressId: z.string().min(1, 'addressId wajib diisi'),
   subtotal: z.number().min(0).optional(),
   shippingCost: z.number().min(0).optional(),
   discountAmount: z.number().min(0).optional(),
@@ -224,7 +230,7 @@ export const sellerProfileUpdateSchema = z.object({
 })
 
 export const sellerWithdrawSchema = z.object({
-  amount: z.number().positive('Amount must be a positive number'),
+  amount: z.number().int().positive('Amount must be a positive integer'),
   bankAccount: z.string().optional(),
   bankName: z.string().optional(),
   bankHolder: z.string().optional(),

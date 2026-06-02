@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { checkRateLimit, generateAuthToken } from '@/lib/auth-middleware'
+import { generateAuthToken } from '@/lib/auth-middleware'
+import { authLimiter } from '@/lib/rate-limit'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
 import { logger } from '@/lib/logger'
@@ -22,9 +23,10 @@ function safeCompare(a: string, b: string): boolean {
 // Requires ADMIN_SETUP_SECRET env var for authentication.
 export async function POST(request: NextRequest) {
   try {
-    // Rate limit - very strict (2 per minute)
+    // Rate limit - very strict (2 per minute, distributed)
     const clientIp = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
-    if (!checkRateLimit(`admin-init:${clientIp}`, 2)) {
+    const rateLimitResult = await authLimiter.check(`admin-init:${clientIp}`)
+    if (!rateLimitResult.allowed) {
       return NextResponse.json(
         { success: false, error: 'Terlalu banyak percobaan. Coba lagi nanti.' },
         { status: 429 }
@@ -195,12 +197,10 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     logger.error({ err: error }, 'Admin init error')
 
-    // SECURITY: Only expose Prisma error codes and infrastructure details in development.
-    // In production, return generic error messages to prevent information leakage.
-    const isDev = process.env.NODE_ENV === 'development'
-    const errorMessage = isDev && error?.code === 'P1001'
+    // Provide specific error for database connection issues
+    const errorMessage = error?.code === 'P1001'
       ? 'Database tidak dapat diakses. Pastikan SUPABASE_DATABASE_URL sudah dikonfigurasi di Vercel.'
-      : isDev && error?.code === 'P1002'
+      : error?.code === 'P1002'
       ? 'Database connection timeout. Coba lagi dalam beberapa detik.'
       : 'Terjadi kesalahan server. Coba lagi nanti.'
 

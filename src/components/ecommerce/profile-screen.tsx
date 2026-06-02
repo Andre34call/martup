@@ -1,22 +1,22 @@
 "use client"
 
-import { motion } from "framer-motion"
-import { useAppStore, useCartStore } from "@/lib/store"
+import { motion, AnimatePresence } from "framer-motion"
+import { useAppStore } from "@/lib/store"
 import { formatPrice } from "@/lib/utils"
-import { RoleBadge } from "./shared"
+import { PageHeader, SectionHeader, RoleBadge } from "./shared"
 import { useState, useMemo, useRef, useEffect } from "react"
 import { useTheme } from 'next-themes'
 import {
-  User, Edit, Ticket, Package, Truck,
+  ArrowLeft, User, Edit, Wallet, Coins, Ticket, Package, Truck,
   Star, MapPin, Heart, Store, HelpCircle, Settings as SettingsIcon,
   Shield, Bell, Globe, ChevronRight, LogOut, Moon, Sun,
-  CreditCard, Check, Store as StoreIcon, LayoutDashboard,
-  Camera, Search, ShoppingCart
+  CreditCard, Clock, Check, Store as StoreIcon, LayoutDashboard,
+  Camera, X
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { ELEVATED_ROLES, type UserRole } from "@/lib/types"
-import { UPLOAD_LIMITS } from "@/lib/upload-limits"
 
 // Default values for unauthenticated users — NOT a mock, just sensible defaults
 const DEFAULT_USER_VALUES = {
@@ -66,24 +66,15 @@ function MenuItem({
 
 // ==================== PROFILE SCREEN ====================
 export function ProfileScreen() {
-  const { currentUser, userRole, originalRole, switchRole, orders, navigate, logout, showToast, avatarUrl, uploadAvatar, walletBalance, walletCoins, vouchers, unreadNotificationCount, totalUnreadChats } = useAppStore()
-  const { getTotalItemCount } = useCartStore()
-  const cartCount = getTotalItemCount()
+  const { currentUser, userRole, originalRole, switchRole, orders, navigate, logout, showToast, avatarUrl, uploadAvatar, walletBalance, walletCoins, vouchers } = useAppStore()
   const avatarInputRef = useRef<HTMLInputElement>(null)
   const [avatarError, setAvatarError] = useState(false)
-  const [avatarRetryKey, setAvatarRetryKey] = useState(0)
 
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
 
   // Reset avatar error when URL changes
   useEffect(() => { setAvatarError(false) }, [avatarUrl])
-
-  // Retry loading avatar image (handles transient network/403 errors)
-  const handleAvatarRetry = () => {
-    setAvatarError(false)
-    setAvatarRetryKey(prev => prev + 1)
-  }
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -92,8 +83,8 @@ export function ProfileScreen() {
       showToast("File harus berupa gambar", "error")
       return
     }
-    if (file.size > UPLOAD_LIMITS.mbToBytes(UPLOAD_LIMITS.MAX_AVATAR_SIZE_MB)) {
-      showToast(`Ukuran foto maksimal ${UPLOAD_LIMITS.MAX_AVATAR_SIZE_MB}MB`, "error")
+    if (file.size > 5 * 1024 * 1024) {
+      showToast("Ukuran foto maksimal 5MB", "error")
       return
     }
     setIsUploadingAvatar(true)
@@ -152,69 +143,18 @@ export function ProfileScreen() {
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
-      {/* ===== TOP BAR (Shopping Style — matches HomeScreen) ===== */}
-      <div className="sticky top-0 z-40 glass">
-        <div className="flex items-center gap-3 px-4 h-14">
-          {/* Logo */}
-          <span className="text-xl font-extrabold bg-gradient-to-r from-emerald-600 to-teal-400 bg-clip-text text-transparent flex-shrink-0">
-            MartUp
-          </span>
-
-          {/* Search bar */}
-          <motion.button
-            whileTap={{ scale: 0.98 }}
-            onClick={() => navigate("search")}
-            className="flex-1 flex items-center gap-2 h-9 px-3 rounded-xl bg-muted/60 border border-border/50 text-muted-foreground text-sm"
-          >
-            <Search className="w-4 h-4" />
-          </motion.button>
-
-          {/* Cart icon */}
-          <motion.button
-            whileTap={{ scale: 0.9 }}
-            onClick={() => navigate("cart")}
-            className="relative w-9 h-9 flex items-center justify-center rounded-xl hover:bg-muted transition-colors"
-          >
-            <ShoppingCart className="w-5 h-5 text-foreground" />
-            {cartCount > 0 && (
-              <motion.span
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 flex items-center justify-center rounded-full bg-orange-500 text-white text-[9px] font-bold px-1"
-              >
-                {cartCount > 99 ? "99+" : cartCount}
-              </motion.span>
-            )}
-          </motion.button>
-
-          {/* Notification bell */}
-          <motion.button
-            whileTap={{ scale: 0.9 }}
-            onClick={() => navigate("notification")}
-            className="relative w-9 h-9 flex items-center justify-center rounded-xl hover:bg-muted transition-colors"
-          >
-            <Bell className="w-5 h-5 text-foreground" />
-            {unreadNotificationCount > 0 && (
-              <motion.span
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 flex items-center justify-center rounded-full bg-red-500 text-white text-[9px] font-bold px-1"
-              >
-                {unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}
-              </motion.span>
-            )}
-          </motion.button>
-
-          {/* Settings gear */}
-          <motion.button
-            whileTap={{ scale: 0.9 }}
+      <PageHeader
+        title="Profil"
+        showBack={false}
+        rightAction={
+          <button
             onClick={() => navigate("settings")}
             className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-muted transition-colors"
           >
-            <SettingsIcon className="w-5 h-5 text-foreground" />
-          </motion.button>
-        </div>
-      </div>
+            <SettingsIcon className="w-5 h-5 text-muted-foreground" />
+          </button>
+        }
+      />
 
       <div className="flex-1 pb-20 overflow-y-auto">
         {/* Profile Header */}
@@ -225,7 +165,7 @@ export function ProfileScreen() {
                 <input
                   ref={avatarInputRef}
                   type="file"
-                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  accept="image/*"
                   className="hidden"
                   onChange={handleAvatarUpload}
                 />
@@ -242,21 +182,11 @@ export function ProfileScreen() {
                   ) : avatarUrl && !avatarError ? (
                     <div className="w-16 h-16 rounded-full overflow-hidden shadow-md ring-2 ring-emerald-500/30">
                       <img
-                        key={avatarRetryKey}
                         src={avatarUrl}
                         alt="Avatar"
                         className="w-full h-full object-cover"
                         onError={() => setAvatarError(true)}
                       />
-                    </div>
-                  ) : avatarUrl && avatarError ? (
-                    <div
-                      className="w-16 h-16 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-white font-bold flex flex-col items-center justify-center text-xs shadow-md cursor-pointer"
-                      onClick={handleAvatarRetry}
-                      title="Klik untuk coba ulang memuat foto"
-                    >
-                      <Camera className="w-4 h-4 mb-0.5" />
-                      <span className="text-[8px]">Coba lagi</span>
                     </div>
                   ) : (
                     <div className="w-16 h-16 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 text-white font-bold flex items-center justify-center text-xl shadow-md">

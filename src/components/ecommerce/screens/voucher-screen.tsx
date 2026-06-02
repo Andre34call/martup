@@ -4,7 +4,7 @@ import { motion } from "framer-motion"
 import { useAppStore } from "@/lib/store"
 import { formatPrice } from "@/lib/utils"
 import { fadeIn, stagger } from '@/lib/animations'
-import { PageHeader, EmptyState } from "../shared"
+import { PageHeader, EmptyState, PrimaryButton } from "../shared"
 import { useState, useEffect, useMemo } from "react"
 import { Ticket, Copy, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -106,9 +106,9 @@ export function VoucherScreen() {
             placeholder="Masukkan Kode"
             className="flex-1 rounded-xl h-10"
           />
-          <Button onClick={handleUseCode} className="bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl h-10 px-5">
+          <PrimaryButton onClick={handleUseCode} className="rounded-xl h-10 px-5">
             Pakai
-          </Button>
+          </PrimaryButton>
         </motion.div>
 
         {/* Tabs */}
@@ -174,9 +174,9 @@ export function VoucherScreen() {
                         <span className="mx-1">·</span>
                         <span>s/d {new Date(voucher.validUntil).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}</span>
                       </div>
-                      <Button size="sm" onClick={() => handleUseVoucher(voucher)} className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white">
+                      <PrimaryButton size="sm" onClick={() => handleUseVoucher(voucher)} className="h-7 text-[11px] rounded-lg">
                         Gunakan
-                      </Button>
+                      </PrimaryButton>
                     </div>
                   </div>
                 </Card>

@@ -22,72 +22,6 @@ const WS_URL = typeof window !== 'undefined'
 // Detect if WebSocket chat is available in this environment
 const isWsAvailable = typeof window !== 'undefined' && WS_URL !== ''
 
-/**
- * Build a ChatRoom object from API response data.
- * Supports both seller rooms (with seller info) and direct user rooms.
- */
-function mapApiRoomToChatRoom(r: Record<string, unknown>): ChatRoom {
-  const otherUser = r.otherUser as Record<string, unknown> | undefined
-  const sellerData = (otherUser?.seller as Record<string, unknown>) || {}
-  const productData = r.product as Record<string, unknown> | undefined
-
-  // If the other user has a seller profile, build the Seller object for backward compat
-  const hasSeller = sellerData && sellerData.id
-
-  const room: ChatRoom = {
-    id: r.id as string,
-    // Build otherUser info (available for ALL room types)
-    otherUser: otherUser ? {
-      id: otherUser.id as string,
-      name: (otherUser.name as string) || 'User',
-      avatar: otherUser.avatar as string | undefined,
-      isVerified: (otherUser.isVerified as boolean) || false,
-    } : undefined,
-    // Build seller info if the other user is a seller (backward compat)
-    seller: hasSeller ? {
-      id: sellerData.id as string,
-      userId: otherUser?.id as string || '',
-      storeName: (sellerData.storeName as string) || (otherUser?.name as string) || 'Seller',
-      storeSlug: (sellerData.storeSlug as string) || '',
-      storeAvatar: (otherUser?.avatar as string) || (sellerData.storeAvatar as string) || undefined,
-      isVerified: (sellerData.isVerified as boolean) || false,
-      isPremium: (sellerData.isPremium as boolean) || false,
-      rating: (sellerData.rating as number) || 0,
-      totalSales: (sellerData.totalSales as number) || 0,
-      totalProducts: (sellerData.totalProducts as number) || 0,
-    } : undefined,
-    lastMessage: (r.lastMessage as string) || '',
-    lastMessageTime: (r.lastMessageTime as string) || (r.updatedAt as string) || new Date().toISOString(),
-    unreadCount: (r.unreadCount as number) || 0,
-    product: productData ? {
-      id: productData.id as string,
-      name: productData.name as string,
-      price: productData.price as number,
-      images: typeof productData.images === 'string' ? JSON.parse(productData.images) : (productData.images as string[]) || [],
-    } as any : undefined,
-  }
-  return room
-}
-
-/**
- * Get display name for a chat room participant.
- * Works for both seller and non-seller rooms.
- */
-export function getChatRoomDisplayName(room: ChatRoom): string {
-  if (room.seller) return room.seller.storeName
-  if (room.otherUser) return room.otherUser.name
-  return 'User'
-}
-
-/**
- * Get avatar URL for a chat room participant.
- */
-export function getChatRoomAvatar(room: ChatRoom): string | undefined {
-  if (room.seller) return room.seller.storeAvatar
-  if (room.otherUser) return room.otherUser.avatar
-  return undefined
-}
-
 export const createChatSlice: StateCreator<AppStore, [], [], ChatSlice> = (set, get) => ({
   chatRooms: [],
   chatMessages: {},
@@ -147,7 +81,35 @@ export const createChatSlice: StateCreator<AppStore, [], [], ChatSlice> = (set, 
     try {
       const data = await apiClient.get<ChatRoomsResponse>('/api/chat/rooms')
       if (data.success && data.data) {
-        const rooms: ChatRoom[] = (data.data as Array<Record<string, unknown>>).map(mapApiRoomToChatRoom)
+        const rooms: ChatRoom[] = (data.data as Array<Record<string, unknown>>).map((r: Record<string, unknown>) => {
+          const otherUser = r.otherUser as Record<string, unknown> | undefined
+          const sellerData = (otherUser?.seller as Record<string, unknown>) || {}
+          const productData = r.product as Record<string, unknown> | undefined
+          return {
+            id: r.id as string,
+            seller: {
+              id: sellerData.id as string || otherUser?.id as string || '',
+              userId: otherUser?.id as string || '',
+              storeName: (otherUser?.name as string) || (sellerData.storeName as string) || 'Seller',
+              storeSlug: (sellerData.storeSlug as string) || '',
+              storeAvatar: (otherUser?.avatar as string) || (sellerData.storeAvatar as string) || undefined,
+              isVerified: (sellerData.isVerified as boolean) || false,
+              isPremium: (sellerData.isPremium as boolean) || false,
+              rating: (sellerData.rating as number) || 0,
+              totalSales: (sellerData.totalSales as number) || 0,
+              totalProducts: (sellerData.totalProducts as number) || 0,
+            },
+            lastMessage: (r.lastMessage as string) || '',
+            lastMessageTime: (r.lastMessageTime as string) || (r.updatedAt as string) || new Date().toISOString(),
+            unreadCount: (r.unreadCount as number) || 0,
+            product: productData ? {
+              id: productData.id as string,
+              name: productData.name as string,
+              price: productData.price as number,
+              images: typeof productData.images === 'string' ? JSON.parse(productData.images) : (productData.images as string[]) || [],
+            } as any : undefined,
+          }
+        })
         const totalUnreadChats = rooms.reduce((sum, r) => sum + r.unreadCount, 0)
         set({ chatRooms: rooms, totalUnreadChats })
 
@@ -246,8 +208,33 @@ export const createChatSlice: StateCreator<AppStore, [], [], ChatSlice> = (set, 
       const data = await res.json()
       if (data.success && data.data) {
         const r = data.data as Record<string, unknown>
-        const room = mapApiRoomToChatRoom(r)
-
+        const otherUser = r.otherUser as Record<string, unknown> | undefined
+        const sellerData = (otherUser?.seller as Record<string, unknown>) || {}
+        const productData = r.product as Record<string, unknown> | undefined
+        const room: ChatRoom = {
+          id: r.id as string,
+          seller: {
+            id: sellerData.id as string || otherUser?.id as string || '',
+            userId: otherUser?.id as string || '',
+            storeName: (otherUser?.name as string) || (sellerData.storeName as string) || 'Seller',
+            storeSlug: (sellerData.storeSlug as string) || '',
+            storeAvatar: (otherUser?.avatar as string) || (sellerData.storeAvatar as string) || undefined,
+            isVerified: (sellerData.isVerified as boolean) || false,
+            isPremium: (sellerData.isPremium as boolean) || false,
+            rating: (sellerData.rating as number) || 0,
+            totalSales: (sellerData.totalSales as number) || 0,
+            totalProducts: (sellerData.totalProducts as number) || 0,
+          },
+          lastMessage: (r.lastMessage as string) || '',
+          lastMessageTime: (r.lastMessageTime as string) || (r.updatedAt as string) || new Date().toISOString(),
+          unreadCount: 0,
+          product: productData ? {
+            id: productData.id as string,
+            name: productData.name as string,
+            price: productData.price as number,
+            images: typeof productData.images === 'string' ? JSON.parse(productData.images) : (productData.images as string[]) || [],
+          } as any : undefined,
+        }
         // Add to local state if not already present
         if (!get().chatRooms.find(cr => cr.id === room.id)) {
           get().addChatRoom(room)
@@ -263,35 +250,6 @@ export const createChatSlice: StateCreator<AppStore, [], [], ChatSlice> = (set, 
       return null
     } catch (error) {
       logger.warn({ component: 'chat', err: error }, 'Create chat room error')
-      return null
-    }
-  },
-
-  // Create a direct user-to-user chat room
-  createDirectChat: async (userId) => {
-    try {
-      const res = await apiClient.rawPost('/api/chat/rooms', { userId })
-      if (!res.ok) throw new Error('Failed to create direct chat')
-      const data = await res.json()
-      if (data.success && data.data) {
-        const r = data.data as Record<string, unknown>
-        const room = mapApiRoomToChatRoom(r)
-
-        // Add to local state if not already present
-        if (!get().chatRooms.find(cr => cr.id === room.id)) {
-          get().addChatRoom(room)
-        }
-
-        // Join the new room via WebSocket
-        if (socket && get().isSocketConnected) {
-          socket.emit('join-room', { roomId: room.id })
-        }
-
-        return room.id
-      }
-      return null
-    } catch (error) {
-      logger.warn({ component: 'chat', err: error }, 'Create direct chat error')
       return null
     }
   },

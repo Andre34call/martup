@@ -5,14 +5,15 @@ import {
   Users, Shield, Check, Ban, Trash2, AlertTriangle
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { PrimaryButton } from "../shared"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { useAppStore } from "@/lib/store"
-import { PageHeader, SearchBar, EmptyState } from "../shared"
+import { PageHeader, SearchBar, EmptyState, AdminScreenWrapper } from "../shared"
 import { stagger } from '@/lib/animations'
 import { useState, useEffect } from "react"
 import { ConfirmDialog } from "../confirm-dialog"
-import { LoadingSpinner } from "../loading-spinner"
+
 import { apiClient } from '@/lib/api-client'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Input } from "@/components/ui/input"
@@ -91,10 +92,8 @@ export function AdminUsers() {
     return matchesSearch && matchesRole
   })
 
-  if (isLoading) return <div className="pb-20"><PageHeader title="Kelola Users" /><LoadingSpinner message="Memuat users..." /></div>
-
   return (
-    <div className="pb-20">
+    <AdminScreenWrapper title="Kelola Users" isLoading={isLoading}>
       <PageHeader title="Kelola Users" />
 
       <div className="px-4 space-y-4">
@@ -182,12 +181,12 @@ export function AdminUsers() {
                   </div>
                   <div className="flex gap-2 mt-3 pt-3 border-t border-border/50">
                     {user.status === "pending" && (
-                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white" onClick={() => {
+                      <PrimaryButton size="sm" className="h-7 text-[11px] rounded-lg" onClick={() => {
                         handleUpdateUser(user.id, { isVerified: true })
                         showToast("User berhasil diverifikasi", "success")
                       }}>
                         <Check className="w-3 h-3 mr-0.5" /> Verify
-                      </Button>
+                      </PrimaryButton>
                     )}
                     {user.status === "active" && (
                       <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-amber-600" onClick={() => setConfirmAction({
@@ -398,6 +397,6 @@ export function AdminUsers() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </AdminScreenWrapper>
   )
 }

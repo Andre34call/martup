@@ -3,18 +3,8 @@ import { db } from '@/lib/db'
 import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
 import { updateOrderStatus } from '@/lib/order-status'
+import { parseJsonField } from '@/lib/api-utils'
 import { logger } from '@/lib/logger'
-
-// Helper to safely parse JSON fields
-function parseJsonField(value: string | null | undefined): unknown[] {
-  if (!value) return []
-  try {
-    const parsed = JSON.parse(value)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
 
 // GET /api/admin/orders - Fetch all orders with buyer name for admin
 export async function GET(request: NextRequest) {
@@ -70,18 +60,6 @@ export async function GET(request: NextRequest) {
               rating: true,
               totalSales: true,
               totalProducts: true,
-            },
-          },
-          platformBankAccount: {
-            select: {
-              id: true,
-              bankName: true,
-              bankCode: true,
-              accountNumber: true,
-              accountHolder: true,
-              branch: true,
-              isActive: true,
-              isDefault: true,
             },
           },
         },

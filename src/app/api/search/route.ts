@@ -1,22 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { checkRateLimit } from '@/lib/auth-middleware'
+import { parseJsonField } from '@/lib/api-utils'
+import { apiLimiter } from '@/lib/rate-limit'
 import { logger } from '@/lib/logger'
 import { serializeDecimal } from '@/lib/decimal-utils'
 import { Prisma } from '@prisma/client'
-
-// ==================== HELPERS ====================
-
-/** Safely parse a JSON string field (images, tags) into an array */
-function parseJsonField(value: string | null | undefined): unknown[] {
-  if (!value) return []
-  try {
-    const parsed = JSON.parse(value)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
 
 /** Extract client IP from request headers (behind reverse proxy) */
 function getClientIp(request: NextRequest): string {
@@ -41,9 +29,10 @@ export async function GET(request: NextRequest) {
   const startTime = Date.now()
 
   try {
-    // --- Rate limiting: 30 req/min per IP ---
+    // --- Rate limiting: 30 req/min per IP (distributed) ---
     const clientIp = getClientIp(request)
-    if (!checkRateLimit(`search:${clientIp}`, 30)) {
+    const rateLimitResult = await apiLimiter.check(`search:${clientIp}`)
+    if (!rateLimitResult.allowed) {
       logger.warn({ ip: clientIp }, 'Search rate limit exceeded')
       return NextResponse.json(
         { success: false, error: 'Too many requests. Please try again later.' },
@@ -160,10 +149,10 @@ export async function GET(request: NextRequest) {
       ...categoryFilter,
       AND: priceConditions.length > 0 ? priceConditions : undefined,
       OR: [
-        { name: { contains: q } },
-        { description: { contains: q } },
-        { tags: { contains: q } },
-        { category: { name: { contains: q } } },
+        { name: { contains: q, mode: 'insensitive' } },
+        { description: { contains: q, mode: 'insensitive' } },
+        { tags: { contains: q, mode: 'insensitive' } },
+        { category: { name: { contains: q, mode: 'insensitive' } } },
       ],
     }
 

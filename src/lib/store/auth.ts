@@ -138,7 +138,8 @@ export const createAuthSlice: StateCreator<AppStore, [], [], AuthSlice> = (set, 
         const userData = userDataRaw.data || userDataRaw
         if (userData.seller) {
           const { mapSeller } = await import('../mappers')
-          const seller = mapSeller(userData.seller)
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const seller = mapSeller(userData.seller as any)
           set({ seller })
         }
       } catch (preCheckErr) {
@@ -153,7 +154,8 @@ export const createAuthSlice: StateCreator<AppStore, [], [], AuthSlice> = (set, 
 
           if (registerData.success && registerData.data) {
             const { mapSeller } = await import('../mappers')
-            const seller = mapSeller(registerData.data)
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const seller = mapSeller(registerData.data as any)
             set({ seller })
           } else if (registerRes.status === 409) {
             // Already a seller — fetch existing seller data
@@ -163,7 +165,8 @@ export const createAuthSlice: StateCreator<AppStore, [], [], AuthSlice> = (set, 
 
               if (userData.seller) {
                 const { mapSeller } = await import('../mappers')
-                const seller = mapSeller(userData.seller)
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const seller = mapSeller(userData.seller as any)
                 set({ seller })
 
                 // Also update seller balance from wallet

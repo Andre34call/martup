@@ -1,12 +1,11 @@
 "use client"
 
 import { motion, AnimatePresence } from "framer-motion"
-import { Search, Bell, MessageCircle, ChevronRight, Zap, Package, ShoppingCart, Target, Flame } from "lucide-react"
+import { Search, Bell, MessageCircle, ChevronRight, Zap, Package, ShoppingCart } from "lucide-react"
 import { useAppStore, useCartStore } from "@/lib/store"
 import { ProductCard, FlashSaleTimer, CategoryPill, SectionHeader, EmptyState } from "./shared"
 import type { Product } from "@/lib/types"
 import { useState, useEffect, useCallback, useRef } from "react"
-import { apiClient } from "@/lib/api-client"
 
 // ==================== SECURITY HELPERS ====================
 
@@ -59,8 +58,6 @@ export function HomeScreen() {
   const cartCount = getTotalItemCount()
   const [currentBanner, setCurrentBanner] = useState(0)
   const [showLoadingMore, setShowLoadingMore] = useState(false)
-  const [promotedProducts, setPromotedProducts] = useState<Product[]>([])
-  const [viralProducts, setViralProducts] = useState<Product[]>([])
 
   // Handle quick action button clicks
   const handleQuickAction = useCallback((key: string) => {
@@ -100,61 +97,6 @@ export function HomeScreen() {
         break
     }
   }, [setSearchQuery, navigate, showToast])
-
-  // Fetch promoted and viral products on mount
-  useEffect(() => {
-    const fetchPromotedAndViral = async () => {
-      try {
-        const [promotedData, viralData] = await Promise.all([
-          apiClient.get<any>('/api/products', { sort: 'promoted', limit: '10' }),
-          apiClient.get<any>('/api/products', { sort: 'viral', limit: '20' }),
-        ])
-
-        const mapProduct = (p: any): Product => ({
-          id: p.id,
-          sellerId: p.sellerId,
-          categoryId: p.categoryId,
-          name: p.name,
-          slug: p.slug,
-          description: p.description,
-          price: Number(p.price),
-          discountPrice: p.discountPrice ? Number(p.discountPrice) : undefined,
-          images: Array.isArray(p.images) ? p.images : [],
-          stock: p.stock,
-          sold: p.sold,
-          minOrder: p.minOrder || 1,
-          weight: p.weight,
-          condition: p.condition || 'new',
-          status: p.status || 'active',
-          rating: p.rating || 0,
-          reviewCount: p.reviewCount || 0,
-          viewCount: p.viewCount || 0,
-          viralScore: p.viralScore || 0,
-          isFeatured: p.isFeatured || false,
-          isPromoted: p.isPromoted || false,
-          promotedUntil: p.promotedUntil || undefined,
-          isFlashSale: p.isFlashSale || false,
-          flashSaleEnd: p.flashSaleEnd || undefined,
-          tags: Array.isArray(p.tags) ? p.tags : undefined,
-          variants: (p.variants || []).map((v: any) => ({
-            id: v.id, productId: v.productId, name: v.name, value: v.value,
-            sku: v.sku || undefined, price: v.price ? Number(v.price) : undefined,
-            stock: v.stock, image: v.image || undefined,
-          })),
-          seller: p.seller || { id: '', userId: '', storeName: 'Unknown', storeSlug: '', isVerified: false, isPremium: false, rating: 0, totalSales: 0, totalProducts: 0 },
-          category: p.category || { id: '', name: 'Uncategorized', slug: 'uncategorized' },
-        })
-
-        if (promotedData?.success) {
-          setPromotedProducts((promotedData.data || []).map(mapProduct))
-        }
-        if (viralData?.success) {
-          setViralProducts((viralData.data || []).map(mapProduct))
-        }
-      } catch {}
-    }
-    fetchPromotedAndViral()
-  }, [])
 
   // Fetch home banners on mount
   useEffect(() => {
@@ -502,123 +444,11 @@ export function HomeScreen() {
         </div>
       </div>
 
-      {/* ===== PROMOTED PRODUCTS SECTION ===== */}
-      {promotedProducts.length > 0 && (
-        <div className="pt-5">
-          <div className="px-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <Target className="w-5 h-5 text-amber-500" />
-                <h2 className="text-base font-bold text-foreground">Promo Pilihan</h2>
-                <span className="text-[9px] font-medium text-amber-600 bg-amber-50 dark:bg-amber-900/30 px-1.5 py-0.5 rounded-md border border-amber-200 dark:border-amber-800">IKLAN</span>
-              </div>
-              <button onClick={() => navigate("search")} className="flex items-center gap-0.5 text-xs font-medium text-emerald-600 hover:text-emerald-700">
-                Lihat Semua
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-          <div className="flex gap-3 overflow-x-auto no-scrollbar px-4 pb-1">
-            {promotedProducts.map((product) => (
-              <motion.div key={product.id} whileTap={{ scale: 0.97 }} onClick={() => handleProductClick(product)}
-                className="flex-shrink-0 w-[155px] bg-card rounded-xl border border-amber-200/50 dark:border-amber-800/50 shadow-sm overflow-hidden cursor-pointer relative">
-                <div className="absolute top-1 left-1 z-10 bg-amber-500 text-white text-[8px] font-bold px-1.5 py-0.5 rounded-md">IKLAN</div>
-                <div className="relative aspect-square overflow-hidden">
-                  {product.images && product.images.length > 0 && !product.images[0].startsWith('blob:') ? (
-                    <img src={product.images[0]} alt={product.name} className="w-full h-full object-cover" loading="lazy" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-amber-100 dark:bg-amber-900/30">
-                      <span className="text-xl font-bold text-amber-500">{product.name.charAt(0)}</span>
-                    </div>
-                  )}
-                  {product.discountPrice && (
-                    <div className="absolute top-1 right-1 bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md">
-                      -{product.price > 0 ? Math.round(((product.price - product.discountPrice) / product.price) * 100) : 0}%
-                    </div>
-                  )}
-                </div>
-                <div className="p-2 space-y-1">
-                  <h3 className="text-[11px] font-medium line-clamp-2 leading-tight min-h-[1.5rem]">{product.name}</h3>
-                  {product.discountPrice ? (
-                    <p className="text-xs font-bold text-emerald-600">
-                      {new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(product.discountPrice)}
-                    </p>
-                  ) : (
-                    <p className="text-xs font-bold text-emerald-600">
-                      {new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(product.price)}
-                    </p>
-                  )}
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ===== VIRAL/TRENDING SECTION ===== */}
-      {viralProducts.length > 0 && (
-        <div className="pt-5">
-          <div className="px-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <Flame className="w-5 h-5 text-red-500" />
-                <h2 className="text-base font-bold text-foreground">Lagi Viral 🔥</h2>
-              </div>
-              <button onClick={() => navigate("search")} className="flex items-center gap-0.5 text-xs font-medium text-emerald-600 hover:text-emerald-700">
-                Lihat Semua
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-          <div className="flex gap-3 overflow-x-auto no-scrollbar px-4 pb-1">
-            {viralProducts.slice(0, 10).map((product, idx) => (
-              <motion.div key={product.id} whileTap={{ scale: 0.97 }} onClick={() => handleProductClick(product)}
-                className="flex-shrink-0 w-[155px] bg-card rounded-xl border border-border/50 shadow-sm overflow-hidden cursor-pointer">
-                <div className="relative aspect-square overflow-hidden">
-                  {product.images && product.images.length > 0 && !product.images[0].startsWith('blob:') ? (
-                    <img src={product.images[0]} alt={product.name} className="w-full h-full object-cover" loading="lazy" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-red-100 dark:bg-red-900/30">
-                      <span className="text-xl font-bold text-red-500">{product.name.charAt(0)}</span>
-                    </div>
-                  )}
-                  {product.discountPrice && (
-                    <div className="absolute top-1 left-1 bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md">
-                      -{product.price > 0 ? Math.round(((product.price - product.discountPrice) / product.price) * 100) : 0}%
-                    </div>
-                  )}
-                  {idx < 3 && (
-                    <div className="absolute top-1 right-1 bg-red-500 text-white text-[8px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-0.5">
-                      <Flame className="w-2.5 h-2.5" /> #{idx + 1}
-                    </div>
-                  )}
-                </div>
-                <div className="p-2 space-y-1">
-                  <h3 className="text-[11px] font-medium line-clamp-2 leading-tight min-h-[1.5rem]">{product.name}</h3>
-                  {product.discountPrice ? (
-                    <p className="text-xs font-bold text-emerald-600">
-                      {new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(product.discountPrice)}
-                    </p>
-                  ) : (
-                    <p className="text-xs font-bold text-emerald-600">
-                      {new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(product.price)}
-                    </p>
-                  )}
-                  <p className="text-[10px] text-muted-foreground">
-                    {product.sold > 1000 ? `${(product.sold / 1000).toFixed(1)}rb` : product.sold} terjual
-                  </p>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* ===== PRODUCT FEED ===== */}
       <div className="pt-5 px-4" ref={feedRef}>
         <SectionHeader
           title="Rekomendasi Untukmu"
-          subtitle="Urutan berdasarkan popularitas"
+          subtitle="Berdasarkan preferensimu"
           onAction={() => navigate("search")}
           actionLabel="Lihat Semua"
         />

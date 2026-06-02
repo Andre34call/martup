@@ -15,6 +15,7 @@ import { PageHeader, EmptyState } from "../shared"
 import { useState, useEffect, useCallback } from "react"
 import { ConfirmDialog } from "../confirm-dialog"
 import { apiClient, ApiClientError } from '@/lib/api-client'
+import { handleApiError } from '@/lib/handle-api-error'
 
 // ==================== TYPE DEFINITIONS ====================
 interface CampaignItem {
@@ -54,8 +55,8 @@ export function AdminCampaigns() {
       if (data.success) {
         setCampaigns(data.data)
       }
-    } catch {
-      showToast("Gagal memuat kampanye", "error")
+    } catch (err) {
+      handleApiError(err, "kampanye")
     } finally {
       setLoading(false)
     }

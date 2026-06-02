@@ -1,17 +1,90 @@
 import type { StateCreator } from 'zustand'
 import { logger } from '@/lib/logger'
 import type { AdminSlice, AppStore } from './types'
-import type { AdminStats, WithdrawStatus, Order } from '../types'
+import type { AdminStats, WithdrawStatus, Order, User, Banner, Division } from '../types'
 import { apiClient } from '@/lib/api-client'
 
+// Proper types for API response data (instead of any[])
+interface RawDivision {
+  id: string
+  name: string
+  slug: string
+  description?: string
+  icon?: string
+  color?: string
+  headUserId?: string
+  headUser?: { id: string; name: string; email: string; avatar?: string; role: string }
+  memberCount: number
+  isActive: boolean
+  sortOrder: number
+  createdAt: string
+  updatedAt: string
+}
+
+interface RawAdminUser {
+  id: string
+  name: string
+  email: string
+  phone?: string
+  role: string
+  isVerified: boolean
+  isBlocked: boolean
+  joinDate: string
+  totalSpent?: number
+  totalOrders?: number
+  divisionId?: string | null
+}
+
+interface RawWithdrawal {
+  id: string
+  sellerId: string
+  sellerName?: string
+  storeName?: string
+  amount: number
+  bankName?: string
+  bankAccount?: string
+  bankHolder?: string
+  status: string
+  createdAt?: string
+  processedAt?: string
+  adminNote?: string
+}
+
+interface RawBanner {
+  id: string
+  title: string
+  image: string
+  link?: string
+  position?: string
+  isActive?: boolean
+  sortOrder?: number
+  startDate?: string | null
+  endDate?: string | null
+}
+
+interface RawComplaint {
+  id: string
+  userId?: string
+  userName?: string
+  buyer?: string
+  type?: string
+  description?: string
+  status?: string
+  createdAt?: string
+  resolution?: string
+  response?: string
+  orderId?: string
+  seller?: string
+}
+
 // Type aliases for API responses
-type DivisionsResponse = { success: boolean; divisions: any[] }
-type AdminUsersResponse = { success: boolean; data?: any[]; users?: any[] }
+type DivisionsResponse = { success: boolean; divisions: RawDivision[] }
+type AdminUsersResponse = { success: boolean; data?: RawAdminUser[]; users?: RawAdminUser[] }
 type AdminOrdersResponse = { success: boolean; data: Order[] }
 type AdminStatsResponse = { success: boolean; data: AdminStats }
-type AdminWithdrawalsResponse = { success: boolean; data: any[] }
-type AdminBannersResponse = { success: boolean; data: any[] }
-type AdminComplaintsResponse = { success: boolean; data: any[] }
+type AdminWithdrawalsResponse = { success: boolean; data: RawWithdrawal[] }
+type AdminBannersResponse = { success: boolean; data: RawBanner[] }
+type AdminComplaintsResponse = { success: boolean; data: RawComplaint[] }
 type PlatformSettingsResponse = { success: boolean; data: Record<string, number | boolean | string> }
 
 export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set, get) => ({
@@ -56,7 +129,7 @@ export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set
       if (data.success) {
         const users = data.data || data.users || []
         set({
-          adminUsers: users.map((u: any) => ({
+          adminUsers: users.map((u: RawAdminUser) => ({
             id: u.id,
             name: u.name,
             email: u.email,
@@ -122,7 +195,7 @@ export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set
       const data = await apiClient.get<AdminWithdrawalsResponse>('/api/admin/withdrawals')
       if (data.success && data.data) {
         // Map withdrawals to store's WithdrawRequest format
-        const withdrawals = data.data.map((w: any) => ({
+        const withdrawals = data.data.map((w: RawWithdrawal) => ({
           id: w.id,
           sellerId: w.sellerId,
           sellerName: w.sellerName || w.storeName || 'Unknown',
@@ -153,7 +226,7 @@ export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set
       const data = await apiClient.get<AdminBannersResponse>('/api/admin/banners')
       if (data.success && data.data) {
         set({
-          adminBanners: data.data.map((b: any) => ({
+          adminBanners: data.data.map((b: RawBanner) => ({
             id: b.id,
             title: b.title,
             image: b.image,
@@ -175,7 +248,7 @@ export const createAdminSlice: StateCreator<AppStore, [], [], AdminSlice> = (set
       const data = await apiClient.get<AdminComplaintsResponse>('/api/admin/complaints')
       if (data.success && data.data) {
         set({
-          adminComplaints: data.data.map((c: any) => ({
+          adminComplaints: data.data.map((c: RawComplaint) => ({
             id: c.id,
             userId: c.userId || '',
             userName: c.userName || c.buyer || '',

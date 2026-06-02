@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middleware'
+import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
+import { paymentLimiter } from '@/lib/rate-limit'
 import { serializeDecimal } from '@/lib/decimal-utils'
 import { validateBody, paymentCreateSchema } from '@/lib/validations'
 
@@ -32,9 +33,10 @@ export async function POST(request: NextRequest) {
     const authResult = await verifyAuth(request)
     if (!authResult.success) return authErrorResponse(authResult)
 
-    // Step 2: Rate limit — 5 payment creation requests per minute
+    // Step 2: Rate limit — 5 payment creation requests per minute (distributed)
     const rateLimitId = `payment-create-${authResult.user.id}`
-    if (!checkRateLimit(rateLimitId, 5)) {
+    const rateLimitResult = await paymentLimiter.check(rateLimitId)
+    if (!rateLimitResult.allowed) {
       return NextResponse.json(
         { success: false, error: 'Rate limit exceeded. Max 5 payment requests per minute.' },
         { status: 429 }

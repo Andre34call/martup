@@ -1,0 +1,8 @@
+export { SellerDashboard } from './seller-dashboard'
+export { SellerProducts } from './seller-products'
+export { SellerOrders } from './seller-orders'
+export { SellerAnalytics } from './seller-analytics'
+export { SellerWallet } from './seller-wallet'
+export { SellerChat } from './seller-chat'
+export { SellerSettings } from './seller-settings'
+export { SellerCampaign } from './seller-campaign'

@@ -51,49 +51,21 @@ export async function GET(request: NextRequest) {
       // Auth check is optional for GET — continue without auth
     }
 
-    // Build where clause using AND to combine multiple conditions properly
-    // - Filter out hidden and inactive posts
-    // - Private posts: only visible to the owner
-    // - Search: content or user name match
-    const andConditions: Record<string, unknown>[] = [
-      { isActive: true, isHidden: false },
-    ]
-
-    // Private filtering
-    if (authedUserId) {
-      // Show public posts + own private posts
-      andConditions.push({
-        OR: [
-          { isPrivate: false },
-          { isPrivate: true, userId: authedUserId },
-        ],
-      })
-    } else {
-      // Not authenticated — only show public posts
-      andConditions.push({ isPrivate: false })
-    }
-
-    // User filter
+    // Build where clause — filter out hidden and inactive posts
+    const where: Record<string, unknown> = { isActive: true, isHidden: false }
     if (userId) {
-      andConditions.push({ userId })
+      where.userId = userId
     }
-
-    // Search filter
     if (searchQuery && searchQuery.trim().length >= 2) {
-      andConditions.push({
-        OR: [
-          { content: { contains: searchQuery.trim() } },
-          { user: { name: { contains: searchQuery.trim() } } },
-        ],
-      })
+      // Search in post content and user name
+      where.OR = [
+        { content: { contains: searchQuery.trim(), mode: 'insensitive' } },
+        { user: { name: { contains: searchQuery.trim(), mode: 'insensitive' } } },
+      ]
     }
-
-    // Cursor pagination
     if (cursor) {
-      andConditions.push({ createdAt: { lt: new Date(cursor) } })
+      where.createdAt = { lt: new Date(cursor) }
     }
-
-    const where = andConditions.length === 1 ? andConditions[0] : { AND: andConditions }
 
     const posts = await db.streamPost.findMany({
       where,
@@ -232,7 +204,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { type, mediaUrl, mediaType, thumbnailUrl, productId, isPrivate } = body
+    const { type, mediaUrl, mediaType, thumbnailUrl, productId } = body
 
     // Validate type
     if (!type || !isValidPostType(type)) {
@@ -288,7 +260,6 @@ export async function POST(request: NextRequest) {
         mediaType: mediaType || null,
         thumbnailUrl: thumbnailUrl || null,
         productId: productId || null,
-        isPrivate: Boolean(isPrivate),
       },
       include: {
         user: {

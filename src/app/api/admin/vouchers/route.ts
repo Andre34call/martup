@@ -155,7 +155,15 @@ export async function PUT(request: NextRequest) {
     if (code !== undefined) updateData.code = String(code).toUpperCase()
     if (name !== undefined) updateData.name = name
     if (description !== undefined) updateData.description = description
-    if (type !== undefined) updateData.type = type
+    if (type !== undefined) {
+      if (!['percentage', 'fixed'].includes(type as string)) {
+        return NextResponse.json(
+          { success: false, error: 'Invalid voucher type. Must be "percentage" or "fixed"' },
+          { status: 400 }
+        )
+      }
+      updateData.type = type
+    }
     if (value !== undefined) updateData.value = parseFloat(String(value))
     if (minPurchase !== undefined)
       updateData.minPurchase = parseFloat(String(minPurchase))
@@ -165,8 +173,34 @@ export async function PUT(request: NextRequest) {
       updateData.usageLimit = usageLimit ? parseInt(String(usageLimit), 10) : null
     if (perUserLimit !== undefined)
       updateData.perUserLimit = parseInt(String(perUserLimit), 10)
-    if (validFrom !== undefined) updateData.validFrom = new Date(String(validFrom))
-    if (validUntil !== undefined) updateData.validUntil = new Date(String(validUntil))
+    if (validFrom !== undefined) {
+      const validFromDate = new Date(String(validFrom))
+      if (isNaN(validFromDate.getTime())) {
+        return NextResponse.json(
+          { success: false, error: 'validFrom must be a valid date' },
+          { status: 400 }
+        )
+      }
+      updateData.validFrom = validFromDate
+    }
+    if (validUntil !== undefined) {
+      const validUntilDate = new Date(String(validUntil))
+      if (isNaN(validUntilDate.getTime())) {
+        return NextResponse.json(
+          { success: false, error: 'validUntil must be a valid date' },
+          { status: 400 }
+        )
+      }
+      // Validate date range: validUntil must be after validFrom
+      const effectiveValidFrom = validFrom !== undefined ? new Date(String(validFrom)) : (updateData.validFrom as Date | undefined)
+      if (effectiveValidFrom && validUntilDate <= effectiveValidFrom) {
+        return NextResponse.json(
+          { success: false, error: 'validUntil must be after validFrom' },
+          { status: 400 }
+        )
+      }
+      updateData.validUntil = validUntilDate
+    }
     if (isActive !== undefined) updateData.isActive = isActive
 
     const voucher = await db.voucher.update({

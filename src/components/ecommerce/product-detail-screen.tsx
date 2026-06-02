@@ -16,7 +16,7 @@ import { SHIPPING_OPTIONS } from "@/lib/constants"
 import { apiClient } from "@/lib/api-client"
 import {
   PageHeader, QuantitySelector, PriceDisplay, ProductCard, EmptyState,
-  FlashSaleTimer, RatingStars, AvatarWithName, SellerBadge
+  FlashSaleTimer, RatingStars, AvatarWithName, SellerBadge, PrimaryButton
 } from "./shared"
 import type { Product, ProductVariant } from "@/lib/types"
 import { useState, useRef, useCallback, useMemo, useEffect } from "react"
@@ -247,14 +247,6 @@ export function ProductDetailScreen() {
   const [canReview, setCanReview] = useState(false)
 
   const product = products.find(p => p.id === selectedProductId)
-
-  // Track product view when entering detail screen
-  useEffect(() => {
-    if (selectedProductId) {
-      // Fire and forget — don't block rendering
-      apiClient.post<any>(`/api/products/${selectedProductId}/view`, {}).catch(() => {})
-    }
-  }, [selectedProductId])
 
   // Fetch reviews from API when product changes
   useEffect(() => {
@@ -490,14 +482,7 @@ export function ProductDetailScreen() {
             transition={{ delay: 0.15 }}
             className="space-y-3"
           >
-            <div className="flex items-start gap-2">
-              <h1 className="text-lg font-bold text-foreground leading-tight">{product.name}</h1>
-              {(product as any).productType === 'jasa' && (
-                <Badge className="bg-emerald-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md flex-shrink-0 mt-0.5">
-                  🛠️ JASA
-                </Badge>
-              )}
-            </div>
+            <h1 className="text-lg font-bold text-foreground leading-tight">{product.name}</h1>
 
             <div className="flex items-center gap-3 flex-wrap">
               <RatingStars rating={product.rating} size="sm" reviewCount={product.reviewCount} />
@@ -505,14 +490,10 @@ export function ProductDetailScreen() {
               <span className="text-xs text-muted-foreground">
                 {product.sold > 1000 ? `${(product.sold / 1000).toFixed(1)}rb` : product.sold} terjual
               </span>
-              {(product as any).productType !== 'jasa' && (
-                <>
-                  <Separator orientation="vertical" className="h-4" />
-                  <span className="text-xs text-muted-foreground">
-                    Stok: {effectiveVariant ? effectiveVariant.stock : product.stock}
-                  </span>
-                </>
-              )}
+              <Separator orientation="vertical" className="h-4" />
+              <span className="text-xs text-muted-foreground">
+                Stok: {effectiveVariant ? effectiveVariant.stock : product.stock}
+              </span>
             </div>
 
             {/* Variant selector */}
@@ -680,32 +661,8 @@ export function ProductDetailScreen() {
             <div className="space-y-2 pt-2">
               <p className="text-sm font-medium">Detail:</p>
               <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
-                {/* Jasa products: show jasa-specific info instead of weight/shipping */}
-                {(product as any).productType === 'jasa' ? (
-                  <>
-                    <span className="text-muted-foreground">Tipe</span>
-                    <span className="text-foreground flex items-center gap-1">
-                      🛠️ <span className="font-medium text-emerald-600">Jasa</span>
-                    </span>
-                    {(product as any).serviceDuration && (
-                      <>
-                        <span className="text-muted-foreground">Durasi</span>
-                        <span className="text-foreground">{(product as any).serviceDuration}</span>
-                      </>
-                    )}
-                    {(product as any).serviceLocation && (
-                      <>
-                        <span className="text-muted-foreground">Lokasi</span>
-                        <span className="text-foreground">{(product as any).serviceLocation}</span>
-                      </>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <span className="text-muted-foreground">Berat</span>
-                    <span className="text-foreground">{product.weight}g</span>
-                  </>
-                )}
+                <span className="text-muted-foreground">Berat</span>
+                <span className="text-foreground">{product.weight}g</span>
                 <span className="text-muted-foreground">Kondisi</span>
                 <span className="text-foreground">{product.condition === 'new' ? 'Baru' : 'Bekas'}</span>
                 <span className="text-muted-foreground">Min. Pemesanan</span>
@@ -927,7 +884,7 @@ export function ProductDetailScreen() {
           <motion.button
             whileTap={{ scale: 0.95 }}
             onClick={async () => {
-              const room = chatRooms.find(r => r.seller?.id === product.sellerId || r.otherUser?.id === product.sellerId)
+              const room = chatRooms.find(r => r.seller.id === product.sellerId)
               if (room) {
                 setSelectedChatRoom(room.id)
               } else {
@@ -955,12 +912,12 @@ export function ProductDetailScreen() {
             Keranjang
           </Button>
 
-          <Button
-            className="flex-1 h-11 text-sm font-bold rounded-xl bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white"
+          <PrimaryButton
+            className="flex-1 h-11 text-sm font-bold rounded-xl"
             onClick={handleBuyNow}
           >
             Beli Sekarang
-          </Button>
+          </PrimaryButton>
         </div>
       </div>
     </div>

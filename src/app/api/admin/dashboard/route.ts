@@ -70,21 +70,24 @@ export async function GET(request: NextRequest) {
     const userGrowth = Array.from(userMap.entries()).map(([date, users]) => ({ date, users }))
 
     return NextResponse.json({
-      stats: {
-        totalUsers,
-        totalSellers,
-        totalOrders,
-        totalRevenue,
-        pendingWithdrawals,
-        activeProducts,
-        revenueChart,
-        userGrowth,
+      success: true,
+      data: {
+        stats: {
+          totalUsers,
+          totalSellers,
+          totalOrders,
+          totalRevenue,
+          pendingWithdrawals,
+          activeProducts,
+          revenueChart,
+          userGrowth,
+        },
       },
     })
   } catch (error) {
     logger.error({ err: error }, 'Get admin dashboard error')
     return NextResponse.json(
-      { error: 'Terjadi kesalahan server' },
+      { success: false, error: 'Terjadi kesalahan server' },
       { status: 500 }
     )
   }

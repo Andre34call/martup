@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { verifyAuth, checkRateLimit } from '@/lib/auth-middleware'
+import { verifyAuth } from '@/lib/auth-middleware'
 
 import { logger } from '@/lib/logger'
 // POST /api/orders/[id]/cancel — Cancel order
@@ -15,14 +15,6 @@ export async function POST(
       return NextResponse.json({ error: authResult.error }, { status: authResult.status })
     }
     const user = authResult.user
-
-    // SECURITY: Rate limit order cancellations to 5 requests per minute per user
-    if (!checkRateLimit(`order-cancel:${user.id}`, 5)) {
-      return NextResponse.json(
-        { error: 'Terlalu banyak permintaan pembatalan. Coba lagi nanti.' },
-        { status: 429 }
-      )
-    }
 
     const { id } = await params
 

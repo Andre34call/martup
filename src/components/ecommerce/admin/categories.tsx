@@ -14,6 +14,7 @@ import { useState, useEffect, useCallback } from "react"
 import { ConfirmDialog } from "../confirm-dialog"
 import { LoadingSpinner } from "../loading-spinner"
 import { apiClient, ApiClientError } from '@/lib/api-client'
+import { handleApiError } from '@/lib/handle-api-error'
 import { stagger } from '@/lib/animations'
 
 // ==================== TYPE DEFINITIONS ====================
@@ -55,8 +56,8 @@ export function AdminCategories() {
       if (data.success) {
         setCategories(data.data)
       }
-    } catch {
-      showToast("Gagal memuat kategori", "error")
+    } catch (err) {
+      handleApiError(err, "kategori")
     } finally {
       setLoading(false)
     }

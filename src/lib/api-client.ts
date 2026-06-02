@@ -7,38 +7,9 @@
  * - Automatic CSRF token injection for mutating requests (POST, PUT, DELETE, PATCH)
  * - CSRF retry: if a 403 CSRF error occurs, fetches a fresh token and retries once
  * - Consistent error handling with ApiClientError
- * - Request timeout (15s default) to prevent infinite loading states
  */
 
 import { getCsrfToken, ensureCsrfToken, fetchFreshCsrfToken } from '@/lib/csrf-client'
-
-// Default timeout for API requests (15 seconds)
-const API_TIMEOUT_MS = 15_000
-// Longer timeout for file uploads (5 minutes — supports 250MB video uploads on slower connections)
-const UPLOAD_TIMEOUT_MS = 300_000
-
-/**
- * Fetch with AbortController timeout — prevents requests from hanging indefinitely.
- * On slow/unstable connections (especially mobile), a server that doesn't respond
- * will leave the UI stuck in a loading state forever without this.
- *
- * NOTE: Does NOT use AbortSignal.any() because it's not supported on older
- * mobile browsers (requires Chrome 116+, Safari 17.4+, Firefox 130+).
- */
-function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: number = API_TIMEOUT_MS): Promise<Response> {
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
-
-  return fetch(url, { ...options, signal: controller.signal })
-    .catch((err) => {
-      // Convert AbortError to a more descriptive error
-      if (err.name === 'AbortError') {
-        throw new DOMException('Request timed out', 'AbortError')
-      }
-      throw err
-    })
-    .finally(() => clearTimeout(timeoutId))
-}
 
 interface ApiError {
   error: string
@@ -116,7 +87,7 @@ function getUploadHeaders(): HeadersInit {
  * Fetch with CSRF retry — ensures a CSRF token is available before making
  * the request, and retries with a fresh token if CSRF validation fails.
  */
-async function fetchWithCsrfRetry(url: string, options: RequestInit, timeoutMs: number = API_TIMEOUT_MS): Promise<Response> {
+async function fetchWithCsrfRetry(url: string, options: RequestInit): Promise<Response> {
   const isMutating = ['POST', 'PUT', 'DELETE', 'PATCH'].includes(
     (options.method || 'GET').toUpperCase()
   )
@@ -139,7 +110,7 @@ async function fetchWithCsrfRetry(url: string, options: RequestInit, timeoutMs: 
   const isAuthRoute = url.includes('/api/auth/')
   const isCsrfExemptAuthRoute = csrfExemptAuthRoutes.some(route => url.includes(route))
   if (isAuthRoute && isCsrfExemptAuthRoute) {
-    return fetchWithTimeout(url, options, timeoutMs)
+    return fetch(url, options)
   }
 
   // For mutating requests, ensure we have a CSRF token before making the request
@@ -157,7 +128,7 @@ async function fetchWithCsrfRetry(url: string, options: RequestInit, timeoutMs: 
     }
   }
 
-  const response = await fetchWithTimeout(url, options, timeoutMs)
+  const response = await fetch(url, options)
 
   // If CSRF validation failed, the server returns 403 with a fresh CSRF cookie
   // The server error message contains 'CSRF' and/or has code: 'CSRF_ERROR'
@@ -175,7 +146,7 @@ async function fetchWithCsrfRetry(url: string, options: RequestInit, timeoutMs: 
           ...existingHeaders,
           'x-csrf-token': freshToken,
         }
-        return fetchWithTimeout(url, { ...options, headers: newHeaders }, timeoutMs)
+        return fetch(url, { ...options, headers: newHeaders })
       }
     }
   }
@@ -200,7 +171,7 @@ async function handleResponse<T>(response: Response): Promise<T> {
 export const apiClient = {
   get: async <T>(url: string, params?: Record<string, string | undefined>): Promise<T> => {
     const fullUrl = buildUrl(url, params)
-    const response = await fetchWithTimeout(fullUrl, {
+    const response = await fetch(fullUrl, {
       method: 'GET',
       headers: getHeaders(),
     })
@@ -243,7 +214,7 @@ export const apiClient = {
       method: 'POST',
       headers: getUploadHeaders(),
       body: formData,
-    }, UPLOAD_TIMEOUT_MS)
+    })
     return handleResponse<T>(response)
   },
 

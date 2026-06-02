@@ -4,14 +4,13 @@ import { motion, AnimatePresence } from "framer-motion"
 import { useAppStore } from "@/lib/store"
 import { formatPrice } from "@/lib/utils"
 import { fadeIn, stagger } from '@/lib/animations'
-import { PageHeader, SectionHeader, EmptyState } from "../shared"
+import { PageHeader, SectionHeader, EmptyState, PrimaryButton } from "../shared"
 import { useState, useRef, useCallback } from "react"
 import { Star, Camera, Send, Lock, Package, ImagePlus, Video, Play, X, Eye, ThumbsUp, ThumbsDown, Meh, CheckCircle2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
-import { UPLOAD_LIMITS } from "@/lib/upload-limits"
 
 // --- Media types ---
 interface ReviewImage {
@@ -26,9 +25,9 @@ interface ReviewVideo {
   file: File
 }
 
-const MAX_IMAGES = UPLOAD_LIMITS.MAX_REVIEW_IMAGES
-const MAX_VIDEO_SIZE_MB = UPLOAD_LIMITS.MAX_REVIEW_VIDEO_SIZE_MB
-const MAX_IMAGE_SIZE_MB = UPLOAD_LIMITS.MAX_REVIEW_IMAGE_SIZE_MB
+const MAX_IMAGES = 5
+const MAX_VIDEO_SIZE_MB = 30
+const MAX_IMAGE_SIZE_MB = 5
 
 // Rating labels
 const ratingLabels: Record<number, { text: string; color: string; icon: React.ReactNode }> = {
@@ -567,13 +566,13 @@ export function ReviewScreen() {
                       </div>
 
                       {/* Submit Button */}
-                      <Button
+                      <PrimaryButton
                         disabled={!rating}
                         onClick={() => handleSubmitReview(order.id)}
-                        className="w-full bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl h-10 disabled:opacity-40 text-sm font-semibold"
+                        className="w-full rounded-xl h-10 disabled:opacity-40 text-sm font-semibold"
                       >
                         <Send className="w-4 h-4 mr-1.5" /> Kirim Ulasan
-                      </Button>
+                      </PrimaryButton>
                     </Card>
                   </motion.div>
                 )

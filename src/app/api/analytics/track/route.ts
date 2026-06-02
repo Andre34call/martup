@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middleware'
+import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
+import { apiLimiter } from '@/lib/rate-limit'
 import { logger } from '@/lib/logger'
 
 // ==================== ANALYTICS TRACKING ENDPOINT ====================
@@ -9,9 +10,10 @@ import { logger } from '@/lib/logger'
 
 export async function POST(request: NextRequest) {
   try {
-    // Rate limit: 30 events per minute per IP
+    // Rate limit: 30 events per minute per IP (distributed)
     const clientIp = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
-    if (!checkRateLimit(`analytics:${clientIp}`, 30)) {
+    const rateLimitResult = await apiLimiter.check(`analytics:${clientIp}`)
+    if (!rateLimitResult.allowed) {
       return NextResponse.json({ success: false, error: 'Rate limit exceeded' }, { status: 429 })
     }
 

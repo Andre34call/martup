@@ -1,7 +1,7 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { Heart, Star, Zap, Truck, Shield, RotateCcw, Share, Flame } from "lucide-react"
+import { Heart, Star, Zap, Truck, Shield, RotateCcw, Share } from "lucide-react"
 import { useWishlistStore, useAppStore } from "@/lib/store"
 import type { Product } from "@/lib/types"
 import { useState } from "react"
@@ -54,11 +54,9 @@ interface ProductCardProps {
   onClick?: () => void
   layout?: "grid" | "list"
   showShareToStream?: boolean
-  showViralBadge?: boolean
-  showPromotedBadge?: boolean
 }
 
-export function ProductCard({ product, onClick, layout = "grid", showShareToStream = false, showViralBadge = false, showPromotedBadge = false }: ProductCardProps) {
+export function ProductCard({ product, onClick, layout = "grid", showShareToStream = false }: ProductCardProps) {
   const { toggleWishlist, isWishlisted } = useWishlistStore()
   const { setShareToStreamProduct, navigate, showToast, isAuthenticated } = useAppStore()
   const wishlisted = isWishlisted(product.id)
@@ -154,16 +152,9 @@ export function ProductCard({ product, onClick, layout = "grid", showShareToStre
         )}
 
         {/* Discount badge */}
-        {discountPercent > 0 && !(showPromotedBadge || product.isPromoted) && (
+        {discountPercent > 0 && (
           <div className="absolute top-2 left-2 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md">
             -{discountPercent}%
-          </div>
-        )}
-
-        {/* Jasa badge */}
-        {(product as any).productType === 'jasa' && (
-          <div className="absolute top-2 left-2 bg-emerald-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-0.5">
-            🛠️ JASA
           </div>
         )}
 
@@ -172,20 +163,6 @@ export function ProductCard({ product, onClick, layout = "grid", showShareToStre
           <div className="absolute top-2 right-2 bg-orange-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-0.5 shimmer">
             <Zap className="w-2.5 h-2.5" />
             FLASH
-          </div>
-        )}
-
-        {/* Promoted/IKLAN badge */}
-        {(showPromotedBadge || product.isPromoted) && (product as any).productType !== 'jasa' && (
-          <div className="absolute top-2 left-2 bg-amber-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md">
-            IKLAN
-          </div>
-        )}
-
-        {/* Viral badge */}
-        {(showViralBadge || (product.viralScore > 0 && product.sold >= 10)) && !product.isPromoted && (product as any).productType !== 'jasa' && (
-          <div className="absolute top-2 left-2 bg-gradient-to-r from-red-500 to-orange-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-0.5">
-            <Flame className="w-2.5 h-2.5" /> VIRAL
           </div>
         )}
 

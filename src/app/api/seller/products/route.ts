@@ -1,20 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middleware'
+import { parseJsonField } from '@/lib/api-utils'
 import { sanitizeInput } from '@/lib/sanitize'
 import { serializeDecimal } from '@/lib/decimal-utils'
 
 import { logger } from '@/lib/logger'
-// Helper to safely parse JSON fields
-function parseJsonField(value: string | null | undefined): unknown[] {
-  if (!value) return []
-  try {
-    const parsed = JSON.parse(value)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
 
 // GET /api/seller/products - Fetch products for a specific seller
 // SECURITY: Only the seller themselves (or admins) can see all products including drafts.
@@ -114,16 +105,9 @@ export async function POST(request: NextRequest) {
       minOrder = 1,
       weight,
       condition = 'new',
-      productType = 'product',
-      serviceDuration,
-      serviceLocation,
       status = 'active',
-      // SECURITY: isFeatured and isFlashSale are admin-only fields.
-      // Sellers cannot set these — they would get free promotion.
-      // isFeatured is set by admin only.
-      // isFlashSale requires admin approval.
-      isFeatured = false, // Ignored below — forced to false
-      isFlashSale = false, // Ignored below — forced to false
+      isFeatured = false,
+      isFlashSale = false,
       flashSaleEnd,
       tags,
       variants = [],
@@ -177,8 +161,7 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-    // Jasa (service) products don't require weight
-    if (productType !== 'jasa' && (weight === undefined || weight === null)) {
+    if (weight === undefined || weight === null) {
       return NextResponse.json(
         { success: false, error: 'weight is required' },
         { status: 400 }
@@ -207,10 +190,6 @@ export async function POST(request: NextRequest) {
     // SECURITY: Block blob: video URLs
     const safeVideoUrl = (typeof videoUrl === 'string' && !videoUrl.startsWith('blob:')) ? videoUrl : null
 
-    // SECURITY: Sellers can only set status to 'active' or 'draft'
-    // 'blocked' is admin-only for moderation
-    const safeStatus = ['active', 'draft'].includes(status) ? status : 'active'
-
     const product = await db.product.create({
       data: {
         sellerId: verifiedSellerId,
@@ -226,13 +205,10 @@ export async function POST(request: NextRequest) {
         minOrder,
         weight,
         condition,
-        productType,
-        serviceDuration: productType === 'jasa' ? (serviceDuration || null) : null,
-        serviceLocation: productType === 'jasa' ? (serviceLocation || null) : null,
-        status: safeStatus,
-        isFeatured: false, // SECURITY: Always false — admin sets this
-        isFlashSale: false, // SECURITY: Always false — admin sets this
-        flashSaleEnd: null, // No flash sale without admin approval
+        status,
+        isFeatured,
+        isFlashSale,
+        flashSaleEnd: flashSaleEnd ? new Date(flashSaleEnd) : null,
         tags: tagsStr,
         variants: {
           create: variants.map((v: {
@@ -316,9 +292,6 @@ export async function PUT(request: NextRequest) {
       minOrder,
       weight,
       condition,
-      productType,
-      serviceDuration,
-      serviceLocation,
       status,
       isFeatured,
       isFlashSale,
@@ -380,11 +353,9 @@ export async function PUT(request: NextRequest) {
     }
 
     // Validate status if provided
-    // SECURITY: Sellers can only set 'active' or 'draft'. The 'blocked' status
-    // is reserved for admin soft-delete only (prevents sellers from hiding problematic products)
-    if (status !== undefined && !['active', 'draft'].includes(status)) {
+    if (status !== undefined && !['active', 'draft', 'blocked'].includes(status)) {
       return NextResponse.json(
-        { success: false, error: 'Status harus "active" atau "draft". Status "blocked" hanya bisa diatur oleh admin.' },
+        { success: false, error: 'status must be "active", "draft", or "blocked"' },
         { status: 400 }
       )
     }
@@ -440,22 +411,9 @@ export async function PUT(request: NextRequest) {
     if (minOrder !== undefined) updateData.minOrder = minOrder
     if (weight !== undefined) updateData.weight = weight
     if (condition !== undefined) updateData.condition = condition
-    if (productType !== undefined) {
-      updateData.productType = productType
-      // When switching to jasa, clear service fields or set them
-      if (productType === 'jasa') {
-        updateData.serviceDuration = serviceDuration || null
-        updateData.serviceLocation = serviceLocation || null
-      } else {
-        updateData.serviceDuration = null
-        updateData.serviceLocation = null
-      }
-    }
-    // SECURITY: Sellers cannot modify isFeatured, isFlashSale, or flashSaleEnd
-    // These are admin-only fields. Remove them from updateData if present.
-    delete updateData.isFeatured
-    delete updateData.isFlashSale
-    delete updateData.flashSaleEnd
+    if (isFeatured !== undefined) updateData.isFeatured = isFeatured
+    if (isFlashSale !== undefined) updateData.isFlashSale = isFlashSale
+    if (flashSaleEnd !== undefined) updateData.flashSaleEnd = flashSaleEnd ? new Date(flashSaleEnd) : null
 
     // Stringify JSON fields for storage
     // SECURITY: Filter out blob: URLs that can never be served to other users

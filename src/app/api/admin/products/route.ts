@@ -3,17 +3,8 @@ import { db } from '@/lib/db'
 import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
 
+import { parseJsonField } from '@/lib/api-utils'
 import { logger } from '@/lib/logger'
-// Helper to safely parse JSON fields
-function parseJsonField(value: string | null | undefined): unknown[] {
-  if (!value) return []
-  try {
-    const parsed = JSON.parse(value)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
 
 // GET /api/admin/products - Fetch ALL products (including blocked/draft) with seller info
 export async function GET(request: NextRequest) {
@@ -34,8 +25,8 @@ export async function GET(request: NextRequest) {
     }
     if (search) {
       where.OR = [
-        { name: { contains: search } },
-        { slug: { contains: search } },
+        { name: { contains: search, mode: 'insensitive' } },
+        { slug: { contains: search, mode: 'insensitive' } },
       ]
     }
 
@@ -101,7 +92,7 @@ export async function PUT(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { productId, status, isFeatured, isPromoted, promotedUntil, name, description, price, discountPrice, images, videoUrl, categoryId, condition, weight, stock, tags } = body
+    const { productId, status, isFeatured, name, description, price, discountPrice, images, videoUrl, categoryId, condition, weight, stock, tags } = body
 
     if (!productId) {
       return NextResponse.json(
@@ -122,10 +113,14 @@ export async function PUT(request: NextRequest) {
     const updateData: Record<string, unknown> = {}
 
     // Status & featured flags
-    if (status !== undefined) updateData.status = status
+    if (status !== undefined) {
+      const validStatuses = ['active', 'draft', 'blocked', 'pending', 'rejected']
+      if (!validStatuses.includes(status as string)) {
+        return NextResponse.json({ success: false, error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` }, { status: 400 })
+      }
+      updateData.status = status
+    }
     if (isFeatured !== undefined) updateData.isFeatured = isFeatured
-    if (isPromoted !== undefined) updateData.isPromoted = isPromoted
-    if (promotedUntil !== undefined) updateData.promotedUntil = promotedUntil || null
 
     // Content fields for moderation
     if (name !== undefined) {

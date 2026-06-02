@@ -40,8 +40,8 @@ export async function GET(request: NextRequest) {
         isActive: true,
         id: { not: authResult.user.id },
         OR: [
-          { name: { contains: query } },
-          { username: { contains: query } },
+          { name: { contains: query, mode: 'insensitive' } },
+          { username: { contains: query, mode: 'insensitive' } },
         ],
       },
       select: {

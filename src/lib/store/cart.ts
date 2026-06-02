@@ -39,21 +39,13 @@ function isUserAuthenticated(): boolean {
 
 /** Map a server cart item response to our local CartItem type */
 function mapServerCartItem(raw: Record<string, unknown>): CartItem {
-  const rawProduct = raw.product as Record<string, unknown> | undefined
   return {
     id: raw.id as string,
     productId: raw.productId as string,
     variantId: (raw.variantId as string) || undefined,
     quantity: raw.quantity as number,
     isChecked: raw.isChecked as boolean,
-    product: rawProduct ? {
-      ...(rawProduct as unknown as Product),
-      // Ensure new fields have defaults if missing from server response
-      viewCount: (rawProduct as Record<string, unknown>).viewCount ?? 0,
-      viralScore: (rawProduct as Record<string, unknown>).viralScore ?? 0,
-      isPromoted: (rawProduct as Record<string, unknown>).isPromoted ?? false,
-      promotedUntil: (rawProduct as Record<string, unknown>).promotedUntil ?? undefined,
-    } as Product : (raw.product as Product),
+    product: raw.product as Product,
     variant: (raw.variant as ProductVariant) || undefined,
   }
 }

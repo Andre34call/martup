@@ -1,22 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAuth, checkRateLimit } from '@/lib/auth-middleware'
+import { parseJsonField } from '@/lib/api-utils'
 import { sanitizeInput } from '@/lib/sanitize'
 import { serializeDecimal } from '@/lib/decimal-utils'
 
 import { logger } from '@/lib/logger'
-// ==================== HELPERS ====================
-
-// Safely parse a JSON field (images stored as JSON string)
-function parseJsonField(value: string | null | undefined): unknown[] {
-  if (!value) return []
-  try {
-    const parsed = JSON.parse(value)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
 
 // Recalculate the product's average rating and review count
 async function recalculateProductRating(productId: string) {
@@ -389,7 +378,7 @@ export async function PUT(request: NextRequest) {
         _count: { id: true },
       })
       await tx.product.update({
-        where: { id: existingReview.productId || undefined },
+        where: { id: existingReview.productId },
         data: {
           rating: stats._avg.rating ? Math.round(stats._avg.rating * 10) / 10 : 0,
           reviewCount: stats._count.id,
@@ -400,7 +389,7 @@ export async function PUT(request: NextRequest) {
     })
 
     // Recalculate seller rating from their products' ratings (outside transaction to avoid deadlock)
-    const updatedProduct = await db.product.findUnique({ where: { id: existingReview.productId || undefined }, select: { sellerId: true } })
+    const updatedProduct = await db.product.findUnique({ where: { id: existingReview.productId }, select: { sellerId: true } })
     if (updatedProduct) {
       await recalculateSellerRating(updatedProduct.sellerId)
     }
@@ -483,7 +472,7 @@ export async function DELETE(request: NextRequest) {
         _count: { id: true },
       })
       await tx.product.update({
-        where: { id: productId || undefined },
+        where: { id: productId },
         data: {
           rating: stats._avg.rating ? Math.round(stats._avg.rating * 10) / 10 : 0,
           reviewCount: stats._count.id,
@@ -492,7 +481,7 @@ export async function DELETE(request: NextRequest) {
     })
 
     // Recalculate seller rating from their products' ratings (outside transaction to avoid deadlock)
-    const updatedProduct = await db.product.findUnique({ where: { id: productId || undefined }, select: { sellerId: true } })
+    const updatedProduct = await db.product.findUnique({ where: { id: productId }, select: { sellerId: true } })
     if (updatedProduct) {
       await recalculateSellerRating(updatedProduct.sellerId)
     }

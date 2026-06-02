@@ -9,13 +9,67 @@ import {
   ChevronDown,
   Loader2,
   MessageCircle,
-  Trash2,
 } from "lucide-react"
 import { apiClient, ApiClientError } from "@/lib/api-client"
 import { formatRelativeTime, truncateText } from "@/lib/utils"
 import { MentionInput, MentionText } from "./mention-components"
-import { useAppStore } from "@/lib/store"
-import { StreamPost, StreamComment, CommentsResponse, CommentMutationResponse, LikeCommentResponse } from "./stream-types"
+
+// ==================== LOCAL TYPES ====================
+interface StreamPost {
+  id: string
+  userId: string
+  user: {
+    id: string
+    name: string
+    avatar?: string
+  }
+  type: "text" | "image" | "video"
+  content: string
+  mediaUrl?: string
+  likeCount: number
+  commentCount: number
+  isLiked: boolean
+  createdAt: string
+}
+
+interface StreamComment {
+  id: string
+  userId: string
+  user: {
+    id: string
+    name: string
+    avatar?: string
+  }
+  content: string
+  likeCount: number
+  isLiked: boolean
+  parentId?: string
+  replyCount: number
+  createdAt: string
+  replies?: StreamComment[]
+}
+
+interface CommentsResponse {
+  success: boolean
+  data: StreamComment[]
+  pagination?: {
+    nextCursor?: string | null
+    hasMore: boolean
+    limit: number
+  }
+}
+
+interface CommentMutationResponse {
+  success: boolean
+  data?: StreamComment
+  error?: string
+}
+
+interface LikeCommentResponse {
+  success: boolean
+  isLiked: boolean
+  likeCount: number
+}
 
 // ==================== AVATAR HELPER ====================
 const avatarColors = [
@@ -52,14 +106,8 @@ export function StreamCommentSheet({
   const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set())
   const [isLoadingReplies, setIsLoadingReplies] = useState<Set<string>>(new Set())
 
-  const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null)
-
   const inputRef = useRef<HTMLInputElement>(null)
   const commentsEndRef = useRef<HTMLDivElement>(null)
-  const setOverlayOpen = useAppStore((s) => s.setOverlayOpen)
-  const setSelectedUser = useAppStore((s) => s.setSelectedUser)
-  const currentUser = useAppStore((s) => s.currentUser)
-  const navigate = useAppStore((s) => s.navigate)
 
   // ==================== FETCH COMMENTS ====================
   const fetchComments = useCallback(async () => {
@@ -80,18 +128,6 @@ export function StreamCommentSheet({
       setIsLoading(false)
     }
   }, [post])
-
-  // Signal overlay state to hide bottom nav
-  useEffect(() => {
-    if (post) {
-      setOverlayOpen(true)
-    }
-    return () => {
-      if (post) {
-        setOverlayOpen(false)
-      }
-    }
-  }, [post, setOverlayOpen])
 
   // Fetch when post changes
   useEffect(() => {
@@ -318,77 +354,6 @@ export function StreamCommentSheet({
     [handleSendComment]
   )
 
-  // ==================== DELETE COMMENT ====================
-  const handleDeleteComment = useCallback(
-    async (commentId: string, isReply: boolean, parentId?: string) => {
-      if (!post || deletingCommentId) return
-
-      setDeletingCommentId(commentId)
-      try {
-        const data = await apiClient.del<{ success: boolean; data?: { deletedCount: number } }>(
-          `/api/stream/${post.id}/comments/${commentId}`
-        )
-
-        if (data.success) {
-          if (isReply && parentId) {
-            // Remove reply from parent's replies and update replyCount
-            setComments((prev) =>
-              prev.map((c) => {
-                if (c.id === parentId) {
-                  const updatedReplies = (c.replies || []).filter(
-                    (r) => r.id !== commentId
-                  )
-                  return {
-                    ...c,
-                    replyCount: Math.max(0, c.replyCount - 1),
-                    replies: updatedReplies,
-                  }
-                }
-                return c
-              })
-            )
-          } else {
-            // Remove top-level comment (and its replies)
-            setComments((prev) => prev.filter((c) => c.id !== commentId))
-          }
-          onCommentAdded?.(post.id)
-        }
-      } catch (error) {
-        if (error instanceof ApiClientError) {
-          // Server returned an error
-        }
-      } finally {
-        setDeletingCommentId(null)
-      }
-    },
-    [post, deletingCommentId, onCommentAdded]
-  )
-
-  // ==================== MENTION CLICK → NAVIGATE TO PROFILE ====================
-  const handleMentionClick = useCallback(
-    async (username: string) => {
-      try {
-        // Resolve username to userId via the search API
-        const data = await apiClient.get<{ success: boolean; data: Array<{ id: string; name: string; username?: string }> }>(
-          "/api/user/search",
-          { q: username, limit: "1" }
-        )
-        if (data.success && data.data && data.data.length > 0) {
-          const user = data.data[0]
-          // Verify the username matches (search also matches by name)
-          if (user.username?.toLowerCase() === username.toLowerCase()) {
-            onClose()
-            setSelectedUser(user.id)
-            navigate("user-profile")
-          }
-        }
-      } catch {
-        // Silently fail — user can try again
-      }
-    },
-    [onClose, setSelectedUser, navigate]
-  )
-
   // Derive post user info
   const postUserName = post?.user?.name || 'User'
   const postUserAvatar = post?.user?.avatar
@@ -404,7 +369,7 @@ export function StreamCommentSheet({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 z-[55] bg-black/50 backdrop-blur-sm"
+            className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
           />
 
           {/* Sheet */}
@@ -413,16 +378,16 @@ export function StreamCommentSheet({
             animate={{ y: 0 }}
             exit={{ y: "100%" }}
             transition={{ type: "spring", damping: 30, stiffness: 300 }}
-            className="fixed bottom-0 left-0 right-0 z-[60] bg-background rounded-t-2xl shadow-2xl flex flex-col"
+            className="fixed bottom-0 left-0 right-0 z-50 bg-background rounded-t-2xl shadow-2xl"
             style={{ maxHeight: "85vh" }}
           >
             {/* Handle */}
-            <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
+            <div className="flex justify-center pt-3 pb-1">
               <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
             </div>
 
             {/* Header */}
-            <div className="flex items-center justify-between px-4 pb-3 border-b border-border/50 flex-shrink-0">
+            <div className="flex items-center justify-between px-4 pb-3 border-b border-border/50">
               <div className="flex items-center gap-3 flex-1 min-w-0">
                 {/* Post user avatar */}
                 <div className="relative flex-shrink-0">
@@ -470,8 +435,8 @@ export function StreamCommentSheet({
               </motion.button>
             </div>
 
-            {/* Comments list - flex-1 to take remaining space, min-h-0 for overflow */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0">
+            {/* Comments list */}
+            <div className="overflow-y-auto custom-scrollbar" style={{ maxHeight: "calc(85vh - 140px)" }}>
               {isLoading ? (
                 <div className="flex items-center justify-center py-12">
                   <motion.div
@@ -502,18 +467,14 @@ export function StreamCommentSheet({
                     <CommentItem
                       key={comment.id}
                       comment={comment}
-                      currentUserId={currentUser?.id}
                       isExpanded={expandedReplies.has(comment.id)}
                       isLoadingReplies={isLoadingReplies.has(comment.id)}
-                      isDeleting={deletingCommentId === comment.id}
                       onLike={(id) => handleLikeComment(id, false)}
                       onReply={handleReply}
                       onLoadReplies={handleLoadReplies}
                       onLikeReply={(replyId) =>
                         handleLikeComment(replyId, true, comment.id)
                       }
-                      onDelete={(commentId, isReply, parentId) => handleDeleteComment(commentId, isReply, parentId)}
-                      onMentionClick={handleMentionClick}
                     />
                   ))}
                 </div>
@@ -528,7 +489,7 @@ export function StreamCommentSheet({
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: "auto" }}
                   exit={{ opacity: 0, height: 0 }}
-                  className="flex items-center gap-2 px-4 py-2 bg-muted/30 border-t border-border/50 flex-shrink-0"
+                  className="flex items-center gap-2 px-4 py-2 bg-muted/30 border-t border-border/50"
                 >
                   <span className="text-xs text-muted-foreground flex-1">
                     Membalas{" "}
@@ -548,7 +509,7 @@ export function StreamCommentSheet({
             </AnimatePresence>
 
             {/* Input area */}
-            <div className="flex items-center gap-2 px-4 py-3 border-t border-border/50 bg-background pb-safe flex-shrink-0">
+            <div className="flex items-center gap-2 px-4 py-3 border-t border-border/50 bg-background">
               {/* @ mention quick insert */}
               <motion.button
                 whileTap={{ scale: 0.85 }}
@@ -601,38 +562,28 @@ export function StreamCommentSheet({
 // ==================== COMMENT ITEM ====================
 interface CommentItemProps {
   comment: StreamComment
-  currentUserId?: string
   isExpanded: boolean
   isLoadingReplies: boolean
-  isDeleting: boolean
   onLike: (id: string) => void
   onReply: (comment: StreamComment) => void
   onLoadReplies: (id: string) => void
   onLikeReply: (id: string) => void
-  onDelete: (commentId: string, isReply: boolean, parentId?: string) => void
-  onMentionClick: (username: string) => void
 }
 
 function CommentItem({
   comment,
-  currentUserId,
   isExpanded,
   isLoadingReplies,
-  isDeleting,
   onLike,
   onReply,
   onLoadReplies,
   onLikeReply,
-  onDelete,
-  onMentionClick,
 }: CommentItemProps) {
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const isOwner = currentUserId === comment.userId
   const commentUserName = comment.user?.name || 'User'
   const commentUserAvatar = comment.user?.avatar
 
   return (
-    <div className={`px-4 py-3 transition-opacity ${isDeleting ? 'opacity-40 pointer-events-none' : ''}`}>
+    <div className="px-4 py-3">
       {/* Comment content */}
       <div className="flex gap-2.5">
         {/* Avatar */}
@@ -669,7 +620,7 @@ function CommentItem({
             </span>
           </div>
           <p className="text-sm text-foreground mt-0.5 whitespace-pre-wrap">
-            <MentionText content={comment.content} onMentionClick={onMentionClick} />
+            <MentionText content={comment.content} />
           </p>
 
           {/* Actions */}
@@ -705,38 +656,6 @@ function CommentItem({
             >
               Balas
             </button>
-
-            {/* Delete — only visible to comment author */}
-            {isOwner && !showDeleteConfirm && (
-              <button
-                onClick={() => setShowDeleteConfirm(true)}
-                className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground hover:text-red-500 transition-colors"
-              >
-                <Trash2 className="w-3 h-3" />
-                Hapus
-              </button>
-            )}
-
-            {/* Delete confirmation */}
-            {isOwner && showDeleteConfirm && (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => {
-                    setShowDeleteConfirm(false)
-                    onDelete(comment.id, false)
-                  }}
-                  className="text-[10px] font-semibold text-red-500 hover:text-red-600 transition-colors"
-                >
-                  Ya, hapus
-                </button>
-                <button
-                  onClick={() => setShowDeleteConfirm(false)}
-                  className="text-[10px] font-medium text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  Batal
-                </button>
-              </div>
-            )}
           </div>
 
           {/* View replies toggle */}
@@ -775,9 +694,8 @@ function CommentItem({
                 {comment.replies.map((reply) => {
                   const replyUserName = reply.user?.name || 'User'
                   const replyUserAvatar = reply.user?.avatar
-                  const isReplyOwner = currentUserId === reply.userId
                   return (
-                    <div key={reply.id} className={`flex gap-2.5 transition-opacity ${isDeleting ? 'opacity-40 pointer-events-none' : ''}`}>
+                    <div key={reply.id} className="flex gap-2.5">
                       {/* Reply avatar */}
                       <div className="relative flex-shrink-0">
                         {replyUserAvatar ? (
@@ -812,7 +730,7 @@ function CommentItem({
                           </span>
                         </div>
                         <p className="text-xs text-foreground mt-0.5 whitespace-pre-wrap">
-                          <MentionText content={reply.content} onMentionClick={onMentionClick} />
+                          <MentionText content={reply.content} />
                         </p>
                         <div className="flex items-center gap-3 mt-1">
                           <motion.button
@@ -845,16 +763,6 @@ function CommentItem({
                           >
                             Balas
                           </button>
-                          {/* Delete reply — only visible to reply author */}
-                          {isReplyOwner && (
-                            <button
-                              onClick={() => onDelete(reply.id, true, comment.id)}
-                              className="flex items-center gap-0.5 text-[9px] font-medium text-muted-foreground hover:text-red-500 transition-colors"
-                            >
-                              <Trash2 className="w-2.5 h-2.5" />
-                              Hapus
-                            </button>
-                          )}
                         </div>
                       </div>
                     </div>

@@ -8,10 +8,10 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { useAppStore } from "@/lib/store"
-import { PageHeader, EmptyState } from "../shared"
+import { PageHeader, EmptyState, AdminScreenWrapper, PrimaryButton } from "../shared"
 import { stagger } from '@/lib/animations'
 import { useState, useEffect } from "react"
-import { LoadingSpinner } from "../loading-spinner"
+
 
 export function AdminComplaints() {
   const { showToast, adminComplaints, updateAdminComplaint, fetchAdminComplaints } = useAppStore()
@@ -40,10 +40,8 @@ export function AdminComplaints() {
     rejected: "border-red-300 text-red-600",
   }
 
-  if (isLoading) return <div className="pb-20"><PageHeader title="Keluhan" /><LoadingSpinner message="Memuat keluhan..." /></div>
-
   return (
-    <div className="pb-20">
+    <AdminScreenWrapper title="Keluhan" isLoading={isLoading}>
       <PageHeader title="Keluhan" />
 
       <div className="px-4 space-y-4">
@@ -116,12 +114,12 @@ export function AdminComplaints() {
                           <Clock className="w-3 h-3 mr-0.5" /> Proses
                         </Button>
                       )}
-                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white" onClick={() => {
+                      <PrimaryButton size="sm" className="h-7 text-[11px] rounded-lg" onClick={() => {
                         updateAdminComplaint(complaint.id, { status: "resolved" })
                         showToast("Keluhan diselesaikan", "success")
                       }}>
                         <Check className="w-3 h-3 mr-0.5" /> Resolve
-                      </Button>
+                      </PrimaryButton>
                       <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500" onClick={() => {
                         updateAdminComplaint(complaint.id, { status: "rejected" })
                         showToast("Keluhan ditolak", "info")
@@ -136,6 +134,6 @@ export function AdminComplaints() {
           )}
         </div>
       </div>
-    </div>
+    </AdminScreenWrapper>
   )
 }

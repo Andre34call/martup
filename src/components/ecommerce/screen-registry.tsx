@@ -45,6 +45,8 @@ const RefundScreen = lazy(() => import('@/components/ecommerce/missing-screens')
 const HelpScreen = lazy(() => import('@/components/ecommerce/missing-screens').then(m => ({ default: m.HelpScreen })))
 const FollowedStoresScreen = lazy(() => import('@/components/ecommerce/missing-screens').then(m => ({ default: m.FollowedStoresScreen })))
 const DepositScreen = lazy(() => import('@/components/ecommerce/missing-screens').then(m => ({ default: m.DepositScreen })))
+const DepositHistoryScreen = lazy(() => import('@/components/ecommerce/missing-screens').then(m => ({ default: m.DepositHistoryScreen })))
+const DepositDetailScreen = lazy(() => import('@/components/ecommerce/missing-screens').then(m => ({ default: m.DepositDetailScreen })))
 const WithdrawScreen = lazy(() => import('@/components/ecommerce/missing-screens').then(m => ({ default: m.WithdrawScreen })))
 
 // --- Seller Screens ---
@@ -81,7 +83,6 @@ const AdminSettings = lazy(() => import('@/components/ecommerce/admin-new-screen
 const StreamFeedScreen = lazy(() => import('@/components/ecommerce/stream').then(m => ({ default: m.StreamFeedScreen })))
 const StreamCreateScreen = lazy(() => import('@/components/ecommerce/stream').then(m => ({ default: m.StreamCreateScreen })))
 const StreamSearchScreen = lazy(() => import('@/components/ecommerce/stream').then(m => ({ default: m.StreamSearchScreen })))
-const StreamUserProfileScreen = lazy(() => import('@/components/ecommerce/stream').then(m => ({ default: m.StreamUserProfileScreen })))
 
 // --- Legal Screens ---
 const PrivacyPolicyScreen = lazy(() => import('@/components/ecommerce/legal/legal-screens').then(m => ({ default: m.PrivacyPolicyScreen })))
@@ -121,6 +122,8 @@ const screenMap: Record<ScreenName, ScreenEntry> = {
   'order-tracking': { component: OrderScreen },
   wallet: { component: WalletScreen },
   deposit: { component: DepositScreen },
+  'deposit-history': { component: DepositHistoryScreen },
+  'deposit-detail': { component: DepositDetailScreen },
   withdraw: { component: WithdrawScreen },
   chat: { component: ChatScreen },
   'chat-room': { component: ChatRoomScreen },
@@ -140,7 +143,6 @@ const screenMap: Record<ScreenName, ScreenEntry> = {
   stream: { component: StreamFeedScreen },
   'stream-create': { component: StreamCreateScreen },
   'stream-search': { component: StreamSearchScreen },
-  'user-profile': { component: StreamUserProfileScreen },
 
   // Legal (props will be injected at render time)
   'privacy-policy': { component: PrivacyPolicyScreen },
@@ -206,11 +208,10 @@ export const ADMIN_SCREENS: readonly ScreenName[] = [
 // Sub-screens that should hide the bottom nav (they have their own back navigation headers)
 export const SUB_SCREENS: readonly ScreenName[] = [
   'product-detail', 'seller-shop', 'checkout', 'review', 'refund',
-  'address', 'help', 'followed-stores', 'deposit', 'withdraw',
+  'address', 'help', 'followed-stores', 'deposit', 'deposit-history', 'deposit-detail', 'withdraw',
   'settings', 'voucher', 'order-tracking', 'seller-add-product',
   'chat-room', 'category-detail', 'seller-withdraw', 'seller-withdraw-history',
   'privacy-policy', 'terms-of-service', 'refund-policy', 'stream-create', 'stream-search',
-  'user-profile',
 ] as const
 
 // ==================== LOADING FALLBACK ====================

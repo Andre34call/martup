@@ -6,7 +6,7 @@ import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 // SECURITY: Always requires admin authentication
 export async function GET(request: NextRequest) {
   if (process.env.NODE_ENV === 'production') {
-    return NextResponse.json({ success: false, error: 'Not available in production' }, { status: 404 })
+    return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 })
   }
 
   // SECURITY: Always require admin auth — even in non-production

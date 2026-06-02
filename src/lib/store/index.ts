@@ -67,7 +67,6 @@ export const useAppStore = create<AppStore>()(
         previousScreens: [],
         settings: state.settings,
         searchHistory: state.searchHistory,
-        avatarUrl: state.avatarUrl,
         // Do NOT persist: currentScreen, orders, notifications, products, wallet, vouchers, isSettingsLoaded, etc.
       }),
     }

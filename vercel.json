@@ -2,14 +2,6 @@
   "buildCommand": "prisma generate && prisma db push --accept-data-loss && next build",
   "installCommand": "bun install",
   "framework": "nextjs",
-  "functions": {
-    "src/app/api/upload/route.ts": {
-      "maxDuration": 300
-    },
-    "src/app/api/stream/route.ts": {
-      "maxDuration": 60
-    }
-  },
   "crons": [
     {
       "path": "/api/cron/cancel-expired",
@@ -22,10 +14,6 @@
     {
       "path": "/api/cron/auto-complete-stuck",
       "schedule": "0 9 * * *"
-    },
-    {
-      "path": "/api/cron/auto-confirm-service",
-      "schedule": "0 */6 * * *"
     }
   ]
 }

@@ -30,14 +30,14 @@ export interface SelectionSlice {
   selectedOrderId: string | null
   selectedChatRoomId: string | null
   selectedSellerId: string | null
-  selectedUserId: string | null
+  selectedDepositId: string | null
   shareToStreamProduct: { id: string; name: string; image?: string; price: number; discountPrice?: number } | null
   setSelectedProduct: (id: string | null) => void
   setSelectedCategory: (id: string | null) => void
   setSelectedOrder: (id: string | null) => void
   setSelectedChatRoom: (id: string | null) => void
   setSelectedSeller: (id: string | null) => void
-  setSelectedUser: (id: string | null) => void
+  setSelectedDeposit: (id: string | null) => void
   setShareToStreamProduct: (product: SelectionSlice['shareToStreamProduct']) => void
   clearShareToStreamProduct: () => void
 }
@@ -46,8 +46,6 @@ export interface UISlice {
   isLoading: boolean
   showSplash: boolean
   setShowSplash: (v: boolean) => void
-  isOverlayOpen: boolean
-  setOverlayOpen: (open: boolean) => void
   toast: { message: string; type: 'success' | 'error' | 'info' | 'warning' } | null
   showToast: (message: string, type?: 'success' | 'error' | 'info' | 'warning') => void
   hideToast: () => void
@@ -74,7 +72,6 @@ export interface ChatSlice {
   fetchChatMessages: (roomId: string) => Promise<void>
   sendChatMessage: (roomId: string, content: string, type?: string) => Promise<void>
   createChatRoom: (sellerId: string, productId?: string) => Promise<string | null>
-  createDirectChat: (userId: string) => Promise<string | null>
   connectSocket: () => void
   disconnectSocket: () => void
   emitTyping: (roomId: string, isTyping: boolean) => void
@@ -85,7 +82,6 @@ export interface OrderSlice {
   isOrdersLoaded: boolean
   addOrder: (order: Order) => void
   updateOrderStatus: (orderId: string, status: OrderStatus, options?: { trackingNumber?: string; cancelReason?: string }) => Promise<void>
-  updateOrderPaymentStatus: (orderId: string, paymentStatus: string) => void
   payForOrder: (orderId: string) => Promise<{ token?: string; redirectUrl?: string } | void>
   cancelOrder: (orderId: string) => Promise<void>
   updateOrderTracking: (orderId: string, trackingNumber: string) => Promise<void>

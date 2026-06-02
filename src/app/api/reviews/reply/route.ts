@@ -55,7 +55,7 @@ export async function PUT(request: NextRequest) {
       select: { id: true },
     })
 
-    if (!seller || !review.product || review.product.sellerId !== seller.id) {
+    if (!seller || review.product.sellerId !== seller.id) {
       return NextResponse.json(
         { success: false, error: 'Hanya penjual produk ini yang dapat membalas review' },
         { status: 403 }
@@ -77,9 +77,9 @@ export async function PUT(request: NextRequest) {
     // Create notification for the reviewer
     await db.notification.create({
       data: {
-        userId: review.userId!,
+        userId: review.userId,
         title: 'Penjual Membalas Review',
-        content: `Penjual telah membalas review Anda untuk produk "${review.product?.name || 'produk'}"`,
+        content: `Penjual telah membalas review Anda untuk produk "${review.product.name}"`,
         type: 'system',
         refType: 'review',
         refId: reviewId,

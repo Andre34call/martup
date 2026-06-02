@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion"
 import { useAppStore } from "@/lib/store"
-import { PageHeader, EmptyState, SearchBar } from "../shared"
+import { PageHeader, EmptyState, SearchBar, PrimaryButton } from "../shared"
 import { useState } from "react"
 import { HelpCircle, ChevronDown, ChevronUp, Phone, Package, CreditCard, MapPin, RotateCcw, Shield } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -136,9 +136,9 @@ export function HelpScreen() {
           )}
         </div>
 
-        <Button onClick={handleContactCS} className="w-full bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl h-11">
+        <PrimaryButton onClick={handleContactCS} className="w-full rounded-xl h-11">
           <Phone className="w-4 h-4 mr-2" /> Hubungi CS
-        </Button>
+        </PrimaryButton>
       </div>
     </div>
   )

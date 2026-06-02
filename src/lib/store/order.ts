@@ -25,21 +25,6 @@ function restoreOrders(orders: Order[]) {
  * Server responses may contain extra DB fields (createdAt as Date, Decimal numbers, etc.)
  * that we need to normalize for local state.
  */
-// Helper to safely parse JSON fields (serviceProofImages, etc.)
-function parseJsonArray(value: unknown): string[] | undefined {
-  if (!value) return undefined
-  if (Array.isArray(value)) return value as string[]
-  if (typeof value === 'string') {
-    try {
-      const parsed = JSON.parse(value)
-      return Array.isArray(parsed) ? parsed : undefined
-    } catch {
-      return undefined
-    }
-  }
-  return undefined
-}
-
 function mapServerOrder(raw: Record<string, unknown>): Order {
   return {
     id: raw.id as string,
@@ -55,15 +40,6 @@ function mapServerOrder(raw: Record<string, unknown>): Order {
     totalAmount: Number(raw.totalAmount ?? 0),
     paymentMethod: (raw.paymentMethod as string) || undefined,
     paymentStatus: (raw.paymentStatus as string) || 'unpaid',
-    paymentProofUrl: (raw.paymentProofUrl as string) || undefined,
-    platformBankAccountId: (raw.platformBankAccountId as string) || undefined,
-    escrowStatus: (raw.escrowStatus as string) || 'none',
-    note: (raw.note as string) || undefined,
-    isServiceOrder: raw.isServiceOrder === true || raw.isServiceOrder === 'true',
-    serviceProofImages: parseJsonArray(raw.serviceProofImages),
-    sellerCompletedAt: typeof raw.sellerCompletedAt === 'string' ? raw.sellerCompletedAt : raw.sellerCompletedAt ? new Date(raw.sellerCompletedAt as number | string).toISOString() : undefined,
-    buyerConfirmedAt: typeof raw.buyerConfirmedAt === 'string' ? raw.buyerConfirmedAt : raw.buyerConfirmedAt ? new Date(raw.buyerConfirmedAt as number | string).toISOString() : undefined,
-    autoConfirmAt: typeof raw.autoConfirmAt === 'string' ? raw.autoConfirmAt : raw.autoConfirmAt ? new Date(raw.autoConfirmAt as number | string).toISOString() : undefined,
     items: Array.isArray(raw.items)
       ? raw.items.map((item: Record<string, unknown>) => ({
           id: item.id as string,
@@ -87,7 +63,7 @@ function mapServerOrder(raw: Record<string, unknown>): Order {
           status: (raw.shipping as Record<string, unknown>).status as string,
         }
       : undefined,
-    // address may not be present in list API responses (and is null for service orders)
+    // address may not be present in list API responses
     address: raw.address as Order['address'],
     seller: raw.seller as Order['seller'],
     buyerName: (raw.buyerName as string) || undefined,
@@ -208,18 +184,6 @@ export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set
       // Rollback on network error
       set(restoreOrders(preSnapshot))
     }
-  },
-
-  // ==================== updateOrderPaymentStatus ====================
-  // Updates only the paymentStatus field (e.g., for bank transfer proof upload)
-  updateOrderPaymentStatus: (orderId, paymentStatus) => {
-    set((state) => ({
-      orders: state.orders.map(o => o.id === orderId ? {
-        ...o,
-        paymentStatus,
-        ...(paymentStatus === 'pending_verification' ? { status: 'pending_verification' as OrderStatus } : {}),
-      } : o),
-    }))
   },
 
   // ==================== payForOrder ====================

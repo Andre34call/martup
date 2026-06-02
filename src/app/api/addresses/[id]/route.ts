@@ -10,7 +10,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // SECURITY: Unified auth using verifyAuth (not requireAuth from auth-helpers)
+    // SECURITY: Unified auth using verifyAuth (supports both session and bearer token)
     const authResult = await verifyAuth(request)
     if (!authResult.success) return authErrorResponse(authResult)
 

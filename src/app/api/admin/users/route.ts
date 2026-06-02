@@ -39,8 +39,8 @@ export async function GET(request: NextRequest) {
 
     if (search) {
       where.OR = [
-        { name: { contains: search } },
-        { email: { contains: search } },
+        { name: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
       ]
     }
 
@@ -61,8 +61,12 @@ export async function GET(request: NextRequest) {
             totalProducts: true,
           },
         },
+        _count: {
+          select: { orders: true },
+        },
         orders: {
           select: { totalAmount: true },
+          where: { status: { notIn: ['CANCELLED', 'cancelled'] } },
         },
       },
       orderBy: { createdAt: 'desc' },
@@ -73,7 +77,7 @@ export async function GET(request: NextRequest) {
         (sum, order) => sum + Number(order.totalAmount),
         0
       )
-      const totalOrders = user.orders.length
+      const totalOrders = user._count.orders
 
       return {
         id: user.id,
@@ -125,34 +129,9 @@ export async function PUT(request: NextRequest) {
     const body = await request.json()
     const { userId, isVerified, isActive, role, updates } = body
 
-    // Input validation
-    if (!userId || typeof userId !== 'string') {
+    if (!userId) {
       return NextResponse.json(
-        { success: false, error: 'userId is required and must be a string' },
-        { status: 400 }
-      )
-    }
-    if (isVerified !== undefined && typeof isVerified !== 'boolean') {
-      return NextResponse.json(
-        { success: false, error: 'isVerified must be a boolean' },
-        { status: 400 }
-      )
-    }
-    if (isActive !== undefined && typeof isActive !== 'boolean') {
-      return NextResponse.json(
-        { success: false, error: 'isActive must be a boolean' },
-        { status: 400 }
-      )
-    }
-    if (role !== undefined && typeof role !== 'string') {
-      return NextResponse.json(
-        { success: false, error: 'role must be a string' },
-        { status: 400 }
-      )
-    }
-    if (updates && typeof updates !== 'object') {
-      return NextResponse.json(
-        { success: false, error: 'updates must be an object' },
+        { success: false, error: 'userId is required' },
         { status: 400 }
       )
     }

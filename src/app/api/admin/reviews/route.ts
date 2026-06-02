@@ -2,17 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
+import { parseJsonField } from '@/lib/api-utils'
 import { logger } from '@/lib/logger'
-
-function parseJsonField(value: string | null | undefined): unknown[] {
-  if (!value) return []
-  try {
-    const parsed = JSON.parse(value)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
 
 // GET /api/admin/reviews - List all reviews with filters
 export async function GET(request: NextRequest) {
@@ -93,7 +84,7 @@ export async function PUT(request: NextRequest) {
       _count: { id: true },
     })
     await db.product.update({
-      where: { id: review.productId || undefined },
+      where: { id: review.productId },
       data: {
         rating: stats._avg.rating ?? 0,
         reviewCount: stats._count.id,
@@ -138,7 +129,7 @@ export async function DELETE(request: NextRequest) {
         _count: { id: true },
       })
       await tx.product.update({
-        where: { id: productId || undefined },
+        where: { id: productId },
         data: {
           rating: stats._avg.rating ?? 0,
           reviewCount: stats._count.id,

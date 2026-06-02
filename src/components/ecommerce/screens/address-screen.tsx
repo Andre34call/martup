@@ -3,7 +3,7 @@
 import { motion, AnimatePresence } from "framer-motion"
 import { useAppStore } from "@/lib/store"
 import { stagger } from '@/lib/animations'
-import { PageHeader, SectionHeader } from "../shared"
+import { PageHeader, SectionHeader, PrimaryButton } from "../shared"
 import { useState } from "react"
 import { Plus, Edit, Trash2, MapPin } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -134,12 +134,12 @@ export function AddressScreen() {
   return (
     <div className="pb-24">
       <PageHeader title="Alamat" rightAction={
-        <Button
+        <PrimaryButton
           onClick={handleToggleAddForm}
-          className="bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl h-9 text-xs"
+          className="rounded-xl h-9 text-xs"
         >
           <Plus className="w-3.5 h-3.5 mr-1" /> {editingId ? "Edit" : "Tambah"}
-        </Button>
+        </PrimaryButton>
       } />
 
       <div className="px-4 space-y-4">
@@ -219,9 +219,9 @@ export function AddressScreen() {
                     <Input value={formPostalCode} onChange={(e) => setFormPostalCode(e.target.value)} placeholder="12345" className="rounded-xl h-9" />
                   </div>
                 </div>
-                <Button onClick={handleSaveAddress} className="w-full bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl h-10">
+                <PrimaryButton onClick={handleSaveAddress} className="w-full rounded-xl h-10">
                   Simpan Alamat
-                </Button>
+                </PrimaryButton>
               </Card>
             </motion.div>
           )}

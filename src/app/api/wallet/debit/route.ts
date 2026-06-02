@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { verifyAuth, checkRateLimit, authErrorResponse } from '@/lib/auth-middleware'
+import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
+import { paymentLimiter, rateLimitHeaders } from '@/lib/rate-limit'
 import { serializeDecimal } from '@/lib/decimal-utils'
 import { logger, logBusinessEvent } from '@/lib/logger'
 import { validateBody, walletDebitSchema } from '@/lib/validations'
+import { validateCsrfRequest } from '@/lib/csrf'
 
 // ==================== WALLET DEBIT (Payment) ====================
 // Deducts balance from the user's wallet for order payment.
@@ -19,11 +21,18 @@ export async function POST(request: NextRequest) {
     }
 
     // SECURITY: Rate limit — 5 debit requests per minute per user
-    if (!checkRateLimit(`debit:${authResult.user.id}`, 5)) {
+    const rlResult = await paymentLimiter.check(`debit:${authResult.user.id}`)
+    if (!rlResult.allowed) {
       return NextResponse.json(
         { success: false, error: 'Terlalu banyak request. Coba lagi dalam 1 menit.' },
-        { status: 429 }
+        { status: 429, headers: rateLimitHeaders(rlResult) }
       )
+    }
+
+    // SECURITY: CSRF protection
+    const csrfResult = await validateCsrfRequest(request)
+    if (!csrfResult.valid) {
+      return NextResponse.json({ success: false, error: 'Keamanan request tidak valid. Refresh halaman dan coba lagi.' }, { status: 403 })
     }
 
     const body = await request.json()
@@ -103,42 +112,40 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // SECURITY: Verify amount matches order total EXACTLY
-    // The client-provided amount is ignored — we use the server-side order total
-    const serverTotalAmount = Number(order.totalAmount)
-    if (amount !== serverTotalAmount) {
+    // Verify amount matches order total
+    if (Math.abs(Number(order.totalAmount) - amount) > 1) {
+      // Allow 1 rupiah rounding difference
       return NextResponse.json(
-        { success: false, error: `Jumlah pembayaran tidak sesuai. Total pesanan: Rp ${serverTotalAmount.toLocaleString('id-ID')}` },
-        { status: 400 }
-      )
-    }
-
-    // IDEMPOTENCY: Check if wallet already debited for this order
-    const existingDebit = await db.walletMutation.findFirst({
-      where: {
-        walletId: wallet.id,
-        type: 'debit',
-        refType: 'order',
-        refId: orderId,
-      },
-    })
-
-    if (existingDebit) {
-      return NextResponse.json(
-        { success: false, error: 'Pembayaran untuk pesanan ini sudah diproses sebelumnya' },
+        { success: false, error: `Jumlah pembayaran tidak sesuai. Total pesanan: Rp ${Number(order.totalAmount).toLocaleString('id-ID')}` },
         { status: 400 }
       )
     }
 
     // Process everything in a single database transaction
+    // SECURITY: Idempotency check is INSIDE the transaction to prevent TOCTOU race condition
+    // (two concurrent requests could both pass the outside check before either creates the mutation)
     const result = await db.$transaction(async (tx) => {
+      // IDEMPOTENCY: Check if wallet already debited for this order (INSIDE transaction)
+      const existingDebit = await tx.walletMutation.findFirst({
+        where: {
+          walletId: wallet.id,
+          type: 'debit',
+          refType: 'order',
+          refId: orderId,
+        },
+      })
+
+      if (existingDebit) {
+        throw new Error('ALREADY_PAID')
+      }
+
       // SECURITY: Re-fetch wallet inside transaction to prevent race conditions (double-spend)
       const currentWallet = await tx.wallet.findUnique({
         where: { id: wallet.id },
       })
 
       if (!currentWallet || Number(currentWallet.balance) < amount) {
-        throw new Error(`Saldo tidak mencukupi. Saldo: Rp ${Number(currentWallet?.balance ?? 0).toLocaleString('id-ID')}, Dibutuhkan: Rp ${amount.toLocaleString('id-ID')}`)
+        throw new Error(`INSUFFICIENT_BALANCE:${Number(currentWallet?.balance ?? 0)}`)
       }
 
       // 1. Deduct wallet balance
@@ -290,7 +297,22 @@ export async function POST(request: NextRequest) {
       },
     }))
   } catch (error: unknown) {
-    // Error logged above — generic message returned to client
+    // Handle transaction-level errors
+    if (error instanceof Error) {
+      if (error.message === 'ALREADY_PAID') {
+        return NextResponse.json(
+          { success: false, error: 'Pembayaran untuk pesanan ini sudah diproses sebelumnya' },
+          { status: 400 }
+        )
+      }
+      if (error.message.startsWith('INSUFFICIENT_BALANCE:')) {
+        const balance = error.message.split(':')[1] || '0'
+        return NextResponse.json(
+          { success: false, error: `Saldo tidak mencukupi. Saldo: Rp ${Number(balance).toLocaleString('id-ID')}, Dibutuhkan: Rp ${amount.toLocaleString('id-ID')}` },
+          { status: 400 }
+        )
+      }
+    }
     logger.error({ err: error }, 'POST /api/wallet/debit error')
     return NextResponse.json(
       { success: false, error: 'Terjadi kesalahan server' },

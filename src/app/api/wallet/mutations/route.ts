@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
+import { paymentLimiter, rateLimitHeaders } from '@/lib/rate-limit'
 import { logger } from '@/lib/logger'
 
 // GET /api/wallet/mutations — Get wallet mutation history
@@ -13,6 +14,16 @@ export async function GET(request: NextRequest) {
     if (!authResult.success) {
       return authErrorResponse(authResult)
     }
+
+    // SECURITY: Rate limit to prevent enumeration attacks
+    const rlResult = await paymentLimiter.check(`mutations:${authResult.user.id}`)
+    if (!rlResult.allowed) {
+      return NextResponse.json(
+        { success: false, error: 'Terlalu banyak request. Coba lagi dalam 1 menit.' },
+        { status: 429, headers: rateLimitHeaders(rlResult) }
+      )
+    }
+
     const userId = authResult.user.id
     const { searchParams } = request.nextUrl
 

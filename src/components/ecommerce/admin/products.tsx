@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion"
 import {
-  Box, AlertTriangle, Check, Ban, Trash2, Edit, Upload, Target
+  Box, AlertTriangle, Check, Ban, Trash2, Edit, Upload
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -11,12 +11,12 @@ import { Input } from "@/components/ui/input"
 import { useAppStore } from "@/lib/store"
 import { formatPrice } from "@/lib/utils"
 import { fadeIn, stagger } from '@/lib/animations'
-import { PageHeader, SectionHeader, SearchBar, EmptyState } from "../shared"
+import { PageHeader, SectionHeader, SearchBar, EmptyState, AdminScreenWrapper, PrimaryButton } from "../shared"
 import { useState, useEffect, useCallback } from "react"
 import { ConfirmDialog } from "../confirm-dialog"
-import { LoadingSpinner } from "../loading-spinner"
 import { apiClient } from '@/lib/api-client'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { handleApiError } from '@/lib/handle-api-error'
 
 interface AdminProductItem {
   id: string
@@ -36,10 +36,6 @@ interface AdminProductItem {
   weight: number
   condition: string
   tags: string[]
-  isPromoted: boolean
-  promotedUntil: string | null
-  viewCount: number
-  viralScore: number
 }
 
 export function AdminProducts() {
@@ -64,8 +60,6 @@ export function AdminProducts() {
   const [uploadingImage, setUploadingImage] = useState(false)
   const [uploadingVideo, setUploadingVideo] = useState(false)
   const [categories, setCategories] = useState<{id: string; name: string}[]>([])
-  const [promoteProduct, setPromoteProduct] = useState<AdminProductItem | null>(null)
-  const [promoteDays, setPromoteDays] = useState("30")
 
   const fetchAdminProducts = useCallback(async () => {
     try {
@@ -90,15 +84,11 @@ export function AdminProducts() {
           weight: p.weight || 0,
           condition: p.condition || 'new',
           tags: Array.isArray(p.tags) ? p.tags : [],
-          isPromoted: p.isPromoted || false,
-          promotedUntil: p.promotedUntil || null,
-          viewCount: p.viewCount || 0,
-          viralScore: p.viralScore || 0,
         }))
         setAdminProducts(mapped)
       }
-    } catch {
-      showToast("Gagal memuat produk", "error")
+    } catch (err) {
+      handleApiError(err, "produk")
     } finally {
       setLoading(false)
     }
@@ -198,24 +188,6 @@ export function AdminProducts() {
     }
   }
 
-  const handlePromote = async (productId: string, promote: boolean, days: number = 30) => {
-    try {
-      const data = await apiClient.put<{ success: boolean; error?: string }>('/api/admin/products/promote', {
-        productId,
-        isPromoted: promote,
-        promotedDays: days,
-      })
-      if (data.success) {
-        setAdminProducts(prev => prev.map(p => p.id === productId ? { ...p, isPromoted: promote } : p))
-        showToast(promote ? "Produk dipromosikan" : "Promosi dihapus", "success")
-      } else {
-        showToast(data.error || "Gagal mengubah promosi", "error")
-      }
-    } catch {
-      showToast("Gagal mengubah promosi", "error")
-    }
-  }
-
   const handleEditProduct = async (productId: string, updates: Record<string, unknown>) => {
     try {
       const data = await apiClient.put<{ success: boolean; error?: string }>('/api/admin/products', { productId, ...updates })
@@ -235,18 +207,14 @@ export function AdminProducts() {
 
   const filtered = adminProducts.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) || p.sellerName.toLowerCase().includes(search.toLowerCase())
-    const matchesStatus = statusFilter === "all" ? true : 
-      statusFilter === "promoted" ? p.isPromoted : 
-      p.status === statusFilter
+    const matchesStatus = statusFilter === "all" || p.status === statusFilter
     return matchesSearch && matchesStatus
   })
 
   const flaggedProducts = adminProducts.filter(p => p.status === "blocked")
 
-  if (loading) return <div className="pb-20"><PageHeader title="Moderasi Produk" /><LoadingSpinner message="Memuat produk..." /></div>
-
   return (
-    <div className="pb-20">
+    <AdminScreenWrapper title="Moderasi Produk" isLoading={loading}>
       <PageHeader title="Moderasi Produk" />
 
       <div className="px-4 space-y-4">
@@ -259,7 +227,6 @@ export function AdminProducts() {
             { key: "active", label: "Aktif" },
             { key: "blocked", label: "Diblokir" },
             { key: "draft", label: "Draft" },
-            { key: "promoted", label: "Promosi" },
           ].map((filter) => (
             <motion.button
               key={filter.key}
@@ -301,9 +268,9 @@ export function AdminProducts() {
                       </div>
                     </div>
                     <div className="flex gap-2 mt-3 pt-2 border-t border-red-100 dark:border-red-900/30">
-                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white" onClick={() => handleStatusChange(product.id, 'active')}>
+                      <PrimaryButton size="sm" className="h-7 text-[11px] rounded-lg" onClick={() => handleStatusChange(product.id, 'active')}>
                         <Check className="w-3 h-3 mr-0.5" /> Approve
-                      </Button>
+                      </PrimaryButton>
                       <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-blue-500" onClick={() => {
                         setEditProduct(product)
                         setEditName(product.name)
@@ -319,21 +286,6 @@ export function AdminProducts() {
                         setEditTags((product.tags || []).join(', '))
                       }}>
                         <Edit className="w-3 h-3 mr-0.5" /> Edit
-                      </Button>
-                      <Button variant="outline" size="sm" className={`h-7 text-[11px] rounded-lg ${product.isPromoted ? 'text-amber-600 border-amber-300' : 'text-amber-500'}`} onClick={() => {
-                        if (product.isPromoted) {
-                          setConfirmAction({
-                            action: () => handlePromote(product.id, false),
-                            title: 'Hapus Promosi',
-                            message: `Apakah Anda yakin ingin menghapus promosi untuk "${product.name}"?`
-                          })
-                        } else {
-                          setPromoteProduct(product)
-                          setPromoteDays("30")
-                        }
-                      }}>
-                        <Target className="w-3 h-3 mr-0.5" />
-                        {product.isPromoted ? 'Promosi' : 'Promosikan'}
                       </Button>
                       <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500" onClick={() => setConfirmAction({
                         action: () => handleDelete(product.id),
@@ -380,11 +332,8 @@ export function AdminProducts() {
                         }`}>
                           {product.status === "active" ? "Aktif" : product.status === "draft" ? "Draft" : "Blocked"}
                         </Badge>
-                        {product.isPromoted && (
-                          <Badge variant="outline" className="text-[9px] border-amber-300 text-amber-600">Promosi</Badge>
-                        )}
                       </div>
-                      <p className="text-xs text-muted-foreground">{product.sellerName} · Terjual {product.sold} · 👁 {product.viewCount}</p>
+                      <p className="text-xs text-muted-foreground">{product.sellerName} · Terjual {product.sold}</p>
                       <p className="text-sm font-bold text-emerald-600 mt-0.5">{formatPrice(product.price)}</p>
                     </div>
                   </div>
@@ -406,9 +355,9 @@ export function AdminProducts() {
                       <Edit className="w-3 h-3 mr-0.5" /> Edit
                     </Button>
                     {product.status === "blocked" ? (
-                      <Button size="sm" className="h-7 text-[11px] rounded-lg bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white" onClick={() => handleStatusChange(product.id, 'active')}>
+                      <PrimaryButton size="sm" className="h-7 text-[11px] rounded-lg" onClick={() => handleStatusChange(product.id, 'active')}>
                         <Check className="w-3 h-3 mr-0.5" /> Approve
-                      </Button>
+                      </PrimaryButton>
                     ) : (
                       <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500" onClick={() => setConfirmAction({
                         action: () => handleStatusChange(product.id, 'blocked'),
@@ -418,21 +367,6 @@ export function AdminProducts() {
                         <Ban className="w-3 h-3 mr-0.5" /> Block
                       </Button>
                     )}
-                    <Button variant="outline" size="sm" className={`h-7 text-[11px] rounded-lg ${product.isPromoted ? 'text-amber-600 border-amber-300' : 'text-amber-500'}`} onClick={() => {
-                      if (product.isPromoted) {
-                        setConfirmAction({
-                          action: () => handlePromote(product.id, false),
-                          title: 'Hapus Promosi',
-                          message: `Apakah Anda yakin ingin menghapus promosi untuk "${product.name}"?`
-                        })
-                      } else {
-                        setPromoteProduct(product)
-                        setPromoteDays("30")
-                      }
-                    }}>
-                      <Target className="w-3 h-3 mr-0.5" />
-                      {product.isPromoted ? 'Promosi' : 'Promosikan'}
-                    </Button>
                     <Button variant="outline" size="sm" className="h-7 text-[11px] rounded-lg text-red-500" onClick={() => setConfirmAction({
                       action: () => handleDelete(product.id),
                       title: 'Hapus Produk',
@@ -584,7 +518,7 @@ export function AdminProducts() {
             <Button variant="outline" onClick={() => setEditProduct(null)} className="rounded-xl h-10 flex-1">
               Batal
             </Button>
-            <Button
+            <PrimaryButton
               onClick={async () => {
                 if (!editProduct) return
                 const tagArray = editTags.split(',').map(t => t.trim()).filter(t => t.length > 0)
@@ -603,61 +537,10 @@ export function AdminProducts() {
                 })
                 if (success) setEditProduct(null)
               }}
-              className="bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl h-10 flex-1"
+              className="rounded-xl h-10 flex-1"
             >
               Simpan
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      <Dialog open={!!promoteProduct} onOpenChange={(open) => { if (!open) setPromoteProduct(null) }}>
-        <DialogContent className="max-w-[360px] rounded-2xl p-5">
-          <DialogHeader>
-            <DialogTitle className="text-base font-bold">Promosikan Produk</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 mt-2">
-            <p className="text-sm text-muted-foreground">
-              Produk <span className="font-medium text-foreground">"{promoteProduct?.name}"</span> akan ditampilkan di bagian atas halaman utama sebagai iklan.
-            </p>
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-foreground">Durasi Promosi (hari)</label>
-              <div className="grid grid-cols-4 gap-2">
-                {["7", "14", "30", "60"].map(d => (
-                  <button
-                    key={d}
-                    onClick={() => setPromoteDays(d)}
-                    className={`py-2 rounded-xl text-xs font-medium border transition-colors ${
-                      promoteDays === d
-                        ? 'bg-amber-500 text-white border-amber-500'
-                        : 'bg-card text-foreground border-border hover:bg-muted'
-                    }`}
-                  >
-                    {d} hari
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-xl border border-amber-200 dark:border-amber-800">
-              <p className="text-xs text-amber-700 dark:text-amber-400">
-                💡 Produk yang dipromosikan akan ditandai dengan badge "IKLAN" dan muncul di section "Promo Pilihan" di halaman utama.
-              </p>
-            </div>
-          </div>
-          <DialogFooter className="mt-4 gap-2">
-            <Button variant="outline" onClick={() => setPromoteProduct(null)} className="rounded-xl h-10 flex-1">
-              Batal
-            </Button>
-            <Button
-              onClick={() => {
-                if (promoteProduct) {
-                  handlePromote(promoteProduct.id, true, parseInt(promoteDays))
-                  setPromoteProduct(null)
-                }
-              }}
-              className="bg-amber-500 hover:bg-amber-600 text-white rounded-xl h-10 flex-1"
-            >
-              Promosikan
-            </Button>
+            </PrimaryButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -668,6 +551,6 @@ export function AdminProducts() {
         title={confirmAction?.title || ''}
         message={confirmAction?.message || ''}
       />
-    </div>
+    </AdminScreenWrapper>
   )
 }

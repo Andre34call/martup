@@ -4,6 +4,7 @@ import { motion } from "framer-motion"
 import { ArrowLeft, ChevronRight, Package } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useAppStore } from "@/lib/store"
+import { PrimaryButton } from "./buttons"
 
 // ==================== PAGE HEADER ====================
 interface PageHeaderProps {
@@ -144,13 +145,13 @@ export function EmptyState({ icon, title, subtitle, actionLabel, onAction }: Emp
         <p className="text-sm text-muted-foreground max-w-[250px]">{subtitle}</p>
       )}
       {actionLabel && onAction && (
-        <Button
+        <PrimaryButton
           onClick={onAction}
-          className="mt-4 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl"
+          className="mt-4 rounded-xl"
           size="sm"
         >
           {actionLabel}
-        </Button>
+        </PrimaryButton>
       )}
     </motion.div>
   )

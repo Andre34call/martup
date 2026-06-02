@@ -5,7 +5,7 @@ export type ScreenName =
   | 'splash' | 'onboarding' | 'login' | 'register' | 'otp' | 'forgot-password' | 'reset-password' | 'email-verification'
   | 'home' | 'search' | 'category' | 'product-detail' | 'wishlist'
   | 'cart' | 'checkout' | 'payment' | 'order-tracking' | 'orders'
-  | 'wallet' | 'deposit' | 'withdraw' | 'chat' | 'chat-room'
+  | 'wallet' | 'deposit' | 'deposit-history' | 'deposit-detail' | 'withdraw' | 'chat' | 'chat-room'
   | 'notification' | 'profile' | 'settings' | 'voucher' | 'review'
   | 'refund' | 'help' | 'address' | 'followed-stores'
   | 'seller-shop' | 'category-detail'
@@ -17,7 +17,7 @@ export type ScreenName =
   | 'admin-withdraw' | 'admin-banner' | 'admin-analytics' | 'admin-complaints'
   | 'admin-divisions' | 'admin-workflow'
   | 'admin-categories' | 'admin-vouchers' | 'admin-deposits' | 'admin-campaigns' | 'admin-reviews' | 'admin-settings'
-  | 'stream' | 'stream-create' | 'stream-search' | 'user-profile'
+  | 'stream' | 'stream-create' | 'stream-search'
 
 export interface User {
   id: string
@@ -76,18 +76,10 @@ export interface Product {
   minOrder: number
   weight: number
   condition: 'new' | 'used'
-  productType?: 'product' | 'jasa'
-  serviceDuration?: string
-  serviceLocation?: string
   status: 'active' | 'draft' | 'blocked'
   rating: number
   reviewCount: number
-  viewCount: number
-  viralScore: number
   isFeatured: boolean
-  isPromoted: boolean
-  promotedUntil?: string
-  promotedBy?: string
   isFlashSale: boolean
   flashSaleEnd?: string
   tags?: string[]
@@ -154,20 +146,12 @@ export interface Order {
   totalAmount: number
   paymentMethod?: string
   paymentStatus: string
-  paymentProofUrl?: string
-  platformBankAccountId?: string
-  escrowStatus?: string // none, held, released, refunded
-  note?: string
-  isServiceOrder?: boolean
-  serviceProofImages?: string[]
-  sellerCompletedAt?: string
-  buyerConfirmedAt?: string
-  autoConfirmAt?: string
+  paymentProof?: string
+  paymentBankName?: string
   items: OrderItem[]
   shipping?: Shipping
-  address?: Address
+  address: Address
   seller: Seller
-  platformBankAccount?: PlatformBankAccountInfo
   buyerName?: string
   createdAt: string
   paidAt?: string
@@ -175,18 +159,7 @@ export interface Order {
   deliveredAt?: string
 }
 
-export interface PlatformBankAccountInfo {
-  id: string
-  bankName: string
-  bankCode?: string
-  accountNumber: string
-  accountHolder: string
-  branch?: string
-  isActive: boolean
-  isDefault: boolean
-}
-
-export type OrderStatus = 'pending' | 'pending_verification' | 'paid' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'refunded'
+export type OrderStatus = 'pending' | 'paid' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'refunded'
 
 export interface OrderItem {
   id: string
@@ -223,54 +196,6 @@ export interface Review {
   sellerReplyAt?: string
   createdAt: string
 }
-
-// ==================== BUYER RATING ====================
-export interface BuyerRating {
-  id: string
-  orderId: string
-  rating: number
-  content?: string
-  tags?: string[]
-  createdAt: string
-  seller: {
-    id: string
-    storeName: string
-    storeAvatar?: string
-  }
-}
-
-export interface BuyerTrustScore {
-  buyerRating: number
-  buyerRatingCount: number
-  cancellationCount: number
-  returnCount: number
-  cancellationRate: number
-  returnRate: number
-  trustLevel: 'excellent' | 'good' | 'fair' | 'poor' | 'new'
-  totalOrders: number
-}
-
-export type TrustLevel = BuyerTrustScore['trustLevel']
-
-export const TRUST_LEVEL_CONFIG: Record<TrustLevel, { label: string; color: string; bg: string; emoji: string }> = {
-  excellent: { label: 'Sangat Dipercaya', color: 'text-emerald-600', bg: 'bg-emerald-50 border-emerald-200', emoji: '⭐' },
-  good: { label: 'Dipercaya', color: 'text-blue-600', bg: 'bg-blue-50 border-blue-200', emoji: '✅' },
-  fair: { label: 'Cukup', color: 'text-amber-600', bg: 'bg-amber-50 border-amber-200', emoji: '🟡' },
-  poor: { label: 'Waspada', color: 'text-red-600', bg: 'bg-red-50 border-red-200', emoji: '⚠️' },
-  new: { label: 'Pembeli Baru', color: 'text-gray-600', bg: 'bg-gray-50 border-gray-200', emoji: '🆕' },
-}
-
-// Tags that sellers can choose when rating buyers
-export const BUYER_RATING_TAGS = [
-  { id: 'bayar_cepat', label: 'Bayar Cepat', icon: '⚡' },
-  { id: 'komunikatif', label: 'Komunikatif', icon: '💬' },
-  { id: 'ramah', label: 'Ramah', icon: '😊' },
-  { id: 'mudah_diajak_kerja_sama', label: 'Mudah Diajak Kerja Sama', icon: '🤝' },
-  { id: 'terlambat_bayar', label: 'Terlambat Bayar', icon: '🕐' },
-  { id: 'tidak_respon', label: 'Tidak Respon', icon: '🔕' },
-  { id: 'cancel_sepihak', label: 'Cancel Sepihak', icon: '❌' },
-  { id: 'return_bermasalah', label: 'Return Bermasalah', icon: '📦' },
-] as const
 
 export interface Wallet {
   id: string
@@ -313,13 +238,7 @@ export interface Notification {
 
 export interface ChatRoom {
   id: string
-  seller?: Seller        // For seller chat rooms (backward compat)
-  otherUser?: {          // For any user chat rooms (user-to-user)
-    id: string
-    name: string
-    avatar?: string
-    isVerified: boolean
-  }
+  seller: Seller
   lastMessage: string
   lastMessageTime: string
   unreadCount: number
@@ -504,8 +423,6 @@ export const WORK_TYPE_TO_DIVISION: Record<string, string> = {
   deposit: 'finance',
   refund: 'finance',
   product_report: 'tech',
-  post_report: 'cs',
-  user_report: 'cs',
   product_review: 'marketing',
   order_issue: 'operations',
   seller_verification: 'hr',
@@ -519,8 +436,6 @@ export const WORK_TYPE_DISPLAY: Record<string, { label: string; icon: string; co
   deposit: { label: 'Deposit', icon: '💳', color: 'emerald' },
   refund: { label: 'Refund', icon: '↩️', color: 'red' },
   product_report: { label: 'Laporan Produk', icon: '🚨', color: 'purple' },
-  post_report: { label: 'Laporan Postingan', icon: '🚩', color: 'purple' },
-  user_report: { label: 'Laporan Pengguna', icon: '👤', color: 'purple' },
   product_review: { label: 'Review Produk', icon: '⭐', color: 'amber' },
   order_issue: { label: 'Masalah Pesanan', icon: '📦', color: 'blue' },
   seller_verification: { label: 'Verifikasi Seller', icon: '✅', color: 'teal' },

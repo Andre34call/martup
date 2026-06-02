@@ -10,11 +10,12 @@ import { Card } from "@/components/ui/card"
 import { useAppStore } from "@/lib/store"
 import { formatRelativeTime } from "@/lib/utils"
 import { stagger } from '@/lib/animations'
-import { PageHeader, SearchBar, EmptyState } from "../shared"
+import { PageHeader, SearchBar, EmptyState, AdminScreenWrapper } from "../shared"
 import { useState, useEffect, useCallback } from "react"
 import { ConfirmDialog } from "../confirm-dialog"
-import { LoadingSpinner } from "../loading-spinner"
+
 import { apiClient } from '@/lib/api-client'
+import { handleApiError } from '@/lib/handle-api-error'
 
 interface AdminReviewItem {
   id: string
@@ -51,8 +52,8 @@ export function AdminReviews() {
       } else {
         showToast(data.error || "Gagal memuat reviews", "error")
       }
-    } catch {
-      showToast("Gagal memuat reviews", "error")
+    } catch (err) {
+      handleApiError(err, "reviews")
     } finally {
       setLoading(false)
     }
@@ -104,10 +105,8 @@ export function AdminReviews() {
 
   const hiddenCount = adminReviews.filter((r) => r.isHidden).length
 
-  if (loading) return <div className="pb-20"><PageHeader title="Moderasi Review" /><LoadingSpinner message="Memuat reviews..." /></div>
-
   return (
-    <div className="pb-20">
+    <AdminScreenWrapper title="Moderasi Review" isLoading={loading}>
       <PageHeader title="Moderasi Review" />
 
       <div className="px-4 space-y-4">
@@ -221,6 +220,6 @@ export function AdminReviews() {
         title={confirmAction?.title || ""}
         message={confirmAction?.message || ""}
       />
-    </div>
+    </AdminScreenWrapper>
   )
 }

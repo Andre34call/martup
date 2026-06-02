@@ -1,13 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { verifyAuth, checkRateLimit, authErrorResponse } from '@/lib/auth-middleware'
+import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
+import { paymentLimiter, rateLimitHeaders } from '@/lib/rate-limit'
 import { serializeDecimal } from '@/lib/decimal-utils'
-import { logger, logSecurityEvent, logBusinessEvent } from '@/lib/logger'
+import { logger, logBusinessEvent } from '@/lib/logger'
+import { validateCsrfRequest } from '@/lib/csrf'
 
 // ==================== WALLET TOP UP ====================
 // SECURITY: Requires authentication + ownership verification
 // Creates a PENDING deposit — must be verified by payment gateway or admin
 // BEFORE balance is credited. No auto-approve.
+
+const VALID_METHODS = ['bank_transfer', 'gopay', 'ovo', 'dana', 'shopeepay', 'linkaja']
+
+const METHOD_LABELS: Record<string, string> = {
+  bank_transfer: 'Transfer Bank',
+  gopay: 'GoPay',
+  ovo: 'OVO',
+  dana: 'DANA',
+  shopeepay: 'ShopeePay',
+  linkaja: 'LinkAja',
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,20 +31,32 @@ export async function POST(request: NextRequest) {
     }
 
     // SECURITY: Rate limit — 5 top-up requests per minute per user
-    if (!checkRateLimit(`topup:${authResult.user.id}`, 5)) {
+    const rlResult = await paymentLimiter.check(`topup:${authResult.user.id}`)
+    if (!rlResult.allowed) {
       return NextResponse.json(
         { success: false, error: 'Terlalu banyak request. Coba lagi dalam 1 menit.' },
-        { status: 429 }
+        { status: 429, headers: rateLimitHeaders(rlResult) }
       )
     }
 
+    // SECURITY: CSRF protection
+    const csrfResult = await validateCsrfRequest(request)
+    if (!csrfResult.valid) {
+      return NextResponse.json({ success: false, error: 'Keamanan request tidak valid. Refresh halaman dan coba lagi.' }, { status: 403 })
+    }
+
     const body = await request.json()
-    const { amount, method } = body as { amount?: number; method?: string }
+    const { amount, method, senderName } = body as { amount?: number; method?: string; senderName?: string }
+
+    // SECURITY: Sanitize senderName
+    const sanitizedSenderName = senderName
+      ? String(senderName).trim().slice(0, 100).replace(/[<>"'&]/g, '')
+      : undefined
 
     // Validate amount
-    if (!amount || typeof amount !== 'number' || amount <= 0) {
+    if (!amount || typeof amount !== 'number' || amount <= 0 || !Number.isInteger(amount)) {
       return NextResponse.json(
-        { success: false, error: 'Jumlah top up harus lebih dari 0' },
+        { success: false, error: 'Jumlah top up harus berupa bilangan bulat lebih dari 0' },
         { status: 400 }
       )
     }
@@ -52,37 +77,96 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate method
-    const validMethods = ['bank_transfer', 'gopay', 'ovo', 'dana']
-    if (!method || !validMethods.includes(method)) {
+    if (!method || !VALID_METHODS.includes(method)) {
       return NextResponse.json(
-        { success: false, error: `Metode pembayaran tidak valid. Pilih: ${validMethods.join(', ')}` },
+        { success: false, error: `Metode pembayaran tidak valid. Pilih: ${VALID_METHODS.join(', ')}` },
         { status: 400 }
       )
     }
 
-    // Create PENDING deposit record — NO balance credit until payment verified
-    const deposit = await db.deposit.create({
-      data: {
-        userId: authResult.user.id,
-        amount,
-        method,
-        status: 'pending', // MUST remain pending until payment gateway confirms
-      },
-    })
+    // Get MartUp bank accounts for destination info
+    let destinationAccount: string | null = null
+    try {
+      const settingsRecord = await db.platformSetting.findUnique({
+        where: { key: 'platform_settings' },
+      })
+      if (settingsRecord) {
+        const settings = JSON.parse(settingsRecord.value)
+        const bankAccounts = JSON.parse(settings.martupBankAccounts || '[]')
+        // Find matching destination based on method
+        if (method === 'bank_transfer' && bankAccounts.length > 0) {
+          // Find first bank account
+          const bankAcc = bankAccounts.find((a: Record<string, unknown>) => a.type !== 'ewallet')
+          if (bankAcc) {
+            destinationAccount = JSON.stringify(bankAcc)
+          }
+        } else if (method !== 'bank_transfer' && bankAccounts.length > 0) {
+          // Find matching e-wallet
+          const methodToName: Record<string, string[]> = {
+            gopay: ['GoPay', 'gopay'],
+            ovo: ['OVO', 'ovo'],
+            dana: ['DANA', 'dana'],
+            shopeepay: ['ShopeePay', 'shopeepay'],
+            linkaja: ['LinkAja', 'linkaja'],
+          }
+          const names = methodToName[method] || []
+          const ewalletAcc = bankAccounts.find((a: Record<string, unknown>) =>
+            a.type === 'ewallet' && names.some(n => String(a.bankName || '').toLowerCase().includes(n.toLowerCase()))
+          )
+          if (ewalletAcc) {
+            destinationAccount = JSON.stringify(ewalletAcc)
+          }
+        }
+      }
+    } catch {
+      // Non-critical — deposit can still be created without destination
+      logger.warn('Failed to fetch platform settings for deposit destination')
+    }
 
-    // Create a PENDING transaction record
-    await db.transaction.create({
-      data: {
+    // SECURITY: Warn (but don't block) if no matching destination account found.
+    // The deposit is still created so admin can manually verify.
+    // The UI will show a warning to the user to contact admin.
+    if (!destinationAccount) {
+      logger.warn({
         userId: authResult.user.id,
-        type: 'deposit',
-        amount,
-        fee: 0,
-        netAmount: amount,
         method,
-        status: 'pending', // NOT success — awaiting payment
-        description: `Top up via ${method} — menunggu pembayaran`,
-        refId: deposit.id,
-      },
+      }, 'No matching destination account found for deposit method')
+    }
+
+    // Set expiry to 24 hours from now
+    const expiredAt = new Date()
+    expiredAt.setHours(expiredAt.getHours() + 24)
+
+    // SECURITY: Create deposit + transaction atomically to prevent orphan records
+    const deposit = await db.$transaction(async (tx) => {
+      const newDeposit = await tx.deposit.create({
+        data: {
+          userId: authResult.user.id,
+          amount,
+          method,
+          status: 'pending',
+          destinationAccount,
+          senderName: sanitizedSenderName || null,
+          expiredAt,
+        },
+      })
+
+      // Create a PENDING transaction record in the same transaction
+      await tx.transaction.create({
+        data: {
+          userId: authResult.user.id,
+          type: 'deposit',
+          amount,
+          fee: 0,
+          netAmount: amount,
+          method,
+          status: 'pending',
+          description: `Top up via ${METHOD_LABELS[method] || method} — menunggu pembayaran`,
+          refId: newDeposit.id,
+        },
+      })
+
+      return newDeposit
     })
 
     logBusinessEvent({
@@ -91,20 +175,30 @@ export async function POST(request: NextRequest) {
       details: { depositId: deposit.id, amount, method },
     })
 
-    // In production: integrate with Midtrans/payment gateway here to create payment token
-    // For now, return the deposit ID so the client can redirect to payment
+    // Return deposit info with destination account for payment instructions
+    let destinationInfo = null
+    if (destinationAccount) {
+      try {
+        destinationInfo = JSON.parse(destinationAccount)
+      } catch {
+        destinationInfo = null
+      }
+    }
+
     return NextResponse.json(serializeDecimal({
       success: true,
       data: {
         depositId: deposit.id,
         amount,
         method,
+        methodLabel: METHOD_LABELS[method] || method,
         status: 'pending',
-        message: 'Deposit dibuat. Silakan selesaikan pembayaran.',
+        destinationAccount: destinationInfo,
+        expiredAt: expiredAt.toISOString(),
+        message: 'Deposit dibuat. Silakan selesaikan pembayaran sebelum kadaluarsa.',
       },
     }), { status: 201 })
   } catch (error: unknown) {
-    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'Top up error')
     return NextResponse.json(
       { success: false, error: 'Terjadi kesalahan server' },

@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
 import { logger, logSecurityEvent, logBusinessEvent } from '@/lib/logger'
+import { validateCsrfRequest } from '@/lib/csrf'
 
 // ==================== WITHDRAWAL APPROVAL/REJECTION ====================
 // SECURITY: Only admins can approve/reject withdrawals
@@ -17,6 +18,12 @@ export async function PUT(
     const authResult = await verifyAdmin(request)
     if (!authResult.success) {
       return authErrorResponse(authResult)
+    }
+
+    // SECURITY: CSRF protection
+    const csrfResult = await validateCsrfRequest(request)
+    if (!csrfResult.valid) {
+      return NextResponse.json({ success: false, error: 'Keamanan request tidak valid. Refresh halaman dan coba lagi.' }, { status: 403 })
     }
 
     const { id } = await params
@@ -39,44 +46,54 @@ export async function PUT(
       )
     }
 
-    const withdrawal = await db.withdrawal.findUnique({ where: { id } })
-    if (!withdrawal) {
-      return NextResponse.json(
-        { success: false, error: 'Penarikan dana tidak ditemukan' },
-        { status: 404 }
-      )
-    }
-
-    // SECURITY: Only allow status changes from 'pending' (prevent double-processing)
-    if (withdrawal.status !== 'pending') {
-      return NextResponse.json(
-        { success: false, error: `Penarikan sudah berstatus "${withdrawal.status}". Hanya penarikan "pending" yang bisa diproses.` },
-        { status: 400 }
-      )
-    }
-
-    const updateData: Record<string, unknown> = { status }
-    if (adminNote) updateData.adminNote = adminNote
-    if (status === 'approved' || status === 'processed') {
-      updateData.processedAt = new Date()
-    }
-
+    // SECURITY: Entire operation including status check is inside $transaction to prevent race conditions
     const updated = await db.$transaction(async (tx) => {
+      // Fetch withdrawal INSIDE transaction with lock
+      const withdrawal = await tx.withdrawal.findUnique({
+        where: { id },
+      })
+
+      if (!withdrawal) {
+        throw new Error('NOT_FOUND')
+      }
+
+      // SECURITY: Validate status transition INSIDE transaction to prevent invalid state changes
+      const allowedTransitions: Record<string, string[]> = {
+        pending: ['approved', 'rejected'],
+        approved: ['processed'],
+        processed: [], // terminal state
+        rejected: [], // terminal state
+      }
+
+      const allowed = allowedTransitions[withdrawal.status] || []
+      if (!allowed.includes(status)) {
+        throw new Error(`INVALID_TRANSITION:${withdrawal.status}:${status}`)
+      }
+
+      const updateData: Record<string, unknown> = { status }
+      if (adminNote) updateData.adminNote = adminNote
+      if (status === 'processed') {
+        updateData.processedAt = new Date()
+      }
+
       const updatedWithdrawal = await tx.withdrawal.update({
         where: { id },
         data: updateData,
       })
 
-      // If rejected, refund the amount to seller wallet
+      // If rejected, refund the amount from holdBalance back to balance
       if (status === 'rejected') {
         const wallet = await tx.wallet.findUnique({
           where: { sellerId: withdrawal.sellerId },
         })
         if (wallet) {
-          const newBalance = Number(wallet.balance) + Number(withdrawal.amount)
-          await tx.wallet.update({
+          // SECURITY: Decrement holdBalance AND increment balance to prevent phantom funds
+          const updatedWallet = await tx.wallet.update({
             where: { id: wallet.id },
-            data: { balance: { increment: withdrawal.amount } },
+            data: {
+              balance: { increment: withdrawal.amount },
+              holdBalance: { decrement: withdrawal.amount },
+            },
           })
 
           await tx.walletMutation.create({
@@ -84,13 +101,58 @@ export async function PUT(
               walletId: wallet.id,
               type: 'credit',
               amount: withdrawal.amount,
-              balance: newBalance,
+              balance: updatedWallet.balance,
               description: `Pengembalian dana penarikan yang ditolak${adminNote ? `: ${adminNote}` : ''}`,
               refType: 'withdraw',
               refId: withdrawal.id,
             },
           })
         }
+      }
+
+      // When processing (completing) a withdrawal, reduce holdBalance
+      if (status === 'processed') {
+        const wallet = await tx.wallet.findUnique({
+          where: { sellerId: withdrawal.sellerId },
+        })
+        if (wallet) {
+          const updatedWallet = await tx.wallet.update({
+            where: { id: wallet.id },
+            data: {
+              holdBalance: { decrement: withdrawal.amount },
+            },
+          })
+
+          // SECURITY: Verify holdBalance didn't go negative
+          if (updatedWallet.holdBalance.lessThan(0)) {
+            throw new Error('INSUFFICIENT_HOLD_BALANCE')
+          }
+
+          await tx.walletMutation.create({
+            data: {
+              walletId: wallet.id,
+              type: 'debit',
+              amount: withdrawal.amount,
+              balance: updatedWallet.balance,
+              description: `Penarikan dana selesai ke ${withdrawal.bankName} - ${withdrawal.bankAccount}`,
+              refType: 'withdraw',
+              refId: withdrawal.id,
+            },
+          })
+        }
+      }
+
+      // Update the corresponding transaction record status
+      if (status === 'rejected') {
+        await tx.transaction.updateMany({
+          where: { refId: withdrawal.id, type: 'withdraw', status: 'pending' },
+          data: { status: 'failed' },
+        })
+      } else if (status === 'processed') {
+        await tx.transaction.updateMany({
+          where: { refId: withdrawal.id, type: 'withdraw', status: 'pending' },
+          data: { status: 'success' },
+        })
       }
 
       return updatedWithdrawal
@@ -107,7 +169,37 @@ export async function PUT(
       data: updated,
     }))
   } catch (error: unknown) {
-    // Error logged above — generic message returned to client
+    // Handle transaction-level errors (NOT_FOUND, ALREADY_PROCESSED)
+    if (error instanceof Error) {
+      if (error.message === 'NOT_FOUND') {
+        return NextResponse.json(
+          { success: false, error: 'Penarikan dana tidak ditemukan' },
+          { status: 404 }
+        )
+      }
+      if (error.message.startsWith('ALREADY_PROCESSED:')) {
+        const currentStatus = error.message.split(':')[1]
+        return NextResponse.json(
+          { success: false, error: `Penarikan sudah berstatus "${currentStatus}".` },
+          { status: 400 }
+        )
+      }
+      if (error.message.startsWith('INVALID_TRANSITION:')) {
+        const parts = error.message.split(':')
+        const from = parts[1] || '?'
+        const to = parts[2] || '?'
+        return NextResponse.json(
+          { success: false, error: `Tidak dapat mengubah status dari "${from}" ke "${to}"` },
+          { status: 400 }
+        )
+      }
+      if (error.message === 'INSUFFICIENT_HOLD_BALANCE') {
+        return NextResponse.json(
+          { success: false, error: 'Saldo hold tidak mencukupi. Hubungi teknisi.' },
+          { status: 400 }
+        )
+      }
+    }
     logger.error({ err: error }, 'Update withdrawal error')
     return NextResponse.json(
       { success: false, error: 'Terjadi kesalahan server' },

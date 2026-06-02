@@ -7,7 +7,7 @@ import { logger } from '@/lib/logger'
 // SECURITY: Previously had NO auth — exposed DB info to anyone
 export async function GET(request: NextRequest) {
   if (process.env.NODE_ENV === 'production') {
-    return NextResponse.json({ success: false, error: 'Not available in production' }, { status: 404 })
+    return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 })
   }
 
   try {

@@ -8,7 +8,7 @@ interface LegalPageProps {
 
 export function PrivacyPolicyScreen({ onBack }: LegalPageProps) {
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div className="min-h-screen bg-background">
       <PageHeader title="Kebijakan Privasi" onBack={onBack} />
 
       <div className="px-4 py-6 max-w-2xl mx-auto prose prose-sm dark:prose-invert">
@@ -109,7 +109,7 @@ export function PrivacyPolicyScreen({ onBack }: LegalPageProps) {
 
 export function TermsOfServiceScreen({ onBack }: LegalPageProps) {
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div className="min-h-screen bg-background">
       <PageHeader title="Syarat & Ketentuan" onBack={onBack} />
 
       <div className="px-4 py-6 max-w-2xl mx-auto prose prose-sm dark:prose-invert">
@@ -208,7 +208,7 @@ export function TermsOfServiceScreen({ onBack }: LegalPageProps) {
 
 export function RefundPolicyScreen({ onBack }: LegalPageProps) {
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div className="min-h-screen bg-background">
       <PageHeader title="Kebijakan Pengembalian" onBack={onBack} />
 
       <div className="px-4 py-6 max-w-2xl mx-auto prose prose-sm dark:prose-invert">

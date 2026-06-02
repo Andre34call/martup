@@ -7,7 +7,7 @@ import { useEffect } from 'react'
 import { BottomNav, AdminBottomNav, SellerBottomNav } from '@/components/ecommerce/shared'
 import { ErrorBoundary } from '@/components/error-boundary'
 import { ELEVATED_ROLES, type UserRole } from '@/lib/types'
-import { LazyScreenRenderer, AUTH_SCREENS, SELLER_SCREENS, ADMIN_SCREENS } from '@/components/ecommerce/screen-registry'
+import { LazyScreenRenderer, AUTH_SCREENS, SELLER_SCREENS, ADMIN_SCREENS, SUB_SCREENS } from '@/components/ecommerce/screen-registry'
 
 // ==================== GLOBAL TOAST ====================
 function GlobalToast() {
@@ -95,10 +95,10 @@ function ScreenRenderer() {
 export default function Home() {
   const currentScreen = useAppStore((s) => s.currentScreen)
   const navigate = useAppStore((s) => s.navigate)
-  const isOverlayOpen = useAppStore((s) => s.isOverlayOpen)
   const isAuthScreen = (AUTH_SCREENS as readonly string[]).includes(currentScreen)
   const isSellerScreen = (SELLER_SCREENS as readonly string[]).includes(currentScreen)
   const isAdminScreen = (ADMIN_SCREENS as readonly string[]).includes(currentScreen)
+  const isSubScreen = (SUB_SCREENS as readonly string[]).includes(currentScreen)
 
   // Detect password reset token in URL on mount
   const isAuthenticated = useAppStore((s) => s.isAuthenticated)
@@ -134,7 +134,7 @@ export default function Home() {
   }, [navigate, isAuthenticated])
 
   const getBottomNav = () => {
-    if (isAuthScreen || isOverlayOpen) return null
+    if (isAuthScreen || isSubScreen) return null
     if (isAdminScreen) return <AdminBottomNav />
     if (isSellerScreen) return <SellerBottomNav />
     return <BottomNav />

@@ -3,7 +3,7 @@
 import { motion, AnimatePresence } from "framer-motion"
 import { useAppStore } from "@/lib/store"
 import { formatPrice, formatRelativeTime } from "@/lib/utils"
-import { PageHeader, SectionHeader, EmptyState } from "./shared"
+import { PageHeader, SectionHeader, EmptyState, PrimaryButton } from "./shared"
 import type { WalletMutation } from "@/lib/types"
 import { useState, useMemo } from "react"
 import {
@@ -170,7 +170,7 @@ export function WalletScreen() {
               <QuickAction
                 icon={<Clock className="w-5 h-5 text-emerald-600" />}
                 label="Riwayat"
-                onClick={() => showToast("Scroll ke bawah untuk melihat riwayat", "info")}
+                onClick={() => navigate("deposit-history")}
               />
             </div>
           </div>
@@ -259,13 +259,13 @@ export function WalletScreen() {
         {/* Bottom Action Buttons */}
         <div className="px-4 pt-4 pb-4">
           <div className="flex gap-3">
-            <Button
-              className="flex-1 h-12 rounded-xl bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white text-sm font-semibold"
+            <PrimaryButton
+              className="flex-1 h-12 rounded-xl text-sm font-semibold"
               onClick={() => navigate("deposit")}
             >
               <Plus className="w-4 h-4 mr-2" />
               Top Up
-            </Button>
+            </PrimaryButton>
             <Button
               variant="outline"
               className="flex-1 h-12 rounded-xl text-sm font-semibold"

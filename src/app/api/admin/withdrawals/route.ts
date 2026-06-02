@@ -3,6 +3,8 @@ import { db } from '@/lib/db'
 import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
 import { logger, logBusinessEvent } from '@/lib/logger'
+import { validateBody, adminWithdrawalActionSchema } from '@/lib/validations'
+import { validateCsrfRequest } from '@/lib/csrf'
 
 // GET /api/admin/withdrawals - Fetch all withdrawal requests with seller info
 export async function GET(request: NextRequest) {
@@ -80,99 +82,68 @@ export async function PUT(request: NextRequest) {
   const authResult = await verifyAdmin(request)
   if (!authResult.success) return authErrorResponse(authResult)
 
+  // SECURITY: CSRF protection
+  const csrfResult = await validateCsrfRequest(request)
+  if (!csrfResult.valid) {
+    return NextResponse.json({ success: false, error: 'Keamanan request tidak valid. Refresh halaman dan coba lagi.' }, { status: 403 })
+  }
+
   try {
     const body = await request.json()
-    const { withdrawalId, status, adminNote } = body
 
-    // Input validation
-    if (!withdrawalId || typeof withdrawalId !== 'string') {
+    // SECURITY: Use Zod validation (VULN-8 fix)
+    const validation = validateBody(adminWithdrawalActionSchema, body)
+    if (!validation.success) {
       return NextResponse.json(
-        { success: false, error: 'withdrawalId is required and must be a string' },
+        { success: false, error: validation.error },
         { status: 400 }
       )
     }
-    if (!status || typeof status !== 'string') {
-      return NextResponse.json(
-        { success: false, error: 'status is required and must be a string' },
-        { status: 400 }
-      )
-    }
-    if (adminNote !== undefined && typeof adminNote !== 'string') {
-      return NextResponse.json(
-        { success: false, error: 'adminNote must be a string' },
-        { status: 400 }
-      )
-    }
-    if (adminNote && adminNote.length > 500) {
-      return NextResponse.json(
-        { success: false, error: 'adminNote must be at most 500 characters' },
-        { status: 400 }
-      )
-    }
+    const { withdrawalId, status, adminNote } = validation.data
 
-    // Validate status transitions
-    const validStatuses = ['pending', 'approved', 'rejected', 'processed']
-    if (!validStatuses.includes(status)) {
-      return NextResponse.json(
-        { success: false, error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` },
-        { status: 400 }
-      )
-    }
-
-    // Fetch current withdrawal to validate status transition
-    const current = await db.withdrawal.findUnique({
-      where: { id: withdrawalId },
-    })
-
-    if (!current) {
-      return NextResponse.json(
-        { success: false, error: 'Withdrawal not found' },
-        { status: 404 }
-      )
-    }
-
-    const allowedTransitions: Record<string, string[]> = {
-      pending: ['approved', 'rejected'],
-      approved: ['processed'],
-      processed: [], // terminal state
-      rejected: [], // terminal state
-    }
-
-    const allowed = allowedTransitions[current.status] || []
-    if (!allowed.includes(status)) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: `Cannot transition from "${current.status}" to "${status}". Allowed transitions: ${allowed.length > 0 ? allowed.join(', ') : 'none (terminal state)'}`,
-        },
-        { status: 400 }
-      )
-    }
-
-    const updateData: Record<string, unknown> = { status }
-    if (adminNote !== undefined) updateData.adminNote = adminNote
-
-    // When status changes to 'processed', also set processedAt
-    if (status === 'processed') {
-      updateData.processedAt = new Date()
-    }
-
-    // SECURITY: Use $transaction for all status changes involving financial operations
+    // SECURITY: Fetch + status check INSIDE transaction to prevent race conditions
     const withdrawal = await db.$transaction(async (tx) => {
+      // Fetch withdrawal INSIDE transaction
+      const current = await tx.withdrawal.findUnique({
+        where: { id: withdrawalId },
+      })
+
+      if (!current) {
+        throw new Error('NOT_FOUND')
+      }
+
+      // SECURITY: Validate status transition INSIDE transaction to prevent double-processing
+      const allowedTransitions: Record<string, string[]> = {
+        pending: ['approved', 'rejected'],
+        approved: ['processed'],
+        processed: [], // terminal state
+        rejected: [], // terminal state
+      }
+
+      const allowed = allowedTransitions[current.status] || []
+      if (!allowed.includes(status)) {
+        throw new Error(`INVALID_TRANSITION:${current.status}:${status}`)
+      }
+
+      const updateData: Record<string, unknown> = { status }
+      if (adminNote !== undefined) updateData.adminNote = adminNote
+
+      if (status === 'processed') {
+        updateData.processedAt = new Date()
+      }
+
       const updatedWithdrawal = await tx.withdrawal.update({
         where: { id: withdrawalId },
         data: updateData,
       })
 
       // CRITICAL: On rejection, refund holdBalance back to seller's balance
-      // Without this, the seller's escrowed funds would be lost permanently
       if (status === 'rejected') {
         const wallet = await tx.wallet.findUnique({
           where: { sellerId: current.sellerId },
         })
 
         if (wallet) {
-          // Move funds back from holdBalance to balance
           const updatedWallet = await tx.wallet.update({
             where: { id: wallet.id },
             data: {
@@ -181,7 +152,6 @@ export async function PUT(request: NextRequest) {
             },
           })
 
-          // Record the refund mutation
           await tx.walletMutation.create({
             data: {
               walletId: wallet.id,
@@ -197,7 +167,6 @@ export async function PUT(request: NextRequest) {
       }
 
       // When processing (completing) a withdrawal, reduce holdBalance
-      // (funds are now actually sent to the seller's bank account)
       if (status === 'processed') {
         const wallet = await tx.wallet.findUnique({
           where: { sellerId: current.sellerId },
@@ -211,7 +180,11 @@ export async function PUT(request: NextRequest) {
             },
           })
 
-          // Record the final deduction from hold
+          // SECURITY: Verify holdBalance didn't go negative
+          if (updatedWallet.holdBalance.lessThan(0)) {
+            throw new Error('INSUFFICIENT_HOLD_BALANCE')
+          }
+
           await tx.walletMutation.create({
             data: {
               walletId: wallet.id,
@@ -250,7 +223,30 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json(serializeDecimal({ success: true, data: withdrawal }))
   } catch (error: unknown) {
-    // Error logged above — generic message returned to client
+    // Handle transaction-level errors
+    if (error instanceof Error) {
+      if (error.message === 'NOT_FOUND') {
+        return NextResponse.json(
+          { success: false, error: 'Penarikan dana tidak ditemukan' },
+          { status: 404 }
+        )
+      }
+      if (error.message.startsWith('INVALID_TRANSITION:')) {
+        const parts = error.message.split(':')
+        const from = parts[1] || '?'
+        const to = parts[2] || '?'
+        return NextResponse.json(
+          { success: false, error: `Tidak dapat mengubah status dari "${from}" ke "${to}"` },
+          { status: 400 }
+        )
+      }
+      if (error.message === 'INSUFFICIENT_HOLD_BALANCE') {
+        return NextResponse.json(
+          { success: false, error: 'Saldo hold tidak mencukupi. Hubungi teknisi.' },
+          { status: 400 }
+        )
+      }
+    }
     logger.error({ err: error }, 'Admin withdrawals PUT error')
     return NextResponse.json(
       { success: false, error: 'Terjadi kesalahan server' },

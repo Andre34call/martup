@@ -10,17 +10,16 @@ import { apiClient } from "@/lib/api-client"
 import { uploadFile } from "@/lib/upload"
 import { formatPrice } from "@/lib/utils"
 import { fadeIn } from '@/lib/animations'
-import { PageHeader } from "./shared"
+import { PageHeader, PrimaryButton, InlineSpinner } from "./shared"
 import type { Product } from "@/lib/types"
 import { logger } from '@/lib/logger'
 import { mapSeller } from '@/lib/mappers'
-import { UPLOAD_LIMITS } from '@/lib/upload-limits'
 import { useState, useRef } from "react"
 
 // ==================== CONSTANTS ====================
-const MAX_PRODUCT_IMAGES = UPLOAD_LIMITS.MAX_PRODUCT_IMAGES
-const MAX_PRODUCT_IMAGE_SIZE_MB = UPLOAD_LIMITS.MAX_PRODUCT_IMAGE_SIZE_MB
-const MAX_VIDEO_SIZE_MB = UPLOAD_LIMITS.MAX_PRODUCT_VIDEO_SIZE_MB
+const MAX_PRODUCT_IMAGES = 8
+const MAX_PRODUCT_IMAGE_SIZE_MB = 5
+const MAX_VIDEO_SIZE_MB = 30
 
 // ==================== VARIANT GROUP TYPE ====================
 interface VariantGroup {
@@ -73,9 +72,6 @@ export function SellerAddProductScreen() {
   const [minOrder, setMinOrder] = useState(editingProduct?.minOrder?.toString() || "1")
   const [weight, setWeight] = useState(editingProduct?.weight?.toString() || "")
   const [condition, setCondition] = useState<"new" | "used">(editingProduct?.condition || "new")
-  const [productType, setProductType] = useState<"product" | "jasa">((editingProduct as any)?.productType || "product")
-  const [serviceDuration, setServiceDuration] = useState((editingProduct as any)?.serviceDuration || "")
-  const [serviceLocation, setServiceLocation] = useState((editingProduct as any)?.serviceLocation || "")
   const [variants, setVariants] = useState<VariantGroup[]>(editingProduct?.variants ? Object.entries(
     editingProduct.variants.reduce((acc, v) => {
       if (!acc[v.name]) acc[v.name] = []
@@ -392,20 +388,12 @@ export function SellerAddProductScreen() {
       showToast("Harga harus diisi", "error")
       return
     }
-    // For jasa products, skip stock and weight validation
-    if (productType === 'product') {
-      if (!stock || parseInt(stock) <= 0) {
-        showToast("Stok harus diisi", "error")
-        return
-      }
-      if (!weight || parseInt(weight) <= 0) {
-        showToast("Berat produk harus diisi", "error")
-        return
-      }
+    if (!stock || parseInt(stock) <= 0) {
+      showToast("Stok harus diisi", "error")
+      return
     }
-    // Jasa-specific validation
-    if (productType === 'jasa' && !serviceDuration.trim()) {
-      showToast("Durasi pengerjaan harus diisi untuk jasa", "error")
+    if (!weight || parseInt(weight) <= 0) {
+      showToast("Berat produk harus diisi", "error")
       return
     }
 
@@ -458,8 +446,6 @@ export function SellerAddProductScreen() {
             minOrder: parseInt(minOrder) || 1,
             weight: parseInt(weight) || 100,
             condition,
-            productType,
-            ...(productType === 'jasa' ? { serviceDuration: serviceDuration.trim() || null, serviceLocation: serviceLocation.trim() || null } : {}),
             status: 'active',
             categoryId: category,
             tags: tags.length > 0 ? tags : null,
@@ -491,8 +477,6 @@ export function SellerAddProductScreen() {
           minOrder: parseInt(minOrder) || 1,
           weight: parseInt(weight) || 100,
           condition,
-          productType: productType as any,
-          ...(productType === 'jasa' ? { serviceDuration: serviceDuration.trim() || undefined, serviceLocation: serviceLocation.trim() || undefined } : {}),
           status: 'active',
           categoryId: category,
           variants: productVariants,
@@ -510,12 +494,10 @@ export function SellerAddProductScreen() {
             price: priceNumber,
             discountPrice: discountPriceNumber > 0 && discountPriceNumber < priceNumber ? discountPriceNumber : null,
             images: productImages2,
-            stock: productType === 'jasa' ? 999 : parseInt(stock),
+            stock: parseInt(stock),
             minOrder: parseInt(minOrder) || 1,
-            weight: productType === 'jasa' ? 0 : parseInt(weight) || 100,
-            condition: productType === 'jasa' ? 'new' : condition,
-            productType,
-            ...(productType === 'jasa' ? { serviceDuration: serviceDuration.trim() || null, serviceLocation: serviceLocation.trim() || null } : {}),
+            weight: parseInt(weight) || 100,
+            condition,
             status: 'active',
             variants: apiVariants,
             tags: tags.length > 0 ? tags : null,
@@ -554,10 +536,7 @@ export function SellerAddProductScreen() {
           status: 'active',
           rating: 0,
           reviewCount: 0,
-          viewCount: 0,
-          viralScore: 0,
           isFeatured: false,
-          isPromoted: false,
           isFlashSale: false,
           variants: productVariants,
           seller: sellerInfo,
@@ -623,10 +602,7 @@ export function SellerAddProductScreen() {
       status: 'draft',
       rating: editingProduct?.rating || 0,
       reviewCount: editingProduct?.reviewCount || 0,
-      viewCount: editingProduct?.viewCount || 0,
-      viralScore: editingProduct?.viralScore || 0,
       isFeatured: editingProduct?.isFeatured || false,
-      isPromoted: editingProduct?.isPromoted || false,
       isFlashSale: false,
       variants: productVariants,
       seller: sellerInfo,
@@ -740,7 +716,7 @@ export function SellerAddProductScreen() {
               <h3 className="text-sm font-semibold text-foreground">Video Produk</h3>
               <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 font-medium">Opsional</span>
             </div>
-            <p className="text-xs text-muted-foreground">Tambahkan video untuk menarik lebih banyak pembeli. Max {MAX_VIDEO_SIZE_MB}MB.</p>
+            <p className="text-xs text-muted-foreground">Tambahkan video untuk menarik lebih banyak pembeli. Max 30MB.</p>
 
             <input
               ref={videoInputRef}
@@ -775,7 +751,7 @@ export function SellerAddProductScreen() {
               >
                 <Video className="w-6 h-6 text-purple-400" />
                 <span className="text-xs text-purple-600 dark:text-purple-400 font-medium">Upload Video</span>
-                <span className="text-[10px] text-muted-foreground">MP4, WebM, MOV · Max {MAX_VIDEO_SIZE_MB}MB</span>
+                <span className="text-[10px] text-muted-foreground">MP4, WebM, MOV · Max 30MB</span>
               </motion.button>
             )}
           </div>
@@ -917,29 +893,16 @@ export function SellerAddProductScreen() {
               <h3 className="text-sm font-semibold text-foreground">Stok & Pengiriman</h3>
             </div>
 
-            {productType === 'jasa' && (
-              <div className="bg-emerald-50 dark:bg-emerald-950/20 rounded-xl p-3 border border-emerald-200 dark:border-emerald-800/50">
-                <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
-                  <span className="text-xs font-medium">Mode Jasa — tanpa pengiriman fisik</span>
-                </div>
-                <p className="text-[10px] text-emerald-600/70 dark:text-emerald-400/70 mt-1 ml-6">Stok otomatis & berat tidak diperlukan untuk jasa</p>
-              </div>
-            )}
-
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <label className="text-xs font-medium text-muted-foreground">
-                  Stok {productType === 'product' && <span className="text-red-500">*</span>}
-                </label>
+                <label className="text-xs font-medium text-muted-foreground">Stok <span className="text-red-500">*</span></label>
                 <Input
                   type="number"
-                  value={productType === 'jasa' ? '999' : stock}
+                  value={stock}
                   onChange={(e) => setStock(e.target.value)}
                   placeholder="0"
                   min="0"
-                  disabled={productType === 'jasa'}
-                  className="rounded-xl h-10 focus:border-emerald-500 focus:ring-emerald-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="rounded-xl h-10 focus:border-emerald-500 focus:ring-emerald-500/20"
                 />
               </div>
               <div className="space-y-2">
@@ -954,56 +917,18 @@ export function SellerAddProductScreen() {
               </div>
             </div>
 
-            {productType === 'product' && (
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-muted-foreground">Berat (gram) <span className="text-red-500">*</span></label>
-                <Input
-                  type="number"
-                  value={weight}
-                  onChange={(e) => setWeight(e.target.value)}
-                  placeholder="0"
-                  min="1"
-                  className="rounded-xl h-10 focus:border-emerald-500 focus:ring-emerald-500/20"
-                />
-                <p className="text-[10px] text-muted-foreground">Berat termasuk packaging</p>
-              </div>
-            )}
-          </div>
-        </motion.div>
-
-        {/* ============ Product Type (Barang / Jasa) — MOVED UP before stock/weight ============ */}
-        <motion.div {...fadeIn}>
-          <div className="rounded-2xl border border-border/50 bg-card p-4 space-y-3">
-            <label className="text-sm font-semibold text-foreground">Tipe Produk</label>
-            <div className="flex gap-2">
-              <motion.button
-                whileTap={{ scale: 0.95 }}
-                onClick={() => setProductType("product")}
-                className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-all border-2 ${
-                  productType === "product"
-                    ? "bg-emerald-500 text-white border-emerald-500 shadow-sm"
-                    : "bg-card text-foreground border-border hover:border-emerald-300"
-                }`}
-              >
-                📦 Barang
-              </motion.button>
-              <motion.button
-                whileTap={{ scale: 0.95 }}
-                onClick={() => setProductType("jasa")}
-                className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-all border-2 ${
-                  productType === "jasa"
-                    ? "bg-emerald-500 text-white border-emerald-500 shadow-sm"
-                    : "bg-card text-foreground border-border hover:border-emerald-300"
-                }`}
-              >
-                🛠️ Jasa
-              </motion.button>
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-muted-foreground">Berat (gram) <span className="text-red-500">*</span></label>
+              <Input
+                type="number"
+                value={weight}
+                onChange={(e) => setWeight(e.target.value)}
+                placeholder="0"
+                min="1"
+                className="rounded-xl h-10 focus:border-emerald-500 focus:ring-emerald-500/20"
+              />
+              <p className="text-[10px] text-muted-foreground">Berat termasuk packaging</p>
             </div>
-            {productType === "jasa" && (
-              <p className="text-[10px] text-muted-foreground">
-                Mode Jasa: tanpa pengiriman, tanpa stok fisik. Cocok untuk jasa desain, konsultasi, jasa titip, dll.
-              </p>
-            )}
           </div>
         </motion.div>
 
@@ -1037,39 +962,6 @@ export function SellerAddProductScreen() {
             </div>
           </div>
         </motion.div>
-
-        {/* ============ Jasa-specific fields ============ */}
-        {productType === "jasa" && (
-          <motion.div {...fadeIn}>
-            <div className="rounded-2xl border border-emerald-200 dark:border-emerald-800/50 bg-emerald-50/50 dark:bg-emerald-950/10 p-4 space-y-3">
-              <div className="flex items-center gap-2">
-                <span className="text-sm">🛠️</span>
-                <h3 className="text-sm font-semibold text-foreground">Detail Jasa</h3>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 font-medium">Wajib</span>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-foreground mb-1 block">Durasi Pengerjaan <span className="text-red-500">*</span></label>
-                <Input
-                  value={serviceDuration}
-                  onChange={(e) => setServiceDuration(e.target.value)}
-                  placeholder="Contoh: 1-3 hari, 1 minggu, 2 jam"
-                  className="rounded-xl h-10"
-                />
-                <p className="text-[10px] text-muted-foreground mt-1">Berapa lama jasa Anda selesai dikerjakan?</p>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-foreground mb-1 block">Lokasi Jasa</label>
-                <Input
-                  value={serviceLocation}
-                  onChange={(e) => setServiceLocation(e.target.value)}
-                  placeholder="Contoh: Online, Jakarta, Seluruh Indonesia"
-                  className="rounded-xl h-10"
-                />
-                <p className="text-[10px] text-muted-foreground mt-1">Apakah jasa bisa dikerjakan online atau offline?</p>
-              </div>
-            </div>
-          </motion.div>
-        )}
 
         {/* ============ Variants Section ============ */}
         <motion.div {...fadeIn}>
@@ -1257,10 +1149,10 @@ export function SellerAddProductScreen() {
               </div>
             </div>
           )}
-          <Button
+          <PrimaryButton
             onClick={handleSubmit}
             disabled={isUploading || isRegisteringSeller}
-            className="w-full h-12 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl text-sm font-bold shadow-lg shadow-emerald-500/25 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full h-12 rounded-xl text-sm font-bold shadow-lg shadow-emerald-500/25 disabled:cursor-not-allowed"
           >
             {isRegisteringSeller ? (
               <>
@@ -1278,7 +1170,7 @@ export function SellerAddProductScreen() {
                 Publikasikan Produk
               </>
             )}
-          </Button>
+          </PrimaryButton>
 
           <Button
             variant="outline"

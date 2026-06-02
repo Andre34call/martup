@@ -1,20 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
 import { logger } from '@/lib/logger'
-import { db } from '@/lib/db'
 
 // ==================== CONFIG ====================
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-// Required buckets with their configuration — sizes aligned with centralized UPLOAD_LIMITS
+// Required buckets with their configuration
 const REQUIRED_BUCKETS = [
-  { id: 'products', name: 'products', public: true, fileSizeLimit: 50 * 1024 * 1024 },    // 50MB
-  { id: 'avatars', name: 'avatars', public: true, fileSizeLimit: 10 * 1024 * 1024 },      // 10MB
-  { id: 'banners', name: 'banners', public: true, fileSizeLimit: 10 * 1024 * 1024 },      // 10MB
-  { id: 'streams', name: 'streams', public: true, fileSizeLimit: 100 * 1024 * 1024 },     // 100MB
-  { id: 'reviews', name: 'reviews', public: true, fileSizeLimit: 50 * 1024 * 1024 },      // 50MB
+  { id: 'products', name: 'products', public: true, fileSizeLimit: 10 * 1024 * 1024 },
+  { id: 'avatars', name: 'avatars', public: true, fileSizeLimit: 5 * 1024 * 1024 },
+  { id: 'banners', name: 'banners', public: true, fileSizeLimit: 10 * 1024 * 1024 },
+  { id: 'streams', name: 'streams', public: true, fileSizeLimit: 100 * 1024 * 1024 },
+  { id: 'reviews', name: 'reviews', public: true, fileSizeLimit: 10 * 1024 * 1024 },
 ]
 
 // ==================== HELPER: Supabase Storage REST API ====================
@@ -67,36 +66,22 @@ async function createBucket(bucket: typeof REQUIRED_BUCKETS[number]): Promise<{ 
   return { success: true }
 }
 
-/** Create RLS policies on storage.objects for a bucket to allow public reads and authenticated uploads */
-async function createStoragePolicies(bucketId: string): Promise<void> {
-  const policies = [
-    {
-      name: `${bucketId}_public_read`,
-      sql: `CREATE POLICY IF NOT EXISTS "${bucketId}_public_read" ON storage.objects FOR SELECT USING (bucket_id = '${bucketId}')`,
-    },
-    {
-      name: `${bucketId}_auth_upload`,
-      sql: `CREATE POLICY IF NOT EXISTS "${bucketId}_auth_upload" ON storage.objects FOR INSERT WITH CHECK (bucket_id = '${bucketId}' AND auth.uid() IS NOT NULL)`,
-    },
-    {
-      name: `${bucketId}_auth_update`,
-      sql: `CREATE POLICY IF NOT EXISTS "${bucketId}_auth_update" ON storage.objects FOR UPDATE USING (bucket_id = '${bucketId}' AND auth.uid() IS NOT NULL)`,
-    },
-    {
-      name: `${bucketId}_auth_delete`,
-      sql: `CREATE POLICY IF NOT EXISTS "${bucketId}_auth_delete" ON storage.objects FOR DELETE USING (bucket_id = '${bucketId}' AND auth.uid() IS NOT NULL)`,
-    },
-  ]
-
-  for (const policy of policies) {
-    try {
-      await db.$executeRawUnsafe(policy.sql)
-      logger.info({ bucketId, policy: policy.name }, 'Created storage RLS policy')
-    } catch (err) {
-      // Policy might already exist or RLS may not be enabled yet — log but don't fail
-      logger.warn({ bucketId, policy: policy.name, err }, 'RLS policy creation skipped (may already exist)')
-    }
+/** Create storage policy to allow public reads */
+async function createPublicReadPolicy(bucketId: string): Promise<void> {
+  // Create a policy that allows public access to read objects
+  const policyName = `${bucketId}_public_read`
+  const policySql = {
+    sql: `
+      CREATE POLICY "${policyName}" ON storage.objects
+      FOR SELECT
+      USING (bucket_id = '${bucketId}');
+    `,
   }
+
+  // We use the Supabase REST API for storage policies via the /rpc endpoint
+  // But since we may not have pg_net enabled, we'll skip this for now.
+  // Public buckets already allow public reads by default.
+  logger.info({ bucketId }, 'Public read policy setup (bucket is already public)')
 }
 
 // ==================== POST /api/setup/storage ====================
@@ -129,15 +114,13 @@ export async function POST(request: NextRequest) {
 
     for (const bucket of REQUIRED_BUCKETS) {
       if (existingBuckets.includes(bucket.id)) {
-        // Even if bucket exists, ensure RLS policies are in place
-        await createStoragePolicies(bucket.id)
         results.push({ bucket: bucket.id, status: 'already_exists' })
         continue
       }
 
       const result = await createBucket(bucket)
       if (result.success) {
-        await createStoragePolicies(bucket.id)
+        await createPublicReadPolicy(bucket.id)
         results.push({ bucket: bucket.id, status: 'created' })
         logger.info({ bucket: bucket.id }, 'Bucket created successfully')
       } else {

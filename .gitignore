@@ -56,3 +56,5 @@ server.log
 /mini-services/
 # Examples (not needed in production)
 /examples/
+# Upload directory (screenshots, temp files)
+/upload/

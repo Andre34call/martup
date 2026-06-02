@@ -13,14 +13,11 @@ import {
   Search,
   Package,
   ChevronRight,
-  Lock,
-  Globe,
 } from "lucide-react"
 import { useAppStore } from "@/lib/store"
 import { MentionTextarea } from "./mention-components"
 import { apiClient, ApiClientError } from "@/lib/api-client"
 import { uploadFile } from "@/lib/upload"
-import { UPLOAD_LIMITS } from "@/lib/upload-limits"
 import { PageHeader } from "../shared"
 import { ConfirmDialog } from "../confirm-dialog"
 import { formatPrice } from "@/lib/utils"
@@ -79,9 +76,6 @@ export function StreamCreateScreen() {
   const [isPosting, setIsPosting] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<string>("")
 
-  // Private toggle
-  const [isPrivate, setIsPrivate] = useState(false)
-
   // Confirm dialog state
   const [showExitConfirm, setShowExitConfirm] = useState(false)
 
@@ -126,8 +120,8 @@ export function StreamCreateScreen() {
         return
       }
 
-      if (file.size > UPLOAD_LIMITS.mbToBytes(UPLOAD_LIMITS.MAX_STREAM_IMAGE_SIZE_MB)) {
-        showToast(`Ukuran gambar maksimal ${UPLOAD_LIMITS.MAX_STREAM_IMAGE_SIZE_MB}MB`, "error")
+      if (file.size > 10 * 1024 * 1024) {
+        showToast("Ukuran gambar maksimal 10MB", "error")
         return
       }
 
@@ -149,8 +143,8 @@ export function StreamCreateScreen() {
         return
       }
 
-      if (file.size > UPLOAD_LIMITS.mbToBytes(UPLOAD_LIMITS.MAX_STREAM_VIDEO_SIZE_MB)) {
-        showToast(`Ukuran video maksimal ${UPLOAD_LIMITS.MAX_STREAM_VIDEO_SIZE_MB}MB`, "error")
+      if (file.size > 50 * 1024 * 1024) {
+        showToast("Ukuran video maksimal 50MB", "error")
         return
       }
 
@@ -263,7 +257,6 @@ export function StreamCreateScreen() {
         type: postType,
         content: content.trim(),
         productId: selectedProductId || undefined,
-        isPrivate,
       }
 
       if (mediaUrl) {
@@ -301,7 +294,7 @@ export function StreamCreateScreen() {
   ]
 
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div className="min-h-screen bg-background pb-6">
       <PageHeader title="Buat Postingan" onBack={handleGoBack} />
 
       <div className="px-4 pt-4 space-y-5">
@@ -457,7 +450,7 @@ export function StreamCreateScreen() {
                   Pilih Gambar
                 </span>
                 <span className="text-[10px] text-muted-foreground">
-                  JPG, PNG, WebP (maks. {UPLOAD_LIMITS.MAX_STREAM_IMAGE_SIZE_MB}MB)
+                  JPG, PNG, WebP (maks. 10MB)
                 </span>
               </button>
             )}
@@ -472,7 +465,7 @@ export function StreamCreateScreen() {
                   Pilih Video
                 </span>
                 <span className="text-[10px] text-muted-foreground">
-                  MP4, WebM (maks. {UPLOAD_LIMITS.MAX_STREAM_VIDEO_SIZE_MB}MB)
+                  MP4, WebM (maks. 50MB)
                 </span>
               </button>
             )}
@@ -628,49 +621,6 @@ export function StreamCreateScreen() {
                 </motion.div>
               )}
             </AnimatePresence>
-          </div>
-        </motion.div>
-
-        {/* ===== PRIVACY TOGGLE ===== */}
-        <motion.div {...fadeIn}>
-          <div className="flex items-center justify-between p-4 rounded-xl border border-border/50 bg-card">
-            <div className="flex items-center gap-3">
-              <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${
-                isPrivate
-                  ? "bg-amber-100 dark:bg-amber-900/30"
-                  : "bg-emerald-100 dark:bg-emerald-900/30"
-              }`}>
-                {isPrivate ? (
-                  <Lock className="w-4 h-4 text-amber-500" />
-                ) : (
-                  <Globe className="w-4 h-4 text-emerald-500" />
-                )}
-              </div>
-              <div className="text-left">
-                <p className="text-sm font-medium text-foreground">
-                  {isPrivate ? "Privat" : "Publik"}
-                </p>
-                <p className="text-[11px] text-muted-foreground">
-                  {isPrivate
-                    ? "Hanya kamu yang bisa lihat"
-                    : "Semua orang bisa lihat"}
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={() => setIsPrivate(!isPrivate)}
-              className={`relative w-11 h-6 rounded-full transition-colors ${
-                isPrivate
-                  ? "bg-amber-500"
-                  : "bg-muted"
-              }`}
-            >
-              <motion.div
-                animate={{ x: isPrivate ? 20 : 2 }}
-                transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                className="absolute top-1 w-4 h-4 rounded-full bg-white shadow-sm"
-              />
-            </button>
           </div>
         </motion.div>
 

@@ -19,8 +19,6 @@ interface AuthMeResponse {
     id: string
     email: string
     name: string
-    username?: string
-    usernameChangedAt?: string
     phone?: string
     avatar?: string
     role?: string
@@ -28,8 +26,6 @@ interface AuthMeResponse {
     loyaltyPoints?: number
     coins?: number
     referralCode?: string
-    twoFactorEnabled?: boolean
-    emailHidden?: boolean
   }
   isSuperAdmin?: boolean
 }
@@ -99,9 +95,7 @@ function DataFetcher({ children }: { children: React.ReactNode }) {
 
     // Auth flag exists → try to restore session via /api/auth/me
     // The httpOnly session cookie will be sent automatically by the browser
-    // NOTE: Do NOT set tokenRecoveryDone.current = true here — if the async call fails,
-    // we want to allow retries on subsequent effect triggers (e.g., network recovery).
-    // It will be set to true after the async call completes (success or failure).
+    tokenRecoveryDone.current = true
 
     ;(async () => {
       try {
@@ -111,8 +105,6 @@ function DataFetcher({ children }: { children: React.ReactNode }) {
             id: data.user.id,
             email: data.user.email,
             name: data.user.name,
-            username: data.user.username || undefined,
-            usernameChangedAt: data.user.usernameChangedAt || undefined,
             phone: data.user.phone || undefined,
             avatar: data.user.avatar || undefined,
             role: (data.user.role || 'buyer') as UserRole,
@@ -120,8 +112,6 @@ function DataFetcher({ children }: { children: React.ReactNode }) {
             loyaltyPoints: data.user.loyaltyPoints || 0,
             coins: data.user.coins || 0,
             referralCode: data.user.referralCode || undefined,
-            twoFactorEnabled: data.user.twoFactorEnabled || false,
-            emailHidden: data.user.emailHidden || false,
             isSuperAdmin: data.isSuperAdmin || false,
           })
           // Set Sentry user context for error tracking
@@ -144,10 +134,6 @@ function DataFetcher({ children }: { children: React.ReactNode }) {
         logger.warn({ component: 'providers', err: err }, 'Failed to restore session from cookie')
         // Don't clear the flag — it might be a temporary network error
         // The user can try again on next page load
-      } finally {
-        // Mark recovery as done AFTER the async call completes
-        // This allows retries if the call failed due to a transient network error
-        tokenRecoveryDone.current = true
       }
     })()
   }, [isAuthenticated, login, connectSocket])
@@ -164,8 +150,6 @@ function DataFetcher({ children }: { children: React.ReactNode }) {
               id: data.user.id,
               email: data.user.email,
               name: data.user.name,
-              username: data.user.username || undefined,
-              usernameChangedAt: data.user.usernameChangedAt || undefined,
               phone: data.user.phone || undefined,
               avatar: data.user.avatar || undefined,
               role: (data.user.role || 'buyer') as UserRole,
@@ -173,8 +157,6 @@ function DataFetcher({ children }: { children: React.ReactNode }) {
               loyaltyPoints: data.user.loyaltyPoints || 0,
               coins: data.user.coins || 0,
               referralCode: data.user.referralCode || undefined,
-              twoFactorEnabled: data.user.twoFactorEnabled || false,
-              emailHidden: data.user.emailHidden || false,
               isSuperAdmin: data.isSuperAdmin || false,
             })
             // Set auth flag cookie for Google OAuth users (same as email login)
