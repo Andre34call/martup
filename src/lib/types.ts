@@ -154,6 +154,10 @@ export interface Order {
   totalAmount: number
   paymentMethod?: string
   paymentStatus: string
+  paymentProofUrl?: string
+  platformBankAccountId?: string
+  escrowStatus?: string // none, held, released, refunded
+  note?: string
   isServiceOrder?: boolean
   serviceProofImages?: string[]
   sellerCompletedAt?: string
@@ -163,6 +167,7 @@ export interface Order {
   shipping?: Shipping
   address?: Address
   seller: Seller
+  platformBankAccount?: PlatformBankAccountInfo
   buyerName?: string
   createdAt: string
   paidAt?: string
@@ -170,7 +175,18 @@ export interface Order {
   deliveredAt?: string
 }
 
-export type OrderStatus = 'pending' | 'paid' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'refunded'
+export interface PlatformBankAccountInfo {
+  id: string
+  bankName: string
+  bankCode?: string
+  accountNumber: string
+  accountHolder: string
+  branch?: string
+  isActive: boolean
+  isDefault: boolean
+}
+
+export type OrderStatus = 'pending' | 'pending_verification' | 'paid' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'refunded'
 
 export interface OrderItem {
   id: string

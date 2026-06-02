@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
     if (!user) {
       // Try case-insensitive
       const userByInsensitive = await db.user.findFirst({
-        where: { email: { equals: normalizedEmail, mode: 'insensitive' } },
+        where: { email: { equals: normalizedEmail } },
       })
 
       return NextResponse.json({

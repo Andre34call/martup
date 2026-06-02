@@ -216,6 +216,10 @@ export async function updateOrderStatus(params: {
       if (status === 'paid') {
         orderUpdateData.paymentStatus = 'paid'
         orderUpdateData.paidAt = new Date()
+        // Set escrow status to held when payment is confirmed (unless already held via manual verification)
+        if (order.escrowStatus === 'none') {
+          orderUpdateData.escrowStatus = 'held'
+        }
       } else if (status === 'shipped') {
         orderUpdateData.shippedAt = new Date()
         if (isServiceOrder) {
@@ -230,6 +234,8 @@ export async function updateOrderStatus(params: {
         }
       } else if (status === 'delivered') {
         orderUpdateData.deliveredAt = new Date()
+        orderUpdateData.escrowStatus = 'released'
+        orderUpdateData.escrowReleasedAt = new Date()
         // Service order: record buyer confirmation time
         if (isServiceOrder) {
           orderUpdateData.buyerConfirmedAt = new Date()
@@ -240,6 +246,7 @@ export async function updateOrderStatus(params: {
         // SECURITY (SG-5): Mark payment as refunded when cancelling a paid order
         if (order.paymentStatus === 'paid') {
           orderUpdateData.paymentStatus = 'refunded'
+          orderUpdateData.escrowStatus = 'refunded'
         }
       }
 

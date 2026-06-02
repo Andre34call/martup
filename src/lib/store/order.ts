@@ -55,6 +55,10 @@ function mapServerOrder(raw: Record<string, unknown>): Order {
     totalAmount: Number(raw.totalAmount ?? 0),
     paymentMethod: (raw.paymentMethod as string) || undefined,
     paymentStatus: (raw.paymentStatus as string) || 'unpaid',
+    paymentProofUrl: (raw.paymentProofUrl as string) || undefined,
+    platformBankAccountId: (raw.platformBankAccountId as string) || undefined,
+    escrowStatus: (raw.escrowStatus as string) || 'none',
+    note: (raw.note as string) || undefined,
     isServiceOrder: raw.isServiceOrder === true || raw.isServiceOrder === 'true',
     serviceProofImages: parseJsonArray(raw.serviceProofImages),
     sellerCompletedAt: typeof raw.sellerCompletedAt === 'string' ? raw.sellerCompletedAt : raw.sellerCompletedAt ? new Date(raw.sellerCompletedAt as number | string).toISOString() : undefined,
@@ -204,6 +208,18 @@ export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set
       // Rollback on network error
       set(restoreOrders(preSnapshot))
     }
+  },
+
+  // ==================== updateOrderPaymentStatus ====================
+  // Updates only the paymentStatus field (e.g., for bank transfer proof upload)
+  updateOrderPaymentStatus: (orderId, paymentStatus) => {
+    set((state) => ({
+      orders: state.orders.map(o => o.id === orderId ? {
+        ...o,
+        paymentStatus,
+        ...(paymentStatus === 'pending_verification' ? { status: 'pending_verification' as OrderStatus } : {}),
+      } : o),
+    }))
   },
 
   // ==================== payForOrder ====================

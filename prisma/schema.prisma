@@ -3,9 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("SUPABASE_DATABASE_URL")
-  directUrl = env("SUPABASE_DIRECT_URL")
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
 }
 
 // ==================== USER & AUTH ====================
@@ -176,19 +175,27 @@ model WalletMutation {
 }
 
 model Deposit {
-  id          String   @id @default(cuid())
-  userId      String
-  amount      Decimal
-  method      String   // bank_transfer, gopay, ovo, dana
-  status      String   @default("pending") // pending, success, failed
-  proofUrl    String?
-  adminNote   String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                  String   @id @default(cuid())
+  userId              String
+  amount              Decimal
+  method              String   // bank_transfer, gopay, ovo, dana
+  status              String   @default("pending") // pending, verified, failed
+  proofUrl            String?
+  platformBankAccountId String? // FK — which platform bank account the user transferred to
+  senderName          String?  // Name of the sender for verification
+  senderBank          String?  // Bank the sender transferred from
+  adminNote           String?
+  verifiedAt          DateTime?
+  verifiedBy          String?   // admin user ID who verified
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platformBankAccount PlatformBankAccount? @relation(fields: [platformBankAccountId], references: [id], onDelete: SetNull)
 
   @@index([userId, status])
+  @@index([status, createdAt])
+  @@index([platformBankAccountId])
 }
 
 model Withdrawal {
@@ -355,30 +362,35 @@ model Order {
   taxAmount       Decimal    @default(0)
   platformFee     Decimal    @default(0)
   totalAmount     Decimal
-  paymentMethod   String?
-  paymentStatus   String     @default("unpaid")
-  isServiceOrder  Boolean    @default(false) // true if ALL items are jasa (service) products
-  serviceProofImages String? // JSON array — seller-uploaded proof of service completion
-  sellerCompletedAt DateTime? // when seller marked service as completed
-  buyerConfirmedAt  DateTime? // when buyer confirmed service completion
-  autoConfirmAt     DateTime? // auto-release escrow after this time if buyer doesn't respond (3 days)
-  paidAt          DateTime?
-  shippedAt       DateTime?
-  deliveredAt     DateTime?
-  cancelledAt     DateTime?
-  cancelReason    String?
-  note            String?
-  createdAt       DateTime   @default(now())
-  updatedAt       DateTime   @updatedAt
+  paymentMethod       String?
+  paymentStatus       String     @default("unpaid") // unpaid, pending_verification, paid, failed
+  paymentProofUrl     String?    // Buyer-uploaded bukti transfer for manual bank transfer
+  platformBankAccountId String?  // Which MartUp bank account the buyer transferred to
+  escrowStatus        String     @default("none") // none, held, released, refunded — escrow tracking
+  escrowReleasedAt    DateTime?  // When escrow funds were released to seller
+  isServiceOrder      Boolean    @default(false) // true if ALL items are jasa (service) products
+  serviceProofImages  String?    // JSON array — seller-uploaded proof of service completion
+  sellerCompletedAt   DateTime?  // when seller marked service as completed
+  buyerConfirmedAt    DateTime?  // when buyer confirmed service/delivery completion
+  autoConfirmAt       DateTime?  // auto-release escrow after this time if buyer doesn't respond
+  paidAt              DateTime?
+  shippedAt           DateTime?
+  deliveredAt         DateTime?
+  cancelledAt         DateTime?
+  cancelReason        String?
+  note                String?
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
 
-  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  seller          Seller     @relation(fields: [sellerId], references: [id])
-  address         Address?   @relation(fields: [addressId], references: [id])
-  items           OrderItem[]
-  shipping        Shipping?
-  voucherUsages   VoucherUsage[]
-  complaint       Complaint?
-  buyerRating     BuyerRating?
+  user                User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  seller              Seller     @relation(fields: [sellerId], references: [id])
+  address             Address?   @relation(fields: [addressId], references: [id])
+  items               OrderItem[]
+  shipping            Shipping?
+  voucherUsages       VoucherUsage[]
+  complaint           Complaint?
+  buyerRating         BuyerRating?
+  platformBankAccount PlatformBankAccount? @relation(fields: [platformBankAccountId], references: [id], onDelete: SetNull)
 
   @@index([userId, status])
   @@index([sellerId])
@@ -430,8 +442,8 @@ model Shipping {
 
 model Review {
   id            String    @id @default(cuid())
-  userId        String
-  productId     String
+  userId        String?
+  productId     String?
   orderItemId   String?   @unique
   rating        Int       // 1-5
   content       String?
@@ -442,8 +454,8 @@ model Review {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @default(now()) @updatedAt
 
-  user      User       @relation("UserReviews", fields: [userId], references: [id], onDelete: SetNull)
-  product   Product    @relation("ProductReviews", fields: [productId], references: [id], onDelete: SetNull)
+  user      User?      @relation("UserReviews", fields: [userId], references: [id], onDelete: SetNull)
+  product   Product?   @relation("ProductReviews", fields: [productId], references: [id], onDelete: SetNull)
   orderItem OrderItem? @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
 
   @@index([productId, createdAt])
@@ -730,6 +742,26 @@ model WorkItem {
 }
 
 // ==================== PLATFORM SETTINGS ====================
+
+model PlatformBankAccount {
+  id            String   @id @default(cuid())
+  bankName      String   // BCA, Mandiri, BNI, BRI, etc.
+  bankCode      String?  // Bank code for reference
+  accountNumber String   // Account number
+  accountHolder String   // Account holder name (PT MartUp Indonesia, etc.)
+  branch        String?  // Branch name
+  isActive      Boolean  @default(true)
+  isDefault     Boolean  @default(false) // Primary account shown to buyers
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  deposits      Deposit[]
+  orders        Order[]
+
+  @@index([isActive, sortOrder])
+  @@index([isDefault])
+}
 
 model PlatformSetting {
   key   String @id

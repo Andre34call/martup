@@ -93,7 +93,7 @@ export async function PUT(request: NextRequest) {
       _count: { id: true },
     })
     await db.product.update({
-      where: { id: review.productId },
+      where: { id: review.productId || undefined },
       data: {
         rating: stats._avg.rating ?? 0,
         reviewCount: stats._count.id,
@@ -138,7 +138,7 @@ export async function DELETE(request: NextRequest) {
         _count: { id: true },
       })
       await tx.product.update({
-        where: { id: productId },
+        where: { id: productId || undefined },
         data: {
           rating: stats._avg.rating ?? 0,
           reviewCount: stats._count.id,

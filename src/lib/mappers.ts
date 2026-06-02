@@ -1,4 +1,4 @@
-import type { User, UserRole, Seller, Order, OrderStatus, Notification as AppNotification, Address, Review, WalletMutation, Banner } from './types'
+import type { User, UserRole, Seller, Order, OrderStatus, Notification as AppNotification, Address, Review, WalletMutation, Banner, PlatformBankAccountInfo } from './types'
 
 /**
  * Map raw API user data to typed User object
@@ -82,7 +82,11 @@ export function mapOrder(raw: any, currentUser?: User | null): Order {
     platformFee: raw.platformFee || 0,
     totalAmount: raw.totalAmount,
     paymentMethod: raw.paymentMethod || undefined,
-    paymentStatus: raw.paymentStatus,
+    paymentStatus: raw.paymentStatus || 'unpaid',
+    paymentProofUrl: raw.paymentProofUrl || undefined,
+    platformBankAccountId: raw.platformBankAccountId || undefined,
+    escrowStatus: raw.escrowStatus || 'none',
+    note: raw.note || undefined,
     items: (raw.items || []).map((item: any) => ({
       id: item.id,
       productId: item.productId,
@@ -146,6 +150,16 @@ export function mapOrder(raw: any, currentUser?: User | null): Order {
       totalSales: 0,
       totalProducts: 0,
     },
+    platformBankAccount: raw.platformBankAccount ? {
+      id: raw.platformBankAccount.id,
+      bankName: raw.platformBankAccount.bankName,
+      bankCode: raw.platformBankAccount.bankCode || undefined,
+      accountNumber: raw.platformBankAccount.accountNumber,
+      accountHolder: raw.platformBankAccount.accountHolder,
+      branch: raw.platformBankAccount.branch || undefined,
+      isActive: raw.platformBankAccount.isActive,
+      isDefault: raw.platformBankAccount.isDefault,
+    } as PlatformBankAccountInfo : undefined,
     createdAt: raw.createdAt,
     paidAt: raw.paidAt || undefined,
     shippedAt: raw.shippedAt || undefined,

@@ -1,85 +1,79 @@
-import { db } from '@/lib/db'
 import { logger } from '@/lib/logger'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-// Bucket configurations with their max file sizes
-const BUCKET_CONFIG = {
-  products: { maxSize: 52428800 },   // 50MB
-  avatars: { maxSize: 10485760 },    // 10MB
-  banners: { maxSize: 10485760 },    // 10MB
-  streams: { maxSize: 104857600 },   // 100MB
-  reviews: { maxSize: 52428800 },    // 50MB
-} as const
-
-type BucketId = keyof typeof BUCKET_CONFIG
-
-// Track which buckets we've already verified/created in this process
-const verifiedBuckets = new Set<string>()
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 
 /**
- * Ensure a Supabase Storage bucket exists before uploading.
- * Checks if the bucket exists, and creates it if not.
- * Uses the database to check and create buckets with proper RLS policies.
- * Results are cached in-memory to avoid repeated checks.
+ * Ensure a Supabase Storage bucket exists and has public read access.
+ * Creates the bucket if it doesn't exist and sets up RLS policies.
+ * Idempotent — safe to call multiple times.
  */
-export async function ensureBucketExists(bucketId: string): Promise<void> {
-  // Validate bucket ID
-  if (!Object.keys(BUCKET_CONFIG).includes(bucketId)) {
-    throw new Error(`Invalid bucket ID: ${bucketId}`)
+export async function ensureBucket(
+  bucketName: string,
+  options: {
+    maxFileSizeMb?: number
+    allowedMimeTypes?: string[]
+  } = {}
+): Promise<boolean> {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    logger.warn({ bucket: bucketName }, 'Supabase not configured, skipping ensureBucket')
+    return false
   }
 
-  // Skip if already verified in this process
-  if (verifiedBuckets.has(bucketId)) {
-    return
-  }
-
-  const config = BUCKET_CONFIG[bucketId as BucketId]
+  const { maxFileSizeMb = 10, allowedMimeTypes } = options
 
   try {
-    // Check if bucket exists
-    const bucket = await db.$queryRawUnsafe(
-      `SELECT id FROM storage.buckets WHERE id = $1`,
-      bucketId
-    ) as { id: string }[]
+    // Check if bucket exists by trying to get it
+    const getRes = await fetch(`${SUPABASE_URL}/storage/v1/bucket/${bucketName}`, {
+      headers: {
+        'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        'apikey': SUPABASE_SERVICE_ROLE_KEY,
+      },
+    })
 
-    if (bucket.length === 0) {
-      // Create the bucket
-      await db.$executeRawUnsafe(
-        `INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-         VALUES ($1, $2, true, $3, NULL)
-         ON CONFLICT (id) DO NOTHING`,
-        bucketId, bucketId, config.maxSize
-      )
-
-      // Create basic RLS policies
-      const policies = [
-        `CREATE POLICY "${bucketId}_public_read" ON storage.objects
-         FOR SELECT USING (bucket_id = '${bucketId}')`,
-        `CREATE POLICY "${bucketId}_auth_upload" ON storage.objects
-         FOR INSERT WITH CHECK (bucket_id = '${bucketId}' AND auth.uid() IS NOT NULL)`,
-        `CREATE POLICY "${bucketId}_auth_update" ON storage.objects
-         FOR UPDATE USING (bucket_id = '${bucketId}' AND auth.uid() IS NOT NULL)`,
-        `CREATE POLICY "${bucketId}_auth_delete" ON storage.objects
-         FOR DELETE USING (bucket_id = '${bucketId}' AND auth.uid() IS NOT NULL)`,
-      ]
-
-      for (const sql of policies) {
-        try {
-          await db.$executeRawUnsafe(sql)
-        } catch {
-          // Policy might already exist — ignore
-        }
-      }
-
-      logger.info({ bucketId }, 'Auto-created storage bucket with policies')
+    if (getRes.ok) {
+      logger.debug({ bucket: bucketName }, 'Bucket already exists')
+      return true
     }
 
-    // Mark as verified
-    verifiedBuckets.add(bucketId)
+    if (getRes.status !== 404) {
+      logger.warn({ bucket: bucketName, status: getRes.status }, 'Unexpected status checking bucket')
+    }
+
+    // Bucket doesn't exist — create it
+    logger.info({ bucket: bucketName }, 'Creating storage bucket...')
+
+    const createBody: Record<string, unknown> = {
+      id: bucketName,
+      name: bucketName,
+      public: true,
+      fileSizeLimit: maxFileSizeMb * 1024 * 1024,
+    }
+
+    if (allowedMimeTypes) {
+      createBody.allowedMimeTypes = allowedMimeTypes
+    }
+
+    const createRes = await fetch(`${SUPABASE_URL}/storage/v1/bucket`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        'apikey': SUPABASE_SERVICE_ROLE_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(createBody),
+    })
+
+    if (!createRes.ok && createRes.status !== 409) {
+      const errText = await createRes.text().catch(() => 'unknown')
+      logger.error({ bucket: bucketName, status: createRes.status, err: errText }, 'Failed to create bucket')
+      return false
+    }
+
+    logger.info({ bucket: bucketName }, 'Storage bucket created successfully')
+    return true
   } catch (error) {
-    logger.warn({ err: error, bucketId }, 'Failed to ensure bucket exists — proceeding with upload attempt')
-    // Don't throw — let the upload attempt proceed; Supabase will return a proper error if bucket is truly missing
+    logger.error({ err: error, bucket: bucketName }, 'ensureBucket error')
+    return false
   }
 }

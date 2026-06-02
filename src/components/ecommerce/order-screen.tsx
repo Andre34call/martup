@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { apiClient } from "@/lib/api-client"
+import { PaymentProofUpload } from "./payment-proof-upload"
 
 const ORDER_TABS = [
   { key: "all", label: "Semua" },
@@ -61,6 +62,7 @@ const SERVICE_STATUS_LABELS: Partial<Record<OrderStatus, string>> = {
 // Status badge style map (mirrors shared/display.tsx statusConfig)
 const STATUS_STYLES: Record<OrderStatus, string> = {
   pending: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+  pending_verification: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
   paid: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
   processing: "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400",
   shipped: "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400",
@@ -71,6 +73,7 @@ const STATUS_STYLES: Record<OrderStatus, string> = {
 
 const DEFAULT_STATUS_LABELS: Record<OrderStatus, string> = {
   pending: "Menunggu Pembayaran",
+  pending_verification: "Menunggu Verifikasi Pembayaran",
   paid: "Dibayar",
   processing: "Diproses",
   shipped: "Dikirim",
@@ -89,6 +92,7 @@ function getStatusLabel(order: Order): string {
 function getActiveStep(order: Order): number {
   switch (order.status) {
     case "pending": return 0
+    case "pending_verification": return 0
     case "paid": return 1
     case "processing": return 2
     case "shipped": return 3
@@ -685,6 +689,22 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
             </div>
           </div>
         </div>
+
+        {/* Payment Proof Upload (for bank transfer orders) */}
+        {(['Transfer Bank (Escrow)', 'bank_transfer'].some(m => order.paymentMethod?.includes(m)) || 
+          order.paymentMethod === 'Transfer Bank') && 
+          ['unpaid', 'pending_verification', 'failed'].includes(order.paymentStatus) && (
+          <div className="px-4 pb-4">
+            <PaymentProofUpload
+              orderId={order.id}
+              orderNumber={order.orderNumber}
+              totalAmount={order.totalAmount}
+              paymentStatus={order.paymentStatus}
+              currentProofUrl={(order as any).paymentProofUrl}
+              currentBankAccountId={(order as any).platformBankAccountId}
+            />
+          </div>
+        )}
 
         {/* Order Info */}
         <div className="px-4 pb-4">

@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
     // Fallback: try case-insensitive lookup for legacy mixed-case emails in the database
     if (!user) {
       user = await db.user.findFirst({
-        where: { email: { equals: email, mode: 'insensitive' } },
+        where: { email: { equals: email } },
         include: {
           seller: true,
           wallet: true,

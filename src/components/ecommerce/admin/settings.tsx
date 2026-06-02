@@ -14,6 +14,7 @@ import { PageHeader, SectionHeader } from "../shared"
 import { fadeIn } from '@/lib/animations'
 import { useState, useEffect, useCallback } from "react"
 import { apiClient, ApiClientError } from '@/lib/api-client'
+import { PlatformBankAccounts } from "./platform-bank-accounts"
 
 // ==================== TYPE DEFINITIONS ====================
 interface PlatformSettings {
@@ -107,6 +108,9 @@ export function AdminSettings() {
       <PageHeader title="Pengaturan Platform" showBack={true} />
 
       <div className="px-4 space-y-4 pt-2">
+        {/* Platform Bank Accounts */}
+        <PlatformBankAccounts />
+
         {/* Financial Settings */}
         <motion.div {...fadeIn}>
           <SectionHeader title="Keuangan" icon={<Banknote className="w-4 h-4" />} />

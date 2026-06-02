@@ -72,6 +72,18 @@ export async function GET(request: NextRequest) {
               totalProducts: true,
             },
           },
+          platformBankAccount: {
+            select: {
+              id: true,
+              bankName: true,
+              bankCode: true,
+              accountNumber: true,
+              accountHolder: true,
+              branch: true,
+              isActive: true,
+              isDefault: true,
+            },
+          },
         },
         orderBy: { createdAt: 'desc' },
         skip,

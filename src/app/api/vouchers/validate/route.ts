@@ -90,7 +90,6 @@ export async function POST(request: NextRequest) {
       where: {
         code: {
           equals: code.toUpperCase(),
-          mode: 'insensitive',
         },
       },
     })

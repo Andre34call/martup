@@ -85,6 +85,7 @@ export interface OrderSlice {
   isOrdersLoaded: boolean
   addOrder: (order: Order) => void
   updateOrderStatus: (orderId: string, status: OrderStatus, options?: { trackingNumber?: string; cancelReason?: string }) => Promise<void>
+  updateOrderPaymentStatus: (orderId: string, paymentStatus: string) => void
   payForOrder: (orderId: string) => Promise<{ token?: string; redirectUrl?: string } | void>
   cancelOrder: (orderId: string) => Promise<void>
   updateOrderTracking: (orderId: string, trackingNumber: string) => Promise<void>

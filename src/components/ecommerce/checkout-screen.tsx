@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import {
   MapPin, ChevronRight, Truck, Ticket, CreditCard, Wallet,
   Check, ShoppingBag, Clock, BadgeCheck, ArrowRight,
-  ShieldCheck, Info, Banknote, Smartphone, AlertTriangle
+  ShieldCheck, Info, Banknote, Smartphone, AlertTriangle, Building2
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -90,6 +90,7 @@ const PAYMENT_METHODS = [
   { id: "wallet", name: "MartUp Pay", icon: Wallet, description: "Bayar cepat dari saldo", color: "emerald" },
   { id: "midtrans", name: "Transfer & E-Wallet", icon: Smartphone, description: "VA, GoPay, OVO, Dana, ShopeePay", color: "blue" },
   { id: "card", name: "Kartu Kredit/Debit", icon: CreditCard, description: "Visa, Mastercard, JCB", color: "purple" },
+  { id: "bank_transfer", name: "Transfer Bank (Escrow)", icon: Building2, description: "Transfer ke rekening MartUp (Escrow)", color: "teal" },
   { id: "cod", name: "Bayar di Tempat (COD)", icon: Banknote, description: "Bayar saat barang diterima", color: "orange" },
 ]
 
@@ -348,7 +349,7 @@ export function CheckoutScreen() {
       // Skip shipping for jasa-only sellers
       if (isJasaOnlySeller(sellerId)) {
         // Set zero-cost shipping for jasa-only sellers
-        setShippingBySeller(prev => ({ ...prev, [sellerId]: { id: 'jasa-free', name: 'Tanpa Pengiriman (Jasa)', price: 0, estimate: '-', provider: 'jasa' } }))
+        setShippingBySeller(prev => ({ ...prev, [sellerId]: { provider: 'jasa', service: 'free', name: 'Tanpa Pengiriman (Jasa)', price: 0, estimatedDays: '-', logo: '📦' } }))
         return
       }
       const weight = weightBySeller[sellerId] || 1000
@@ -552,6 +553,7 @@ export function CheckoutScreen() {
               totalAmount: groupTotal,
               paymentMethod: PAYMENT_METHODS.find(m => m.id === selectedPayment)?.name || selectedPayment,
               paymentStatus: orderPaymentStatus,
+              escrowStatus: isImmediatePayment ? 'held' : 'none',
               isServiceOrder: isSellerJasaOnly,
               items: group.items.map((item) => ({
                 id: `oi${Date.now()}-${item.id}`,
@@ -709,8 +711,8 @@ export function CheckoutScreen() {
           setIsProcessing(false)
         }
 
-      } else {
-        // COD or other payment methods — order stays pending
+      } else if (selectedPayment === 'cod' || selectedPayment === 'bank_transfer') {
+        // COD or bank_transfer — order stays pending
         if (selectedVoucher) markVoucherUsed(selectedVoucher.id)
 
         // BUG 10 FIX: Remove cart items for COD (no payment step needed)
@@ -951,12 +953,14 @@ export function CheckoutScreen() {
                     method.color === 'emerald' ? 'bg-emerald-100 dark:bg-emerald-900/30' :
                     method.color === 'blue' ? 'bg-blue-100 dark:bg-blue-900/30' :
                     method.color === 'purple' ? 'bg-purple-100 dark:bg-purple-900/30' :
+                    method.color === 'teal' ? 'bg-teal-100 dark:bg-teal-900/30' :
                     'bg-orange-100 dark:bg-orange-900/30'
                   }`}>
                     <Icon className={`w-5 h-5 ${
                       method.color === 'emerald' ? 'text-emerald-600' :
                       method.color === 'blue' ? 'text-blue-600' :
                       method.color === 'purple' ? 'text-purple-600' :
+                      method.color === 'teal' ? 'text-teal-600' :
                       'text-orange-600'
                     }`} />
                   </div>
