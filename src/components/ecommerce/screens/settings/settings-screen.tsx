@@ -1,6 +1,7 @@
 "use client"
 
 import { motion } from "framer-motion"
+import { fadeIn } from "@/lib/animations"
 import { useAppStore } from "@/lib/store"
 import { apiClient, ApiClientError } from '@/lib/api-client'
 import { PageHeader, SectionHeader } from "../../shared"
