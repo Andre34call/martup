@@ -47,6 +47,7 @@ const methodConfig: Record<string, { label: string; icon: string; color: string 
   dana: { label: 'DANA', icon: '🔵', color: 'bg-sky-50 text-sky-600 dark:bg-sky-900/30 dark:text-sky-400' },
   shopeepay: { label: 'ShopeePay', icon: '🧡', color: 'bg-orange-50 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400' },
   linkaja: { label: 'LinkAja', icon: '🔴', color: 'bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400' },
+  midtrans: { label: 'Midtrans (Otomatis)', icon: '⚡', color: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400' },
 }
 
 const statusConfig: Record<string, { label: string; className: string }> = {

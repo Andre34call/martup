@@ -21,6 +21,7 @@ const rateLimitStore = new Map<string, { count: number; expiresAt: number }>()
 const RATE_LIMITS: { pattern: RegExp; maxRequests: number; windowMs: number }[] = [
   { pattern: /\/api\/auth\/(login|register|otp)/, maxRequests: 20, windowMs: 60_000 },
   { pattern: /\/api\/payment\//, maxRequests: 5, windowMs: 60_000 },
+  { pattern: /\/api\/deposit\//, maxRequests: 5, windowMs: 60_000 },
   { pattern: /\/api\/wallet\//, maxRequests: 10, windowMs: 60_000 },
   { pattern: /\/api\/admin\//, maxRequests: 30, windowMs: 60_000 },
   { pattern: /\/api\/user\//, maxRequests: 15, windowMs: 60_000 },

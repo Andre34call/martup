@@ -21,7 +21,8 @@ const MIDTRANS_SERVER_KEY = process.env.MIDTRANS_SERVER_KEY || ''
 // Midtrans webhook callback — called by Midtrans servers when payment status changes.
 // NO standard auth required (Midtrans calls this from their servers).
 // MUST verify the notification signature before processing.
-// IDEMPOTENCY: Checks order's current status to prevent duplicate processing.
+// IDEMPOTENCY: Checks order/deposit's current status to prevent duplicate processing.
+// Handles both ORDER payments (orderNumber) and DEPOSIT payments (DEPOSIT-{id}).
 
 export async function POST(request: NextRequest) {
   try {
@@ -57,7 +58,27 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Step 2: Find the order by orderNumber
+    // Step 2: Route based on order_id prefix
+    // DEPOSIT-{id} → deposit payment processing
+    // Otherwise → order payment processing (existing logic)
+    const isDeposit = order_id.startsWith('DEPOSIT-')
+
+    if (isDeposit) {
+      return handleDepositNotification({
+        order_id,
+        transaction_status,
+        transaction_id,
+        status_code,
+        payment_type,
+        gross_amount,
+        fraud_status,
+        transaction_time,
+      })
+    }
+
+    // ==================== ORDER PAYMENT PROCESSING ====================
+
+    // Find the order by orderNumber
     const order = await db.order.findUnique({
       where: { orderNumber: order_id },
       include: {
@@ -102,7 +123,6 @@ export async function POST(request: NextRequest) {
     }
 
     // IDEMPOTENCY CHECK: If the order is already in the target state, skip processing
-    // This prevents duplicate wallet mutations from Midtrans retrying notifications
     if (transaction_status === 'settlement' || (transaction_status === 'capture' && fraud_status === 'accept')) {
       if (order.paymentStatus === 'paid') {
         logger.info({
@@ -134,16 +154,13 @@ export async function POST(request: NextRequest) {
 
     switch (transaction_status) {
       case 'capture':
-        // Credit card capture — check fraud status
         if (fraud_status === 'accept') {
           newOrderStatus = 'paid'
           newPaymentStatus = 'paid'
           paidAt = new Date()
         } else if (fraud_status === 'challenge') {
-          // Payment is challenged — keep pending
           newPaymentStatus = 'challenged'
         } else {
-          // Fraud denied
           newOrderStatus = 'cancelled'
           newPaymentStatus = 'denied'
           cancelledAt = new Date()
@@ -152,19 +169,16 @@ export async function POST(request: NextRequest) {
         break
 
       case 'settlement':
-        // Payment completed successfully
         newOrderStatus = 'paid'
         newPaymentStatus = 'paid'
         paidAt = new Date()
         break
 
       case 'pending':
-        // Payment pending — user hasn't completed payment yet
         newPaymentStatus = 'pending'
         break
 
       case 'deny':
-        // Payment denied by the payment provider
         newOrderStatus = 'cancelled'
         newPaymentStatus = 'denied'
         cancelledAt = new Date()
@@ -172,7 +186,6 @@ export async function POST(request: NextRequest) {
         break
 
       case 'cancel':
-        // Payment cancelled
         newOrderStatus = 'cancelled'
         newPaymentStatus = 'cancelled'
         cancelledAt = new Date()
@@ -180,7 +193,6 @@ export async function POST(request: NextRequest) {
         break
 
       case 'expire':
-        // Payment expired (not paid within the time limit)
         newOrderStatus = 'cancelled'
         newPaymentStatus = 'expired'
         cancelledAt = new Date()
@@ -188,25 +200,21 @@ export async function POST(request: NextRequest) {
         break
 
       case 'refund':
-        // Payment refunded
         newOrderStatus = 'refunded'
         newPaymentStatus = 'refunded'
         break
 
       case 'partial_refund':
-        // Partial refund — keep order as is, note the partial refund
         newPaymentStatus = 'partial_refund'
         break
 
       default:
         logger.warn({ transaction_status }, 'Midtrans notification: Unhandled transaction_status')
-        // Acknowledge receipt but don't process unknown statuses
         return NextResponse.json({ success: true, message: 'Notification received but status not handled' })
     }
 
     // Step 4: Process the status change in a database transaction
     await db.$transaction(async (tx) => {
-      // Build update data for the order
       const orderUpdateData: Record<string, unknown> = {}
       if (newOrderStatus) orderUpdateData.status = newOrderStatus
       if (newPaymentStatus) orderUpdateData.paymentStatus = newPaymentStatus
@@ -215,7 +223,6 @@ export async function POST(request: NextRequest) {
       if (cancelReason) orderUpdateData.cancelReason = cancelReason
       if (payment_type) orderUpdateData.paymentMethod = payment_type
 
-      // Update the order
       await tx.order.update({
         where: { id: order.id },
         data: orderUpdateData,
@@ -249,9 +256,8 @@ export async function POST(request: NextRequest) {
         })
       }
 
-      // Step 5: On successful payment (settlement or capture+accept), process seller payout
+      // Step 5: On successful payment, process seller payout
       if (newPaymentStatus === 'paid' && (transaction_status === 'settlement' || (transaction_status === 'capture' && fraud_status === 'accept'))) {
-        // IDEMPOTENCY: Double-check no wallet mutation already exists for this order
         const existingMutation = await tx.walletMutation.findFirst({
           where: {
             refType: 'order',
@@ -263,17 +269,14 @@ export async function POST(request: NextRequest) {
 
         if (existingMutation) {
           logger.info({ orderNumber: order.orderNumber }, 'Midtrans notification: Seller payout already processed for order')
-          return // Skip payout, already processed
+          return
         }
 
-        // Calculate seller earnings: subtotal - platform fee (commission)
         const subtotal = Number(order.subtotal)
         const commissionRate = Number(order.seller.commissionRate)
         const commissionAmount = Math.round(subtotal * commissionRate)
         const sellerEarnings = subtotal - commissionAmount
 
-        // Credit the seller's wallet
-        // Find or create the seller's wallet
         let sellerWallet = await tx.wallet.findUnique({
           where: { sellerId: order.sellerId },
         })
@@ -290,7 +293,6 @@ export async function POST(request: NextRequest) {
           })
         }
 
-        // Add earnings to seller's pendingBalance (funds become available after delivery/confirmation)
         const updatedWallet = await tx.wallet.update({
           where: { id: sellerWallet.id },
           data: {
@@ -300,7 +302,6 @@ export async function POST(request: NextRequest) {
 
         const newBalance = Number(updatedWallet.balance)
 
-        // Create wallet mutation record for seller (credit)
         await tx.walletMutation.create({
           data: {
             walletId: sellerWallet.id,
@@ -313,7 +314,6 @@ export async function POST(request: NextRequest) {
           },
         })
 
-        // Create platform fee transaction (commission)
         if (commissionAmount > 0) {
           await tx.transaction.create({
             data: {
@@ -330,7 +330,6 @@ export async function POST(request: NextRequest) {
           })
         }
 
-        // Create notification for buyer
         await tx.notification.create({
           data: {
             userId: order.userId,
@@ -342,7 +341,6 @@ export async function POST(request: NextRequest) {
           },
         })
 
-        // Create notification for seller
         await tx.notification.create({
           data: {
             userId: order.seller.userId,
@@ -384,7 +382,6 @@ export async function POST(request: NextRequest) {
       }
     })
 
-    // Log the notification for audit purposes
     logger.info({
       orderId: order.id,
       orderNumber: order.orderNumber,
@@ -396,13 +393,274 @@ export async function POST(request: NextRequest) {
       transactionTime: transaction_time,
     }, 'Midtrans notification processed:')
 
-    // Always return 200 to acknowledge receipt to Midtrans
     return NextResponse.json({ success: true, message: 'Notification processed' })
   } catch (error: unknown) {
-    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'Payment Notification POST error')
-    // Still return 200 so Midtrans doesn't keep retrying
-    // But log the error for investigation
     return NextResponse.json({ success: false, error: 'Terjadi kesalahan server' })
   }
+}
+
+// ==================== DEPOSIT NOTIFICATION HANDLER ====================
+
+async function handleDepositNotification({
+  order_id,
+  transaction_status,
+  transaction_id,
+  status_code,
+  payment_type,
+  gross_amount,
+  fraud_status,
+  transaction_time,
+}: {
+  order_id: string
+  transaction_status: string
+  transaction_id: string
+  status_code: string
+  payment_type: string
+  gross_amount: string
+  fraud_status?: string
+  transaction_time: string
+}): Promise<NextResponse> {
+  // Extract deposit ID from order_id (format: DEPOSIT-{cuid})
+  const depositId = order_id.replace('DEPOSIT-', '')
+
+  // Find the deposit
+  const deposit = await db.deposit.findUnique({
+    where: { id: depositId },
+    include: {
+      user: {
+        select: { id: true, name: true, email: true },
+        wallet: true,
+      },
+    },
+  })
+
+  if (!deposit) {
+    logger.error({ depositId, order_id }, 'Midtrans deposit notification: Deposit not found')
+    // Return 200 so Midtrans doesn't retry indefinitely
+    return NextResponse.json({ success: false, error: 'Deposit not found' })
+  }
+
+  // SECURITY: Verify gross_amount matches deposit amount
+  if (Number(gross_amount) !== Number(deposit.amount)) {
+    logger.error({
+      depositId: deposit.id,
+      midtransOrderId: order_id,
+      expectedAmount: Number(deposit.amount),
+      receivedAmount: Number(gross_amount),
+    }, 'Midtrans deposit notification: gross_amount does not match deposit amount')
+    return NextResponse.json(
+      { success: false, error: 'Amount mismatch' },
+      { status: 400 }
+    )
+  }
+
+  // IDEMPOTENCY CHECK: Skip if already in terminal state
+  if (deposit.status === 'success') {
+    logger.info({ depositId: deposit.id }, 'Midtrans deposit notification: Deposit already processed as success')
+    return NextResponse.json({ success: true, message: 'Deposit already processed' })
+  }
+
+  if (deposit.status === 'failed' || deposit.status === 'expired') {
+    if (transaction_status === 'cancel' || transaction_status === 'expire' || transaction_status === 'deny') {
+      logger.info({ depositId: deposit.id }, 'Midtrans deposit notification: Deposit already in terminal state')
+      return NextResponse.json({ success: true, message: 'Deposit already in terminal state' })
+    }
+  }
+
+  // Determine deposit status based on transaction_status
+  let newDepositStatus: string | null = null
+  let isPaymentSuccess = false
+
+  switch (transaction_status) {
+    case 'capture':
+      if (fraud_status === 'accept') {
+        newDepositStatus = 'success'
+        isPaymentSuccess = true
+      } else if (fraud_status === 'challenge') {
+        newDepositStatus = 'pending' // Keep pending for challenged payments
+      } else {
+        newDepositStatus = 'failed'
+      }
+      break
+
+    case 'settlement':
+      newDepositStatus = 'success'
+      isPaymentSuccess = true
+      break
+
+    case 'pending':
+      // Still pending — user hasn't completed payment yet
+      newDepositStatus = 'pending'
+      break
+
+    case 'deny':
+      newDepositStatus = 'failed'
+      break
+
+    case 'cancel':
+      newDepositStatus = 'failed'
+      break
+
+    case 'expire':
+      newDepositStatus = 'expired'
+      break
+
+    case 'refund':
+    case 'partial_refund':
+      // Refunds on deposits — keep as failed (shouldn't normally happen for deposits)
+      newDepositStatus = 'failed'
+      break
+
+    default:
+      logger.warn({ transaction_status }, 'Midtrans deposit notification: Unhandled transaction_status')
+      return NextResponse.json({ success: true, message: 'Notification received but status not handled' })
+  }
+
+  // Process the deposit status change in a database transaction
+  await db.$transaction(async (tx) => {
+    // Update deposit record
+    const depositUpdateData: Record<string, unknown> = {}
+    if (newDepositStatus) depositUpdateData.status = newDepositStatus
+    if (payment_type) depositUpdateData.paymentType = payment_type
+    if (transaction_id) depositUpdateData.midtransTransactionId = transaction_id
+    if (isPaymentSuccess) {
+      depositUpdateData.verifiedAt = new Date()
+    }
+
+    await tx.deposit.update({
+      where: { id: deposit.id },
+      data: depositUpdateData,
+    })
+
+    // Update the Transaction record status
+    const transactionRecord = await tx.transaction.findFirst({
+      where: {
+        type: 'deposit',
+        refId: deposit.id,
+      },
+    })
+
+    if (transactionRecord) {
+      const txStatusMap: Record<string, string> = {
+        success: 'success',
+        pending: 'pending',
+        failed: 'failed',
+        expired: 'failed',
+      }
+      await tx.transaction.update({
+        where: { id: transactionRecord.id },
+        data: {
+          status: txStatusMap[newDepositStatus || ''] || 'pending',
+          method: payment_type || transactionRecord.method,
+          description: isPaymentSuccess
+            ? `Top Up via Midtrans (${payment_type}) — berhasil`
+            : transaction_status === 'pending'
+              ? `Top Up via Midtrans (${payment_type}) — menunggu pembayaran`
+              : `Top Up via Midtrans (${payment_type}) — ${transaction_status}`,
+        },
+      })
+    }
+
+    // On successful payment: credit user wallet atomically
+    if (isPaymentSuccess) {
+      // IDEMPOTENCY: Check if wallet already credited for this deposit
+      const existingMutation = await tx.walletMutation.findFirst({
+        where: {
+          refType: 'deposit',
+          refId: deposit.id,
+          type: 'credit',
+        },
+      })
+
+      if (existingMutation) {
+        logger.info({ depositId: deposit.id }, 'Midtrans deposit notification: Wallet already credited for deposit')
+        return // Skip, already processed
+      }
+
+      // Find or create user wallet
+      let wallet = deposit.user.wallet
+      if (!wallet) {
+        wallet = await tx.wallet.create({
+          data: {
+            userId: deposit.user.id,
+            balance: 0,
+            holdBalance: 0,
+            pendingBalance: 0,
+          },
+        })
+      }
+
+      // Credit the wallet balance
+      const updatedWallet = await tx.wallet.update({
+        where: { id: wallet.id },
+        data: {
+          balance: { increment: Number(deposit.amount) },
+        },
+      })
+
+      const newBalance = Number(updatedWallet.balance)
+
+      // Create wallet mutation record
+      await tx.walletMutation.create({
+        data: {
+          walletId: wallet.id,
+          type: 'credit',
+          amount: Number(deposit.amount),
+          balance: newBalance,
+          description: `Top Up saldo via Midtrans (${payment_type}) — Rp ${Number(deposit.amount).toLocaleString('id-ID')}`,
+          refType: 'deposit',
+          refId: deposit.id,
+        },
+      })
+
+      // Create notification for user
+      await tx.notification.create({
+        data: {
+          userId: deposit.user.id,
+          title: 'Top Up Berhasil!',
+          content: `Top up sebesar Rp ${Number(deposit.amount).toLocaleString('id-ID')} via Midtrans (${payment_type}) berhasil. Saldo Anda telah ditambahkan.`,
+          type: 'system',
+          refType: 'deposit',
+          refId: deposit.id,
+        },
+      })
+
+      logger.info({
+        depositId: deposit.id,
+        userId: deposit.user.id,
+        amount: Number(deposit.amount),
+        paymentType: payment_type,
+        newBalance,
+      }, 'Midtrans deposit: Wallet credited successfully')
+    }
+
+    // On failure/expiry: create notification
+    if (newDepositStatus === 'failed' || newDepositStatus === 'expired') {
+      await tx.notification.create({
+        data: {
+          userId: deposit.user.id,
+          title: newDepositStatus === 'expired' ? 'Top Up Kadaluarsa' : 'Top Up Gagal',
+          content: newDepositStatus === 'expired'
+            ? `Top up sebesar Rp ${Number(deposit.amount).toLocaleString('id-ID')} telah kadaluarsa. Silakan buat top up baru.`
+            : `Top up sebesar Rp ${Number(deposit.amount).toLocaleString('id-ID')} gagal diproses. Silakan coba lagi.`,
+          type: 'system',
+          refType: 'deposit',
+          refId: deposit.id,
+        },
+      })
+    }
+  })
+
+  logger.info({
+    depositId: deposit.id,
+    midtransOrderId: order_id,
+    transactionStatus: transaction_status,
+    paymentType: payment_type,
+    newDepositStatus,
+    transactionId: transaction_id,
+    transactionTime: transaction_time,
+  }, 'Midtrans deposit notification processed:')
+
+  return NextResponse.json({ success: true, message: 'Deposit notification processed' })
 }
