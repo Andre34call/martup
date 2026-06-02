@@ -146,6 +146,8 @@ export interface Order {
   totalAmount: number
   paymentMethod?: string
   paymentStatus: string
+  paymentProof?: string
+  paymentBankName?: string
   items: OrderItem[]
   shipping?: Shipping
   address: Address

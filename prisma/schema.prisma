@@ -324,6 +324,8 @@ model Order {
   cancelledAt     DateTime?
   cancelReason    String?
   note            String?
+  paymentProof    String?    // URL of payment proof image (escrow)
+  paymentBankName String?    // Bank name buyer transferred from (escrow)
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 

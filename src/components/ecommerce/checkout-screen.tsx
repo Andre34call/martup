@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import {
   MapPin, ChevronRight, Truck, Ticket, CreditCard, Wallet,
   Check, ShoppingBag, Clock, BadgeCheck, ArrowRight,
-  ShieldCheck, Info, Banknote, Smartphone, AlertTriangle
+  ShieldCheck, Info, Banknote, Smartphone, AlertTriangle, Landmark, Copy, CheckCircle
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -90,6 +90,7 @@ const PAYMENT_METHODS = [
   { id: "wallet", name: "MartUp Pay", icon: Wallet, description: "Bayar cepat dari saldo", color: "emerald" },
   { id: "midtrans", name: "Transfer & E-Wallet", icon: Smartphone, description: "VA, GoPay, OVO, Dana, ShopeePay", color: "blue" },
   { id: "card", name: "Kartu Kredit/Debit", icon: CreditCard, description: "Visa, Mastercard, JCB", color: "purple" },
+  { id: "escrow", name: "Transfer Bank (Escrow)", icon: Landmark, description: "Transfer ke rekening MartUp — dana aman sampai barang diterima", color: "amber" },
   { id: "cod", name: "Bayar di Tempat (COD)", icon: Banknote, description: "Bayar saat barang diterima", color: "orange" },
 ]
 
@@ -268,6 +269,9 @@ export function CheckoutScreen() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [shippingRatesBySeller, setShippingRatesBySeller] = useState<Record<string, ShippingOption[]>>({})
   const [isLoadingRates, setIsLoadingRates] = useState<Record<string, boolean>>({})
+  const [escrowBankAccounts, setEscrowBankAccounts] = useState<{ bankName: string; accountNumber: string; accountHolder: string }[]>([])
+  const [isLoadingBankAccounts, setIsLoadingBankAccounts] = useState(false)
+  const [copiedAccountId, setCopiedAccountId] = useState<string | null>(null)
 
   const checkedItems = getCheckedItems()
   const checkedTotal = getCheckedTotal()
@@ -355,6 +359,30 @@ export function CheckoutScreen() {
       fetchShippingRates(sellerId, defaultAddress.city, weight, group.seller.storeCity)
     })
   }, [defaultAddress?.city])
+
+  // Fetch MartUp bank accounts when escrow is selected
+  useEffect(() => {
+    if (selectedPayment === 'escrow' && escrowBankAccounts.length === 0) {
+      setIsLoadingBankAccounts(true)
+      apiClient.get<{ success: boolean; data: { bankName: string; accountNumber: string; accountHolder: string }[] }>('/api/settings/bank-accounts')
+        .then((res) => {
+          if (res.data && Array.isArray(res.data)) {
+            setEscrowBankAccounts(res.data)
+          }
+        })
+        .catch((err) => {
+          logger.warn({ component: 'checkout', err }, 'Failed to fetch bank accounts')
+        })
+        .finally(() => setIsLoadingBankAccounts(false))
+    }
+  }, [selectedPayment, escrowBankAccounts.length])
+
+  const handleCopyAccountNumber = (accountNumber: string, accountId: string) => {
+    navigator.clipboard?.writeText(accountNumber)
+    setCopiedAccountId(accountId)
+    showToast('Nomor rekening disalin!', 'success')
+    setTimeout(() => setCopiedAccountId(null), 2000)
+  }
 
   // Get shipping options for a seller (dynamic or fallback)
   const getShippingOptions = useCallback((sellerId: string): ShippingOption[] => {
@@ -606,6 +634,19 @@ export function CheckoutScreen() {
           showToast('Pembayaran wallet gagal. Pesanan tersimpan sebagai "Belum Bayar".', 'error')
           navigate('orders')
         }
+
+      } else if (selectedPayment === 'escrow') {
+        // Escrow payment: buyer transfers to MartUp bank account
+        // Order stays pending/unpaid — buyer uploads proof later from order detail
+        if (selectedVoucher) markVoucherUsed(selectedVoucher.id)
+
+        // Remove cart items (order is committed)
+        const checkedItemIds = checkedItems.map(i => i.id)
+        checkedItemIds.forEach(id => removeItem(id))
+
+        setIsProcessing(false)
+        showToast('Pesanan dibuat! Silakan transfer ke rekening MartUp dan upload bukti pembayaran.', 'success')
+        navigate('orders')
 
       } else if (selectedPayment === 'midtrans' || selectedPayment === 'card') {
         // Midtrans / Card payment: open Snap popup for each seller order
@@ -901,12 +942,14 @@ export function CheckoutScreen() {
                     method.color === 'emerald' ? 'bg-emerald-100 dark:bg-emerald-900/30' :
                     method.color === 'blue' ? 'bg-blue-100 dark:bg-blue-900/30' :
                     method.color === 'purple' ? 'bg-purple-100 dark:bg-purple-900/30' :
+                    method.color === 'amber' ? 'bg-amber-100 dark:bg-amber-900/30' :
                     'bg-orange-100 dark:bg-orange-900/30'
                   }`}>
                     <Icon className={`w-5 h-5 ${
                       method.color === 'emerald' ? 'text-emerald-600' :
                       method.color === 'blue' ? 'text-blue-600' :
                       method.color === 'purple' ? 'text-purple-600' :
+                      method.color === 'amber' ? 'text-amber-600' :
                       'text-orange-600'
                     }`} />
                   </div>
@@ -926,6 +969,66 @@ export function CheckoutScreen() {
               )
             })}
           </div>
+
+          {/* Escrow Bank Account Info */}
+          {selectedPayment === 'escrow' && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="space-y-3"
+            >
+              <div className="flex items-center gap-2 mt-2">
+                <ShieldCheck className="w-4 h-4 text-amber-500" />
+                <h4 className="text-sm font-bold text-foreground">Rekening Escrow MartUp</h4>
+              </div>
+
+              {isLoadingBankAccounts ? (
+                <div className="flex items-center justify-center gap-2 p-4">
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                    className="w-5 h-5 border-2 border-amber-500/30 border-t-amber-500 rounded-full"
+                  />
+                  <span className="text-xs text-muted-foreground">Memuat rekening...</span>
+                </div>
+              ) : escrowBankAccounts.length === 0 ? (
+                <div className="p-3 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                  <p className="text-xs text-amber-700 dark:text-amber-400">Rekening MartUp belum tersedia. Silakan hubungi admin.</p>
+                </div>
+              ) : (
+                escrowBankAccounts.map((acc, idx) => (
+                  <div key={idx} className="p-3 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <Landmark className="w-4 h-4 text-amber-600" />
+                      <span className="text-sm font-semibold text-foreground">{acc.bankName}</span>
+                    </div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-base font-mono font-bold text-foreground tracking-wider">{acc.accountNumber}</span>
+                      <button
+                        onClick={() => handleCopyAccountNumber(acc.accountNumber, `${idx}`)}
+                        className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors"
+                      >
+                        {copiedAccountId === `${idx}` ? (
+                          <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+                        ) : (
+                          <Copy className="w-3.5 h-3.5 text-amber-600" />
+                        )}
+                      </button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">a/n <span className="font-medium text-foreground">{acc.accountHolder}</span></p>
+                  </div>
+                ))
+              )}
+
+              <div className="flex items-start gap-2 p-2.5 bg-muted/50 rounded-lg">
+                <Info className="w-3.5 h-3.5 text-amber-500 mt-0.5 flex-shrink-0" />
+                <p className="text-[10px] text-muted-foreground leading-relaxed">
+                  Transfer sesuai total pesanan. Dana akan ditahan MartUp sampai Anda konfirmasi barang diterima.
+                </p>
+              </div>
+            </motion.div>
+          )}
         </motion.div>
 
         {/* Price Summary */}

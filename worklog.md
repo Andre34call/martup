@@ -2059,3 +2059,41 @@ Stage Summary:
 - 39 screenshot files removed from git tracking, added to .gitignore
 - Branch divergence resolved via force push
 - Production deployment triggered via Vercel auto-deploy
+
+---
+Task ID: 1
+Agent: code
+Task: Implement buyer-facing Complaint/Refund system (API + UI wiring)
+
+Work Log:
+- Read worklog.md, prisma schema, existing RefundScreen stub, api-client.ts, auth-middleware.ts, admin complaints route, and order store slice
+- Created `src/app/api/complaints/route.ts` with GET and POST handlers:
+  - **GET /api/complaints**: Requires `verifyAuth`, queries complaints where userId = authenticated user, supports `?status=open,processing` comma-separated filter, includes order relation (orderNumber, totalAmount, items), returns `{ success: true, data: complaints[] }`
+  - **POST /api/complaints**: Requires `verifyAuth`, validates orderId (required), type (required: 'refund' | 'return' | 'complain'), reason (required), description (optional), images (optional JSON array). Checks order belongs to user, order status is eligible (delivered/paid/processing/shipped), no existing complaint for the order (unique constraint on orderId). Creates Complaint with status 'open'. Returns `{ success: true, data: complaint }` with status 201
+  - Both handlers use `sanitizeInput` for user-generated content, `serializeDecimal` for Prisma Decimal fields, `checkRateLimit` for rate limiting, and `logger` for error logging
+- Rewired `src/components/ecommerce/screens/refund-screen.tsx` from stub to real API integration:
+  - Replaced hardcoded empty arrays with state fetched from `GET /api/complaints`
+  - Active tab fetches `?status=open,processing` for active complaints
+  - History tab fetches `?status=resolved,rejected` for past complaints
+  - Added `useCallback` and `useEffect` for data fetching on mount
+  - Order dropdown now populated from `useAppStore().orders` — only shows delivered/paid orders that don't already have complaints (filters out orderIds in activeRefunds + refundHistory)
+  - On form submit: uploads evidence images via `apiClient.upload('/api/upload', formData)`, then `apiClient.post('/api/complaints', body)` to create the complaint
+  - Added form state: selectedOrderId, selectedType, selectedReason, description
+  - Added loading states: isLoadingActive, isLoadingHistory, isSubmitting with Loader2 spinner
+  - Added empty states via `EmptyState` component for both tabs
+  - Mapped complaint statuses to Indonesian labels: open→"Diajukan", processing→"Diproses", resolved→"Selesai", rejected→"Ditolak"
+  - Added STATUS_COLORS map for consistent badge styling
+  - Added COMPLAINT_TYPES (refund/return/complain) and REASON_OPTIONS dropdowns
+  - History cards show resolution text and evidence images (parsed from JSON)
+  - Defined type aliases at top of file (ComplaintItem, ComplaintsResponse, ComplaintCreateResponse, UploadResponse) to avoid TSX generic parsing ambiguity
+  - Used `apiClient.get`, `apiClient.post`, `apiClient.upload` with `ApiClientError` handling throughout
+  - Preserved existing UI structure, styling, and AnimatePresence patterns
+- Lint passes ✅
+- Dev server compiles successfully ✅
+
+Stage Summary:
+- Created 1 new API route file (`src/app/api/complaints/route.ts`) with GET + POST handlers
+- Rewired RefundScreen from stub (hardcoded empty arrays, no API calls) to full API integration
+- Buyer can now: view active complaints, view complaint history, create new complaints with evidence uploads
+- All API calls use `apiClient` with CSRF protection and auth headers
+- Zero breaking changes — lint passes, dev server OK

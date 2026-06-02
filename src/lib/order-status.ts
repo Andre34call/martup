@@ -191,6 +191,46 @@ export async function updateOrderStatus(params: {
       if (status === 'paid') {
         orderUpdateData.paymentStatus = 'paid'
         orderUpdateData.paidAt = new Date()
+
+        // For escrow orders: move funds to seller's pendingBalance (held until delivery)
+        if (order.paymentMethod?.toLowerCase().includes('escrow')) {
+          const platformCommissionRate = await getCommissionRate()
+          const sellerCommissionRate = Number(order.seller.commissionRate)
+          const commissionRate = platformCommissionRate || sellerCommissionRate || 0.05
+          const subtotal = Number(order.subtotal)
+          const commissionAmount = Math.round(subtotal * commissionRate)
+          const sellerHoldAmount = subtotal - commissionAmount
+
+          // Find or create seller's wallet
+          let sellerWallet = await tx.wallet.findUnique({
+            where: { sellerId: order.sellerId },
+          })
+
+          if (!sellerWallet) {
+            sellerWallet = await tx.wallet.create({
+              data: {
+                userId: order.seller.userId,
+                sellerId: order.sellerId,
+                balance: 0,
+                holdBalance: 0,
+                pendingBalance: 0,
+              },
+            })
+          }
+
+          // Add to pendingBalance (escrow hold)
+          await tx.wallet.update({
+            where: { id: sellerWallet.id },
+            data: { pendingBalance: { increment: sellerHoldAmount } },
+          })
+
+          logger.info({
+            orderId: order.id,
+            sellerId: order.sellerId,
+            holdAmount: sellerHoldAmount,
+            commissionAmount,
+          }, 'Escrow funds held in seller pendingBalance')
+        }
       } else if (status === 'shipped') {
         orderUpdateData.shippedAt = new Date()
       } else if (status === 'delivered') {

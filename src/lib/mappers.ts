@@ -81,6 +81,8 @@ export function mapOrder(raw: any, currentUser?: User | null): Order {
     totalAmount: raw.totalAmount,
     paymentMethod: raw.paymentMethod || undefined,
     paymentStatus: raw.paymentStatus,
+    paymentProof: raw.paymentProof || undefined,
+    paymentBankName: raw.paymentBankName || undefined,
     items: (raw.items || []).map((item: any) => ({
       id: item.id,
       productId: item.productId,
