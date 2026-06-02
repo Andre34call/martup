@@ -292,7 +292,13 @@ export interface Notification {
 
 export interface ChatRoom {
   id: string
-  seller: Seller
+  seller?: Seller        // For seller chat rooms (backward compat)
+  otherUser?: {          // For any user chat rooms (user-to-user)
+    id: string
+    name: string
+    avatar?: string
+    isVerified: boolean
+  }
   lastMessage: string
   lastMessageTime: string
   unreadCount: number

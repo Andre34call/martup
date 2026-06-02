@@ -1412,7 +1412,7 @@ export function SellerChat() {
                     <div className="flex items-center gap-3">
                       <div className="relative">
                         <div className="w-10 h-10 rounded-full bg-emerald-500 text-white font-bold flex items-center justify-center">
-                          {room.seller?.storeName?.charAt(0) || '?'}
+                          {room.otherUser?.name?.charAt(0) || room.seller?.storeName?.charAt(0) || '?'}
                         </div>
                         {room.unreadCount > 0 && (
                           <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-1">
@@ -1422,7 +1422,7 @@ export function SellerChat() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between">
-                          <p className="text-sm font-medium text-foreground">{room.seller?.storeName || 'Pembeli'}</p>
+                          <p className="text-sm font-medium text-foreground">{room.otherUser?.name || room.seller?.storeName || 'Pembeli'}</p>
                           <p className="text-[10px] text-muted-foreground">{formatRelativeTime(room.lastMessageTime)}</p>
                         </div>
                         <p className="text-xs text-muted-foreground truncate mt-0.5">{room.lastMessage}</p>

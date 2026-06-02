@@ -4,12 +4,13 @@ import { motion, AnimatePresence } from "framer-motion"
 import { useAppStore } from "@/lib/store"
 import { formatPrice, formatRelativeTime } from "@/lib/utils"
 import { PageHeader, EmptyState, SearchBar } from "./shared"
+import { getChatRoomDisplayName, getChatRoomAvatar } from "@/lib/store/chat"
 import type { ChatRoom, ChatMessage } from "@/lib/types"
 import { useState, useMemo, useCallback, useRef, useEffect } from "react"
 import {
   ArrowLeft, Search, Phone, MoreVertical, Send, Paperclip,
   Image as ImageIcon, MessageCircle, ChevronRight, Check, CheckCheck,
-  Store, Smile
+  Store, Smile, User
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -24,7 +25,10 @@ function ChatRoomItem({ room, onTap }: { room: ChatRoom; onTap: () => void }) {
     "bg-violet-500",
     "bg-cyan-500",
   ]
-  const colorIndex = room.seller.storeName.charCodeAt(0) % colors.length
+  const displayName = getChatRoomDisplayName(room)
+  const avatarUrl = getChatRoomAvatar(room)
+  const colorIndex = displayName.charCodeAt(0) % colors.length
+  const isSeller = !!room.seller
 
   return (
     <motion.div
@@ -34,19 +38,19 @@ function ChatRoomItem({ room, onTap }: { room: ChatRoom; onTap: () => void }) {
     >
       {/* Avatar */}
       <div className="relative flex-shrink-0">
-        {room.seller.storeAvatar ? (
+        {avatarUrl ? (
           <img
-            src={room.seller.storeAvatar}
-            alt={room.seller.storeName}
+            src={avatarUrl}
+            alt={displayName}
             className="w-12 h-12 rounded-full object-cover"
             onError={(e) => { const img = e.currentTarget as HTMLImageElement; img.style.display = 'none'; if (img.nextElementSibling) (img.nextElementSibling as HTMLElement).style.display = 'flex' }}
           />
         ) : null}
         <div
           className={`w-12 h-12 rounded-full ${colors[colorIndex]} text-white font-bold items-center justify-center`}
-          style={{ display: room.seller.storeAvatar ? 'none' : 'flex' }}
+          style={{ display: avatarUrl ? 'none' : 'flex' }}
         >
-          {room.seller.storeName.charAt(0)}
+          {displayName.charAt(0)}
         </div>
         {room.unreadCount > 0 && (
           <span className="absolute -top-0.5 -right-0.5 w-5 h-5 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold border-2 border-background">
@@ -58,7 +62,12 @@ function ChatRoomItem({ room, onTap }: { room: ChatRoom; onTap: () => void }) {
       {/* Content */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
-          <h4 className="text-sm font-semibold text-foreground truncate">{room.seller.storeName}</h4>
+          <div className="flex items-center gap-1.5 min-w-0">
+            <h4 className="text-sm font-semibold text-foreground truncate">{displayName}</h4>
+            {isSeller && (
+              <Store className="w-3.5 h-3.5 text-orange-500 flex-shrink-0" />
+            )}
+          </div>
           <span className="text-[10px] text-muted-foreground flex-shrink-0">
             {formatRelativeTime(room.lastMessageTime)}
           </span>
@@ -123,6 +132,10 @@ function ChatRoomView({ room, onBack }: { room: ChatRoom; onBack: () => void }) 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
+  const displayName = getChatRoomDisplayName(room)
+  const avatarUrl = getChatRoomAvatar(room)
+  const isSeller = !!room.seller
+
   // Fetch messages from API when entering a chat room
   useEffect(() => {
     if (room?.id) {
@@ -175,10 +188,15 @@ function ChatRoomView({ room, onBack }: { room: ChatRoom; onBack: () => void }) 
             </motion.button>
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-full bg-emerald-500 text-white font-bold flex items-center justify-center text-xs">
-                {room.seller.storeName.charAt(0)}
+                {displayName.charAt(0)}
               </div>
               <div>
-                <p className="text-sm font-semibold text-foreground">{room.seller.storeName}</p>
+                <div className="flex items-center gap-1">
+                  <p className="text-sm font-semibold text-foreground">{displayName}</p>
+                  {isSeller && (
+                    <Store className="w-3.5 h-3.5 text-orange-500" />
+                  )}
+                </div>
                 <p className={`text-[10px] ${isSocketConnected ? 'text-emerald-500' : 'text-amber-500'}`}>
                   {isSocketConnected ? 'Online' : 'Connecting...'}
                 </p>
@@ -227,7 +245,7 @@ function ChatRoomView({ room, onBack }: { room: ChatRoom; onBack: () => void }) 
                 {/* Avatar placeholder */}
                 {!isMine && (
                   <div className={`w-7 h-7 rounded-full flex-shrink-0 ${showAvatar ? "bg-emerald-500 text-white font-bold flex items-center justify-center text-[10px]" : "invisible"}`}>
-                    {showAvatar ? room.seller.storeName.charAt(0) : ""}
+                    {showAvatar ? displayName.charAt(0) : ""}
                   </div>
                 )}
 
@@ -354,9 +372,11 @@ export function ChatScreen() {
     if (!searchQuery.trim()) return chatRooms
     const q = searchQuery.toLowerCase()
     return chatRooms.filter(
-      (r) =>
-        r.seller.storeName.toLowerCase().includes(q) ||
-        r.lastMessage.toLowerCase().includes(q)
+      (r) => {
+        const name = getChatRoomDisplayName(r)
+        return name.toLowerCase().includes(q) ||
+          r.lastMessage.toLowerCase().includes(q)
+      }
     )
   }, [chatRooms, searchQuery])
 
@@ -418,7 +438,7 @@ export function ChatScreen() {
                 <EmptyState
                   icon={<MessageCircle className="w-10 h-10 text-muted-foreground" />}
                   title="Belum Ada Chat"
-                  subtitle="Mulai chat dengan seller untuk bertanya tentang produk"
+                  subtitle="Mulai chat dengan seller atau user lain"
                   actionLabel="Cari Produk"
                 />
               </motion.div>

@@ -273,7 +273,7 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
           <button
             className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-muted transition-colors"
             onClick={() => {
-              const room = chatRooms.find(r => r.seller.id === order.sellerId)
+              const room = chatRooms.find(r => r.seller?.id === order.sellerId || r.otherUser?.id === order.sellerId)
               if (room) { setSelectedChatRoom(room.id); navigate("chat-room") }
               else { showToast("Chat belum tersedia", "info") }
             }}
@@ -417,7 +417,7 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
               <button
                 className="text-xs text-emerald-600 font-medium flex items-center gap-0.5"
                 onClick={() => {
-                  const room = chatRooms.find(r => r.seller.id === order.sellerId)
+                  const room = chatRooms.find(r => r.seller?.id === order.sellerId || r.otherUser?.id === order.sellerId)
                   if (room) { setSelectedChatRoom(room.id); navigate("chat-room") }
                   else { showToast("Chat belum tersedia", "info") }
                 }}

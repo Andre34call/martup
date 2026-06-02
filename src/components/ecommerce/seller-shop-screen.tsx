@@ -159,7 +159,7 @@ export function SellerShopScreen() {
                 size="sm"
                 className="flex-1 h-9 text-xs rounded-lg"
                 onClick={() => {
-                  const chatRoom = chatRooms.find(r => r.seller.id === selectedSellerId)
+                  const chatRoom = chatRooms.find(r => r.seller?.id === selectedSellerId || r.otherUser?.id === selectedSellerId)
                   if (chatRoom) setSelectedChatRoom(chatRoom.id)
                   navigate('chat-room')
                 }}

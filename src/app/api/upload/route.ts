@@ -4,8 +4,11 @@ import { UPLOAD_LIMITS } from '@/lib/upload-limits'
 import { logger } from '@/lib/logger'
 
 // ==================== ROUTE SEGMENT CONFIG ====================
-// Increase max duration for large file uploads (videos up to 100MB)
+// Increase max duration for large file uploads (videos up to 250MB)
 export const maxDuration = 300 // 5 minutes
+
+// Allow large request bodies for file uploads
+export const bodySizeLimit = '300mb'
 
 // ==================== CONFIG ====================
 

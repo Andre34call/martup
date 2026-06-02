@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { verifyAuth, checkRateLimit } from '@/lib/auth-middleware'
 
 import { logger } from '@/lib/logger'
+
 // GET /api/chat/rooms - List chat rooms for authenticated user
 export async function GET(request: NextRequest) {
   try {
@@ -30,12 +31,18 @@ export async function GET(request: NextRequest) {
                     id: true,
                     name: true,
                     avatar: true,
+                    isVerified: true,
                     seller: {
                       select: {
                         id: true,
                         storeName: true,
+                        storeSlug: true,
                         storeAvatar: true,
                         isVerified: true,
+                        isPremium: true,
+                        rating: true,
+                        totalSales: true,
+                        totalProducts: true,
                       },
                     },
                   },
@@ -90,7 +97,7 @@ export async function GET(request: NextRequest) {
           })
         }
 
-        // Build other user info with seller data
+        // Build other user info — supports both seller and non-seller users
         const otherUser = otherParticipant?.user || null
         const sellerInfo = otherUser?.seller || null
 
@@ -104,6 +111,7 @@ export async function GET(request: NextRequest) {
                 id: otherUser.id,
                 name: otherUser.name,
                 avatar: otherUser.avatar,
+                isVerified: otherUser.isVerified,
                 seller: sellerInfo,
               }
             : null,
@@ -138,6 +146,10 @@ export async function GET(request: NextRequest) {
 }
 
 // POST /api/chat/rooms - Create or get existing chat room
+// Supports both buyer→seller and user→user chat:
+//   - sellerId: creates buyer→seller room (legacy, backward compatible)
+//   - userId: creates user→user direct chat (new feature)
+//   - productId: optional, links room to a product context
 export async function POST(request: NextRequest) {
   try {
     // SECURITY: Require authentication
@@ -162,36 +174,59 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { sellerId, productId } = body
+    const { sellerId, userId: targetUserId, productId } = body
 
-    if (!sellerId) {
+    // Determine the other user's ID
+    let otherUserId: string
+    let roomContext: 'seller' | 'user' = 'user'
+
+    if (targetUserId) {
+      // New: Direct user-to-user chat
+      otherUserId = targetUserId
+      roomContext = 'user'
+    } else if (sellerId) {
+      // Legacy: Buyer→Seller chat (sellerId is the Seller record ID, not userId)
+      roomContext = 'seller'
+      const seller = await db.seller.findUnique({
+        where: { id: sellerId },
+        include: {
+          user: {
+            select: { id: true, name: true, avatar: true, isActive: true },
+          },
+        },
+      })
+
+      if (!seller || !seller.user.isActive) {
+        return NextResponse.json(
+          { success: false, error: 'Seller not found or inactive' },
+          { status: 404 }
+        )
+      }
+      otherUserId = seller.userId
+    } else {
       return NextResponse.json(
-        { success: false, error: 'sellerId is required' },
+        { success: false, error: 'sellerId or userId is required' },
         { status: 400 }
       )
     }
 
     // SECURITY: Cannot create chat room with yourself
-    if (sellerId === authResult.user.id) {
+    if (otherUserId === authResult.user.id) {
       return NextResponse.json(
         { success: false, error: 'Cannot create chat room with yourself' },
         { status: 400 }
       )
     }
 
-    // Verify the seller exists
-    const seller = await db.seller.findUnique({
-      where: { id: sellerId },
-      include: {
-        user: {
-          select: { id: true, name: true, avatar: true, isActive: true },
-        },
-      },
+    // Verify the target user exists and is active
+    const targetUser = await db.user.findUnique({
+      where: { id: otherUserId },
+      select: { id: true, name: true, avatar: true, isActive: true, isVerified: true },
     })
 
-    if (!seller || !seller.user.isActive) {
+    if (!targetUser || !targetUser.isActive) {
       return NextResponse.json(
-        { success: false, error: 'Seller not found or inactive' },
+        { success: false, error: 'User not found or inactive' },
         { status: 404 }
       )
     }
@@ -209,8 +244,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const buyerId = authResult.user.id
-    const sellerUserId = seller.userId
+    const myId = authResult.user.id
 
     // Check if a room already exists between these two users
     // We find rooms where both users are participants
@@ -218,7 +252,7 @@ export async function POST(request: NextRequest) {
       where: {
         participants: {
           every: {
-            userId: { in: [buyerId, sellerUserId] },
+            userId: { in: [myId, otherUserId] },
           },
         },
       },
@@ -228,17 +262,26 @@ export async function POST(request: NextRequest) {
     })
 
     // Filter to find a room where exactly these two users are participants
+    const sortedIds = [myId, otherUserId].sort()
     const existingRoom = existingRooms.find((room) => {
       const participantIds = room.participants.map((p) => p.userId).sort()
       return (
         participantIds.length === 2 &&
-        participantIds[0] === [buyerId, sellerUserId].sort()[0] &&
-        participantIds[1] === [buyerId, sellerUserId].sort()[1]
+        participantIds[0] === sortedIds[0] &&
+        participantIds[1] === sortedIds[1]
       )
     })
 
     if (existingRoom) {
-      // Return the existing room
+      // Return the existing room with other user info
+      const otherUserSeller = await db.seller.findUnique({
+        where: { userId: otherUserId },
+        select: {
+          id: true, storeName: true, storeSlug: true, storeAvatar: true,
+          isVerified: true, isPremium: true, rating: true, totalSales: true, totalProducts: true,
+        },
+      })
+
       return NextResponse.json({
         success: true,
         data: {
@@ -247,6 +290,13 @@ export async function POST(request: NextRequest) {
           createdAt: existingRoom.createdAt,
           updatedAt: existingRoom.updatedAt,
           isNew: false,
+          otherUser: {
+            id: targetUser.id,
+            name: targetUser.name,
+            avatar: targetUser.avatar,
+            isVerified: targetUser.isVerified,
+            seller: otherUserSeller,
+          },
         },
       })
     }
@@ -257,8 +307,8 @@ export async function POST(request: NextRequest) {
         productId: productId || null,
         participants: {
           create: [
-            { userId: buyerId },
-            { userId: sellerUserId },
+            { userId: myId },
+            { userId: otherUserId },
           ],
         },
       },
@@ -270,12 +320,18 @@ export async function POST(request: NextRequest) {
                 id: true,
                 name: true,
                 avatar: true,
+                isVerified: true,
                 seller: {
                   select: {
                     id: true,
                     storeName: true,
+                    storeSlug: true,
                     storeAvatar: true,
                     isVerified: true,
+                    isPremium: true,
+                    rating: true,
+                    totalSales: true,
+                    totalProducts: true,
                   },
                 },
               },
@@ -284,6 +340,10 @@ export async function POST(request: NextRequest) {
         },
       },
     })
+
+    // Build other user info for response
+    const otherParticipant = newRoom.participants.find(p => p.userId === otherUserId)
+    const otherUserInfo = otherParticipant?.user
 
     return NextResponse.json(
       {
@@ -294,6 +354,15 @@ export async function POST(request: NextRequest) {
           createdAt: newRoom.createdAt,
           updatedAt: newRoom.updatedAt,
           isNew: true,
+          otherUser: otherUserInfo
+            ? {
+                id: otherUserInfo.id,
+                name: otherUserInfo.name,
+                avatar: otherUserInfo.avatar,
+                isVerified: otherUserInfo.isVerified,
+                seller: otherUserInfo.seller,
+              }
+            : null,
         },
       },
       { status: 201 }

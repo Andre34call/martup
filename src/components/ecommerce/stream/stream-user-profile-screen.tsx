@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { ArrowLeft, Heart, MessageCircle, Eye, Play, Pause, Package, Store, Verified, Mail, Calendar, Grid3X3, Share2, Bookmark, MoreHorizontal, Lock, ShoppingBag } from "lucide-react"
+import { ArrowLeft, Heart, MessageCircle, Eye, Play, Pause, Package, Store, Verified, Mail, Calendar, Grid3X3, Share2, Bookmark, MoreHorizontal, Lock, ShoppingBag, Send } from "lucide-react"
 import { useAppStore } from "@/lib/store"
 import { apiClient } from "@/lib/api-client"
 import { formatRelativeTime, formatPrice, truncateText } from "@/lib/utils"
@@ -199,6 +199,11 @@ export function StreamUserProfileScreen() {
   const showToast = useAppStore(s => s.showToast)
   const currentUser = useAppStore(s => s.currentUser)
   const currentUserId = currentUser?.id || null
+  const createDirectChat = useAppStore(s => s.createDirectChat)
+  const setSelectedChatRoom = useAppStore(s => s.setSelectedChatRoom)
+
+  // Chat initiation state
+  const [isCreatingChat, setIsCreatingChat] = useState(false)
 
   // Data state
   const [profileData, setProfileData] = useState<ProfileResponse["data"] | null>(null)
@@ -246,6 +251,25 @@ export function StreamUserProfileScreen() {
   useEffect(() => {
     fetchProfile()
   }, [fetchProfile])
+
+  // ==================== START CHAT ====================
+  const handleStartChat = useCallback(async () => {
+    if (!selectedUserId || selectedUserId === currentUserId) return
+    setIsCreatingChat(true)
+    try {
+      const roomId = await createDirectChat(selectedUserId)
+      if (roomId) {
+        setSelectedChatRoom(roomId)
+        navigate("chat-room")
+      } else {
+        showToast("Gagal membuat chat", "error")
+      }
+    } catch {
+      showToast("Gagal membuat chat", "error")
+    } finally {
+      setIsCreatingChat(false)
+    }
+  }, [selectedUserId, currentUserId, createDirectChat, setSelectedChatRoom, navigate, showToast])
 
   // Derived data
   const user = profileData?.user
@@ -507,6 +531,26 @@ export function StreamUserProfileScreen() {
               <span className="text-[11px] text-muted-foreground font-medium">Suka</span>
             </motion.div>
           </div>
+
+          {/* Chat button — visible if viewing another user's profile */}
+          {user && currentUserId && user.id !== currentUserId && (
+            <motion.button
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={handleStartChat}
+              disabled={isCreatingChat}
+              className="mt-4 flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 active:from-emerald-700 active:to-teal-700 text-white rounded-xl px-6 py-2.5 text-sm font-semibold shadow-md shadow-emerald-500/20 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {isCreatingChat ? (
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <Send className="w-4 h-4" />
+              )}
+              {isCreatingChat ? 'Membuka Chat...' : 'Chat'}
+            </motion.button>
+          )}
         </div>
       </motion.div>
 

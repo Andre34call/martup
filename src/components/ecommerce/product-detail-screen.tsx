@@ -892,7 +892,7 @@ export function ProductDetailScreen() {
           <motion.button
             whileTap={{ scale: 0.95 }}
             onClick={async () => {
-              const room = chatRooms.find(r => r.seller.id === product.sellerId)
+              const room = chatRooms.find(r => r.seller?.id === product.sellerId || r.otherUser?.id === product.sellerId)
               if (room) {
                 setSelectedChatRoom(room.id)
               } else {

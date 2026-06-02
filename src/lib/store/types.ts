@@ -74,6 +74,7 @@ export interface ChatSlice {
   fetchChatMessages: (roomId: string) => Promise<void>
   sendChatMessage: (roomId: string, content: string, type?: string) => Promise<void>
   createChatRoom: (sellerId: string, productId?: string) => Promise<string | null>
+  createDirectChat: (userId: string) => Promise<string | null>
   connectSocket: () => void
   disconnectSocket: () => void
   emitTyping: (roomId: string, isTyping: boolean) => void

@@ -14,8 +14,8 @@ import { getCsrfToken, ensureCsrfToken, fetchFreshCsrfToken } from '@/lib/csrf-c
 
 // Default timeout for API requests (15 seconds)
 const API_TIMEOUT_MS = 15_000
-// Longer timeout for file uploads (60 seconds)
-const UPLOAD_TIMEOUT_MS = 60_000
+// Longer timeout for file uploads (5 minutes — supports 250MB video uploads on slower connections)
+const UPLOAD_TIMEOUT_MS = 300_000
 
 /**
  * Fetch with AbortController timeout — prevents requests from hanging indefinitely.
