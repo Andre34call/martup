@@ -2460,3 +2460,31 @@ Stage Summary:
 - View tracking works both implicitly (product detail GET) and explicitly (/view POST)
 - Admin can manage product promotions with duration and seller notifications
 - Zero breaking changes — lint passes ✅
+---
+Task ID: viral-promoted-system
+Agent: Main Agent
+Task: Implement viral/trending product algorithm + admin promoted products (IKLAN) system
+
+Work Log:
+- Analyzed current product display system: only `createdAt DESC` sort, `isFeatured` unused, no view tracking
+- Updated Prisma schema: added `viewCount`, `viralScore`, `isPromoted`, `promotedUntil`, `promotedBy` fields + indexes
+- Updated Product TypeScript type with new fields
+- Updated product store mapping to include viewCount, viralScore, isPromoted, promotedUntil
+- Updated GET /api/products: supports sort=viral (default), newest, popular, promoted + isPromoted/isFeatured filters
+- Viral sort uses raw SQL: `sold*3 + COALESCE(rating,0)*reviewCount*5 + viewCount*0.1` then fetches full products with Prisma
+- Created POST /api/products/[id]/view: rate-limited explicit view tracking, increments viewCount + recalculates viralScore
+- Updated GET /api/products/[id]: added non-blocking view tracking (fire-and-forget with rate limit per IP)
+- Created PUT /api/admin/products/promote: admin-only, set/unset promotion with configurable duration (7/14/30/60 days)
+- Updated HomeScreen: new "Promo Pilihan 🎯" (IKLAN) horizontal section + "Lagi Viral 🔥" trending section
+- Updated ProductCard: IKLAN badge (amber) for promoted products, VIRAL badge (red gradient) for trending products
+- Updated Admin Products: promote/unpromote button, duration picker, "Promosi" filter, promoted badge on cards
+- Auto-notification to sellers when products are promoted/unpromoted
+- Lint passes, committed as 135c760, pushed to production
+
+Stage Summary:
+- Products on home page now sorted by viral score by default (not just newest)
+- Admin can promote products as paid ads with IKLAN badge visible on home page
+- Viral algorithm considers: sold count (3x weight), rating * review count (5x), view count (0.1x)
+- View tracking: automatic on product detail page + explicit POST endpoint
+- Promoted products auto-expire based on promotedUntil timestamp
+- Deployed to production as commit 135c760
