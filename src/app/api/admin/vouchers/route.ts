@@ -156,7 +156,7 @@ export async function PUT(request: NextRequest) {
     if (name !== undefined) updateData.name = name
     if (description !== undefined) updateData.description = description
     if (type !== undefined) {
-      if (!['percentage', 'fixed'].includes(type)) {
+      if (!['percentage', 'fixed'].includes(type as string)) {
         return NextResponse.json(
           { success: false, error: 'Invalid voucher type. Must be "percentage" or "fixed"' },
           { status: 400 }

@@ -115,7 +115,7 @@ export async function PUT(request: NextRequest) {
     // Status & featured flags
     if (status !== undefined) {
       const validStatuses = ['active', 'draft', 'blocked', 'pending', 'rejected']
-      if (!validStatuses.includes(status)) {
+      if (!validStatuses.includes(status as string)) {
         return NextResponse.json({ success: false, error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` }, { status: 400 })
       }
       updateData.status = status
