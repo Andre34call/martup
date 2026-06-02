@@ -38,29 +38,53 @@ const VALIDATION_RULES: Record<string, { min: number; max: number; label: string
 
 const SETTINGS_KEY = 'platform_settings'
 
+interface BankAccount {
+  bankName: string
+  accountNumber: string
+  accountHolder: string
+}
+
+function parseBankAccounts(value: unknown): BankAccount[] {
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value)
+      if (Array.isArray(parsed)) return parsed
+    } catch { /* ignore */ }
+  }
+  if (Array.isArray(value)) return value
+  return []
+}
+
 async function readSettings(): Promise<Record<string, number | boolean | string>> {
   try {
     const row = await db.platformSetting.findUnique({ where: { key: SETTINGS_KEY } })
     if (row) {
       const saved = JSON.parse(row.value) as Record<string, number | boolean | string>
-      const merged = { ...DEFAULT_SETTINGS, ...saved }
-      // Parse martupBankAccounts from JSON string if stored as string
-      if (typeof merged.martupBankAccounts === 'string') {
-        try {
-          merged.martupBankAccounts = JSON.parse(merged.martupBankAccounts as string)
-        } catch {
-          merged.martupBankAccounts = []
+      // Parse martupBankAccounts from JSON string to array before merging
+      const bankAccounts = parseBankAccounts(saved.martupBankAccounts)
+      const result: Record<string, number | boolean | string> = { ...DEFAULT_SETTINGS }
+      for (const [key, value] of Object.entries(saved)) {
+        if (key === 'martupBankAccounts') {
+          result[key] = JSON.stringify(bankAccounts)
+        } else if (key in DEFAULT_SETTINGS) {
+          result[key] = value
         }
       }
-      if (!Array.isArray(merged.martupBankAccounts)) {
-        merged.martupBankAccounts = []
-      }
-      return merged
+      return result
     }
   } catch {
     // If DB read fails or JSON is corrupted, return defaults
   }
   return { ...DEFAULT_SETTINGS }
+}
+
+// Helper to build the API response with martupBankAccounts as a proper array
+function settingsToResponse(settings: Record<string, number | boolean | string>) {
+  const { martupBankAccounts, ...rest } = settings
+  return {
+    ...rest,
+    martupBankAccounts: parseBankAccounts(martupBankAccounts),
+  }
 }
 
 async function writeSettings(settings: Record<string, number | boolean | string>): Promise<void> {
@@ -80,7 +104,7 @@ export async function GET(request: NextRequest) {
 
     const settings = await readSettings()
 
-    return NextResponse.json({ success: true, data: settings })
+    return NextResponse.json({ success: true, data: settingsToResponse(settings) })
   } catch (error: unknown) {
     // Error logged above — generic message returned to client
     logger.error({ err: error }, 'Admin settings GET error')
@@ -186,7 +210,7 @@ export async function PUT(request: NextRequest) {
     const merged = { ...current, ...updates }
     await writeSettings(merged)
 
-    return NextResponse.json({ success: true, data: merged })
+    return NextResponse.json({ success: true, data: settingsToResponse(merged) })
   } catch (error: unknown) {
     // Error logged above — generic message returned to client
     logger.error({ err: error }, 'Admin settings PUT error')
