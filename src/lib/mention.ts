@@ -43,8 +43,8 @@ export async function createMentionNotifications(params: {
       isActive: true,
       id: { not: authorUserId },
       OR: [
-        { username: { in: mentionNames } },
-        { name: { in: mentionNames } },
+        { username: { in: mentionNames, mode: 'insensitive' } },
+        { name: { in: mentionNames, mode: 'insensitive' } },
       ],
     },
     select: { id: true, name: true, username: true },

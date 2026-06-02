@@ -84,12 +84,12 @@ export async function POST(request: NextRequest) {
     // Fallback: case-insensitive search if exact match not found
     if (!user && email !== normalizedEmail) {
       user = await db.user.findFirst({
-        where: { email: { contains: email } },
+        where: { email: { equals: email, mode: 'insensitive' } },
         include: {
           seller: true,
           wallet: true,
         },
-      })
+      }) as any
     }
 
     if (!user) {

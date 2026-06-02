@@ -434,7 +434,8 @@ export async function POST(request: NextRequest) {
         const voucher = await tx.voucher.findFirst({
           where: {
             code: {
-              equals: voucherCode.toUpperCase(),
+              equals: voucherCode,
+              mode: 'insensitive',
             },
           },
         })

@@ -43,10 +43,10 @@ export async function POST(request: NextRequest) {
     })
 
     if (!user) {
-      // Try case-insensitive (SQLite doesn't support Prisma mode:insensitive, use contains as fallback)
+      // Try case-insensitive lookup (Prisma mode:insensitive for PostgreSQL)
       const userByInsensitive = await db.user.findFirst({
-        where: { email: { contains: normalizedEmail } },
-      })
+        where: { email: { equals: normalizedEmail, mode: 'insensitive' } },
+      }) as any
 
       return NextResponse.json({
         found: false,
