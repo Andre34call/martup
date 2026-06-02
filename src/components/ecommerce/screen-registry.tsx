@@ -45,6 +45,8 @@ const RefundScreen = lazy(() => import('@/components/ecommerce/missing-screens')
 const HelpScreen = lazy(() => import('@/components/ecommerce/missing-screens').then(m => ({ default: m.HelpScreen })))
 const FollowedStoresScreen = lazy(() => import('@/components/ecommerce/missing-screens').then(m => ({ default: m.FollowedStoresScreen })))
 const DepositScreen = lazy(() => import('@/components/ecommerce/missing-screens').then(m => ({ default: m.DepositScreen })))
+const DepositHistoryScreen = lazy(() => import('@/components/ecommerce/missing-screens').then(m => ({ default: m.DepositHistoryScreen })))
+const DepositDetailScreen = lazy(() => import('@/components/ecommerce/missing-screens').then(m => ({ default: m.DepositDetailScreen })))
 const WithdrawScreen = lazy(() => import('@/components/ecommerce/missing-screens').then(m => ({ default: m.WithdrawScreen })))
 
 // --- Seller Screens ---
@@ -120,6 +122,8 @@ const screenMap: Record<ScreenName, ScreenEntry> = {
   'order-tracking': { component: OrderScreen },
   wallet: { component: WalletScreen },
   deposit: { component: DepositScreen },
+  'deposit-history': { component: DepositHistoryScreen },
+  'deposit-detail': { component: DepositDetailScreen },
   withdraw: { component: WithdrawScreen },
   chat: { component: ChatScreen },
   'chat-room': { component: ChatRoomScreen },
@@ -204,7 +208,7 @@ export const ADMIN_SCREENS: readonly ScreenName[] = [
 // Sub-screens that should hide the bottom nav (they have their own back navigation headers)
 export const SUB_SCREENS: readonly ScreenName[] = [
   'product-detail', 'seller-shop', 'checkout', 'review', 'refund',
-  'address', 'help', 'followed-stores', 'deposit', 'withdraw',
+  'address', 'help', 'followed-stores', 'deposit', 'deposit-history', 'deposit-detail', 'withdraw',
   'settings', 'voucher', 'order-tracking', 'seller-add-product',
   'chat-room', 'category-detail', 'seller-withdraw', 'seller-withdraw-history',
   'privacy-policy', 'terms-of-service', 'refund-policy', 'stream-create', 'stream-search',

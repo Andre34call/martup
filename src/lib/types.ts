@@ -5,7 +5,7 @@ export type ScreenName =
   | 'splash' | 'onboarding' | 'login' | 'register' | 'otp' | 'forgot-password' | 'reset-password' | 'email-verification'
   | 'home' | 'search' | 'category' | 'product-detail' | 'wishlist'
   | 'cart' | 'checkout' | 'payment' | 'order-tracking' | 'orders'
-  | 'wallet' | 'deposit' | 'withdraw' | 'chat' | 'chat-room'
+  | 'wallet' | 'deposit' | 'deposit-history' | 'deposit-detail' | 'withdraw' | 'chat' | 'chat-room'
   | 'notification' | 'profile' | 'settings' | 'voucher' | 'review'
   | 'refund' | 'help' | 'address' | 'followed-stores'
   | 'seller-shop' | 'category-detail'

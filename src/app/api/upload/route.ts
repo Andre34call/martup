@@ -15,6 +15,7 @@ const ALLOWED_BUCKETS: Record<string, string[]> = {
   banners: ['images'],
   streams: ['images', 'videos'],
   reviews: ['images', 'videos'],
+  deposits: ['proofs'],
 }
 
 // Bucket configuration for auto-creation
@@ -43,6 +44,11 @@ const BUCKET_CONFIG: Record<string, { public: boolean; fileSizeLimit: number; al
     public: true,
     fileSizeLimit: 10 * 1024 * 1024,
     allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/webm'],
+  },
+  deposits: {
+    public: true,
+    fileSizeLimit: 5 * 1024 * 1024,
+    allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
   },
 }
 

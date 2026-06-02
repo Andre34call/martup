@@ -2315,3 +2315,36 @@ Stage Summary:
 - All existing imports in screen-registry.tsx continue to work via backward-compatible re-export in auth-screens.tsx
 - Shared code extracted: 7 type aliases, 7 validation helpers, 2 animation variant objects, 1 MartUpLogo component
 - Zero breaking changes — lint passes, dev server compiles
+---
+Task ID: topup-feature
+Agent: Main Coordinator
+Task: Build complete Top Up feature for MartUp users
+
+Work Log:
+- Analyzed existing codebase: Deposit model, wallet APIs, deposit screen, admin deposits screen
+- Updated Prisma schema: added destinationAccount, senderName, expiredAt, verifiedAt, verifiedBy fields to Deposit model; added new statuses (proof_uploaded, expired); added new methods (shopeepay, linkaja); added indexes
+- Pushed schema to local SQLite database
+- Added deposits bucket to upload API whitelist (deposits: ['proofs'], 5MB max, image only)
+- Created GET /api/wallet/deposits - user's own deposit history with pagination and status filtering
+- Created GET /api/wallet/deposits/[id] - single deposit detail endpoint
+- Created POST /api/wallet/deposits/[id]/proof - upload payment proof (ownership check, expiry check, Supabase URL validation)
+- Enhanced POST /api/wallet/topup - added destination account info, 24h expiry, senderName, shopeepay/linkaja methods
+- Enhanced POST /api/wallet/deposit - same enhancements as topup + work item creation
+- Enhanced GET/PUT /api/admin/deposits - pagination, new statuses, verification tracking (verifiedAt, verifiedBy)
+- Rewrote DepositScreen with 3-step flow: Choose Amount → Choose Payment Method → Transfer Instructions + Proof Upload
+- Created DepositHistoryScreen - user deposit history with status filter tabs, pagination, click-to-detail
+- Created DepositDetailScreen - individual deposit detail with proof upload, countdown timer, copy-to-clipboard
+- Enhanced AdminDeposits with inline proof viewing, expandable cards, new statuses, verification tracking
+- Updated WalletScreen: Riwayat quick action now navigates to deposit-history
+- Added selectedDepositId/setSelectedDeposit to store SelectionSlice
+- Added deposit-history and deposit-detail to ScreenName type and screen registry
+- Lint passes, dev server compiles and renders
+
+Stage Summary:
+- Complete Top Up flow: Create deposit → See transfer instructions → Upload proof → Admin verifies → Balance credited
+- 6 payment methods supported: bank_transfer, gopay, ovo, dana, shopeepay, linkaja
+- Secure: auth required, rate limiting, ownership checks, atomic wallet credit, CSRF protection
+- User-facing: 3-step deposit screen, deposit history, deposit detail with proof upload
+- Admin: expandable cards with inline proof viewing, approve/reject with verification tracking
+- New API endpoints: 3 (deposits list, deposit detail, proof upload)
+- Enhanced API endpoints: 3 (topup, deposit, admin deposits)

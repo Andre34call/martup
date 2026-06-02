@@ -13,27 +13,35 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status')
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1'))
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '50')))
+    const skip = (page - 1) * limit
 
     const where: Record<string, unknown> = {}
     if (status) {
       where.status = status
     }
 
-    const deposits = await db.deposit.findMany({
-      where,
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            phone: true,
-            avatar: true,
+    const [deposits, total] = await Promise.all([
+      db.deposit.findMany({
+        where,
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phone: true,
+              avatar: true,
+            },
           },
         },
-      },
-      orderBy: { createdAt: 'desc' },
-    })
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      db.deposit.count({ where }),
+    ])
 
     const mapped = deposits.map((d) => ({
       id: d.id,
@@ -47,13 +55,26 @@ export async function GET(request: NextRequest) {
       status: d.status,
       proofUrl: d.proofUrl,
       adminNote: d.adminNote,
-      createdAt: d.createdAt,
-      updatedAt: d.updatedAt,
+      destinationAccount: d.destinationAccount,
+      senderName: d.senderName,
+      expiredAt: d.expiredAt?.toISOString() || null,
+      verifiedAt: d.verifiedAt?.toISOString() || null,
+      verifiedBy: d.verifiedBy,
+      createdAt: d.createdAt.toISOString(),
+      updatedAt: d.updatedAt.toISOString(),
     }))
 
-    return NextResponse.json(serializeDecimal({ success: true, data: mapped }))
+    return NextResponse.json(serializeDecimal({
+      success: true,
+      data: {
+        items: mapped,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    }))
   } catch (error: unknown) {
-    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'Admin deposits GET error')
     return NextResponse.json(
       { success: false, error: 'Terjadi kesalahan server' },
@@ -80,27 +101,26 @@ export async function PUT(request: NextRequest) {
     }
     const { depositId, status, adminNote } = validation.data
 
-    // Fetch the deposit to verify it exists and is currently pending
+    // Fetch the deposit to verify it exists and is currently pending/proof_uploaded
     const deposit = await db.deposit.findUnique({
       where: { id: depositId },
     })
 
     if (!deposit) {
       return NextResponse.json(
-        { success: false, error: 'Deposit not found' },
+        { success: false, error: 'Deposit tidak ditemukan' },
         { status: 404 }
       )
     }
 
-    if (deposit.status !== 'pending') {
+    if (deposit.status !== 'pending' && deposit.status !== 'proof_uploaded') {
       return NextResponse.json(
-        { success: false, error: `Deposit already processed with status "${deposit.status}"` },
+        { success: false, error: `Deposit sudah diproses dengan status "${deposit.status}"` },
         { status: 400 }
       )
     }
 
     // SECURITY: Use $transaction for atomic deposit approval + wallet credit
-    // This prevents race conditions where balance could be read incorrectly between operations
     const updatedDeposit = await db.$transaction(async (tx) => {
       // If approving, credit the user's wallet atomically
       if (status === 'success') {
@@ -109,7 +129,6 @@ export async function PUT(request: NextRequest) {
         })
 
         if (wallet) {
-          // Atomic increment + read fresh balance within the same transaction
           const updatedWallet = await tx.wallet.update({
             where: { id: wallet.id },
             data: { balance: { increment: deposit.amount } },
@@ -121,13 +140,12 @@ export async function PUT(request: NextRequest) {
               type: 'credit',
               amount: deposit.amount,
               balance: updatedWallet.balance,
-              description: `Deposit approved - ${deposit.method}`,
+              description: `Top up disetujui - ${deposit.method}`,
               refType: 'deposit',
               refId: deposit.id,
             },
           })
         } else {
-          // Create wallet if it doesn't exist, then credit
           const newWallet = await tx.wallet.create({
             data: {
               userId: deposit.userId,
@@ -141,7 +159,7 @@ export async function PUT(request: NextRequest) {
               type: 'credit',
               amount: deposit.amount,
               balance: newWallet.balance,
-              description: `Deposit approved - ${deposit.method}`,
+              description: `Top up disetujui - ${deposit.method}`,
               refType: 'deposit',
               refId: deposit.id,
             },
@@ -163,8 +181,12 @@ export async function PUT(request: NextRequest) {
         })
       }
 
-      // Update deposit status
-      const updateData: Record<string, unknown> = { status }
+      // Update deposit status with verification tracking
+      const updateData: Record<string, unknown> = {
+        status,
+        verifiedAt: new Date(),
+        verifiedBy: authResult.user.id,
+      }
       if (adminNote !== undefined) updateData.adminNote = adminNote
 
       return tx.deposit.update({
@@ -176,12 +198,11 @@ export async function PUT(request: NextRequest) {
     logBusinessEvent({
       event: 'DEPOSIT_STATUS_CHANGED',
       userId: authResult.user.id,
-      details: { depositId, newStatus: status, adminNote },
+      details: { depositId, newStatus: status, adminNote, depositUserId: deposit.userId },
     })
 
     return NextResponse.json(serializeDecimal({ success: true, data: updatedDeposit }))
   } catch (error: unknown) {
-    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'Admin deposits PUT error')
     return NextResponse.json(
       { success: false, error: 'Terjadi kesalahan server' },

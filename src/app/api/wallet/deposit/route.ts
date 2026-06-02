@@ -8,8 +8,18 @@ import { createWorkItemFromEntity } from '@/lib/workflow'
 // ==================== WALLET DEPOSIT ====================
 // SECURITY: Requires authentication
 // Creates a PENDING deposit — NO balance credit until payment confirmed
-// Payment confirmation happens via /api/payment/notification (Midtrans webhook)
-// or admin manual approval via /api/admin/deposits
+// Payment confirmation happens via admin manual approval or payment gateway
+
+const VALID_METHODS = ['bank_transfer', 'gopay', 'ovo', 'dana', 'shopeepay', 'linkaja']
+
+const METHOD_LABELS: Record<string, string> = {
+  bank_transfer: 'Transfer Bank',
+  gopay: 'GoPay',
+  ovo: 'OVO',
+  dana: 'DANA',
+  shopeepay: 'ShopeePay',
+  linkaja: 'LinkAja',
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -28,7 +38,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { amount, method } = body as { amount?: number; method?: string }
+    const { amount, method, senderName } = body as { amount?: number; method?: string; senderName?: string }
 
     // Validate amount
     if (!amount || typeof amount !== 'number' || amount <= 0) {
@@ -53,13 +63,47 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate method
-    const validMethods = ['bank_transfer', 'gopay', 'ovo', 'dana']
-    if (!method || !validMethods.includes(method)) {
+    if (!method || !VALID_METHODS.includes(method)) {
       return NextResponse.json(
-        { success: false, error: `Metode pembayaran tidak valid. Pilih: ${validMethods.join(', ')}` },
+        { success: false, error: `Metode pembayaran tidak valid. Pilih: ${VALID_METHODS.join(', ')}` },
         { status: 400 }
       )
     }
+
+    // Get MartUp bank accounts for destination info
+    let destinationAccount: string | null = null
+    try {
+      const settingsRecord = await db.platformSetting.findUnique({
+        where: { key: 'platform_settings' },
+      })
+      if (settingsRecord) {
+        const settings = JSON.parse(settingsRecord.value)
+        const bankAccounts = JSON.parse(settings.martupBankAccounts || '[]')
+        if (method === 'bank_transfer' && bankAccounts.length > 0) {
+          const bankAcc = bankAccounts.find((a: Record<string, unknown>) => a.type !== 'ewallet')
+          if (bankAcc) destinationAccount = JSON.stringify(bankAcc)
+        } else if (method !== 'bank_transfer' && bankAccounts.length > 0) {
+          const methodToName: Record<string, string[]> = {
+            gopay: ['GoPay', 'gopay'],
+            ovo: ['OVO', 'ovo'],
+            dana: ['DANA', 'dana'],
+            shopeepay: ['ShopeePay', 'shopeepay'],
+            linkaja: ['LinkAja', 'linkaja'],
+          }
+          const names = methodToName[method] || []
+          const ewalletAcc = bankAccounts.find((a: Record<string, unknown>) =>
+            a.type === 'ewallet' && names.some(n => String(a.bankName || '').toLowerCase().includes(n.toLowerCase()))
+          )
+          if (ewalletAcc) destinationAccount = JSON.stringify(ewalletAcc)
+        }
+      }
+    } catch {
+      logger.warn('Failed to fetch platform settings for deposit destination')
+    }
+
+    // Set expiry to 24 hours from now
+    const expiredAt = new Date()
+    expiredAt.setHours(expiredAt.getHours() + 24)
 
     // Create PENDING deposit — NO balance credit until payment gateway confirms
     const deposit = await db.deposit.create({
@@ -67,7 +111,10 @@ export async function POST(request: NextRequest) {
         userId: authResult.user.id,
         amount,
         method,
-        status: 'pending', // MUST remain pending until payment is verified
+        status: 'pending',
+        destinationAccount,
+        senderName: senderName || null,
+        expiredAt,
       },
     })
 
@@ -80,8 +127,8 @@ export async function POST(request: NextRequest) {
         fee: 0,
         netAmount: amount,
         method,
-        status: 'pending', // NOT success — awaiting payment confirmation
-        description: `Deposit via ${method} — menunggu pembayaran`,
+        status: 'pending',
+        description: `Deposit via ${METHOD_LABELS[method] || method} — menunggu pembayaran`,
         refId: deposit.id,
       },
     })
@@ -96,7 +143,7 @@ export async function POST(request: NextRequest) {
     await createWorkItemFromEntity({
       type: 'deposit',
       title: `Deposit: ${authResult.user.name} - Rp ${amount.toLocaleString('id-ID')}`,
-      description: `Deposit Rp ${amount.toLocaleString('id-ID')} via ${method} oleh ${authResult.user.name} (${authResult.user.email})`,
+      description: `Deposit Rp ${amount.toLocaleString('id-ID')} via ${METHOD_LABELS[method] || method} oleh ${authResult.user.name} (${authResult.user.email})`,
       refType: 'deposit',
       refId: deposit.id,
       metadata: { amount, method, userId: authResult.user.id },
@@ -104,20 +151,26 @@ export async function POST(request: NextRequest) {
       createdBy: authResult.user.id,
     }).catch(err => logger.warn({ err }, 'Failed to auto-create deposit work item'))
 
-    // In production: Call Midtrans/payment gateway to create payment token
-    // For now, return deposit info for the client to process payment
+    // Return deposit info with destination account for payment instructions
+    let destinationInfo = null
+    if (destinationAccount) {
+      try { destinationInfo = JSON.parse(destinationAccount) } catch { destinationInfo = null }
+    }
+
     return NextResponse.json(serializeDecimal({
       success: true,
       data: {
         depositId: deposit.id,
         amount,
         method,
+        methodLabel: METHOD_LABELS[method] || method,
         status: 'pending',
-        message: 'Deposit dibuat. Silakan selesaikan pembayaran sebelum saldo dikreditkan.',
+        destinationAccount: destinationInfo,
+        expiredAt: expiredAt.toISOString(),
+        message: 'Deposit dibuat. Silakan selesaikan pembayaran sebelum kadaluarsa.',
       },
     }), { status: 201 })
   } catch (error: unknown) {
-    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'POST /api/wallet/deposit error')
     return NextResponse.json(
       { success: false, error: 'Terjadi kesalahan server' },

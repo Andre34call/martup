@@ -170,7 +170,7 @@ export function WalletScreen() {
               <QuickAction
                 icon={<Clock className="w-5 h-5 text-emerald-600" />}
                 label="Riwayat"
-                onClick={() => showToast("Scroll ke bawah untuk melihat riwayat", "info")}
+                onClick={() => navigate("deposit-history")}
               />
             </div>
           </div>
