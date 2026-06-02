@@ -1,9 +1,9 @@
 "use client"
 
-import { Button, ButtonProps } from "@/components/ui/button"
+import { Button } from "@/components/ui/button"
 import { motion } from "framer-motion"
 
-type PrimaryButtonProps = ButtonProps
+type PrimaryButtonProps = React.ComponentProps<typeof Button>
 
 export function PrimaryButton({ className, children, ...props }: PrimaryButtonProps) {
   return (

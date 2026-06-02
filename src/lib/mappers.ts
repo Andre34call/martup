@@ -3,7 +3,7 @@ import type { User, UserRole, Seller, Order, OrderStatus, Notification as AppNot
 // ==================== RAW API TYPES ====================
 // These represent the shape of data as it comes from the API (before mapping)
 
-interface RawSeller {
+export interface RawSeller {
   id: string
   userId?: string
   storeName?: string
