@@ -89,6 +89,7 @@ export async function GET(request: NextRequest) {
       const scored = allProducts.map(p => ({
         id: p.id,
         viralScore: p.sold * 3 + (p.rating || 0) * p.reviewCount * 5 + p.viewCount * 0.1,
+        createdAt: p.createdAt,
       }))
       scored.sort((a, b) => b.viralScore - a.viralScore || Number(b.createdAt) - Number(a.createdAt))
 

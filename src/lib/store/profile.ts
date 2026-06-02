@@ -1,6 +1,7 @@
 import type { StateCreator } from 'zustand'
 import { logger } from '@/lib/logger'
 import type { ProfileSlice, AppStore } from './types'
+import type { User } from '@/lib/types'
 import { apiClient } from '@/lib/api-client'
 
 // API response types
@@ -13,14 +14,14 @@ export const createProfileSlice: StateCreator<AppStore, [], [], ProfileSlice> = 
     avatarUrl: url,
     // Keep currentUser.avatar in sync with avatarUrl
     currentUser: get().currentUser
-      ? { ...get().currentUser, avatar: url }
+      ? { ...get().currentUser, avatar: url ?? undefined } as User
       : null,
   }),
   updateProfile: async (data) => {
     // Optimistic update — update UI immediately
     set((state) => ({
       currentUser: state.currentUser
-        ? { ...state.currentUser, ...data }
+        ? { ...state.currentUser, ...data } as User
         : null,
     }))
 
@@ -32,7 +33,7 @@ export const createProfileSlice: StateCreator<AppStore, [], [], ProfileSlice> = 
         const serverData = response.data
         set((state) => ({
           currentUser: state.currentUser
-            ? { ...state.currentUser, ...serverData }
+            ? { ...state.currentUser, ...serverData } as User
             : null,
           // Keep avatarUrl in sync if server returned an avatar
           ...(serverData.avatar ? { avatarUrl: serverData.avatar } : {}),
@@ -64,7 +65,7 @@ export const createProfileSlice: StateCreator<AppStore, [], [], ProfileSlice> = 
       set((state) => ({
         avatarUrl,
         currentUser: state.currentUser
-          ? { ...state.currentUser, avatar: avatarUrl }
+          ? { ...state.currentUser, avatar: avatarUrl } as User
           : null,
       }))
     } catch (error) {
@@ -79,7 +80,7 @@ export const createProfileSlice: StateCreator<AppStore, [], [], ProfileSlice> = 
       set((state) => ({
         avatarUrl: null,
         currentUser: state.currentUser
-          ? { ...state.currentUser, avatar: null }
+          ? { ...state.currentUser, avatar: undefined } as User
           : null,
       }))
     } catch (error) {

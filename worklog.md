@@ -2793,3 +2793,37 @@ Stage Summary:
 - Profile update route correctly does NOT accept `avatar` field (prevents arbitrary URL injection)
 - `apiClient.upload()` properly handles CSRF with retry for avatar uploads
 - Both upload screens have loading states during avatar upload
+
+---
+Task ID: 4-13
+Agent: Main Coordinator
+Task: Comprehensive security audit + bug fixes + deploy
+
+Work Log:
+- Fixed build error from commit 135c760 (checkRateLimit 3-arg call) - was already fixed in f2a393e
+- Ran two parallel audit agents: Avatar Upload Audit + Full App Audit
+- Found 3 CRITICAL, 5 HIGH, 8 MEDIUM, 7 LOW issues across the codebase
+- Fixed all CRITICAL and HIGH issues:
+  - C-1: Replaced $queryRawUnsafe with Prisma query builder for viral sort (SQL injection risk eliminated)
+  - C-2: Wallet debit now requires EXACT amount match (no 1-rupiah tolerance)
+  - C-3: Sellers can no longer set status='blocked' on products (admin-only)
+  - H-1: Post owners can now delete comments on their own posts
+  - H-3: Seller products POST/PUT forces isFeatured=false, isFlashSale=false (prevents free promotion)
+  - H-4/H-5: Admin routes now validate input types (userId, status, adminNote)
+- Fixed Avatar Upload bugs:
+  - avatarError resets when avatarUrl changes (useEffect)
+  - avatarUrl stays in sync with currentUser.avatar
+  - Type-safe avatar URL extraction (no more fragile ?? operator)
+  - removeAvatar uses null instead of undefined for consistency
+- Fixed MEDIUM issues:
+  - Upload route blocks avatars bucket (must use dedicated /api/user/avatar endpoint)
+  - Avatar input uses specific MIME types instead of image/* (prevents SVG confusion)
+  - Added ChatRoom.updatedAt index for feed query performance
+- Pushed to GitHub (commit 6787ace)
+- Attempted Vercel deploy (no VERCEL_TOKEN configured - auto-deploys from GitHub)
+
+Stage Summary:
+- 3 CRITICAL security issues fixed (SQL injection, payment tolerance, product status)
+- 5 HIGH issues fixed (comment deletion, seller promotion exploit, admin validation)
+- 5 MEDIUM issues fixed (avatar upload flow, bucket restrictions, SVG prevention, Prisma index)
+- Commit 6787ace pushed to origin/main
