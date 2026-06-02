@@ -4,6 +4,7 @@ import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
 import { logger, logBusinessEvent } from '@/lib/logger'
 import { validateBody, adminDepositActionSchema } from '@/lib/validations'
+import { validateCsrfRequest } from '@/lib/csrf'
 
 // GET /api/admin/deposits - List all deposits with user info, support ?status=pending filter
 export async function GET(request: NextRequest) {
@@ -90,6 +91,12 @@ export async function PUT(request: NextRequest) {
   try {
     const authResult = await verifyAdmin(request)
     if (!authResult.success) return authErrorResponse(authResult)
+
+    // SECURITY: CSRF protection
+    const csrfResult = await validateCsrfRequest(request)
+    if (!csrfResult.valid) {
+      return NextResponse.json({ success: false, error: 'Keamanan request tidak valid. Refresh halaman dan coba lagi.' }, { status: 403 })
+    }
 
     const body = await request.json()
     const validation = validateBody(adminDepositActionSchema, body)

@@ -3,6 +3,7 @@ import { verifyAdmin, verifySuperAdmin, authErrorResponse } from '@/lib/auth-mid
 import { db } from '@/lib/db'
 
 import { logger, logSecurityEvent } from '@/lib/logger'
+import { validateCsrfRequest } from '@/lib/csrf'
 // Default platform settings
 const DEFAULT_SETTINGS: Record<string, number | boolean | string> = {
   commissionRate: 5,       // percentage
@@ -122,6 +123,12 @@ export async function PUT(request: NextRequest) {
     const authResult = await verifySuperAdmin(request)
     if (!authResult.success) return authErrorResponse(authResult)
 
+    // SECURITY: CSRF protection
+    const csrfResult = await validateCsrfRequest(request)
+    if (!csrfResult.valid) {
+      return NextResponse.json({ success: false, error: 'Keamanan request tidak valid. Refresh halaman dan coba lagi.' }, { status: 403 })
+    }
+
     const body = await request.json()
     const current = await readSettings()
 
@@ -172,9 +179,18 @@ export async function PUT(request: NextRequest) {
         }
         // Validate numeric fields
         if (typeof DEFAULT_SETTINGS[key] === 'number') {
-          const numVal = parseFloat(String(body[key]))
+          // SECURITY: Use parseInt for integer fields, parseFloat only for commissionRate
+          const isIntegerField = key !== 'commissionRate'
+          const numVal = isIntegerField
+            ? parseInt(String(body[key]), 10)
+            : parseFloat(String(body[key]))
           if (isNaN(numVal)) {
             validationErrors.push(`${key}: must be a valid number`)
+            continue
+          }
+          // Additional check: integer fields must not be fractional
+          if (isIntegerField && numVal !== Math.floor(numVal)) {
+            validationErrors.push(`${key}: must be a whole number`)
             continue
           }
           // Apply range validation rules

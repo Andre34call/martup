@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { verifyAuth, checkRateLimit, authErrorResponse } from '@/lib/auth-middleware'
+import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
+import { paymentLimiter, rateLimitHeaders } from '@/lib/rate-limit'
 import { serializeDecimal } from '@/lib/decimal-utils'
 import { logger } from '@/lib/logger'
 
@@ -17,10 +18,11 @@ export async function GET(
 
     const { id: depositId } = await params
 
-    if (!checkRateLimit(`deposit-detail:${authResult.user.id}`, 20)) {
+    const rlResult = await paymentLimiter.check(`deposit-detail:${authResult.user.id}`)
+    if (!rlResult.allowed) {
       return NextResponse.json(
         { success: false, error: 'Terlalu banyak request. Coba lagi dalam 1 menit.' },
-        { status: 429 }
+        { status: 429, headers: rateLimitHeaders(rlResult) }
       )
     }
 

@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { verifyAuth, checkRateLimit, authErrorResponse } from '@/lib/auth-middleware'
+import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
+import { paymentLimiter, rateLimitHeaders } from '@/lib/rate-limit'
 import { serializeDecimal } from '@/lib/decimal-utils'
 import { logger, logSecurityEvent, logBusinessEvent } from '@/lib/logger'
+import { validateCsrfRequest } from '@/lib/csrf'
 
 // POST /api/wallet/deposits/[id]/proof - Upload payment proof for a deposit
 export async function POST(
@@ -17,11 +19,18 @@ export async function POST(
 
     const { id: depositId } = await params
 
-    if (!checkRateLimit(`deposit-proof:${authResult.user.id}`, 5)) {
+    const rlResult = await paymentLimiter.check(`deposit-proof:${authResult.user.id}`)
+    if (!rlResult.allowed) {
       return NextResponse.json(
         { success: false, error: 'Terlalu banyak request. Coba lagi dalam 1 menit.' },
-        { status: 429 }
+        { status: 429, headers: rateLimitHeaders(rlResult) }
       )
+    }
+
+    // SECURITY: CSRF protection
+    const csrfResult = await validateCsrfRequest(request)
+    if (!csrfResult.valid) {
+      return NextResponse.json({ success: false, error: 'Keamanan request tidak valid. Refresh halaman dan coba lagi.' }, { status: 403 })
     }
 
     // Parse the request body first (before transaction)

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { verifyAuth, checkRateLimit, authErrorResponse } from '@/lib/auth-middleware'
+import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
+import { paymentLimiter, rateLimitHeaders } from '@/lib/rate-limit'
 import { serializeDecimal } from '@/lib/decimal-utils'
 import { logger } from '@/lib/logger'
 
@@ -12,10 +13,11 @@ export async function GET(request: NextRequest) {
       return authErrorResponse(authResult)
     }
 
-    if (!checkRateLimit(`deposits:${authResult.user.id}`, 10)) {
+    const rlResult = await paymentLimiter.check(`deposits:${authResult.user.id}`)
+    if (!rlResult.allowed) {
       return NextResponse.json(
         { success: false, error: 'Terlalu banyak request. Coba lagi dalam 1 menit.' },
-        { status: 429 }
+        { status: 429, headers: rateLimitHeaders(rlResult) }
       )
     }
 
@@ -26,7 +28,15 @@ export async function GET(request: NextRequest) {
     const skip = (page - 1) * limit
 
     const where: Record<string, unknown> = { userId: authResult.user.id }
+    // SECURITY: Validate status filter to prevent invalid Prisma queries
+    const VALID_DEPOSIT_STATUSES = ['pending', 'proof_uploaded', 'success', 'failed', 'expired']
     if (status) {
+      if (!VALID_DEPOSIT_STATUSES.includes(status)) {
+        return NextResponse.json(
+          { success: false, error: `Status tidak valid. Gunakan: ${VALID_DEPOSIT_STATUSES.join(', ')}` },
+          { status: 400 }
+        )
+      }
       where.status = status
     }
 

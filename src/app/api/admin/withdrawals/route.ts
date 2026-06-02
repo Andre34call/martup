@@ -4,6 +4,7 @@ import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
 import { logger, logBusinessEvent } from '@/lib/logger'
 import { validateBody, adminWithdrawalActionSchema } from '@/lib/validations'
+import { validateCsrfRequest } from '@/lib/csrf'
 
 // GET /api/admin/withdrawals - Fetch all withdrawal requests with seller info
 export async function GET(request: NextRequest) {
@@ -80,6 +81,12 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   const authResult = await verifyAdmin(request)
   if (!authResult.success) return authErrorResponse(authResult)
+
+  // SECURITY: CSRF protection
+  const csrfResult = await validateCsrfRequest(request)
+  if (!csrfResult.valid) {
+    return NextResponse.json({ success: false, error: 'Keamanan request tidak valid. Refresh halaman dan coba lagi.' }, { status: 403 })
+  }
 
   try {
     const body = await request.json()
@@ -173,6 +180,11 @@ export async function PUT(request: NextRequest) {
             },
           })
 
+          // SECURITY: Verify holdBalance didn't go negative
+          if (updatedWallet.holdBalance.lessThan(0)) {
+            throw new Error('INSUFFICIENT_HOLD_BALANCE')
+          }
+
           await tx.walletMutation.create({
             data: {
               walletId: wallet.id,
@@ -225,6 +237,12 @@ export async function PUT(request: NextRequest) {
         const to = parts[2] || '?'
         return NextResponse.json(
           { success: false, error: `Tidak dapat mengubah status dari "${from}" ke "${to}"` },
+          { status: 400 }
+        )
+      }
+      if (error.message === 'INSUFFICIENT_HOLD_BALANCE') {
+        return NextResponse.json(
+          { success: false, error: 'Saldo hold tidak mencukupi. Hubungi teknisi.' },
           { status: 400 }
         )
       }

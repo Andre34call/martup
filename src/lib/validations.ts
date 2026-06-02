@@ -127,7 +127,7 @@ export const adminWithdrawalActionSchema = z.object({
 // ==================== Wallet ====================
 export const walletDebitSchema = z.object({
   orderId: z.string().min(1, 'orderId wajib diisi'),
-  amount: z.number().positive('Jumlah debit harus lebih dari 0'),
+  amount: z.number().int().positive('Jumlah debit harus bilangan bulat lebih dari 0'),
   description: z.string().optional(),
 })
 
@@ -230,7 +230,7 @@ export const sellerProfileUpdateSchema = z.object({
 })
 
 export const sellerWithdrawSchema = z.object({
-  amount: z.number().positive('Amount must be a positive number'),
+  amount: z.number().int().positive('Amount must be a positive integer'),
   bankAccount: z.string().optional(),
   bankName: z.string().optional(),
   bankHolder: z.string().optional(),

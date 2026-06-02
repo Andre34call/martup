@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { verifyAuth, checkRateLimit, authErrorResponse } from '@/lib/auth-middleware'
+import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
+import { paymentLimiter, rateLimitHeaders } from '@/lib/rate-limit'
 import { serializeDecimal } from '@/lib/decimal-utils'
 import { logger, logBusinessEvent } from '@/lib/logger'
+import { validateCsrfRequest } from '@/lib/csrf'
 
 // ==================== WALLET TOP UP ====================
 // SECURITY: Requires authentication + ownership verification
@@ -29,11 +31,18 @@ export async function POST(request: NextRequest) {
     }
 
     // SECURITY: Rate limit — 5 top-up requests per minute per user
-    if (!checkRateLimit(`topup:${authResult.user.id}`, 5)) {
+    const rlResult = await paymentLimiter.check(`topup:${authResult.user.id}`)
+    if (!rlResult.allowed) {
       return NextResponse.json(
         { success: false, error: 'Terlalu banyak request. Coba lagi dalam 1 menit.' },
-        { status: 429 }
+        { status: 429, headers: rateLimitHeaders(rlResult) }
       )
+    }
+
+    // SECURITY: CSRF protection
+    const csrfResult = await validateCsrfRequest(request)
+    if (!csrfResult.valid) {
+      return NextResponse.json({ success: false, error: 'Keamanan request tidak valid. Refresh halaman dan coba lagi.' }, { status: 403 })
     }
 
     const body = await request.json()
@@ -128,32 +137,36 @@ export async function POST(request: NextRequest) {
     const expiredAt = new Date()
     expiredAt.setHours(expiredAt.getHours() + 24)
 
-    // Create PENDING deposit record — NO balance credit until payment verified
-    const deposit = await db.deposit.create({
-      data: {
-        userId: authResult.user.id,
-        amount,
-        method,
-        status: 'pending',
-        destinationAccount,
-        senderName: sanitizedSenderName || null,
-        expiredAt,
-      },
-    })
+    // SECURITY: Create deposit + transaction atomically to prevent orphan records
+    const deposit = await db.$transaction(async (tx) => {
+      const newDeposit = await tx.deposit.create({
+        data: {
+          userId: authResult.user.id,
+          amount,
+          method,
+          status: 'pending',
+          destinationAccount,
+          senderName: sanitizedSenderName || null,
+          expiredAt,
+        },
+      })
 
-    // Create a PENDING transaction record
-    await db.transaction.create({
-      data: {
-        userId: authResult.user.id,
-        type: 'deposit',
-        amount,
-        fee: 0,
-        netAmount: amount,
-        method,
-        status: 'pending',
-        description: `Top up via ${METHOD_LABELS[method] || method} — menunggu pembayaran`,
-        refId: deposit.id,
-      },
+      // Create a PENDING transaction record in the same transaction
+      await tx.transaction.create({
+        data: {
+          userId: authResult.user.id,
+          type: 'deposit',
+          amount,
+          fee: 0,
+          netAmount: amount,
+          method,
+          status: 'pending',
+          description: `Top up via ${METHOD_LABELS[method] || method} — menunggu pembayaran`,
+          refId: newDeposit.id,
+        },
+      })
+
+      return newDeposit
     })
 
     logBusinessEvent({

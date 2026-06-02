@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middleware'
+import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
+import { paymentLimiter, rateLimitHeaders } from '@/lib/rate-limit'
 import { serializeDecimal } from '@/lib/decimal-utils'
 import { Prisma } from '@prisma/client'
 import { validateBody, sellerWithdrawSchema } from '@/lib/validations'
+import { validateCsrfRequest } from '@/lib/csrf'
 
 import { logger } from '@/lib/logger'
 
@@ -39,12 +41,18 @@ export async function POST(request: NextRequest) {
     if (!authResult.success) return authErrorResponse(authResult)
 
     // Step 2: Rate limit — 5 withdrawal requests per minute
-    const rateLimitId = `seller-withdraw-post-${authResult.user.id}`
-    if (!checkRateLimit(rateLimitId, 5)) {
+    const rlResult = await paymentLimiter.check(`seller-withdraw-post-${authResult.user.id}`)
+    if (!rlResult.allowed) {
       return NextResponse.json(
         { success: false, error: 'Rate limit exceeded. Max 5 withdrawal requests per minute.' },
-        { status: 429 }
+        { status: 429, headers: rateLimitHeaders(rlResult) }
       )
+    }
+
+    // SECURITY: CSRF protection
+    const csrfResult = await validateCsrfRequest(request)
+    if (!csrfResult.valid) {
+      return NextResponse.json({ success: false, error: 'Keamanan request tidak valid. Refresh halaman dan coba lagi.' }, { status: 403 })
     }
 
     // Step 3: Verify the authenticated user has a Seller record
@@ -81,9 +89,14 @@ export async function POST(request: NextRequest) {
     const { bankAccount, bankName, bankHolder } = validation.data
 
     // Resolve bank details: use provided values or fall back to seller's stored details
-    const resolvedBankAccount = bankAccount || seller.bankAccount
-    const resolvedBankName = bankName || seller.bankName
-    const resolvedBankHolder = bankHolder || seller.bankHolder
+    // SECURITY: Sanitize bank detail strings to prevent XSS
+    const sanitizeString = (val: unknown): string | undefined => {
+      if (typeof val !== 'string') return undefined
+      return val.trim().slice(0, 100).replace(/[<>"'&]/g, '')
+    }
+    const resolvedBankAccount = sanitizeString(bankAccount) || sanitizeString(seller.bankAccount)
+    const resolvedBankName = sanitizeString(bankName) || sanitizeString(seller.bankName)
+    const resolvedBankHolder = sanitizeString(bankHolder) || sanitizeString(seller.bankHolder)
 
     // Validate bank details are complete
     if (!resolvedBankAccount || !resolvedBankName || !resolvedBankHolder) {
@@ -101,6 +114,15 @@ export async function POST(request: NextRequest) {
     if (amount < minWithdrawal) {
       return NextResponse.json(
         { success: false, error: `Minimum withdrawal amount is Rp ${minWithdrawal.toLocaleString('id-ID')}` },
+        { status: 400 }
+      )
+    }
+
+    // SECURITY: Cap maximum withdrawal amount to prevent draining entire balance at once
+    const MAX_WITHDRAWAL = 10_000_000 // Rp 10,000,000 per transaction
+    if (amount > MAX_WITHDRAWAL) {
+      return NextResponse.json(
+        { success: false, error: `Maximum withdrawal amount is Rp ${MAX_WITHDRAWAL.toLocaleString('id-ID')} per transaction` },
         { status: 400 }
       )
     }
@@ -221,7 +243,16 @@ export async function GET(request: NextRequest) {
     const authResult = await verifyAuth(request)
     if (!authResult.success) return authErrorResponse(authResult)
 
-    // Step 2: Verify the authenticated user has a Seller record
+    // Step 2: Rate limit GET requests
+    const rlResult = await paymentLimiter.check(`seller-withdraw-get:${authResult.user.id}`)
+    if (!rlResult.allowed) {
+      return NextResponse.json(
+        { success: false, error: 'Rate limit exceeded. Try again in a minute.' },
+        { status: 429, headers: rateLimitHeaders(rlResult) }
+      )
+    }
+
+    // Step 3: Verify the authenticated user has a Seller record
     const seller = await db.seller.findFirst({
       where: { userId: authResult.user.id },
       select: { id: true, storeName: true },

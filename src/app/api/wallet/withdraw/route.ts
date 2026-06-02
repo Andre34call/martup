@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { verifyAuth, checkRateLimit, authErrorResponse } from '@/lib/auth-middleware'
+import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
+import { paymentLimiter, rateLimitHeaders } from '@/lib/rate-limit'
 import { serializeDecimal } from '@/lib/decimal-utils'
 import { logger, logBusinessEvent } from '@/lib/logger'
 import { createWorkItemFromEntity } from '@/lib/workflow'
+import { validateCsrfRequest } from '@/lib/csrf'
 
 // ==================== WALLET WITHDRAW ====================
 // SECURITY: Requires authentication + seller verification
@@ -20,11 +22,18 @@ export async function POST(request: NextRequest) {
     }
 
     // SECURITY: Rate limit — 3 withdrawal requests per minute per user
-    if (!checkRateLimit(`withdraw:${authResult.user.id}`, 3)) {
+    const rlResult = await paymentLimiter.check(`withdraw:${authResult.user.id}`)
+    if (!rlResult.allowed) {
       return NextResponse.json(
         { success: false, error: 'Terlalu banyak request. Coba lagi dalam 1 menit.' },
-        { status: 429 }
+        { status: 429, headers: rateLimitHeaders(rlResult) }
       )
+    }
+
+    // SECURITY: CSRF protection
+    const csrfResult = await validateCsrfRequest(request)
+    if (!csrfResult.valid) {
+      return NextResponse.json({ success: false, error: 'Keamanan request tidak valid. Refresh halaman dan coba lagi.' }, { status: 403 })
     }
 
     // Verify seller account
@@ -59,6 +68,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // SECURITY: Cap maximum withdrawal amount to prevent draining entire balance at once
+    const MAX_WITHDRAWAL = 10_000_000 // Rp 10,000,000 per transaction
+    if (amount > MAX_WITHDRAWAL) {
+      return NextResponse.json(
+        { success: false, error: `Penarikan maksimal Rp ${MAX_WITHDRAWAL.toLocaleString('id-ID')} per transaksi` },
+        { status: 400 }
+      )
+    }
+
     // Validate bank details
     if (!bankAccount || !bankName || !bankHolder) {
       return NextResponse.json(
@@ -68,9 +86,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Resolve bank details: body params override seller's stored bank details
-    const resolvedBankAccount = bankAccount || seller.bankAccount
-    const resolvedBankName = bankName || seller.bankName
-    const resolvedBankHolder = bankHolder || seller.bankHolder
+    // SECURITY: Sanitize bank detail strings to prevent XSS
+    const sanitizeString = (val: unknown): string | undefined => {
+      if (typeof val !== 'string') return undefined
+      return val.trim().slice(0, 100).replace(/[<>"'&]/g, '')
+    }
+    const resolvedBankAccount = sanitizeString(bankAccount) || sanitizeString(seller.bankAccount)
+    const resolvedBankName = sanitizeString(bankName) || sanitizeString(seller.bankName)
+    const resolvedBankHolder = sanitizeString(bankHolder) || sanitizeString(seller.bankHolder)
 
     if (!resolvedBankAccount || !resolvedBankName || !resolvedBankHolder) {
       return NextResponse.json(
