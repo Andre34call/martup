@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAuth, verifyAdmin, authErrorResponse, AuthResult } from '@/lib/auth-middleware'
-import { sensitiveLimiter } from '@/lib/rate-limit'
+import { authLimiter } from '@/lib/rate-limit'
 import crypto from 'crypto'
 
 import { logger } from '@/lib/logger'
@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
   try {
     // Rate limit - very strict for admin setup (2 per minute, distributed)
     const clientIp = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
-    const rateLimitResult = await sensitiveLimiter.check(`admin-setup:${clientIp}`)
+    const rateLimitResult = await authLimiter.check(`admin-setup:${clientIp}`)
     if (!rateLimitResult.allowed) {
       return NextResponse.json(
         { success: false, error: 'Terlalu banyak percobaan. Coba lagi nanti.' },
