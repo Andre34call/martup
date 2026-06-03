@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { verifyAuth, isSuperAdmin, isElevatedRole } from '@/lib/auth-middleware'
 import { createRateLimiter } from '@/lib/rate-limit'
 import { validateBody, sellerRegisterSchema } from '@/lib/validations'
+import { validateCsrfRequest } from '@/lib/csrf'
 
 import { logger } from '@/lib/logger'
 
@@ -33,6 +34,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: `Terlalu banyak percobaan. Coba lagi dalam ${retrySeconds > 60 ? Math.ceil(retrySeconds / 60) + ' menit' : retrySeconds + ' detik'}.` },
         { status: 429 }
+      )
+    }
+
+    // SECURITY: CSRF protection
+    const csrfResult = await validateCsrfRequest(request)
+    if (!csrfResult.valid) {
+      return NextResponse.json(
+        { success: false, error: 'CSRF validation failed. Silakan refresh halaman dan coba lagi.' },
+        { status: 403 }
       )
     }
 

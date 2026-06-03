@@ -1524,3 +1524,48 @@ All ~80 unique API paths called by the frontend have matching backend routes:
 7. Create a Zod validation schema for every endpoint (consistent approach)
 8. Add request body size limits globally (currently only in upload)
 9. Add API request logging middleware for all endpoints (not just selected ones)
+
+---
+Task ID: 2
+Agent: General Purpose
+Task: Add SUPER_ADMIN_EMAIL to .env and verify env.ts handling
+
+Work Log:
+- Read /home/z/my-project/.env — confirmed SUPER_ADMIN_EMAIL was missing
+- Added SUPER_ADMIN_EMAIL=kholisakm@gmail.com after the ADMIN_SETUP_SECRET line in .env (line 18)
+- Added comment "# Super Admin Email (for MartUp app admin privileges)" above it
+- Verified src/lib/env.ts properly handles SUPER_ADMIN_EMAIL:
+  - Line 16: Listed in recommendedVars (warns if missing in dev)
+  - Line 67: `process.env.SUPER_ADMIN_EMAIL || ''` — correct, no hardcoded fallback
+  - Line 65-66: Security comment explicitly states "No hardcoded fallback"
+- Searched src/ for hardcoded "kholisakm@gmail.com" — zero matches found (no hardcoded emails)
+- Searched src/ for other hardcoded email patterns — clean
+
+Stage Summary:
+- .env updated: Added SUPER_ADMIN_EMAIL=kholisakm@gmail.com
+- env.ts already properly configured — reads from process.env with empty string fallback
+- No hardcoded super admin email found anywhere in src/
+- **Next action**: Also set SUPER_ADMIN_EMAIL in Vercel Dashboard → Settings → Environment Variables for production
+
+---
+Task ID: 3
+Agent: General-Purpose
+Task: Fix vercel.json cron + CSRF protection for seller/register
+
+Work Log:
+- Read vercel.json: found 3 cron jobs (cancel-expired, auto-complete, auto-complete-stuck), missing auto-confirm-service
+- Added auto-confirm-service cron job to vercel.json with path /api/cron/auto-confirm-service and schedule "0 0 * * *"
+- Read seller/register/route.ts: found POST handler with auth + rate limit but no CSRF protection
+- Read csrf.ts: discovered /api/seller/register was in CSRF_EXEMPT_PATHS (line 35), which made it skip CSRF validation
+- Read wallet/debit-batch/route.ts as reference for CSRF implementation pattern
+- Added CSRF protection to seller/register/route.ts:
+  - Imported validateCsrfRequest from '@/lib/csrf'
+  - Added CSRF check after rate limit and before body parsing, matching the pattern from debit-batch
+  - Returns 403 with 'CSRF validation failed. Silakan refresh halaman dan coba lagi.' on failure
+- Removed '/api/seller/register' from CSRF_EXEMPT_PATHS in csrf.ts so the CSRF check actually enforces
+
+Stage Summary:
+- vercel.json: Added 4th cron job for auto-confirm-service (daily at midnight)
+- seller/register/route.ts: Added CSRF protection (validateCsrfRequest) after rate limit check
+- csrf.ts: Removed /api/seller/register from exempt paths so CSRF is enforced
+- 3 files changed: vercel.json, src/app/api/seller/register/route.ts, src/lib/csrf.ts
