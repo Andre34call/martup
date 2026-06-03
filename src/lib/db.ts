@@ -1,39 +1,24 @@
 import { PrismaClient } from '@prisma/client'
 
-// Fix: System environment may have a stale SQLite DATABASE_URL that overrides .env
-// We use SUPABASE_DATABASE_URL / SUPABASE_DIRECT_URL in Prisma schema to avoid conflict
-// But at runtime, we also need to ensure the Prisma client gets the correct URLs
-if (process.env.SUPABASE_DATABASE_URL) {
-  process.env.DATABASE_URL = process.env.SUPABASE_DATABASE_URL
-}
-if (process.env.SUPABASE_DIRECT_URL) {
-  process.env.DIRECT_URL = process.env.SUPABASE_DIRECT_URL
-}
-
+// Use DATABASE_URL from environment (PostgreSQL via Supabase).
+// If DATABASE_URL points to SQLite (local dev override), fall back to SUPABASE_DATABASE_URL.
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
 }
 
-// Build the connection URL with serverless-optimized parameters for Vercel
-function getConnectionUrl(): string {
-  let url = process.env.SUPABASE_DATABASE_URL || process.env.DATABASE_URL || ''
-  
-  if (url) {
-    // Add connection pooling parameters for both Vercel and dev
-    const params: string[] = []
-    if (!url.includes('connection_limit')) {
-      params.push('connection_limit=5')
-    }
-    if (!url.includes('pool_timeout')) {
-      params.push('pool_timeout=30')
-    }
-    if (params.length > 0) {
-      const separator = url.includes('?') ? '&' : '?'
-      url = `${url}${separator}${params.join('&')}`
-    }
+function getDatabaseUrl(): string {
+  const envUrl = process.env.DATABASE_URL || ''
+  // If DATABASE_URL is a PostgreSQL URL, use it directly
+  if (envUrl.startsWith('postgresql://') || envUrl.startsWith('postgres://')) {
+    return envUrl
   }
-  
-  return url
+  // Otherwise, fall back to SUPABASE_DATABASE_URL (e.g., when DATABASE_URL is SQLite for local dev)
+  const supabaseUrl = process.env.SUPABASE_DATABASE_URL || ''
+  if (supabaseUrl.startsWith('postgresql://') || supabaseUrl.startsWith('postgres://')) {
+    return supabaseUrl
+  }
+  // Last resort: use DATABASE_URL as-is (will likely fail, but gives a clear error)
+  return envUrl
 }
 
 export const db =
@@ -42,7 +27,7 @@ export const db =
     log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
     datasources: {
       db: {
-        url: getConnectionUrl(),
+        url: getDatabaseUrl(),
       },
     },
   })

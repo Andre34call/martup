@@ -84,14 +84,24 @@ export async function POST(request: NextRequest) {
     })
 
     // Fallback: try case-insensitive lookup for legacy mixed-case emails in the database
+    // NOTE: `mode: 'insensitive'` is supported by PostgreSQL (our production database)
     if (!user) {
-      user = await db.user.findFirst({
-        where: { email: { equals: email, mode: 'insensitive' } },
-        include: {
-          seller: true,
-          wallet: true,
-        },
-      }) as any
+      try {
+        user = await db.user.findFirst({
+          where: { email: { equals: email, mode: 'insensitive' } },
+          include: {
+            seller: true,
+            wallet: true,
+          },
+        }) as any
+      } catch (insensitiveErr) {
+        // If mode: 'insensitive' fails, fallback to exact match
+        logger.warn({ err: insensitiveErr }, 'Case-insensitive lookup failed, trying exact match')
+        user = await db.user.findFirst({
+          where: { email },
+          include: { seller: true, wallet: true },
+        }) as any
+      }
       // Auto-normalize the email in the database so future logins use the direct unique lookup
       if (user && user.email !== email) {
         logger.info({ oldEmail: user.email, newEmail: email }, 'Auto-normalizing email to lowercase')
