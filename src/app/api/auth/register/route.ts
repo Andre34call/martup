@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { checkRateLimit, generateAuthToken } from '@/lib/auth-middleware'
-import { authLimiter } from '@/lib/rate-limit'
+import { generateAuthToken } from '@/lib/auth-middleware'
+import { createRateLimiter } from '@/lib/rate-limit'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
 import { sendEmail, emailVerificationTemplate } from '@/lib/email'
@@ -11,23 +11,20 @@ import { setSessionCookies } from '@/lib/session-cookie'
 import { hashToken } from '@/lib/token-hash'
 import { sanitizeInput } from '@/lib/sanitize'
 
+// Rate limiter: 3 registrations per minute per IP
+const registerLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 3, keyPrefix: 'rl:auth:register:' })
+
 // POST /api/auth/register - Register a new user with email and password
 // Now requires email verification before login
 export async function POST(request: NextRequest) {
   try {
     // Rate limit check - stricter for register (3 per minute per IP)
     const clientIp = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
-    if (!checkRateLimit(`register:${clientIp}`, 3)) {
+    const rateLimit = await registerLimiter.check(clientIp)
+    if (!rateLimit.allowed) {
+      const retrySeconds = Math.ceil((rateLimit.resetAt - Date.now()) / 1000)
       return NextResponse.json(
-        { success: false, error: 'Terlalu banyak percobaan registrasi. Coba lagi dalam 1 menit.' },
-        { status: 429 }
-      )
-    }
-    // Also use distributed rate limiter (persists across serverless cold starts)
-    const distLimit = await authLimiter.check(`register:${clientIp}`)
-    if (!distLimit.allowed) {
-      return NextResponse.json(
-        { success: false, error: 'Terlalu banyak percobaan registrasi. Coba lagi dalam beberapa menit.' },
+        { success: false, error: `Terlalu banyak percobaan registrasi. Coba lagi dalam ${retrySeconds > 60 ? Math.ceil(retrySeconds / 60) + ' menit' : retrySeconds + ' detik'}.` },
         { status: 429 }
       )
     }

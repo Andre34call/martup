@@ -4,6 +4,7 @@ import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
 import { paymentLimiter } from '@/lib/rate-limit'
 import { serializeDecimal } from '@/lib/decimal-utils'
 import { validateBody, paymentCreateSchema } from '@/lib/validations'
+import { validateCsrfRequest } from '@/lib/csrf'
 
 import { logger } from '@/lib/logger'
 // ==================== Midtrans Configuration ====================
@@ -32,6 +33,15 @@ export async function POST(request: NextRequest) {
     // Step 1: Verify authentication
     const authResult = await verifyAuth(request)
     if (!authResult.success) return authErrorResponse(authResult)
+
+    // Step 1.5: CSRF protection
+    const csrfResult = await validateCsrfRequest(request)
+    if (!csrfResult.valid) {
+      return NextResponse.json(
+        { success: false, error: 'CSRF validation failed. Silakan refresh halaman dan coba lagi.' },
+        { status: 403 }
+      )
+    }
 
     // Step 2: Rate limit — 5 payment creation requests per minute (distributed)
     const rateLimitId = `payment-create-${authResult.user.id}`

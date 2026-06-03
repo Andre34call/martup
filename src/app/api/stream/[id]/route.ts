@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAuth, authErrorResponse, ELEVATED_ROLES } from '@/lib/auth-middleware'
-import { checkRateLimit } from '@/lib/auth-middleware'
+import { createRateLimiter } from '@/lib/rate-limit'
 import { logger } from '@/lib/logger'
+
+// Rate limiter: 1 view count increment per IP per minute (per post)
+const viewCountLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 1, keyPrefix: 'rl:stream:view:' })
 
 // ==================== GET /api/stream/[id] ====================
 // Get single post with full details — public endpoint
@@ -72,13 +75,13 @@ export async function GET(
       )
     }
 
-    // Rate-limited view count increment: once per IP per hour
+    // Rate-limited view count increment: once per IP per minute
     const clientIp =
       request.headers.get('x-forwarded-for') ||
       request.headers.get('x-real-ip') ||
       'unknown'
-    const viewKey = `stream-view:${id}:${clientIp}`
-    if (checkRateLimit(viewKey, 1)) {
+    const viewRateLimit = await viewCountLimiter.check(`${id}:${clientIp}`)
+    if (viewRateLimit.allowed) {
       // Only increment if not rate-limited (first view from this IP in the current window)
       await db.streamPost.update({
         where: { id },

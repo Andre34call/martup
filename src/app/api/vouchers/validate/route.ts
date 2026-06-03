@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middleware'
+import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
+import { createRateLimiter } from '@/lib/rate-limit'
+
+const voucherValidateLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 10, keyPrefix: 'rl:vouchers:validate:' })
 
 import { logger } from '@/lib/logger'
 // POST /api/vouchers/validate - Validate a voucher code (PREVIEW only)
@@ -17,12 +20,13 @@ export async function POST(request: NextRequest) {
     if (!authResult.success) return authErrorResponse(authResult)
 
     // Rate limit: max 10 per minute per user
-    const rateLimitKey = `voucher-validate-${authResult.user.id}`
-    if (!checkRateLimit(rateLimitKey, 10)) {
+    const rateLimit = await voucherValidateLimiter.check(authResult.user.id)
+    if (!rateLimit.allowed) {
+      const retrySeconds = Math.ceil((rateLimit.resetAt - Date.now()) / 1000)
       return NextResponse.json(
         {
           success: false,
-          error: 'Terlalu banyak percobaan. Silakan coba lagi dalam 1 menit.',
+          error: `Terlalu banyak permintaan. Coba lagi dalam ${retrySeconds > 60 ? Math.ceil(retrySeconds / 60) + ' menit' : retrySeconds + ' detik'}.`,
         },
         { status: 429 }
       )

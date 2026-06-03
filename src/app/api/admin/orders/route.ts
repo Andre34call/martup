@@ -5,6 +5,7 @@ import { serializeDecimal } from '@/lib/decimal-utils'
 import { updateOrderStatus } from '@/lib/order-status'
 import { parseJsonField } from '@/lib/api-utils'
 import { logger } from '@/lib/logger'
+import { z } from 'zod'
 
 // GET /api/admin/orders - Fetch all orders with buyer name for admin
 export async function GET(request: NextRequest) {
@@ -107,25 +108,31 @@ export async function GET(request: NextRequest) {
 // PUT /api/admin/orders - Update order status (admin-protected)
 // Uses the shared updateOrderStatus utility instead of self-fetching via HTTP
 // to avoid SSRF risk, serverless cold-start fragility, and CSRF token consumption.
+
+const adminOrderUpdateSchema = z.object({
+  orderId: z.string().min(1, 'Order ID wajib diisi'),
+  status: z.enum(['processing', 'shipped', 'delivered', 'cancelled', 'paid'], {
+    errorMap: () => ({ message: 'Status tidak valid. Pilihan: processing, shipped, delivered, cancelled, paid' }),
+  }),
+  cancelReason: z.string().optional(),
+  trackingNumber: z.string().optional(),
+})
+
 export async function PUT(request: NextRequest) {
   try {
     const authResult = await verifyAdmin(request)
     if (!authResult.success) return authErrorResponse(authResult)
 
     const body = await request.json()
-    const { orderId, status, cancelReason, trackingNumber } = body as {
-      orderId: string
-      status: string
-      cancelReason?: string
-      trackingNumber?: string
-    }
-
-    if (!orderId) {
+    const validation = adminOrderUpdateSchema.safeParse(body)
+    if (!validation.success) {
+      const firstError = validation.error.errors[0]
       return NextResponse.json(
-        { success: false, error: 'orderId is required' },
+        { success: false, error: firstError?.message || 'Input tidak valid' },
         { status: 400 }
       )
     }
+    const { orderId, status, cancelReason, trackingNumber } = validation.data
 
     // Delegate to shared business logic (includes validation, authorization,
     // status transitions, escrow, stock restoration, refunds, notifications)

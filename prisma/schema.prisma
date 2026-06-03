@@ -219,6 +219,7 @@ model Withdrawal {
   updatedAt   DateTime @updatedAt
 
   @@index([status, createdAt])
+  @@index([sellerId])
 }
 
 model Transaction {
@@ -556,6 +557,7 @@ model ChatMessage {
   room      ChatRoom @relation(fields: [roomId], references: [id])
 
   @@index([roomId, createdAt])
+  @@index([senderId])
 }
 
 // ==================== NOTIFICATIONS ====================

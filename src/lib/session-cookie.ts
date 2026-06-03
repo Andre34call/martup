@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { REMEMBER_ME_MAX_AGE } from '@/lib/constants'
 
 /**
  * Session Cookie Manager for Sticky Login
@@ -19,8 +20,8 @@ export const SESSION_COOKIE_NAME = 'martup_session'
 export const AUTH_FLAG_COOKIE_NAME = 'martup_auth'
 export const REMEMBER_FLAG_COOKIE_NAME = 'martup_remember'
 
-// Remember Me duration: 30 days
-const REMEMBER_ME_MAX_AGE = 30 * 24 * 60 * 60 // seconds
+// Remember Me duration imported from constants.ts
+// const REMEMBER_ME_MAX_AGE = 30 * 24 * 60 * 60 // seconds — now in constants
 
 const COOKIE_OPTIONS = {
   httpOnly: true,

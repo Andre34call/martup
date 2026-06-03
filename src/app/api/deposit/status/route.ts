@@ -47,19 +47,16 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // SECURITY: Users can only check their own deposits
-    if (deposit.method === 'midtrans') {
-      // For midtrans deposits, verify ownership via the deposit's userId
-      const fullDeposit = await db.deposit.findUnique({
-        where: { id: depositId },
-        select: { userId: true },
-      })
-      if (fullDeposit && fullDeposit.userId !== authResult.user.id) {
-        return NextResponse.json(
-          { success: false, error: 'Anda tidak memiliki akses ke deposit ini' },
-          { status: 403 }
-        )
-      }
+    // SECURITY: Users can only check their own deposits (ALL deposit types)
+    const fullDeposit = await db.deposit.findUnique({
+      where: { id: depositId },
+      select: { userId: true },
+    })
+    if (fullDeposit && fullDeposit.userId !== authResult.user.id) {
+      return NextResponse.json(
+        { success: false, error: 'Anda tidak memiliki akses ke deposit ini' },
+        { status: 403 }
+      )
     }
 
     return NextResponse.json(serializeDecimal({

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { verifyAuth, authErrorResponse, checkRateLimit, ELEVATED_ROLES } from '@/lib/auth-middleware'
+import { verifyAuth, authErrorResponse, ELEVATED_ROLES } from '@/lib/auth-middleware'
 import { createRateLimiter } from '@/lib/rate-limit'
 import { sanitizeInput } from '@/lib/sanitize'
 import { logger } from '@/lib/logger'
@@ -13,6 +13,8 @@ const postLimiter = createRateLimiter({
   maxRequests: 10,
   keyPrefix: 'rl:stream-post:',
 })
+
+const postBurstLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 5, keyPrefix: 'rl:stream-post-burst:' })
 
 // ==================== HELPERS ====================
 
@@ -196,9 +198,11 @@ export async function POST(request: NextRequest) {
       request.headers.get('x-forwarded-for') ||
       request.headers.get('x-real-ip') ||
       'unknown'
-    if (!checkRateLimit(`stream-post-min:${authResult.user.id}:${clientIp}`, 5)) {
+    const burstRateLimit = await postBurstLimiter.check(`${authResult.user.id}:${clientIp}`)
+    if (!burstRateLimit.allowed) {
+      const retrySeconds = Math.ceil((burstRateLimit.resetAt - Date.now()) / 1000)
       return NextResponse.json(
-        { success: false, error: 'Too many requests. Please slow down.' },
+        { success: false, error: `Terlalu banyak permintaan. Coba lagi dalam ${retrySeconds > 60 ? Math.ceil(retrySeconds / 60) + ' menit' : retrySeconds + ' detik'}.` },
         { status: 429 }
       )
     }

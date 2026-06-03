@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { verifyAuth, verifyAdmin, checkRateLimit, authErrorResponse } from '@/lib/auth-middleware'
+import { verifyAuth, verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
 import { logger, logSecurityEvent } from '@/lib/logger'
 

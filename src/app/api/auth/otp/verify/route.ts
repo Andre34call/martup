@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { checkRateLimit, generateAuthToken } from '@/lib/auth-middleware'
-import { authLimiter } from '@/lib/rate-limit'
+import { generateAuthToken } from '@/lib/auth-middleware'
+import { createRateLimiter } from '@/lib/rate-limit'
 import crypto from 'crypto'
 
 import { logger } from '@/lib/logger'
 import { setSessionCookies } from '@/lib/session-cookie'
 import { verifyOtpHash } from '@/lib/token-hash'
 import { verifyTokenHash } from '@/lib/token-hash'
+
+// Rate limiter: 10 OTP verification attempts per minute per IP
+const otpVerifyLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 10, keyPrefix: 'rl:auth:otp-verify:' })
 
 // Maximum failed OTP attempts before requiring a new OTP code
 const MAX_OTP_ATTEMPTS = 5
@@ -17,17 +20,11 @@ export async function POST(request: NextRequest) {
   try {
     // Rate limit: max 10 verification attempts per IP per minute
     const clientIp = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
-    if (!checkRateLimit(`otp-verify:${clientIp}`, 10)) {
+    const rateLimit = await otpVerifyLimiter.check(clientIp)
+    if (!rateLimit.allowed) {
+      const retrySeconds = Math.ceil((rateLimit.resetAt - Date.now()) / 1000)
       return NextResponse.json(
-        { success: false, error: 'Terlalu banyak percobaan verifikasi. Coba lagi dalam 1 menit.' },
-        { status: 429 }
-      )
-    }
-    // Also use distributed rate limiter (persists across serverless cold starts)
-    const distLimit = await authLimiter.check(`otp-verify:${clientIp}`)
-    if (!distLimit.allowed) {
-      return NextResponse.json(
-        { success: false, error: 'Terlalu banyak percobaan verifikasi. Coba lagi dalam beberapa menit.' },
+        { success: false, error: `Terlalu banyak percobaan verifikasi. Coba lagi dalam ${retrySeconds > 60 ? Math.ceil(retrySeconds / 60) + ' menit' : retrySeconds + ' detik'}.` },
         { status: 429 }
       )
     }

@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middleware'
+import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
+import { createRateLimiter } from '@/lib/rate-limit'
 import { UPLOAD_LIMITS } from '@/lib/upload-limits'
 
 import { logger } from '@/lib/logger'
+// Rate limiters for avatar operations
+const avatarPostLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 10, keyPrefix: 'rl:user:avatar-post:' })
+const avatarDeleteLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 5, keyPrefix: 'rl:user:avatar-delete:' })
+
 // ==================== CONFIG ====================
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -84,9 +89,11 @@ export async function POST(request: NextRequest) {
 
     // Rate limit: 10/min per user
     const clientIp = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
-    if (!checkRateLimit(`avatar-post:${clientIp}:${authResult.user.id}`, 10)) {
+    const rateLimit = await avatarPostLimiter.check(`${clientIp}:${authResult.user.id}`)
+    if (!rateLimit.allowed) {
+      const retrySeconds = Math.ceil((rateLimit.resetAt - Date.now()) / 1000)
       return NextResponse.json(
-        { success: false, error: 'Too many requests. Please try again in 1 minute.' },
+        { success: false, error: `Terlalu banyak permintaan. Coba lagi dalam ${retrySeconds > 60 ? Math.ceil(retrySeconds / 60) + ' menit' : retrySeconds + ' detik'}.` },
         { status: 429 }
       )
     }
@@ -293,9 +300,11 @@ export async function DELETE(request: NextRequest) {
 
     // Rate limit: 5/min per user
     const clientIp = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
-    if (!checkRateLimit(`avatar-delete:${clientIp}:${authResult.user.id}`, 5)) {
+    const rateLimit = await avatarDeleteLimiter.check(`${clientIp}:${authResult.user.id}`)
+    if (!rateLimit.allowed) {
+      const retrySeconds = Math.ceil((rateLimit.resetAt - Date.now()) / 1000)
       return NextResponse.json(
-        { success: false, error: 'Too many requests. Please try again in 1 minute.' },
+        { success: false, error: `Terlalu banyak permintaan. Coba lagi dalam ${retrySeconds > 60 ? Math.ceil(retrySeconds / 60) + ' menit' : retrySeconds + ' detik'}.` },
         { status: 429 }
       )
     }

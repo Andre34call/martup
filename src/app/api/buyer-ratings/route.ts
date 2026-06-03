@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middleware'
+import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
+import { createRateLimiter } from '@/lib/rate-limit'
+
+const buyerRatingLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 20, keyPrefix: 'rl:buyer-ratings:' })
 import { sanitizeInput } from '@/lib/sanitize'
 import { logger } from '@/lib/logger'
 import { ELEVATED_ROLES } from '@/lib/types'
@@ -178,9 +181,11 @@ export async function POST(request: NextRequest) {
       request.headers.get('x-forwarded-for') ||
       request.headers.get('x-real-ip') ||
       'unknown'
-    if (!checkRateLimit(`buyer-rating:${authResult.user.id}:${clientIp}`, 20)) {
+    const rateLimit = await buyerRatingLimiter.check(`${authResult.user.id}:${clientIp}`)
+    if (!rateLimit.allowed) {
+      const retrySeconds = Math.ceil((rateLimit.resetAt - Date.now()) / 1000)
       return NextResponse.json(
-        { success: false, error: 'Too many requests' },
+        { success: false, error: `Terlalu banyak permintaan. Coba lagi dalam ${retrySeconds > 60 ? Math.ceil(retrySeconds / 60) + ' menit' : retrySeconds + ' detik'}.` },
         { status: 429 }
       )
     }

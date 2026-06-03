@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { verifyAuth, checkRateLimit, authErrorResponse } from '@/lib/auth-middleware'
+import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
+import { createRateLimiter } from '@/lib/rate-limit'
 import { serializeDecimal } from '@/lib/decimal-utils'
 import { logger, logBusinessEvent } from '@/lib/logger'
 import { validateBody, walletDebitBatchSchema } from '@/lib/validations'
+import { validateCsrfRequest } from '@/lib/csrf'
 import { getEffectiveCommissionRate } from '@/lib/commission'
 import { invalidateUserDataCache } from '@/app/api/user-data/route'
+
+// Rate limiter: 3 wallet debit batch requests per minute per user
+const debitBatchLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 3, keyPrefix: 'rl:wallet:debit-batch:' })
 
 // ==================== WALLET DEBIT BATCH (Atomic Multi-Order Payment) ====================
 // Deducts balance from the user's wallet for multiple orders in a SINGLE transaction.
@@ -21,10 +26,21 @@ export async function POST(request: NextRequest) {
       return authErrorResponse(authResult)
     }
 
-    // SECURITY: Rate limit — 3 batch requests per minute per user
-    if (!checkRateLimit(`debit-batch:${authResult.user.id}`, 3)) {
+    // SECURITY: CSRF protection
+    const csrfResult = await validateCsrfRequest(request)
+    if (!csrfResult.valid) {
       return NextResponse.json(
-        { success: false, error: 'Terlalu banyak request. Coba lagi dalam 1 menit.' },
+        { success: false, error: 'CSRF validation failed. Silakan refresh halaman dan coba lagi.' },
+        { status: 403 }
+      )
+    }
+
+    // SECURITY: Rate limit — 3 batch requests per minute per user
+    const rateLimit = await debitBatchLimiter.check(authResult.user.id)
+    if (!rateLimit.allowed) {
+      const retrySeconds = Math.ceil((rateLimit.resetAt - Date.now()) / 1000)
+      return NextResponse.json(
+        { success: false, error: `Terlalu banyak permintaan. Coba lagi dalam ${retrySeconds > 60 ? Math.ceil(retrySeconds / 60) + ' menit' : retrySeconds + ' detik'}.` },
         { status: 429 }
       )
     }

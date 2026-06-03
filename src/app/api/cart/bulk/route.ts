@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middleware'
+import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
+import { createRateLimiter } from '@/lib/rate-limit'
 import { serializeDecimal } from '@/lib/decimal-utils'
 import { logger } from '@/lib/logger'
 import { parseProductJsonFields } from '@/lib/json-utils'
+
+// Rate limiter: 10 cart bulk operations per minute
+const cartBulkLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 10, keyPrefix: 'rl:cart:bulk:' })
 
 // Shared include for cart item product details
 const cartItemInclude = {
@@ -55,9 +59,11 @@ export async function PUT(request: NextRequest) {
 
     // SECURITY: Rate limit
     const clientIp = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
-    if (!checkRateLimit(`cart-bulk:${clientIp}:${authResult.user.id}`, 10)) {
+    const rateLimit = await cartBulkLimiter.check(`${clientIp}:${authResult.user.id}`)
+    if (!rateLimit.allowed) {
+      const retrySeconds = Math.ceil((rateLimit.resetAt - Date.now()) / 1000)
       return NextResponse.json(
-        { success: false, error: 'Terlalu banyak request. Coba lagi dalam 1 menit.' },
+        { success: false, error: `Terlalu banyak permintaan. Coba lagi dalam ${retrySeconds > 60 ? Math.ceil(retrySeconds / 60) + ' menit' : retrySeconds + ' detik'}.` },
         { status: 429 }
       )
     }

@@ -33,41 +33,38 @@ export async function GET(request: NextRequest) {
 
     const totalRevenue = orderRevenue._sum.totalAmount || 0
 
-    // Revenue chart - last 6 months
+    // Revenue chart - last 6 months (database-level GROUP BY instead of loading all orders)
     const sixMonthsAgo = new Date()
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6)
 
-    const monthlyOrders = await db.order.findMany({
-      where: {
-        status: { in: ['paid', 'processing', 'shipped', 'delivered'] },
-        createdAt: { gte: sixMonthsAgo },
-      },
-      select: {
-        totalAmount: true,
-        createdAt: true,
-      },
-    })
+    const monthlyRevenue = await db.$queryRaw<Array<{ month: Date; total: bigint }>>`
+      SELECT DATE_TRUNC('month', "createdAt") as month, SUM("totalAmount") as total
+      FROM "Order"
+      WHERE status IN ('paid', 'processing', 'shipped', 'delivered')
+        AND "createdAt" >= ${sixMonthsAgo}
+      GROUP BY DATE_TRUNC('month', "createdAt")
+      ORDER BY month ASC
+    `
 
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-    const revenueMap = new Map<string, number>()
-    for (const order of monthlyOrders) {
-      const key = monthNames[order.createdAt.getMonth()]
-      revenueMap.set(key, (revenueMap.get(key) || 0) + Number(order.totalAmount))
-    }
-    const revenueChart = Array.from(revenueMap.entries()).map(([date, revenue]) => ({ date, revenue }))
+    const revenueChart = monthlyRevenue.map(r => ({
+      date: monthNames[r.month.getMonth()],
+      revenue: Number(r.total),
+    }))
 
-    // User growth - last 6 months
-    const recentUsers = await db.user.findMany({
-      where: { createdAt: { gte: sixMonthsAgo } },
-      select: { createdAt: true },
-    })
+    // User growth - last 6 months (database-level GROUP BY instead of loading all users)
+    const monthlyUsers = await db.$queryRaw<Array<{ month: Date; total: bigint }>>`
+      SELECT DATE_TRUNC('month', "createdAt") as month, COUNT(*) as total
+      FROM "User"
+      WHERE "createdAt" >= ${sixMonthsAgo}
+      GROUP BY DATE_TRUNC('month', "createdAt")
+      ORDER BY month ASC
+    `
 
-    const userMap = new Map<string, number>()
-    for (const user of recentUsers) {
-      const key = monthNames[user.createdAt.getMonth()]
-      userMap.set(key, (userMap.get(key) || 0) + 1)
-    }
-    const userGrowth = Array.from(userMap.entries()).map(([date, users]) => ({ date, users }))
+    const userGrowth = monthlyUsers.map(r => ({
+      date: monthNames[r.month.getMonth()],
+      users: Number(r.total),
+    }))
 
     return NextResponse.json({
       success: true,

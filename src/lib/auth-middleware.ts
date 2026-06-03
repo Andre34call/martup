@@ -3,7 +3,6 @@ import { db } from '@/lib/db'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import crypto from 'crypto'
-import { createRateLimiter, type RateLimitResult, rateLimitHeaders } from '@/lib/rate-limit'
 import { env } from '@/lib/env'
 import { SESSION_COOKIE_NAME } from '@/lib/session-cookie'
 
@@ -30,71 +29,7 @@ const MANAGER_ASSIGNABLE_ROLES = ['admin', ...DIVISION_ROLES] as const
 
 export { ELEVATED_ROLES, DIVISION_ROLES, MANAGER_ASSIGNABLE_ROLES }
 
-// ==================== RATE LIMITING ====================
-// Uses the advanced rate limiter from rate-limit.ts which supports
-// both in-memory (dev) and Redis/Vercel KV (production) backends.
-
-const apiLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 60, keyPrefix: 'rl:api:' })
-const authLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 20, keyPrefix: 'rl:auth:' })
-const sensitiveLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 5, keyPrefix: 'rl:sensitive:' })
-
-/**
- * Check rate limit using the advanced rate limiter.
- * Returns the rate limit result so callers can include headers in responses.
- */
-export async function checkRateLimitAdvanced(
-  identifier: string,
-  maxRequests: number = 60
-): Promise<RateLimitResult> {
-  const limiter = createRateLimiter({ windowMs: 60_000, maxRequests, keyPrefix: 'rl:custom:' })
-  return limiter.check(identifier)
-}
-
-/**
- * Legacy synchronous rate limit check — kept for backward compatibility.
- *
- * @deprecated Use checkRateLimitAdvanced() for production code.
- * This function uses in-memory storage which:
- * 1. Has a memory leak — entries are never cleaned up, causing unbounded Map growth
- * 2. Is ineffective in serverless environments — each cold start creates a fresh empty map
- * Kept for backward compatibility with existing routes.
- */
-export function checkRateLimit(identifier: string, maxRequests: number = 60): boolean {
-  // Synchronous approximation — uses in-memory fallback for immediate response
-  // For production, use checkRateLimitAdvanced() which supports distributed backends
-  const now = Date.now()
-  if (!checkRateLimit.map) {
-    checkRateLimit.map = new Map<string, { count: number; lastReset: number }>()
-  }
-  const rateLimitMap = checkRateLimit.map
-
-  // SECURITY FIX: Periodic cleanup to prevent memory leak.
-  // Remove entries older than 2 minutes when the map exceeds 10,000 entries.
-  // This prevents unbounded growth of the in-memory Map.
-  if (rateLimitMap.size > 10000) {
-    for (const [key, value] of rateLimitMap) {
-      if (now - value.lastReset > 120_000) {
-        rateLimitMap.delete(key)
-      }
-    }
-  }
-
-  const entry = rateLimitMap.get(identifier)
-
-  if (!entry || now - entry.lastReset > 60_000) {
-    rateLimitMap.set(identifier, { count: 1, lastReset: now })
-    return true
-  }
-
-  if (entry.count >= maxRequests) {
-    return false
-  }
-
-  entry.count++
-  return true
-}
-// Static property for the in-memory map
-checkRateLimit.map = undefined as unknown as Map<string, { count: number; lastReset: number }>
+import { TOKEN_EXPIRY, TOKEN_ROTATION_THRESHOLD } from '@/lib/constants'
 
 // ==================== TOKEN SIGNING ====================
 
@@ -116,12 +51,14 @@ const TOKEN_SECRET = (() => {
   }
   return secret
 })()
-const TOKEN_EXPIRY = 24 * 60 * 60 * 1000 // 24 hours
+// Token expiry imported from constants.ts
+// const TOKEN_EXPIRY = 24 * 60 * 60 * 1000 // 24 hours — now in constants
 
 // Token rotation threshold: if a token is older than this, issue a fresh one.
 // This limits the window of opportunity for stolen cookies (especially Remember Me)
 // without requiring users to re-authenticate frequently.
-const TOKEN_ROTATION_THRESHOLD = 60 * 60 * 1000 // 1 hour
+// Token rotation threshold imported from constants.ts
+// const TOKEN_ROTATION_THRESHOLD = 60 * 60 * 1000 — now in constants
 
 /**
  * Generate an HMAC-signed auth token.

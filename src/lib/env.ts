@@ -14,6 +14,7 @@ const recommendedVars = [
   'CRON_SECRET',
   'ADMIN_SETUP_SECRET',
   'SUPER_ADMIN_EMAIL',
+  'INTERNAL_API_SECRET',
   'SUPABASE_SERVICE_ROLE_KEY',
   'GOOGLE_CLIENT_ID',
   'GOOGLE_CLIENT_SECRET',
@@ -62,8 +63,21 @@ export const env = {
   CRON_SECRET: process.env.CRON_SECRET || '',
   ADMIN_SETUP_SECRET: process.env.ADMIN_SETUP_SECRET || process.env.NEXTAUTH_SECRET || '',
   // SECURITY: Super Admin email — MUST be set via SUPER_ADMIN_EMAIL env var.
-  // Fallback to kholisakm@gmail.com for production if env var not set (migration safety).
-  SUPER_ADMIN_EMAIL: process.env.SUPER_ADMIN_EMAIL || 'kholisakm@gmail.com',
+  // No hardcoded fallback — an empty string means no super admin privileges are granted.
+  SUPER_ADMIN_EMAIL: process.env.SUPER_ADMIN_EMAIL || '',
+  // SECURITY: Internal API secret — separate from NEXTAUTH_SECRET.
+  // Used for service-to-service auth (e.g., NextAuth → sync-user).
+  // In production, MUST be set explicitly. Falls back to NEXTAUTH_SECRET only in development.
+  INTERNAL_API_SECRET: (() => {
+    const val = process.env.INTERNAL_API_SECRET
+    if (val) return val
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('[WARN] INTERNAL_API_SECRET not set — falling back to NEXTAUTH_SECRET in development mode. Set INTERNAL_API_SECRET in production!')
+      return process.env.NEXTAUTH_SECRET || ''
+    }
+    console.error('[SECURITY] INTERNAL_API_SECRET not set in production! Service-to-service auth will use NEXTAUTH_SECRET as fallback, which is insecure.')
+    return process.env.NEXTAUTH_SECRET || ''
+  })(),
   SMS_PROVIDER: process.env.SMS_PROVIDER || 'mock',
   MIDTRANS_SERVER_KEY: process.env.MIDTRANS_SERVER_KEY || '',
   MIDTRANS_IS_PRODUCTION: process.env.MIDTRANS_IS_PRODUCTION === 'true',

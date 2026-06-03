@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middleware'
+import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
+import { createRateLimiter } from '@/lib/rate-limit'
 import { sanitizeInput } from '@/lib/sanitize'
 import { logger } from '@/lib/logger'
 import { createMentionNotifications } from '@/lib/mention'
+
+// Rate limiter: 20 stream comments per minute
+const streamCommentLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 20, keyPrefix: 'rl:stream:comment:' })
 
 // ==================== GET /api/stream/[id]/comments ====================
 // Fetch comments for a post — public endpoint
@@ -185,9 +189,11 @@ export async function POST(
       request.headers.get('x-forwarded-for') ||
       request.headers.get('x-real-ip') ||
       'unknown'
-    if (!checkRateLimit(`stream-comment:${authResult.user.id}:${clientIp}`, 20)) {
+    const rateLimit = await streamCommentLimiter.check(`${authResult.user.id}:${clientIp}`)
+    if (!rateLimit.allowed) {
+      const retrySeconds = Math.ceil((rateLimit.resetAt - Date.now()) / 1000)
       return NextResponse.json(
-        { success: false, error: 'Too many requests. Please slow down.' },
+        { success: false, error: `Terlalu banyak permintaan. Coba lagi dalam ${retrySeconds > 60 ? Math.ceil(retrySeconds / 60) + ' menit' : retrySeconds + ' detik'}.` },
         { status: 429 }
       )
     }

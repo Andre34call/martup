@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
     // SECURITY: Unified auth using verifyAuth (supports both session and bearer token)
     const authResult = await verifyAuth(request)
     if (!authResult.success) {
-      return NextResponse.json({ error: authResult.error }, { status: authResult.status })
+      return NextResponse.json({ success: false, error: authResult.error }, { status: authResult.status })
     }
 
     // Verify seller account
@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
       where: { userId: authResult.user.id },
     })
     if (!seller) {
-      return NextResponse.json({ error: 'Seller account required' }, { status: 403 })
+      return NextResponse.json({ success: false, error: 'Seller account required' }, { status: 403 })
     }
 
     const { searchParams } = request.nextUrl
@@ -103,7 +103,7 @@ export async function GET(request: NextRequest) {
   } catch (error: unknown) {
     logger.error({ err: error }, 'GET /api/seller/orders error')
     return NextResponse.json(
-      { error: 'Gagal mengambil data pesanan seller' },
+      { success: false, error: 'Gagal mengambil data pesanan seller' },
       { status: 500 }
     )
   }

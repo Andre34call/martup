@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middleware'
+import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
 import { createRateLimiter } from '@/lib/rate-limit'
 import { logger } from '@/lib/logger'
 
-// Rate limiter: 10 comment deletions per minute per user
+// Rate limiters: 10 comment deletions per minute + burst protection
 const commentDeleteLimiter = createRateLimiter({
   windowMs: 60 * 1000,
   maxRequests: 10,
   keyPrefix: 'rl:stream-comment-delete:',
 })
+const commentDeleteBurstLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 10, keyPrefix: 'rl:stream-comment-delete-burst:' })
 
 // ==================== DELETE /api/stream/[id]/comments/[commentId] ====================
 // Delete a comment — only the comment author can delete their own comment
@@ -45,14 +46,16 @@ export async function DELETE(
       )
     }
 
-    // Additional burst protection using legacy sync rate limiter
+    // Additional burst protection using distributed rate limiter
     const clientIp =
       request.headers.get('x-forwarded-for') ||
       request.headers.get('x-real-ip') ||
       'unknown'
-    if (!checkRateLimit(`stream-comment-delete-burst:${authResult.user.id}:${clientIp}`, 10)) {
+    const burstRateLimit = await commentDeleteBurstLimiter.check(`${authResult.user.id}:${clientIp}`)
+    if (!burstRateLimit.allowed) {
+      const retrySeconds = Math.ceil((burstRateLimit.resetAt - Date.now()) / 1000)
       return NextResponse.json(
-        { success: false, error: 'Too many requests. Please slow down.' },
+        { success: false, error: `Terlalu banyak permintaan. Coba lagi dalam ${retrySeconds > 60 ? Math.ceil(retrySeconds / 60) + ' menit' : retrySeconds + ' detik'}.` },
         { status: 429 }
       )
     }

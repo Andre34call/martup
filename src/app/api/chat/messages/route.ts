@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { verifyAuth, checkRateLimit } from '@/lib/auth-middleware'
+import { verifyAuth } from '@/lib/auth-middleware'
+import { createRateLimiter } from '@/lib/rate-limit'
 import { sanitizeInput } from '@/lib/sanitize'
 
 import { logger } from '@/lib/logger'
+// Rate limiter: 30 chat messages per minute per user
+const chatMsgLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 30, keyPrefix: 'rl:chat:msg-direct:' })
+
 const MAX_MESSAGE_LENGTH = 2000
 const VALID_MESSAGE_TYPES = ['text', 'image', 'product', 'order']
 
@@ -141,9 +145,11 @@ export async function POST(request: NextRequest) {
     }
 
     // SECURITY: Rate limit message sending (max 30 per minute per user)
-    if (!checkRateLimit(`chat-msg:${authResult.user.id}`, 30)) {
+    const rateLimit = await chatMsgLimiter.check(authResult.user.id)
+    if (!rateLimit.allowed) {
+      const retrySeconds = Math.ceil((rateLimit.resetAt - Date.now()) / 1000)
       return NextResponse.json(
-        { success: false, error: 'Terlalu banyak pesan. Coba lagi dalam 1 menit.' },
+        { success: false, error: `Terlalu banyak pesan. Coba lagi dalam ${retrySeconds > 60 ? Math.ceil(retrySeconds / 60) + ' menit' : retrySeconds + ' detik'}.` },
         { status: 429 }
       )
     }

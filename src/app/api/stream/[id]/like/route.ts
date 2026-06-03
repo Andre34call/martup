@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middleware'
+import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
 import { createRateLimiter } from '@/lib/rate-limit'
 import { logger } from '@/lib/logger'
 
-// Rate limiter: 30 like toggles per minute per user
+// Rate limiters: 30 like toggles per minute + 10 burst protection
 const likeLimiter = createRateLimiter({
   windowMs: 60 * 1000,
   maxRequests: 30,
   keyPrefix: 'rl:stream-like:',
 })
+const likeBurstLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 10, keyPrefix: 'rl:stream-like-burst:' })
 
 // ==================== POST /api/stream/[id]/like ====================
 // Toggle like — like if not liked, unlike if already liked
@@ -38,9 +39,11 @@ export async function POST(
     }
 
     // Additional burst protection
-    if (!checkRateLimit(`like-burst:${authResult.user.id}`, 10)) {
+    const burstRateLimit = await likeBurstLimiter.check(authResult.user.id)
+    if (!burstRateLimit.allowed) {
+      const retrySeconds = Math.ceil((burstRateLimit.resetAt - Date.now()) / 1000)
       return NextResponse.json(
-        { success: false, error: 'Terlalu banyak request. Coba lagi nanti.' },
+        { success: false, error: `Terlalu banyak permintaan. Coba lagi dalam ${retrySeconds > 60 ? Math.ceil(retrySeconds / 60) + ' menit' : retrySeconds + ' detik'}.` },
         { status: 429 }
       )
     }

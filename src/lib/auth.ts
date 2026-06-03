@@ -142,7 +142,7 @@ export const authOptions: NextAuthOptions = {
       // Sync user to our database
       try {
         // SECURITY: Add internal secret to verify this is from NextAuth callback, not external caller
-        const internalSecret = nextauthSecret
+        const internalSecret = env.INTERNAL_API_SECRET
         if (!internalSecret) {
           logger.error({ component: 'auth' }, 'NEXTAUTH_SECRET not set — cannot sync Google OAuth user')
           return true // Still allow sign-in, /api/auth/me will handle user creation as fallback

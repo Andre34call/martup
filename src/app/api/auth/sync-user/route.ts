@@ -4,6 +4,7 @@ import { generateAuthToken } from '@/lib/auth-middleware'
 import { authLimiter } from '@/lib/rate-limit'
 import { sanitizeInput } from '@/lib/sanitize'
 import crypto from 'crypto'
+import { env } from '@/lib/env'
 
 import { logger } from '@/lib/logger'
 
@@ -56,7 +57,7 @@ export async function POST(request: NextRequest) {
 
     // SECURITY: For Google OAuth, verify internal secret (only NextAuth callback should call this)
     const internalSecret = request.headers.get('x-internal-secret')
-    const expectedSecret = process.env.NEXTAUTH_SECRET
+    const expectedSecret = env.INTERNAL_API_SECRET
     if (!expectedSecret || !internalSecret || !safeCompare(internalSecret, expectedSecret)) {
       logger.warn(`[SECURITY] sync-user called without valid internal secret from IP: ${clientIp}`)
       return NextResponse.json(

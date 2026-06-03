@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middleware'
+import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
+import { createRateLimiter } from '@/lib/rate-limit'
 import bcrypt from 'bcryptjs'
 import { logger } from '@/lib/logger'
 import { validateBody, updatePasswordSchema } from '@/lib/validations'
+
+// Rate limiter: 3 password change attempts per minute per user
+const passwordChangeLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 3, keyPrefix: 'rl:user:password:' })
 
 // ==================== POST /api/user/password ====================
 // Change the authenticated user's password with full validation
@@ -15,10 +19,11 @@ export async function POST(request: NextRequest) {
     if (!authResult.success) return authErrorResponse(authResult)
 
     // Step 2: Rate limit — 3 attempts per minute per user
-    const rateLimitKey = `password-change:${authResult.user.id}`
-    if (!checkRateLimit(rateLimitKey, 3)) {
+    const rateLimit = await passwordChangeLimiter.check(authResult.user.id)
+    if (!rateLimit.allowed) {
+      const retrySeconds = Math.ceil((rateLimit.resetAt - Date.now()) / 1000)
       return NextResponse.json(
-        { success: false, error: 'Terlalu banyak percobaan ubah password. Coba lagi dalam 1 menit.' },
+        { success: false, error: `Terlalu banyak percobaan ubah password. Coba lagi dalam ${retrySeconds > 60 ? Math.ceil(retrySeconds / 60) + ' menit' : retrySeconds + ' detik'}.` },
         { status: 429 }
       )
     }

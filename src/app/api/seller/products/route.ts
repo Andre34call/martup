@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middleware'
+import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
+import { createRateLimiter } from '@/lib/rate-limit'
 import { parseJsonField } from '@/lib/api-utils'
 import { sanitizeInput } from '@/lib/sanitize'
 import { serializeDecimal } from '@/lib/decimal-utils'
 
 import { logger } from '@/lib/logger'
+
+const sellerProductsLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 20, keyPrefix: 'rl:seller:products:' })
 
 // GET /api/seller/products - Fetch products for a specific seller
 // SECURITY: Only the seller themselves (or admins) can see all products including drafts.
@@ -84,10 +87,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Rate limit: max 20 operations per minute
-    const rateLimitId = `seller-products-post-${authResult.user.id}`
-    if (!checkRateLimit(rateLimitId, 20)) {
+    const rateLimit = await sellerProductsLimiter.check(authResult.user.id)
+    if (!rateLimit.allowed) {
+      const retrySeconds = Math.ceil((rateLimit.resetAt - Date.now()) / 1000)
       return NextResponse.json(
-        { success: false, error: 'Rate limit exceeded. Max 20 operations per minute.' },
+        { success: false, error: `Terlalu banyak permintaan. Coba lagi dalam ${retrySeconds > 60 ? Math.ceil(retrySeconds / 60) + ' menit' : retrySeconds + ' detik'}.` },
         { status: 429 }
       )
     }
@@ -271,10 +275,11 @@ export async function PUT(request: NextRequest) {
     }
 
     // Rate limit: max 20 operations per minute
-    const rateLimitId = `seller-products-put-${authResult.user.id}`
-    if (!checkRateLimit(rateLimitId, 20)) {
+    const rateLimit = await sellerProductsLimiter.check(authResult.user.id)
+    if (!rateLimit.allowed) {
+      const retrySeconds = Math.ceil((rateLimit.resetAt - Date.now()) / 1000)
       return NextResponse.json(
-        { success: false, error: 'Rate limit exceeded. Max 20 operations per minute.' },
+        { success: false, error: `Terlalu banyak permintaan. Coba lagi dalam ${retrySeconds > 60 ? Math.ceil(retrySeconds / 60) + ' menit' : retrySeconds + ' detik'}.` },
         { status: 429 }
       )
     }
@@ -562,10 +567,11 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Rate limit: max 20 operations per minute
-    const rateLimitId = `seller-products-delete-${authResult.user.id}`
-    if (!checkRateLimit(rateLimitId, 20)) {
+    const rateLimit = await sellerProductsLimiter.check(authResult.user.id)
+    if (!rateLimit.allowed) {
+      const retrySeconds = Math.ceil((rateLimit.resetAt - Date.now()) / 1000)
       return NextResponse.json(
-        { success: false, error: 'Rate limit exceeded. Max 20 operations per minute.' },
+        { success: false, error: `Terlalu banyak permintaan. Coba lagi dalam ${retrySeconds > 60 ? Math.ceil(retrySeconds / 60) + ' menit' : retrySeconds + ' detik'}.` },
         { status: 429 }
       )
     }

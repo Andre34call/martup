@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 
+import { validateCsrfRequest } from '@/lib/csrf'
 import { logger } from '@/lib/logger'
 // Seed endpoint - creates demo sellers with products and categories
 // SECURITY: Requires admin authentication
@@ -17,6 +18,15 @@ export async function POST(request: NextRequest) {
     if (process.env.NODE_ENV === 'production' && process.env.ENABLE_SEED !== 'true') {
       return NextResponse.json(
         { success: false, error: 'Seed endpoint dinonaktifkan di production' },
+        { status: 403 }
+      )
+    }
+
+    // SECURITY: CSRF protection (only when seed is enabled)
+    const csrfResult = await validateCsrfRequest(request)
+    if (!csrfResult.valid) {
+      return NextResponse.json(
+        { success: false, error: 'CSRF validation failed. Silakan refresh halaman dan coba lagi.' },
         { status: 403 }
       )
     }

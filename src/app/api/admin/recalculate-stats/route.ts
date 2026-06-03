@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
+import { validateCsrfRequest } from '@/lib/csrf'
 import { logger } from '@/lib/logger'
 
 // ==================== POST /api/admin/recalculate-stats ====================
@@ -14,6 +15,15 @@ export async function POST(request: NextRequest) {
     const authResult = await verifyAdmin(request)
     if (!authResult.success) {
       return authErrorResponse(authResult)
+    }
+
+    // SECURITY: CSRF protection
+    const csrfResult = await validateCsrfRequest(request)
+    if (!csrfResult.valid) {
+      return NextResponse.json(
+        { success: false, error: 'CSRF validation failed. Silakan refresh halaman dan coba lagi.' },
+        { status: 403 }
+      )
     }
 
     const results = {

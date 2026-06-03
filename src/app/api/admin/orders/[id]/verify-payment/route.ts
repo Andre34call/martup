@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
 import { logger, logBusinessEvent } from '@/lib/logger'
+import { validateCsrfRequest } from '@/lib/csrf'
 
 // ==================== PUT /api/admin/orders/[id]/verify-payment ====================
 // Admin verifies or rejects a buyer's payment proof
@@ -15,6 +16,15 @@ export async function PUT(
     // Step 1: Verify admin authentication
     const authResult = await verifyAdmin(request)
     if (!authResult.success) return authErrorResponse(authResult)
+
+    // Step 1.5: CSRF protection
+    const csrfResult = await validateCsrfRequest(request)
+    if (!csrfResult.valid) {
+      return NextResponse.json(
+        { success: false, error: 'CSRF validation failed. Silakan refresh halaman dan coba lagi.' },
+        { status: 403 }
+      )
+    }
 
     const { id: orderId } = await params
 

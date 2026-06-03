@@ -12,7 +12,7 @@ export async function POST(
     // SECURITY: Unified auth using verifyAuth (supports both session and bearer token)
     const authResult = await verifyAuth(request)
     if (!authResult.success) {
-      return NextResponse.json({ error: authResult.error }, { status: authResult.status })
+      return NextResponse.json({ success: false, error: authResult.error }, { status: authResult.status })
     }
     const user = authResult.user
 
@@ -177,21 +177,21 @@ export async function POST(
     // Handle known business logic errors from the transaction
     if (error instanceof Error) {
       if (error.message === 'Order not found') {
-        return NextResponse.json({ error: 'Order not found' }, { status: 404 })
+        return NextResponse.json({ success: false, error: 'Order not found' }, { status: 404 })
       }
       if (error.message === 'Forbidden') {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+        return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 })
       }
       if (error.message === 'Order can only be cancelled if status is pending or paid') {
         return NextResponse.json(
-          { error: 'Order can only be cancelled if status is pending or paid' },
+          { success: false, error: 'Order can only be cancelled if status is pending or paid' },
           { status: 400 }
         )
       }
     }
     logger.error({ err: error }, 'POST /api/orders/[id]/cancel error')
     return NextResponse.json(
-      { error: 'Gagal membatalkan pesanan' },
+      { success: false, error: 'Gagal membatalkan pesanan' },
       { status: 500 }
     )
   }

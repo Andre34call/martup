@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middleware'
+import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
+import { createRateLimiter } from '@/lib/rate-limit'
 import crypto from 'crypto'
 import bcrypt from 'bcryptjs'
 import { logger } from '@/lib/logger'
 import { sendOTP } from '@/lib/sms-gateway'
 import { validateBody, twoFactorActionSchema, twoFactorDisableSchema } from '@/lib/validations'
 import { hashOtp, verifyOtpHash } from '@/lib/token-hash'
+
+// Rate limiters for 2FA operations
+const tfaOtpLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 5, keyPrefix: 'rl:user:2fa-otp:' })
+const tfaVerifyLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 10, keyPrefix: 'rl:user:2fa-verify:' })
+const tfaDisableLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 5, keyPrefix: 'rl:user:2fa-disable:' })
 
 // OTP configuration for 2FA
 const OTP_LENGTH = 6
@@ -91,10 +97,12 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'send-otp') {
-      // Rate limit: max 5 OTP requests per user per hour
-      if (!checkRateLimit(`2fa-otp:${user.id}`, 5)) {
+      // Rate limit: max 5 OTP requests per user per minute
+      const otpRateLimit = await tfaOtpLimiter.check(user.id)
+      if (!otpRateLimit.allowed) {
+        const retrySeconds = Math.ceil((otpRateLimit.resetAt - Date.now()) / 1000)
         return NextResponse.json(
-          { success: false, error: 'Terlalu banyak permintaan OTP. Coba lagi dalam 1 jam.' },
+          { success: false, error: `Terlalu banyak permintaan OTP. Coba lagi dalam ${retrySeconds > 60 ? Math.ceil(retrySeconds / 60) + ' menit' : retrySeconds + ' detik'}.` },
           { status: 429 }
         )
       }
@@ -140,9 +148,11 @@ export async function POST(request: NextRequest) {
       }
 
       // Rate limit OTP verification attempts
-      if (!checkRateLimit(`2fa-verify:${user.id}`, 10)) {
+      const verifyRateLimit = await tfaVerifyLimiter.check(user.id)
+      if (!verifyRateLimit.allowed) {
+        const retrySeconds = Math.ceil((verifyRateLimit.resetAt - Date.now()) / 1000)
         return NextResponse.json(
-          { success: false, error: 'Terlalu banyak percobaan verifikasi. Coba lagi dalam 1 menit.' },
+          { success: false, error: `Terlalu banyak percobaan verifikasi. Coba lagi dalam ${retrySeconds > 60 ? Math.ceil(retrySeconds / 60) + ' menit' : retrySeconds + ' detik'}.` },
           { status: 429 }
         )
       }
@@ -224,9 +234,11 @@ export async function DELETE(request: NextRequest) {
     if (!authResult.success) return authErrorResponse(authResult)
 
     // Rate limit
-    if (!checkRateLimit(`2fa-disable:${authResult.user.id}`, 5)) {
+    const disableRateLimit = await tfaDisableLimiter.check(authResult.user.id)
+    if (!disableRateLimit.allowed) {
+      const retrySeconds = Math.ceil((disableRateLimit.resetAt - Date.now()) / 1000)
       return NextResponse.json(
-        { success: false, error: 'Terlalu banyak percobaan. Coba lagi dalam 1 menit.' },
+        { success: false, error: `Terlalu banyak percobaan. Coba lagi dalam ${retrySeconds > 60 ? Math.ceil(retrySeconds / 60) + ' menit' : retrySeconds + ' detik'}.` },
         { status: 429 }
       )
     }

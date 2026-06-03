@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middleware'
+import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
+import { createRateLimiter } from '@/lib/rate-limit'
 import { parseJsonField } from '@/lib/api-utils'
 import { serializeDecimal } from '@/lib/decimal-utils'
 
 import { logger } from '@/lib/logger'
+// Rate limiter: 30 cart operations per minute
+const cartLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 30, keyPrefix: 'rl:cart:main:' })
+
 // Helper to parse product JSON fields (images, tags stored as JSON strings)
 function parseProductJsonFields(product: Record<string, unknown>) {
   return {
@@ -134,9 +138,11 @@ export async function POST(request: NextRequest) {
 
     // SECURITY: Rate limit cart operations
     const clientIp = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
-    if (!checkRateLimit(`cart:${clientIp}:${authResult.user.id}`, 30)) {
+    const rateLimit = await cartLimiter.check(`${clientIp}:${authResult.user.id}`)
+    if (!rateLimit.allowed) {
+      const retrySeconds = Math.ceil((rateLimit.resetAt - Date.now()) / 1000)
       return NextResponse.json(
-        { success: false, error: 'Terlalu banyak request. Coba lagi dalam 1 menit.' },
+        { success: false, error: `Terlalu banyak permintaan. Coba lagi dalam ${retrySeconds > 60 ? Math.ceil(retrySeconds / 60) + ' menit' : retrySeconds + ' detik'}.` },
         { status: 429 }
       )
     }

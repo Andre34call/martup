@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { verifyAdmin, verifyManager, verifySuperAdmin, authErrorResponse, isSuperAdmin, isManager, ELEVATED_ROLES, MANAGER_ASSIGNABLE_ROLES, DIVISION_ROLES } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
 import { env } from '@/lib/env'
+import { validateCsrfRequest } from '@/lib/csrf'
 
 import { logger } from '@/lib/logger'
 
@@ -21,7 +22,7 @@ const DIVISION_SLUG_ROLE_MAP: Record<string, string> = {
   hr: 'hr',
 }
 
-// GET /api/admin/users - Fetch all users with seller info, order count, total spent
+// GET /api/admin/users - Fetch all users with seller info, order count, total spent (paginated)
 export async function GET(request: NextRequest) {
   const authResult = await verifyAdmin(request)
   if (!authResult.success) return authErrorResponse(authResult)
@@ -30,6 +31,9 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const role = searchParams.get('role') // optional filter
     const search = searchParams.get('search') // optional search
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10))
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '20', 10)))
+    const skip = (page - 1) * limit
 
     const where: Record<string, unknown> = {}
 
@@ -44,33 +48,38 @@ export async function GET(request: NextRequest) {
       ]
     }
 
-    const users = await db.user.findMany({
-      where,
-      include: {
-        seller: {
-          select: {
-            id: true,
-            storeName: true,
-            storeSlug: true,
-            storeAvatar: true,
-            storeBanner: true,
-            isVerified: true,
-            isPremium: true,
-            rating: true,
-            totalSales: true,
-            totalProducts: true,
+    const [users, total] = await Promise.all([
+      db.user.findMany({
+        where,
+        include: {
+          seller: {
+            select: {
+              id: true,
+              storeName: true,
+              storeSlug: true,
+              storeAvatar: true,
+              storeBanner: true,
+              isVerified: true,
+              isPremium: true,
+              rating: true,
+              totalSales: true,
+              totalProducts: true,
+            },
+          },
+          _count: {
+            select: { orders: true },
+          },
+          orders: {
+            select: { totalAmount: true },
+            where: { status: { notIn: ['CANCELLED', 'cancelled'] } },
           },
         },
-        _count: {
-          select: { orders: true },
-        },
-        orders: {
-          select: { totalAmount: true },
-          where: { status: { notIn: ['CANCELLED', 'cancelled'] } },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-    })
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip,
+      }),
+      db.user.count({ where }),
+    ])
 
     const mapped = users.map((user) => {
       const totalSpent = user.orders.reduce(
@@ -105,6 +114,12 @@ export async function GET(request: NextRequest) {
       // Permission flags — let frontend know what actions are available
       isSuperAdmin: isUserSuperAdmin,
       isManager: isUserSuperAdmin || isUserManager, // Super admin can also do manager things
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
     }))
   } catch (error: unknown) {
     // Error logged above — generic message returned to client
@@ -124,6 +139,15 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   const authResult = await verifyAdmin(request)
   if (!authResult.success) return authErrorResponse(authResult)
+
+  // SECURITY: CSRF protection
+  const csrfResult = await validateCsrfRequest(request)
+  if (!csrfResult.valid) {
+    return NextResponse.json(
+      { success: false, error: 'CSRF validation failed. Silakan refresh halaman dan coba lagi.' },
+      { status: 403 }
+    )
+  }
 
   try {
     const body = await request.json()
@@ -284,6 +308,15 @@ export async function PATCH(request: NextRequest) {
   // Manager or Super Admin can promote to division admin
   const authResult = await verifyManager(request)
   if (!authResult.success) return authErrorResponse(authResult)
+
+  // SECURITY: CSRF protection
+  const csrfResult = await validateCsrfRequest(request)
+  if (!csrfResult.valid) {
+    return NextResponse.json(
+      { success: false, error: 'CSRF validation failed. Silakan refresh halaman dan coba lagi.' },
+      { status: 403 }
+    )
+  }
 
   try {
     const body = await request.json()

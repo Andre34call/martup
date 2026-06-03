@@ -8,6 +8,7 @@ import { logger } from '@/lib/logger'
 import { validateBody, loginSchema } from '@/lib/validations'
 import { setSessionCookies } from '@/lib/session-cookie'
 import { sendEmail, accountLockedTemplate } from '@/lib/email'
+import { MAX_FAILED_LOGIN_ATTEMPTS, LOCKOUT_DURATION_MINUTES } from '@/lib/constants'
 
 // Helper: check if a string looks like a valid bcrypt hash
 function isValidBcryptHash(hash: string): boolean {
@@ -29,9 +30,8 @@ function maskPhone(phone: string): string {
   return `${visibleStart}${maskedMiddle}${visibleEnd}`
 }
 
-// Account lockout configuration
-const MAX_FAILED_ATTEMPTS = 10  // Lock account after 10 failed attempts
-const LOCKOUT_DURATION_MINUTES = 30  // Lock for 30 minutes
+// Account lockout configuration imported from constants.ts
+// MAX_FAILED_LOGIN_ATTEMPTS and LOCKOUT_DURATION_MINUTES — now in constants
 
 // POST /api/auth/login - Login with email and password
 export async function POST(request: NextRequest) {
@@ -128,7 +128,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if account is temporarily locked due to too many failed attempts
-    if (user.failedLoginAttempts >= MAX_FAILED_ATTEMPTS && user.lockedUntil && new Date() < user.lockedUntil) {
+    if (user.failedLoginAttempts >= MAX_FAILED_LOGIN_ATTEMPTS && user.lockedUntil && new Date() < user.lockedUntil) {
       const remainingMinutes = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60000)
       logger.warn({ email, userId: user.id, remainingMinutes }, 'Login failed: account temporarily locked')
       return NextResponse.json(
@@ -184,7 +184,7 @@ export async function POST(request: NextRequest) {
 
       // Increment failed login attempts for account lockout
       const newFailedAttempts = (user.failedLoginAttempts || 0) + 1
-      const lockUntil = newFailedAttempts >= MAX_FAILED_ATTEMPTS
+      const lockUntil = newFailedAttempts >= MAX_FAILED_LOGIN_ATTEMPTS
         ? new Date(Date.now() + LOCKOUT_DURATION_MINUTES * 60 * 1000)
         : null
 

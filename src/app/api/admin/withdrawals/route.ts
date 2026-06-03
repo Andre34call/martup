@@ -6,7 +6,7 @@ import { logger, logBusinessEvent } from '@/lib/logger'
 import { validateBody, adminWithdrawalActionSchema } from '@/lib/validations'
 import { validateCsrfRequest } from '@/lib/csrf'
 
-// GET /api/admin/withdrawals - Fetch all withdrawal requests with seller info
+// GET /api/admin/withdrawals - Fetch all withdrawal requests with seller info (paginated)
 export async function GET(request: NextRequest) {
   const authResult = await verifyAdmin(request)
   if (!authResult.success) return authErrorResponse(authResult)
@@ -14,16 +14,24 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status') // optional filter
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10))
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '20', 10)))
+    const skip = (page - 1) * limit
 
     const where: Record<string, unknown> = {}
     if (status && status !== 'all') {
       where.status = status
     }
 
-    const withdrawals = await db.withdrawal.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-    })
+    const [withdrawals, total] = await Promise.all([
+      db.withdrawal.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip,
+      }),
+      db.withdrawal.count({ where }),
+    ])
 
     // Fetch seller info for each unique sellerId
     const sellerIds = [...new Set(withdrawals.map((w) => w.sellerId))]
@@ -64,7 +72,16 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    return NextResponse.json(serializeDecimal({ success: true, data: mapped }))
+    return NextResponse.json(serializeDecimal({
+      success: true,
+      data: mapped,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    }))
   } catch (error: unknown) {
     // Error logged above — generic message returned to client
     logger.error({ err: error }, 'Admin withdrawals GET error')

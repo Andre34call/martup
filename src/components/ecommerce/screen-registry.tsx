@@ -3,6 +3,7 @@
 import React, { Suspense, lazy, ComponentType } from 'react'
 import { Loader2 } from 'lucide-react'
 import type { ScreenName } from '@/lib/types'
+import { ScreenErrorBoundary } from '@/components/ecommerce/error-boundary'
 
 // ==================== LAZY-LOADED SCREEN REGISTRY ====================
 // All screens are dynamically imported to enable code splitting.
@@ -245,8 +246,10 @@ export function LazyScreenRenderer({ screen, navigate }: ScreenRendererProps) {
   const props = isLegalScreen ? { onBack: () => navigate('settings') } : undefined
 
   return (
-    <Suspense fallback={<ScreenLoader />}>
-      <Component {...props} />
-    </Suspense>
+    <ScreenErrorBoundary>
+      <Suspense fallback={<ScreenLoader />}>
+        <Component {...props} />
+      </Suspense>
+    </ScreenErrorBoundary>
   )
 }

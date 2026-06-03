@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { verifyAuth, checkRateLimit, isSuperAdmin, isElevatedRole } from '@/lib/auth-middleware'
+import { verifyAuth, isSuperAdmin, isElevatedRole } from '@/lib/auth-middleware'
+import { createRateLimiter } from '@/lib/rate-limit'
 import { validateBody, sellerRegisterSchema } from '@/lib/validations'
 
 import { logger } from '@/lib/logger'
+
+const sellerRegisterLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 5, keyPrefix: 'rl:seller:register:' })
 
 // Elevated roles that should NOT be demoted to 'seller' when registering as a seller.
 // Super Admin, Manager, and Division Admins must keep their elevated role.
@@ -24,9 +27,11 @@ export async function POST(request: NextRequest) {
 
     // SECURITY: Rate limit seller registrations
     const clientIp = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
-    if (!checkRateLimit(`seller-register:${clientIp}`, 5)) {
+    const rateLimit = await sellerRegisterLimiter.check(clientIp)
+    if (!rateLimit.allowed) {
+      const retrySeconds = Math.ceil((rateLimit.resetAt - Date.now()) / 1000)
       return NextResponse.json(
-        { success: false, error: 'Terlalu banyak percobaan. Coba lagi dalam 1 menit.' },
+        { success: false, error: `Terlalu banyak percobaan. Coba lagi dalam ${retrySeconds > 60 ? Math.ceil(retrySeconds / 60) + ' menit' : retrySeconds + ' detik'}.` },
         { status: 429 }
       )
     }

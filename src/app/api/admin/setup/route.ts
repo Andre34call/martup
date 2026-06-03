@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { verifyAuth, verifyAdmin, authErrorResponse, AuthResult } from '@/lib/auth-middleware'
 import { authLimiter } from '@/lib/rate-limit'
 import crypto from 'crypto'
+import { validateCsrfRequest } from '@/lib/csrf'
 
 import { logger } from '@/lib/logger'
 
@@ -22,6 +23,15 @@ function safeCompare(a: string, b: string): boolean {
 // Once at least one admin exists, the secret key method is DISABLED
 export async function POST(request: NextRequest) {
   try {
+    // SECURITY: CSRF protection
+    const csrfResult = await validateCsrfRequest(request)
+    if (!csrfResult.valid) {
+      return NextResponse.json(
+        { success: false, error: 'CSRF validation failed. Silakan refresh halaman dan coba lagi.' },
+        { status: 403 }
+      )
+    }
+
     // Rate limit - very strict for admin setup (2 per minute, distributed)
     const clientIp = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
     const rateLimitResult = await authLimiter.check(`admin-setup:${clientIp}`)

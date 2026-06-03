@@ -75,11 +75,11 @@ export async function GET(request: NextRequest) {
     })
   } catch (error: unknown) {
     if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
     logger.error({ err: error }, 'GET /api/wallet/mutations error')
     return NextResponse.json(
-      { error: 'Terjadi kesalahan server' },
+      { success: false, error: 'Terjadi kesalahan server' },
       { status: 500 }
     )
   }

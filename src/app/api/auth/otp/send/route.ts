@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { checkRateLimit } from '@/lib/auth-middleware'
-import { authLimiter } from '@/lib/rate-limit'
+import { createRateLimiter } from '@/lib/rate-limit'
 import crypto from 'crypto'
 
 import { logger } from '@/lib/logger'
@@ -12,24 +11,22 @@ const OTP_LENGTH = 6
 const OTP_EXPIRY_MINUTES = 5
 const OTP_MAX_ATTEMPTS_PER_HOUR = 5
 
+// Rate limiters for OTP send
+const otpSendIpLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: OTP_MAX_ATTEMPTS_PER_HOUR, keyPrefix: 'rl:auth:otp-send-ip:' })
+const otpSendPhoneLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: OTP_MAX_ATTEMPTS_PER_HOUR, keyPrefix: 'rl:auth:otp-send-phone:' })
+
 // POST /api/auth/otp/send - Send OTP to a phone number
 // Generates a 6-digit OTP, stores it in the user record, and returns a requestId
 // In production, this would send the OTP via SMS gateway
 export async function POST(request: NextRequest) {
   try {
-    // Rate limit: max 5 OTP requests per phone per hour
+    // Rate limit: max 5 OTP requests per IP per minute
     const clientIp = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
-    if (!checkRateLimit(`otp-send:${clientIp}`, OTP_MAX_ATTEMPTS_PER_HOUR)) {
+    const ipRateLimit = await otpSendIpLimiter.check(clientIp)
+    if (!ipRateLimit.allowed) {
+      const retrySeconds = Math.ceil((ipRateLimit.resetAt - Date.now()) / 1000)
       return NextResponse.json(
-        { success: false, error: 'Terlalu banyak permintaan OTP. Coba lagi dalam 1 jam.' },
-        { status: 429 }
-      )
-    }
-    // Also use distributed rate limiter (persists across serverless cold starts)
-    const distLimit = await authLimiter.check(`otp-send:${clientIp}`)
-    if (!distLimit.allowed) {
-      return NextResponse.json(
-        { success: false, error: 'Terlalu banyak permintaan OTP. Coba lagi dalam beberapa menit.' },
+        { success: false, error: `Terlalu banyak permintaan OTP. Coba lagi dalam ${retrySeconds > 60 ? Math.ceil(retrySeconds / 60) + ' menit' : retrySeconds + ' detik'}.` },
         { status: 429 }
       )
     }
@@ -63,9 +60,11 @@ export async function POST(request: NextRequest) {
 
     // SECURITY: Per-phone rate limit in addition to per-IP limit
     // Prevents attackers using proxy rotation from spamming a victim's phone
-    if (!checkRateLimit(`otp-send-phone:${normalizedPhone}`, OTP_MAX_ATTEMPTS_PER_HOUR)) {
+    const phoneRateLimit = await otpSendPhoneLimiter.check(normalizedPhone)
+    if (!phoneRateLimit.allowed) {
+      const retrySeconds = Math.ceil((phoneRateLimit.resetAt - Date.now()) / 1000)
       return NextResponse.json(
-        { success: false, error: 'Terlalu banyak permintaan OTP ke nomor ini. Coba lagi dalam 1 jam.' },
+        { success: false, error: `Terlalu banyak permintaan OTP ke nomor ini. Coba lagi dalam ${retrySeconds > 60 ? Math.ceil(retrySeconds / 60) + ' menit' : retrySeconds + ' detik'}.` },
         { status: 429 }
       )
     }

@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middleware'
+import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
+import { createRateLimiter } from '@/lib/rate-limit'
+
+const shippingCalcLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 20, keyPrefix: 'rl:shipping:calc:' })
 import { calculateShippingRates, isValidCourier, getValidCourierNames } from '@/lib/shipping-calculator'
 import { logger, logBusinessEvent } from '@/lib/logger'
 
@@ -18,14 +21,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Rate limit: 20 req/min per user
-    const rateLimitKey = `shipping-calculate:${authResult.user.id}`
-    if (!checkRateLimit(rateLimitKey, 20)) {
+    const rateLimit = await shippingCalcLimiter.check(authResult.user.id)
+    if (!rateLimit.allowed) {
+      const retrySeconds = Math.ceil((rateLimit.resetAt - Date.now()) / 1000)
       logger.warn(
         { component: 'shipping', userId: authResult.user.id },
         'Shipping calculate rate limit exceeded'
       )
       return NextResponse.json(
-        { success: false, error: 'Rate limit exceeded. Please try again later.' },
+        { success: false, error: `Terlalu banyak permintaan. Coba lagi dalam ${retrySeconds > 60 ? Math.ceil(retrySeconds / 60) + ' menit' : retrySeconds + ' detik'}.` },
         { status: 429 }
       )
     }

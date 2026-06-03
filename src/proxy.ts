@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { validateCsrfRequest, issueCsrfToken } from '@/lib/csrf'
+import { env } from '@/lib/env'
 
 // ==================== NEXT.JS MIDDLEWARE ====================
 // This middleware runs before all routes to add:

@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { checkRateLimit } from '@/lib/auth-middleware'
+import { createRateLimiter } from '@/lib/rate-limit'
 import { logger } from '@/lib/logger'
+
+// Rate limiter: 1 product view per IP per minute per product
+const productViewLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 1, keyPrefix: 'rl:product:view:' })
 
 // POST /api/products/[id]/view - Track product view and update viral score
 export async function POST(
@@ -13,7 +16,8 @@ export async function POST(
 
     // Rate limit: 1 view per product per IP per minute
     const clientIp = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
-    if (!checkRateLimit(`product-view:${clientIp}:${id}`, 1)) {
+    const rateLimit = await productViewLimiter.check(`${clientIp}:${id}`)
+    if (!rateLimit.allowed) {
       return NextResponse.json({ success: true, viewed: false })
     }
 

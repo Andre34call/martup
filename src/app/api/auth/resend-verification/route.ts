@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { checkRateLimit } from '@/lib/auth-middleware'
-import { authLimiter } from '@/lib/rate-limit'
+import { createRateLimiter } from '@/lib/rate-limit'
 import crypto from 'crypto'
 import { sendEmail, emailVerificationTemplate } from '@/lib/email'
 import { logger } from '@/lib/logger'
 import { hashToken } from '@/lib/token-hash'
 import { validateBody, resendVerificationSchema } from '@/lib/validations'
+
+// Rate limiter: 3 resend verification attempts per minute per IP
+const resendVerifyLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 3, keyPrefix: 'rl:auth:resend:' })
 
 // POST /api/auth/resend-verification
 // Resends email verification to an unverified user
@@ -14,17 +16,11 @@ export async function POST(request: NextRequest) {
   try {
     // Rate limit: 3 per minute per IP
     const clientIp = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
-    if (!checkRateLimit(`resend-verify:${clientIp}`, 3)) {
+    const rateLimit = await resendVerifyLimiter.check(clientIp)
+    if (!rateLimit.allowed) {
+      const retrySeconds = Math.ceil((rateLimit.resetAt - Date.now()) / 1000)
       return NextResponse.json(
-        { success: false, error: 'Terlalu banyak request. Coba lagi dalam 1 menit.' },
-        { status: 429 }
-      )
-    }
-    // Also use distributed rate limiter (persists across serverless cold starts)
-    const distLimit = await authLimiter.check(`resend-verify:${clientIp}`)
-    if (!distLimit.allowed) {
-      return NextResponse.json(
-        { success: false, error: 'Terlalu banyak request. Coba lagi dalam beberapa menit.' },
+        { success: false, error: `Terlalu banyak request. Coba lagi dalam ${retrySeconds > 60 ? Math.ceil(retrySeconds / 60) + ' menit' : retrySeconds + ' detik'}.` },
         { status: 429 }
       )
     }

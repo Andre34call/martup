@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { verifyAuth, authErrorResponse, checkRateLimit } from '@/lib/auth-middleware'
+import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
+import { createRateLimiter } from '@/lib/rate-limit'
 import { serializeDecimal } from '@/lib/decimal-utils'
 import { logger } from '@/lib/logger'
 import { ensureBucket } from '@/lib/ensure-bucket'
+
+// Rate limiter: 5 payment proof uploads per minute per user
+const paymentProofLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 5, keyPrefix: 'rl:order:payment-proof:' })
 
 // ==================== ROUTE SEGMENT CONFIG ====================
 // Allow large request bodies for payment proof uploads (up to 10MB)
@@ -153,10 +157,11 @@ export async function POST(
     if (!authResult.success) return authErrorResponse(authResult)
 
     // Step 2: Rate limit — 5 uploads per minute per user
-    const rateLimitId = `payment-proof-post:${authResult.user.id}`
-    if (!checkRateLimit(rateLimitId, 5)) {
+    const rateLimit = await paymentProofLimiter.check(authResult.user.id)
+    if (!rateLimit.allowed) {
+      const retrySeconds = Math.ceil((rateLimit.resetAt - Date.now()) / 1000)
       return NextResponse.json(
-        { success: false, error: 'Terlalu banyak permintaan. Coba lagi dalam 1 menit.' },
+        { success: false, error: `Terlalu banyak permintaan. Coba lagi dalam ${retrySeconds > 60 ? Math.ceil(retrySeconds / 60) + ' menit' : retrySeconds + ' detik'}.` },
         { status: 429 }
       )
     }
