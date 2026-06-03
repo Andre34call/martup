@@ -41,3 +41,26 @@ Stage Summary:
 - Error handling: Database auth errors now properly detected and return 503 with helpful message
 - Diagnostic: /api/db-status endpoint provides public DB connectivity check
 - **USER ACTION REQUIRED**: Reset Supabase database password and update Vercel env vars
+
+---
+Task ID: 1
+Agent: Main Agent
+Task: Fix login bugs and deploy to production
+
+Work Log:
+- Investigated full auth flow (login, OTP send/verify, 2FA, session cookies, token rotation)
+- Found 4 bugs: OTP missing requestId, phone format mismatch, 2FA double OTP, token rotation breaks session cookies
+- Fixed Bug 1: Added requestId to OtpSendResponse type, added requestId state in OTP screen, send requestId in verify request
+- Fixed Bug 2: Added phone normalization (+62/62/0 prefix) with variant lookup in both OTP send and verify routes
+- Fixed Bug 3: Removed OTP sending from login 2FA path (now returns requires2FA flag only, OTP screen handles it)
+- Fixed Bug 4: Added martup_remember flag cookie for proper Remember Me detection during token rotation
+- Also updated .env with new database password (Wordpress3$supabase3$)
+- Verified database connection works (Prisma Client connected successfully)
+- Lint passes (0 errors)
+- Committed as c091e48 and pushed to main branch
+
+Stage Summary:
+- 4 auth bugs fixed and deployed
+- Database connection verified with new password
+- Vercel auto-deploy triggered from push
+- Files changed: 7 files, 89 insertions, 45 deletions
