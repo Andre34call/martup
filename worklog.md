@@ -2375,3 +2375,36 @@ Stage Summary:
 - All payment flows secured: CSRF, rate limiting, signature verification, idempotency, atomic transactions
 - Sandbox mode: ALL transactions are simulated (no real money)
 - User needs to: (1) Get Midtrans Sandbox keys from dashboard.midtrans.com, (2) Update MIDTRANS_SERVER_KEY and NEXT_PUBLIC_MIDTRANS_CLIENT_KEY in Vercel env vars
+
+---
+Task ID: 6
+Agent: Main Coordinator
+Task: Fix ambiguous route error & activate Midtrans payment gateway for deposit/top-up
+
+Work Log:
+- Fixed ambiguous route error: /api/stream/[id]/report vs /api/stream/[postId]/report (removed duplicate, consolidated into [id])
+- Added 4 Midtrans fields to Deposit Prisma schema: midtransOrderId (@unique), midtransTransactionId, snapToken, paymentType
+- Completely rewrote deposit-screen.tsx from manual bank transfer flow to Midtrans Snap flow:
+  - Replaced 6 manual payment methods (including OVO/DANA/LinkAja) with 4 Midtrans methods: VA, GoPay, ShopeePay, QRIS
+  - On step 2 completion, calls /api/deposit/midtrans/create instead of /api/wallet/topup
+  - Opens Midtrans Snap popup with snapToken for payment
+  - Polls /api/deposit/status for real-time payment verification
+  - Shows success/pending/failed states with auto-verification
+  - "Buka Kembali Pembayaran" button for closed Snap popups
+- Updated deposit-detail-screen.tsx for Midtrans deposits:
+  - Added Midtrans info section showing order ID, payment type, transaction ID
+  - Added "Buka Kembali Pembayaran" button for pending Midtrans deposits
+  - Hide proof upload section for Midtrans deposits (auto-verified via webhook)
+  - Added midtransPaymentTypeLabels for displaying specific VA/e-wallet names
+  - Added CreditCard, RefreshCw, Info icon imports + openSnapPayment import
+- Added Midtrans env vars to .env.example (MIDTRANS_SERVER_KEY, MIDTRANS_IS_PRODUCTION, NEXT_PUBLIC_MIDTRANS_CLIENT_KEY, NEXT_PUBLIC_MIDTRANS_IS_PRODUCTION)
+- Lint passes with 0 errors
+- Pushed to production (commit 0764cde) — Vercel will auto-deploy with prisma db push
+
+Stage Summary:
+- Ambiguous route error FIXED ✅
+- Midtrans payment gateway ACTIVATED for deposit/top-up ✅
+- 4 payment methods: Virtual Account (BCA/BNI/BRI/Mandiri/Permata), GoPay, ShopeePay, QRIS
+- Auto-verification via Midtrans webhook — no admin needed for Midtrans deposits
+- Sandbox mode: payment NOT real — for testing only
+- User needs to set real Midtrans Sandbox keys on Vercel: MIDTRANS_SERVER_KEY, NEXT_PUBLIC_MIDTRANS_CLIENT_KEY
