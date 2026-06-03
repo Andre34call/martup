@@ -16,7 +16,7 @@ export const POST = withErrorHandler(async (request: NextRequest, context?: Rout
   const auth = await requireAuth(request)
   if (auth instanceof NextResponse) return auth
 
-  // 2. Get postId from context params (slug is [id] but semantically it's a post ID)
+  // 2. Get postId from context params (dynamic segment is [id])
   if (!context) return errorResponse('Missing route context', 500)
   const { id: postId } = await context.params
 
