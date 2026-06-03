@@ -30,6 +30,7 @@ const CSRF_EXEMPT_PATHS = new Set([
   '/api/health-check',          // Diagnostic endpoint
   '/api/health',                // Health check
   '/api/ping',                  // Health check
+  '/api/db-status',             // Database connectivity check (public, read-only)
   '/api/csrf-token',            // CSRF token issuance (must be exempt — it PROVIDES the token)
   '/api/seller/register',       // Seller registration (requires auth, non-destructive, prone to CSRF race condition)
 ])

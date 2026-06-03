@@ -198,15 +198,34 @@ export async function POST(request: NextRequest) {
     logger.error({ err: error }, 'Admin init error')
 
     // Provide specific error for database connection issues
-    const errorMessage = error?.code === 'P1001'
-      ? 'Database tidak dapat diakses. Pastikan SUPABASE_DATABASE_URL sudah dikonfigurasi di Vercel.'
-      : error?.code === 'P1002'
-      ? 'Database connection timeout. Coba lagi dalam beberapa detik.'
-      : 'Terjadi kesalahan server. Coba lagi nanti.'
+    // NOTE: PrismaClientInitializationError may have `code: undefined`,
+    // so we also check `error.name` and `error.message`.
+    const isPrismaInitError = error?.name === 'PrismaClientInitializationError'
+    const isAuthFailedMsg = error?.message?.includes('Authentication failed against database server')
+    const isUnreachableMsg = error?.message?.includes("Can't reach database server")
+    const isDatabaseError = isPrismaInitError || ['P1000', 'P1001', 'P1002', 'ENOTFOUND'].includes(error?.code) || isAuthFailedMsg || isUnreachableMsg
+
+    let errorMessage: string
+    let statusCode = 500
+
+    if (isDatabaseError) {
+      statusCode = 503
+      if (isAuthFailedMsg || error?.code === 'P1000') {
+        errorMessage = 'Database authentication failed. Password di DATABASE_URL salah. Cek di Supabase Dashboard → Project Settings → Database.'
+      } else if (isUnreachableMsg || error?.code === 'P1001') {
+        errorMessage = 'Database tidak dapat diakses. Pastikan SUPABASE_DATABASE_URL sudah dikonfigurasi di Vercel.'
+      } else if (error?.code === 'P1002') {
+        errorMessage = 'Database connection timeout. Coba lagi dalam beberapa detik.'
+      } else {
+        errorMessage = 'Layanan sedang tidak tersedia. Coba lagi dalam beberapa saat.'
+      }
+    } else {
+      errorMessage = 'Terjadi kesalahan server. Coba lagi nanti.'
+    }
 
     return NextResponse.json(
       { success: false, error: errorMessage },
-      { status: 500 }
+      { status: statusCode }
     )
   }
 }

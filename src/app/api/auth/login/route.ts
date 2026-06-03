@@ -339,7 +339,15 @@ export async function POST(request: NextRequest) {
     // (Prisma codes, DB host names, config hints). Detailed messages are only
     // shown in development where they aid debugging.
     const isDev = process.env.NODE_ENV === 'development'
-    const isDatabaseError = ['P1000', 'P1001', 'P1002', 'ENOTFOUND'].includes(error?.code)
+
+    // Detect database connectivity errors.
+    // NOTE: PrismaClientInitializationError may have `code: undefined` (not 'P1000')
+    // for authentication failures, so we also check `error.name` and `error.message`.
+    const isPrismaInitError = error?.name === 'PrismaClientInitializationError'
+    const isDatabaseErrorCode = ['P1000', 'P1001', 'P1002', 'P1003', 'ENOTFOUND', 'ECONNREFUSED', 'ECONNRESET'].includes(error?.code)
+    const isAuthFailedMsg = error?.message?.includes('Authentication failed against database server')
+    const isUnreachableMsg = error?.message?.includes("Can't reach database server")
+    const isDatabaseError = isPrismaInitError || isDatabaseErrorCode || isAuthFailedMsg || isUnreachableMsg
 
     let errorMessage: string
     let statusCode = 500
@@ -348,10 +356,10 @@ export async function POST(request: NextRequest) {
       // Database connectivity issues — always 503, but message depends on env
       statusCode = 503
       if (isDev) {
-        // In development, provide specific guidance for each error code
-        if (error?.code === 'P1000') {
+        // In development, provide specific guidance for each error type
+        if (isAuthFailedMsg || error?.code === 'P1000') {
           errorMessage = 'Database authentication failed. Password di DATABASE_URL/SUPABASE_DATABASE_URL salah. Cek password di Supabase Dashboard → Project Settings → Database → Connection string.'
-        } else if (error?.code === 'P1001') {
+        } else if (isUnreachableMsg || error?.code === 'P1001') {
           errorMessage = 'Database tidak dapat diakses. Pastikan SUPABASE_DATABASE_URL sudah dikonfigurasi di Vercel Dashboard → Settings → Environment Variables.'
         } else if (error?.code === 'P1002') {
           errorMessage = 'Database connection timeout. Coba lagi dalam beberapa detik.'
@@ -361,8 +369,8 @@ export async function POST(request: NextRequest) {
           errorMessage = 'Layanan sedang tidak tersedia. Coba lagi dalam beberapa saat.'
         }
       } else {
-        // In production, show a generic message but include a hint about database configuration
-        errorMessage = 'Layanan sedang tidak tersedia. Tim kami sudah diberitahu — coba lagi dalam beberapa saat.'
+        // In production, show a generic but informative message
+        errorMessage = 'Layanan sedang tidak tersedia. Coba lagi dalam beberapa saat.'
       }
     } else {
       errorMessage = 'Terjadi kesalahan server. Coba lagi nanti.'
