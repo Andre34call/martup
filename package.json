@@ -9,7 +9,7 @@
     "postinstall": "prisma generate && node -e \"const fs=require('fs');['examples','skills','mini-services','.zscripts'].forEach(d=>{try{fs.rmSync(d,{recursive:true,force:true})}catch(e){}})\"",
     "start": "next start",
     "lint": "eslint .",
-    "db:push": "prisma db push",
+    "db:push": "bash scripts/db-push.sh",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:reset": "prisma migrate reset",
