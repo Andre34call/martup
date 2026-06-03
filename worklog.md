@@ -1569,3 +1569,24 @@ Stage Summary:
 - seller/register/route.ts: Added CSRF protection (validateCsrfRequest) after rate limit check
 - csrf.ts: Removed /api/seller/register from exempt paths so CSRF is enforced
 - 3 files changed: vercel.json, src/app/api/seller/register/route.ts, src/lib/csrf.ts
+---
+Task ID: 3
+Agent: Main
+Task: Post-audit WAJIB fixes - storage buckets, env security, query optimization
+
+Work Log:
+- Added 'deposits' bucket to REQUIRED_BUCKETS in storage setup endpoint
+- Added MIME type restriction for deposits bucket (images only, same as avatars)
+- Optimized deposit status route from 2 DB queries to 1 (added userId to select, excluded from response)
+- Made env.ts secret fallbacks stricter: TOKEN_SECRET, CSRF_SECRET, ADMIN_SETUP_SECRET, INTERNAL_API_SECRET now return empty string in production (fail-safe) instead of falling back to NEXTAUTH_SECRET. Development mode still falls back for convenience.
+- Updated local .env: SMS_PROVIDER changed from 'mock' to 'fonnte'
+- Verified Fonnte WhatsApp OTP integration is already fully implemented in sms-gateway.ts
+- Tested storage setup API locally (works but needs SUPABASE_SERVICE_ROLE_KEY set on Vercel)
+- Committed as a42ef5d and pushed to main
+
+Stage Summary:
+- 3 files changed: storage/route.ts (deposits bucket), deposit/status/route.ts (query optimization), env.ts (stricter production secrets)
+- Local .env SMS_PROVIDER updated to fonnte
+- All Sprint 1 critical items now complete (SUPER_ADMIN_EMAIL, deposit ownership, dead code, CSRF, secret separation)
+- Storage buckets need to be created on Vercel after deployment (POST /api/setup/storage)
+- Remaining: Resend email (needs account), Google OAuth redirect URI (needs Google Console setup), Midtrans production (deferred)
