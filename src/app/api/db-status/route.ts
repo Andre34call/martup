@@ -11,6 +11,13 @@ export const dynamic = 'force-dynamic'
  * NOT any data, credentials, or internal details.
  */
 export async function GET() {
+  // Diagnostic: show which URL pattern is being used (without revealing secrets)
+  const dbUrl = process.env.DATABASE_URL || ''
+  const supabaseUrl = process.env.SUPABASE_DATABASE_URL || ''
+  const dbUrlProtocol = dbUrl.startsWith('postgresql://') ? 'postgresql' : dbUrl.startsWith('postgres://') ? 'postgres' : dbUrl.startsWith('file:') ? 'file' : 'unknown'
+  const dbUrlHost = dbUrl.startsWith('postgresql://') || dbUrl.startsWith('postgres://') ? new URL(dbUrl).hostname : 'n/a'
+  const supabaseHost = supabaseUrl.startsWith('postgresql://') || supabaseUrl.startsWith('postgres://') ? new URL(supabaseUrl).hostname : 'n/a'
+
   try {
     const start = Date.now()
     await db.$queryRaw`SELECT 1 as health`
@@ -48,6 +55,13 @@ export async function GET() {
       status: 'error',
       database: 'disconnected',
       detail,
+      // Diagnostic info (safe to show — no passwords)
+      diag: {
+        DATABASE_URL_protocol: dbUrlProtocol,
+        DATABASE_URL_host: dbUrlHost,
+        SUPABASE_DATABASE_URL_host: supabaseHost,
+        effectiveHost: dbUrlProtocol === 'postgresql' || dbUrlProtocol === 'postgres' ? dbUrlHost : supabaseHost || 'none',
+      },
       hint: isAuthFailed
         ? 'Database password is incorrect. Update DATABASE_URL in Vercel Dashboard → Settings → Environment Variables.'
         : isUnreachable
