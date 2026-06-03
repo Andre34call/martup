@@ -31,6 +31,7 @@ export interface SelectionSlice {
   selectedChatRoomId: string | null
   selectedSellerId: string | null
   selectedDepositId: string | null
+  selectedUserId: string | null
   shareToStreamProduct: { id: string; name: string; image?: string; price: number; discountPrice?: number } | null
   setSelectedProduct: (id: string | null) => void
   setSelectedCategory: (id: string | null) => void
@@ -38,6 +39,7 @@ export interface SelectionSlice {
   setSelectedChatRoom: (id: string | null) => void
   setSelectedSeller: (id: string | null) => void
   setSelectedDeposit: (id: string | null) => void
+  setSelectedUser: (id: string | null) => void
   setShareToStreamProduct: (product: SelectionSlice['shareToStreamProduct']) => void
   clearShareToStreamProduct: () => void
 }
@@ -45,7 +47,9 @@ export interface SelectionSlice {
 export interface UISlice {
   isLoading: boolean
   showSplash: boolean
+  overlayOpen: boolean
   setShowSplash: (v: boolean) => void
+  setOverlayOpen: (open: boolean) => void
   toast: { message: string; type: 'success' | 'error' | 'info' | 'warning' } | null
   showToast: (message: string, type?: 'success' | 'error' | 'info' | 'warning') => void
   hideToast: () => void
@@ -72,6 +76,7 @@ export interface ChatSlice {
   fetchChatMessages: (roomId: string) => Promise<void>
   sendChatMessage: (roomId: string, content: string, type?: string) => Promise<void>
   createChatRoom: (sellerId: string, productId?: string) => Promise<string | null>
+  createDirectChat: (userId: string) => Promise<string | null>
   connectSocket: () => void
   disconnectSocket: () => void
   emitTyping: (roomId: string, isTyping: boolean) => void
@@ -85,6 +90,7 @@ export interface OrderSlice {
   payForOrder: (orderId: string) => Promise<{ token?: string; redirectUrl?: string } | void>
   cancelOrder: (orderId: string) => Promise<void>
   updateOrderTracking: (orderId: string, trackingNumber: string) => Promise<void>
+  updateOrderPaymentStatus: (orderId: string, paymentStatus: string) => void
   fetchOrders: (userId: string) => Promise<void>
 }
 

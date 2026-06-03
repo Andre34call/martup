@@ -336,9 +336,9 @@ export async function updateOrderStatus(params: UpdateOrderStatusParams): Promis
               variantId: item.variantId || undefined,
               type: newStatus === 'refunded' ? 'return' : 'cancel',
               quantity: item.quantity,
-              previousQty: currentProduct.stock,
-              newQty: currentProduct.stock + item.quantity,
-              note: `${newStatus === 'refunded' ? 'Refund' : 'Cancel'} order ${order.orderNumber}${cancelReason ? ` - ${cancelReason.trim()}` : ''}`,
+              previousStock: currentProduct.stock,
+              newStock: currentProduct.stock + item.quantity,
+              reason: `${newStatus === 'refunded' ? 'Refund' : 'Cancel'} order ${order.orderNumber}${cancelReason ? ` - ${cancelReason.trim()}` : ''}`,
               orderId: order.id,
               createdBy: updatedBy,
             })

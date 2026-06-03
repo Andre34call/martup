@@ -40,6 +40,10 @@ model User {
   coins         Decimal   @default(0)
   dailyCheckIn  DateTime?
   fcmToken      String?
+  buyerRating   Float     @default(0) // Average rating from sellers
+  buyerRatingCount Int    @default(0) // Number of ratings received
+  cancellationCount Int   @default(0) // Number of cancelled orders
+  returnCount     Int     @default(0) // Number of returned orders
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -64,6 +68,9 @@ model User {
   streamComments StreamComment[]
   streamLikes    StreamLike[]
   streamCommentLikes StreamCommentLike[]
+  givenBuyerRatings  BuyerRating[] @relation("SellerRatings")
+  receivedBuyerRatings BuyerRating[] @relation("BuyerReceivedRatings")
+  streamPostReports  StreamPostReport[]
 }
 
 model Seller {
@@ -121,6 +128,24 @@ model Address {
 }
 
 // ==================== WALLET & TRANSACTIONS ====================
+
+model PlatformBankAccount {
+  id            String   @id @default(cuid())
+  bankName      String   // e.g. "Bank BCA", "Bank Mandiri"
+  bankCode      String?  // e.g. "bca", "mandiri"
+  accountNumber String   // e.g. "1234567890"
+  accountHolder String   // e.g. "PT MartUp Indonesia"
+  branch        String?  // e.g. "Jakarta Pusat"
+  isActive      Boolean  @default(true)
+  isDefault     Boolean  @default(false)
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  orders        Order[]  // Orders directed to this escrow account
+
+  @@index([isActive, sortOrder])
+}
 
 model Wallet {
   id             String   @id @default(cuid())
@@ -256,8 +281,13 @@ model Product {
   status        String    @default("active") // active, draft, blocked
   rating        Float     @default(0)
   reviewCount   Int       @default(0)
+  viewCount     Int       @default(0) // Total product views
+  viralScore    Float     @default(0) // Calculated: sold*3 + rating*reviewCount*5 + viewCount*0.1
   isFeatured    Boolean   @default(false)
   isFlashSale   Boolean   @default(false)
+  isPromoted    Boolean   @default(false) // Admin-paid promotion (ads)
+  promotedUntil DateTime? // When promotion expires
+  promotedBy    String?   // Admin user ID who promoted
   flashSaleEnd  DateTime?
   tags          String?   // JSON array
   createdAt     DateTime  @default(now())
@@ -271,11 +301,35 @@ model Product {
   reviews       Review[]
   wishlists     Wishlist[]
   streamPosts   StreamPost[]
+  stockLogs     StockLog[]
 
   @@index([categoryId, status])
   @@index([sellerId, status])
   @@index([isFlashSale, status])
   @@index([status, createdAt])
+  @@index([isPromoted, status])
+}
+
+model StockLog {
+  id          String   @id @default(cuid())
+  productId   String
+  variantId   String?
+  type        String   // in, out, adjustment, return
+  quantity    Int      // positive for in, negative for out
+  previousStock Int
+  newStock    Int
+  reason      String?
+  orderId     String?  // FK to Order if stock change is from an order
+  createdBy   String?  // User ID who made the change
+  createdAt   DateTime @default(now())
+
+  product     Product       @relation(fields: [productId], references: [id])
+  variant     ProductVariant? @relation(fields: [variantId], references: [id])
+  order       Order?        @relation(fields: [orderId], references: [id])
+
+  @@index([productId, createdAt])
+  @@index([type])
+  @@index([createdAt])
 }
 
 model ProductVariant {
@@ -291,6 +345,7 @@ model ProductVariant {
   product   Product       @relation(fields: [productId], references: [id])
   cartItems CartItem[]
   orderItems OrderItem[]
+  stockLogs StockLog[]
 
   @@index([productId])
 }
@@ -330,6 +385,7 @@ model Order {
   totalAmount     Decimal
   paymentMethod   String?
   paymentStatus   String     @default("unpaid")
+  escrowStatus    String     @default("none") // none, held, released, refunded — tracks escrow for manual bank transfer orders
   paidAt          DateTime?
   shippedAt       DateTime?
   deliveredAt     DateTime?
@@ -338,6 +394,13 @@ model Order {
   note            String?
   paymentProof    String?    // URL of payment proof image (escrow)
   paymentBankName String?    // Bank name buyer transferred from (escrow)
+  platformBankAccountId String? // FK to PlatformBankAccount — which escrow account buyer was told to transfer to
+  buyerRating   Int?     // Seller's rating of the buyer (1-5, null if not yet rated)
+  isServiceOrder Boolean  @default(false) // True if order is for a service (not physical product)
+  autoConfirmAt DateTime? // When to auto-confirm service orders (3 days after proof submitted)
+  buyerConfirmedAt DateTime? // When buyer manually confirmed receipt
+  serviceProofImages String? // JSON array of service proof image URLs
+  sellerCompletedAt DateTime? // When seller submitted service completion proof
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
@@ -347,6 +410,8 @@ model Order {
   shipping        Shipping?
   voucherUsages   VoucherUsage[]
   complaint       Complaint?
+  platformBankAccount PlatformBankAccount? @relation(fields: [platformBankAccountId], references: [id])
+  stockLogs           StockLog[]
 
   @@index([userId, status])
   @@index([sellerId])
@@ -412,6 +477,23 @@ model Review {
 
   @@index([productId, createdAt])
   @@index([userId])
+}
+
+model BuyerRating {
+  id        String   @id @default(cuid())
+  orderId   String   @unique // One rating per order
+  sellerId  String   // User ID of the seller who rates
+  buyerId   String   // User ID of the buyer being rated
+  rating    Int      // 1-5
+  content   String?  // Optional comment
+  tags      String?  // JSON array of rating tags (e.g. ["responsive","friendly"])
+  createdAt DateTime @default(now())
+
+  seller    User     @relation("SellerRatings", fields: [sellerId], references: [id])
+  buyer     User     @relation("BuyerReceivedRatings", fields: [buyerId], references: [id])
+
+  @@index([buyerId, createdAt])
+  @@index([sellerId])
 }
 
 model Wishlist {
@@ -692,6 +774,8 @@ model StreamPost {
   commentCount Int      @default(0)
   isActive     Boolean  @default(true)
   isHidden     Boolean  @default(false) // admin can hide inappropriate posts
+  isEdited     Boolean  @default(false) // true if content was edited after creation
+  isPrivate    Boolean  @default(false) // true if post is only visible to followers
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -699,6 +783,7 @@ model StreamPost {
   product    Product?        @relation(fields: [productId], references: [id])
   likes      StreamLike[]
   comments   StreamComment[]
+  reports    StreamPostReport[]
 
   @@index([userId, createdAt])
   @@index([isActive, createdAt])
@@ -735,6 +820,22 @@ model StreamLike {
 
   post      StreamPost @relation(fields: [postId], references: [id])
   user      User       @relation(fields: [userId], references: [id])
+
+  @@unique([postId, userId])
+  @@index([postId])
+  @@index([userId])
+}
+
+model StreamPostReport {
+  id          String   @id @default(cuid())
+  postId      String
+  userId      String
+  reason      String   // spam, harassment, inappropriate_content, scam, other
+  description String?
+  createdAt   DateTime @default(now())
+
+  post        StreamPost @relation(fields: [postId], references: [id])
+  user        User       @relation(fields: [userId], references: [id])
 
   @@unique([postId, userId])
   @@index([postId])

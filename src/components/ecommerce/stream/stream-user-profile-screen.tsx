@@ -956,7 +956,7 @@ function ProfilePostCard({
         <div className="px-4 pb-2">
           <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
             <MentionText
-              content={post.content}
+              content={post.content ?? ''}
               maxChars={500}
               isExpanded={isContentExpanded}
               onExpand={() => setIsContentExpanded(!isContentExpanded)}

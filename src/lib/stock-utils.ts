@@ -6,9 +6,9 @@ interface LogStockChangeParams {
   variantId?: string    // FK to ProductVariant, if stock change is for a specific variant
   type: 'order' | 'cancel' | 'adjustment' | 'restock' | 'return'
   quantity: number       // positive = increase, negative = decrease
-  previousQty: number
-  newQty: number
-  note?: string
+  previousStock: number
+  newStock: number
+  reason?: string
   orderId?: string       // FK to Order, if stock change is related to an order
   createdBy?: string     // userId who made the change
 }
@@ -26,9 +26,9 @@ export async function logStockChange(params: LogStockChangeParams): Promise<void
         variantId: params.variantId || null,
         type: params.type,
         quantity: params.quantity,
-        previousQty: params.previousQty,
-        newQty: params.newQty,
-        note: params.note || null,
+        previousStock: params.previousStock,
+        newStock: params.newStock,
+        reason: params.reason || null,
         orderId: params.orderId || null,
         createdBy: params.createdBy || null,
       },
@@ -53,9 +53,9 @@ export async function logStockChangeInTx(
       variantId: params.variantId || null,
       type: params.type,
       quantity: params.quantity,
-      previousQty: params.previousQty,
-      newQty: params.newQty,
-      note: params.note || null,
+      previousStock: params.previousStock,
+      newStock: params.newStock,
+      reason: params.reason || null,
       orderId: params.orderId || null,
       createdBy: params.createdBy || null,
     },

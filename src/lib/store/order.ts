@@ -400,6 +400,11 @@ export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set
     }
   },
 
+  // ==================== updateOrderPaymentStatus ====================
+  updateOrderPaymentStatus: (orderId, paymentStatus) => set((state) => ({
+    orders: state.orders.map(o => o.id === orderId ? { ...o, paymentStatus } : o),
+  })),
+
   // ==================== fetchOrders ====================
   // Fetch orders from the server and replace local state
   fetchOrders: async (userId) => {

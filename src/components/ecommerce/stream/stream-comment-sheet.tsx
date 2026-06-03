@@ -24,8 +24,8 @@ interface StreamPost {
     avatar?: string
   }
   type: "text" | "image" | "video"
-  content: string
-  mediaUrl?: string
+  content: string | null
+  mediaUrl?: string | null
   likeCount: number
   commentCount: number
   isLiked: boolean
@@ -419,7 +419,7 @@ export function StreamCommentSheet({
                   </p>
                   {post.content && (
                     <p className="text-xs text-muted-foreground line-clamp-1">
-                      {truncateText(post.content, 60)}
+                      {truncateText(post.content ?? '', 60)}
                     </p>
                   )}
                 </div>

@@ -35,9 +35,10 @@ interface MentionTextProps {
   maxChars?: number
   onExpand?: () => void
   isExpanded?: boolean
+  onMentionClick?: (username: string) => void
 }
 
-export function MentionText({ content, className = "", maxChars, onExpand, isExpanded }: MentionTextProps) {
+export function MentionText({ content, className = "", maxChars, onExpand, isExpanded, onMentionClick }: MentionTextProps) {
   const displayContent = maxChars && !isExpanded && content.length > maxChars
     ? content.slice(0, maxChars)
     : content
@@ -48,7 +49,11 @@ export function MentionText({ content, className = "", maxChars, onExpand, isExp
     <span className={className}>
       {segments.map((segment, i) =>
         segment.type === "mention" ? (
-          <span key={i} className="text-emerald-600 dark:text-emerald-400 font-semibold bg-emerald-50 dark:bg-emerald-950/30 px-0.5 rounded">
+          <span
+            key={i}
+            className="text-emerald-600 dark:text-emerald-400 font-semibold bg-emerald-50 dark:bg-emerald-950/30 px-0.5 rounded cursor-pointer hover:bg-emerald-100 dark:hover:bg-emerald-950/50"
+            onClick={() => onMentionClick?.(segment.value.replace(/^@/, ''))}
+          >
             {segment.value}
           </span>
         ) : (

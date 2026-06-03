@@ -27,6 +27,10 @@ export const UPLOAD_LIMITS = {
   MAX_COMPLAINT_IMAGES: 4,
   MAX_COMPLAINT_IMAGE_SIZE_MB: 10,
 
+  // Stream / social post limits
+  MAX_STREAM_IMAGE_SIZE_MB: 5,
+  MAX_STREAM_VIDEO_SIZE_MB: 50,
+
   // Allowed file types
   ALLOWED_IMAGE_TYPES: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'] as const,
   ALLOWED_VIDEO_TYPES: ['video/mp4', 'video/webm', 'video/quicktime'] as const,

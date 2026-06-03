@@ -131,6 +131,14 @@ export const walletDebitSchema = z.object({
   description: z.string().optional(),
 })
 
+export const walletDebitBatchSchema = z.object({
+  orders: z.array(z.object({
+    orderId: z.string().min(1, 'orderId wajib diisi'),
+    amount: z.number().int().positive('Jumlah debit harus bilangan bulat lebih dari 0'),
+  })).min(1, 'Minimal 1 pesanan untuk batch payment'),
+  description: z.string().optional(),
+})
+
 // ==================== Payment ====================
 export const paymentCreateSchema = z.object({
   orderId: z.string().min(1, 'orderId wajib diisi'),

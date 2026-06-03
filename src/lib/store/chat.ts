@@ -254,6 +254,52 @@ export const createChatSlice: StateCreator<AppStore, [], [], ChatSlice> = (set, 
     }
   },
 
+  createDirectChat: async (userId) => {
+    try {
+      const res = await apiClient.rawPost('/api/chat/rooms', { userId })
+      if (!res.ok) throw new Error('Failed to create direct chat')
+      const data = await res.json()
+      if (data.success && data.data) {
+        const r = data.data as Record<string, unknown>
+        const otherUser = r.otherUser as Record<string, unknown> | undefined
+        const sellerData = (otherUser?.seller as Record<string, unknown>) || {}
+        const room: ChatRoom = {
+          id: r.id as string,
+          seller: {
+            id: sellerData.id as string || otherUser?.id as string || '',
+            userId: otherUser?.id as string || '',
+            storeName: (otherUser?.name as string) || (sellerData.storeName as string) || 'User',
+            storeSlug: (sellerData.storeSlug as string) || '',
+            storeAvatar: (otherUser?.avatar as string) || (sellerData.storeAvatar as string) || undefined,
+            isVerified: (sellerData.isVerified as boolean) || false,
+            isPremium: (sellerData.isPremium as boolean) || false,
+            rating: (sellerData.rating as number) || 0,
+            totalSales: (sellerData.totalSales as number) || 0,
+            totalProducts: (sellerData.totalProducts as number) || 0,
+          },
+          lastMessage: (r.lastMessage as string) || '',
+          lastMessageTime: (r.lastMessageTime as string) || (r.updatedAt as string) || new Date().toISOString(),
+          unreadCount: 0,
+        }
+        // Add to local state if not already present
+        if (!get().chatRooms.find(cr => cr.id === room.id)) {
+          get().addChatRoom(room)
+        }
+
+        // Join the new room via WebSocket
+        if (socket && get().isSocketConnected) {
+          socket.emit('join-room', { roomId: room.id })
+        }
+
+        return room.id
+      }
+      return null
+    } catch (error) {
+      logger.warn({ component: 'chat', err: error }, 'Create direct chat error')
+      return null
+    }
+  },
+
   connectSocket: () => {
     // Don't connect if already connected or connecting
     if (socket?.connected) return

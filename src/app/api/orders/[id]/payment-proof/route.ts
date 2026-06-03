@@ -317,7 +317,7 @@ export async function POST(
       const result = await tx.order.update({
         where: { id: orderId },
         data: {
-          paymentProofUrl: publicUrl,
+          paymentProof: publicUrl,
           platformBankAccountId,
           paymentStatus: 'pending_verification',
           escrowStatus: 'held',
@@ -420,7 +420,7 @@ export async function GET(
         sellerId: true,
         status: true,
         paymentStatus: true,
-        paymentProofUrl: true,
+        paymentProof: true,
         escrowStatus: true,
         totalAmount: true,
         platformBankAccountId: true,
@@ -487,7 +487,7 @@ export async function GET(
         orderNumber: order.orderNumber,
         status: order.status,
         paymentStatus: order.paymentStatus,
-        paymentProofUrl: order.paymentProofUrl,
+        paymentProofUrl: order.paymentProof,
         escrowStatus: order.escrowStatus,
         totalAmount: order.totalAmount,
         platformBankAccountId: order.platformBankAccountId,

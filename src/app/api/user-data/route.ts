@@ -6,6 +6,22 @@ import { serializeDecimal } from '@/lib/decimal-utils'
 
 import { logger } from '@/lib/logger'
 
+// ==================== USER DATA CACHE ====================
+// Simple in-memory cache for user-data responses.
+// Invalidated when wallet mutations, orders, or profile data change.
+
+const userDataCache = new Map<string, { data: unknown; expiry: number }>()
+const CACHE_TTL = 30_000 // 30 seconds
+
+/**
+ * Invalidate the cached user-data for a specific user.
+ * Should be called after wallet mutations, order changes, or profile updates
+ * so that the next GET /api/user-data request fetches fresh data.
+ */
+export function invalidateUserDataCache(userId: string): void {
+  userDataCache.delete(userId)
+}
+
 // Helper to parse product JSON fields
 function parseProductJsonFields(product: Record<string, unknown>) {
   return {

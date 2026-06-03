@@ -429,8 +429,7 @@ async function handleDepositNotification({
     where: { id: depositId },
     include: {
       user: {
-        select: { id: true, name: true, email: true },
-        wallet: true,
+        select: { id: true, name: true, email: true, wallet: true },
       },
     },
   })

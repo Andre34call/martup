@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { logger } from '@/lib/logger'
+import { verifyAuth as verifyAuthFromMiddleware, type AuthResult, type AuthError } from '@/lib/auth-middleware'
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -283,5 +284,58 @@ export function parseJsonField<T = unknown>(value: string | null | undefined): T
     return Array.isArray(parsed) ? (parsed as T[]) : ([] as T[])
   } catch {
     return [] as T[]
+  }
+}
+
+// ==================== AUTH HELPERS ====================
+
+/**
+ * Require authentication for an API route.
+ *
+ * Returns `{ userId }` on success, or a ready-to-send 401 error response on failure.
+ * This is a convenience wrapper around `verifyAuth` from auth-middleware that
+ * returns a simpler shape for routes that only need the user ID.
+ *
+ * Usage:
+ * ```ts
+ * const auth = await requireAuth(request)
+ * if (auth instanceof NextResponse) return auth
+ * // auth is now { userId: string }
+ * ```
+ */
+export async function requireAuth(
+  request: NextRequest,
+): Promise<{ userId: string } | NextResponse<ApiErrorResponse>> {
+  const result: AuthResult | AuthError = await verifyAuthFromMiddleware(request)
+  if (!result.success) {
+    return errorResponse(result.error, result.status)
+  }
+  return { userId: result.user.id }
+}
+
+/**
+ * Optionally verify authentication — returns user info if authenticated, null otherwise.
+ *
+ * Unlike `requireAuth`, this does NOT return an error response when the user
+ * is not authenticated. Useful for public endpoints that provide enhanced
+ * data for logged-in users (e.g. isLiked on public profiles).
+ *
+ * Usage:
+ * ```ts
+ * const authUser = await verifyAuthOrSession(request)
+ * const currentUserId = authUser?.userId ?? null
+ * ```
+ */
+export async function verifyAuthOrSession(
+  request: NextRequest,
+): Promise<{ userId: string } | null> {
+  try {
+    const result: AuthResult | AuthError = await verifyAuthFromMiddleware(request)
+    if (result.success) {
+      return { userId: result.user.id }
+    }
+    return null
+  } catch {
+    return null
   }
 }

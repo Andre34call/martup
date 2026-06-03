@@ -44,17 +44,17 @@ export function sanitizeUser<T extends UserWithSensitiveFields>(user: T): Omit<T
 export function sanitizeUserWithSeller<T extends UserWithSensitiveFields & { seller?: Record<string, unknown> | null }>(
   user: T
 ): Omit<T, typeof SENSITIVE_USER_FIELDS[number]> {
-  const sanitized = sanitizeUser(user)
+  const sanitized = sanitizeUser(user) as T & { seller?: Record<string, unknown> | null }
   
   // SECURITY: Redact banking details from seller object
   // Banking info should only be accessible via dedicated seller profile endpoints
   if (sanitized.seller) {
-    const sellerCopy = { ...sanitized.seller }
+    const sellerCopy = { ...sanitized.seller } as Record<string, unknown>
     delete sellerCopy.bankAccount
     delete sellerCopy.bankHolder
     delete sellerCopy.bankName
     sanitized.seller = sellerCopy
   }
   
-  return sanitized
+  return sanitized as Omit<T, typeof SENSITIVE_USER_FIELDS[number]>
 }

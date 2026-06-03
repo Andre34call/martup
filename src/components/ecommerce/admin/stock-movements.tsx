@@ -46,9 +46,9 @@ interface StockLogEntry {
   variantId?: string | null
   type: string
   quantity: number
-  previousQty: number
-  newQty: number
-  note?: string | null
+  previousStock: number
+  newStock: number
+  reason?: string | null
   orderId?: string | null
   createdBy?: string | null
   createdAt: string
@@ -122,7 +122,7 @@ export function AdminStockMovements() {
   const filteredLogs = searchQuery
     ? logs.filter(log =>
         log.product?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        log.note?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        log.reason?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         log.order?.orderNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         log.variant?.value?.toLowerCase().includes(searchQuery.toLowerCase())
       )
@@ -293,15 +293,15 @@ export function AdminStockMovements() {
                           </span>
                         </div>
                         <span className="text-[10px] text-muted-foreground">
-                          {log.previousQty} → {log.newQty}
+                          {log.previousStock} → {log.newStock}
                         </span>
                       </div>
 
                       {/* Note & Order */}
                       <div className="flex items-center gap-2 mt-1 flex-wrap">
-                        {log.note && (
+                        {log.reason && (
                           <span className="text-[10px] text-muted-foreground truncate max-w-[200px]">
-                            {log.note}
+                            {log.reason}
                           </span>
                         )}
                         {log.order && (

@@ -307,8 +307,9 @@ export async function POST(request: NextRequest) {
       }
       if (error.message.startsWith('INSUFFICIENT_BALANCE:')) {
         const balance = error.message.split(':')[1] || '0'
+        const needed = error.message.split(':')[2] || '0'
         return NextResponse.json(
-          { success: false, error: `Saldo tidak mencukupi. Saldo: Rp ${Number(balance).toLocaleString('id-ID')}, Dibutuhkan: Rp ${amount.toLocaleString('id-ID')}` },
+          { success: false, error: `Saldo tidak mencukupi. Saldo: Rp ${Number(balance).toLocaleString('id-ID')}, Dibutuhkan: Rp ${Number(needed).toLocaleString('id-ID')}` },
           { status: 400 }
         )
       }

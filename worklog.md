@@ -2408,3 +2408,43 @@ Stage Summary:
 - Auto-verification via Midtrans webhook — no admin needed for Midtrans deposits
 - Sandbox mode: payment NOT real — for testing only
 - User needs to set real Midtrans Sandbox keys on Vercel: MIDTRANS_SERVER_KEY, NEXT_PUBLIC_MIDTRANS_CLIENT_KEY
+
+---
+Task ID: 6
+Agent: code
+Task: Fix all missing AppStore properties and other TypeScript errors
+
+Work Log:
+- Read worklog.md and all target files to understand current state
+- **types.ts (store)**: Added 5 missing properties to slice interfaces:
+  - OrderSlice: `updateOrderPaymentStatus: (orderId: string, paymentStatus: string) => void`
+  - UISlice: `overlayOpen: boolean` + `setOverlayOpen: (open: boolean) => void`
+  - SelectionSlice: `selectedUserId: string | null` + `setSelectedUser: (id: string | null) => void`
+  - ChatSlice: `createDirectChat: (userId: string) => Promise<string | null>`
+- **types.ts (lib)**: Added `"user-profile"` to ScreenName union type
+- **order.ts**: Added `updateOrderPaymentStatus` implementation (updates paymentStatus in orders array)
+- **ui.ts**: Added `overlayOpen: false` initial state + `setOverlayOpen` action
+- **selection.ts**: Added `selectedUserId: null` initial state + `setSelectedUser` action
+- **chat.ts**: Added `createDirectChat` implementation (calls /api/chat/rooms with userId)
+- **upload-limits.ts**: Added `MAX_STREAM_IMAGE_SIZE_MB: 5` and `MAX_STREAM_VIDEO_SIZE_MB: 50`
+- **sanitize-user.ts**: Fixed `bankAccount`/`bankHolder`/`bankName`/`seller` property errors by casting sanitized object to include seller type for mutation
+- **stock-utils.ts**: Fixed `previousQty`→`previousStock`, `newQty`→`newStock`, `note`→`reason` to match Prisma StockLog model schema
+- **order-utils.ts**: Updated `logStockChangeInTx` call to use `previousStock`/`newStock`/`reason` instead of old field names
+- **stock-movements.tsx (admin)**: Updated `StockLogEntry` interface and all usages (`previousStock`, `newStock`, `reason`) to match Prisma schema
+- **mention-components.tsx**: Added `onMentionClick?: (username: string) => void` to MentionTextProps; made mention spans clickable with hover state; strips leading @ before calling handler
+- **stream-user-profile-screen.tsx**: Fixed `content: string | null` vs `string` mismatch — changed `content={post.content}` to `content={post.content ?? ''}`
+- **stream-comment-sheet.tsx**: Updated local `StreamPost` interface: `content: string | null`, `mediaUrl?: string | null`; fixed `truncateText` call with null coalescing
+- **screen-registry.tsx**: Added `StreamUserProfileScreen` lazy import and `'user-profile'` entry in screenMap
+- **stream/index.ts**: Added `StreamUserProfileScreen` export
+- Build passes ✅ (next build: ✓ Compiled successfully, 0 TypeScript errors)
+- Lint passes ✅ (0 errors, 3 pre-existing warnings in auth.ts)
+
+Stage Summary:
+- Fixed 5 missing AppStore properties across 4 slice interfaces + implementations
+- Added "user-profile" to ScreenName + screen registry + lazy import
+- Added 2 missing upload limit constants (MAX_STREAM_IMAGE_SIZE_MB, MAX_STREAM_VIDEO_SIZE_MB)
+- Fixed sanitize-user.ts seller property access type errors
+- Fixed stock-utils.ts + order-utils.ts + stock-movements.tsx to align with Prisma StockLog schema (previousStock/newStock/reason)
+- Added onMentionClick prop to MentionTextProps with clickable mention spans
+- Fixed null content type mismatches in stream-user-profile-screen.tsx and stream-comment-sheet.tsx
+- Zero breaking changes — build passes, lint passes

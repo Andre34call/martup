@@ -6,7 +6,9 @@ let toastTimer: ReturnType<typeof setTimeout> | null = null
 export const createUISlice: StateCreator<AppStore, [], [], UISlice> = (set) => ({
   isLoading: false,
   showSplash: true,
+  overlayOpen: false,
   setShowSplash: (v) => set({ showSplash: v }),
+  setOverlayOpen: (open) => set({ overlayOpen: open }),
   toast: null,
   showToast: (message, type = 'success') => {
     if (toastTimer) clearTimeout(toastTimer)
