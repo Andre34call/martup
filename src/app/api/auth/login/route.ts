@@ -3,10 +3,8 @@ import { db } from '@/lib/db'
 import { generateAuthToken, isSuperAdmin } from '@/lib/auth-middleware'
 import { authLimiter } from '@/lib/rate-limit'
 import bcrypt from 'bcryptjs'
-import crypto from 'crypto'
 
 import { logger } from '@/lib/logger'
-import { hashOtp } from '@/lib/token-hash'
 import { validateBody, loginSchema } from '@/lib/validations'
 import { setSessionCookies } from '@/lib/session-cookie'
 import { sendEmail, accountLockedTemplate } from '@/lib/email'
@@ -15,10 +13,6 @@ import { sendEmail, accountLockedTemplate } from '@/lib/email'
 function isValidBcryptHash(hash: string): boolean {
   return /^\$2[aby]\$\d{2}\$/.test(hash)
 }
-
-// OTP configuration for 2FA login
-const OTP_LENGTH = 6
-const OTP_EXPIRY_MINUTES = 5
 
 function maskPhone(phone: string): string {
   const digits = phone.replace(/\D/g, '')
@@ -255,37 +249,21 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      // Generate OTP for 2FA verification
-      const otpCode = crypto.randomInt(0, Math.pow(10, OTP_LENGTH)).toString().padStart(OTP_LENGTH, '0')
-      const otpExpiry = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000)
-
-      await db.user.update({
-        where: { id: user.id },
-        data: { otpCode: hashOtp(otpCode), otpExpiry },
-      })
-
-      // Send OTP via SMS gateway
-      try {
-        const { sendOTP } = await import('@/lib/sms-gateway')
-        const smsResult = await sendOTP(user.phone, otpCode, OTP_EXPIRY_MINUTES)
-        if (smsResult.success) {
-          logger.info({ component: 'auth', userId: user.id, provider: smsResult.provider }, `[2FA Login] OTP sent to ${user.phone} via ${smsResult.provider}`)
-        } else {
-          logger.warn({ component: 'auth', userId: user.id, provider: smsResult.provider, error: smsResult.error }, `[2FA Login] Failed to send OTP to ${user.phone} via ${smsResult.provider}: ${smsResult.error}`)
-        }
-      } catch (smsError) {
-        logger.error({ component: 'auth', userId: user.id, err: smsError }, '[2FA Login] SMS gateway exception')
-      }
-
-      const isDev = process.env.NODE_ENV === 'development'
+      // 2FA: Don't send OTP here — let the OTP screen handle it via /api/auth/otp/send
+      // Previously this route sent OTP directly, which caused:
+      // 1. Double OTP (one from here, one from otp/send) — wasting SMS credits
+      // 2. Missing requestId — the OTP sent here had no requestId for verification
+      // Now we just return the 2FA flag and phone, and the OTP screen handles the rest.
 
       // Return requires2FA flag — client should redirect to OTP screen
+      // The OTP screen will call /api/auth/otp/send which generates the OTP,
+      // sends SMS, and returns a requestId needed for verification.
       return NextResponse.json({
         success: true,
         requires2FA: true,
-        phone: maskPhone(user.phone),
+        phone: user.phone, // Pass actual phone so OTP screen can send OTP
         userId: user.id,
-        message: `Verifikasi 2FA diperlukan. Kode OTP dikirim ke ${maskPhone(user.phone)}`,
+        message: `Verifikasi 2FA diperlukan. Kode OTP akan dikirim ke ${maskPhone(user.phone)}`,
       })
     }
 

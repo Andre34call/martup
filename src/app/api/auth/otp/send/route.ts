@@ -45,12 +45,20 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate phone format (Indonesian)
-    const normalizedPhone = phone.replace(/[\s-]/g, '')
-    if (!/^(0|\+62|62)\d{9,12}$/.test(normalizedPhone)) {
+    const strippedPhone = phone.replace(/[\s-]/g, '')
+    if (!/^(0|\+62|62)\d{9,12}$/.test(strippedPhone)) {
       return NextResponse.json(
         { success: false, error: 'Format nomor HP tidak valid' },
         { status: 400 }
       )
+    }
+
+    // Normalize phone to canonical form for rate limiting and lookups
+    let normalizedPhone = strippedPhone
+    if (strippedPhone.startsWith('+62')) {
+      normalizedPhone = '0' + strippedPhone.slice(3)
+    } else if (strippedPhone.startsWith('62') && !strippedPhone.startsWith('0')) {
+      normalizedPhone = '0' + strippedPhone.slice(2)
     }
 
     // SECURITY: Per-phone rate limit in addition to per-IP limit
@@ -68,9 +76,20 @@ export async function POST(request: NextRequest) {
     // Set expiry time
     const otpExpiry = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000)
 
-    // Find or create user with this phone number
+    // Find user by phone — try all format variants to match regardless of storage format
+    const phoneVariants = [
+      normalizedPhone,         // 08123456789
+      strippedPhone,           // +628123456789 or as-is
+    ]
+    if (normalizedPhone.startsWith('0')) {
+      phoneVariants.push('+62' + normalizedPhone.slice(1))  // +628123456789
+      phoneVariants.push('62' + normalizedPhone.slice(1))   // 628123456789
+    }
+
     let user = await db.user.findFirst({
-      where: { phone: normalizedPhone },
+      where: {
+        phone: { in: phoneVariants.filter((v, i, a) => a.indexOf(v) === i) }
+      },
     })
 
     if (user) {

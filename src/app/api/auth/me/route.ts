@@ -6,7 +6,7 @@ import { authOptions } from '@/lib/auth'
 import { isSuperAdmin } from '@/lib/auth-middleware'
 import { logger } from '@/lib/logger'
 import { authLimiter } from '@/lib/rate-limit'
-import { setSessionCookies, AUTH_FLAG_COOKIE_NAME } from '@/lib/session-cookie'
+import { setSessionCookies, REMEMBER_FLAG_COOKIE_NAME } from '@/lib/session-cookie'
 // GET /api/auth/me - Get current authenticated user
 // Supports two auth methods:
 // 1. NextAuth session (Google OAuth) — via verifyAuth
@@ -150,12 +150,12 @@ export async function GET(request: NextRequest) {
     // increments tokenVersion.
     if (authResult.shouldRotateToken) {
       const freshToken = generateAuthToken(user.id, user.tokenVersion ?? 0)
-      // Check if the current session cookie has maxAge (Remember Me)
-      const sessionCookie = request.cookies.get('martup_session')
-      const rememberMeCookie = request.cookies.get(AUTH_FLAG_COOKIE_NAME)
+      // Check if the current session has Remember Me enabled
+      // Use the dedicated martup_remember flag cookie (not martup_auth which is always "1")
+      const rememberMeCookie = request.cookies.get(REMEMBER_FLAG_COOKIE_NAME)
       const isRememberMe = !!rememberMeCookie?.value
       setSessionCookies(response, freshToken, isRememberMe)
-      logger.info({ component: 'auth', userId: user.id }, 'Token rotated (session cookie refreshed)')
+      logger.info({ component: 'auth', userId: user.id, isRememberMe }, 'Token rotated (session cookie refreshed)')
     }
 
     return response

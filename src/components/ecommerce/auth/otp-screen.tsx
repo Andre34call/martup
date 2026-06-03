@@ -42,6 +42,7 @@ export function OTPScreen() {
   const [isVerifying, setIsVerifying] = useState(false)
   const [touchedPhone, setTouchedPhone] = useState(false)
   const [devOtp, setDevOtp] = useState<string | null>(null)
+  const [requestId, setRequestId] = useState<string | null>(null)
 
   const phoneError = touchedPhone && !phone
     ? "Nomor HP wajib diisi"
@@ -72,6 +73,10 @@ export function OTPScreen() {
 
       const data = await apiClient.post<OtpSendResponse>('/api/auth/otp/send', { phone: formattedPhone })
 
+      // Store requestId for verification — it binds the OTP send and verify steps
+      if (data.requestId) {
+        setRequestId(data.requestId)
+      }
       setStep('otp')
       setCountdown(60)
       // In dev mode, show the OTP for testing
@@ -103,7 +108,7 @@ export function OTPScreen() {
     try {
       const formattedPhone = phone.startsWith('+') ? phone : phone.startsWith('0') ? '+62' + phone.substring(1) : '+62' + phone
 
-      const data = await apiClient.post<OtpVerifyResponse>('/api/auth/otp/verify', { phone: formattedPhone, otpCode: otp })
+      const data = await apiClient.post<OtpVerifyResponse>('/api/auth/otp/verify', { phone: formattedPhone, otpCode: otp, requestId: requestId || undefined })
       if (data.user) {
         // Token is in httpOnly session cookie set by server
         setAuthFlagCookie()

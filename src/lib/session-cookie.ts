@@ -17,6 +17,7 @@ import { NextResponse } from 'next/server'
 
 export const SESSION_COOKIE_NAME = 'martup_session'
 export const AUTH_FLAG_COOKIE_NAME = 'martup_auth'
+export const REMEMBER_FLAG_COOKIE_NAME = 'martup_remember'
 
 // Remember Me duration: 30 days
 const REMEMBER_ME_MAX_AGE = 30 * 24 * 60 * 60 // seconds
@@ -53,10 +54,16 @@ export function setSessionCookies(response: NextResponse, token: string, remembe
       ...FLAG_COOKIE_OPTIONS,
       maxAge: REMEMBER_ME_MAX_AGE,
     })
+    // Set a separate flag so token rotation knows this is a Remember Me session
+    response.cookies.set(REMEMBER_FLAG_COOKIE_NAME, '1', {
+      ...FLAG_COOKIE_OPTIONS,
+      maxAge: REMEMBER_ME_MAX_AGE,
+    })
   } else {
     // Session cookies — cleared when browser closes
     response.cookies.set(SESSION_COOKIE_NAME, token, COOKIE_OPTIONS)
     response.cookies.set(AUTH_FLAG_COOKIE_NAME, '1', FLAG_COOKIE_OPTIONS)
+    // No martup_remember cookie → token rotation will know this is a session-only login
   }
   return response
 }
@@ -71,6 +78,10 @@ export function clearSessionCookies(response: NextResponse): NextResponse {
     maxAge: 0, // Expire immediately
   })
   response.cookies.set(AUTH_FLAG_COOKIE_NAME, '', {
+    ...FLAG_COOKIE_OPTIONS,
+    maxAge: 0, // Expire immediately
+  })
+  response.cookies.set(REMEMBER_FLAG_COOKIE_NAME, '', {
     ...FLAG_COOKIE_OPTIONS,
     maxAge: 0, // Expire immediately
   })
@@ -94,6 +105,16 @@ export function hasAuthFlagCookie(): boolean {
 export function deleteAuthFlagCookie(): void {
   if (typeof document === 'undefined') return
   document.cookie = `${AUTH_FLAG_COOKIE_NAME}=; path=/; max-age=0; SameSite=Lax${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`
+}
+
+/**
+ * Client-side helper: Check if the current session is a "Remember Me" session.
+ * Used during token rotation to decide whether the rotated cookie should be
+ * persistent (30-day) or session-only.
+ */
+export function isRememberMeSession(): boolean {
+  if (typeof document === 'undefined') return false
+  return document.cookie.split(';').some(c => c.trim().startsWith(`${REMEMBER_FLAG_COOKIE_NAME}=`))
 }
 
 /**

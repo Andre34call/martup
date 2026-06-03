@@ -60,11 +60,32 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const normalizedPhone = phone.replace(/[\s-]/g, '')
+    // Normalize phone: convert all formats (+62..., 62..., 0...) to a canonical form
+    // This handles the mismatch where client sends "+62812..." but DB stores "0812..."
+    const strippedPhone = phone.replace(/[\s-]/g, '')
+    let normalizedPhone = strippedPhone
+    if (strippedPhone.startsWith('+62')) {
+      normalizedPhone = '0' + strippedPhone.slice(3)
+    } else if (strippedPhone.startsWith('62') && !strippedPhone.startsWith('0')) {
+      normalizedPhone = '0' + strippedPhone.slice(2)
+    }
 
-    // Find user by phone
+    // Find user by phone — try both canonical forms (+62 and 0 prefix)
+    // to match regardless of how the phone was stored in the DB
+    const phoneVariants = [
+      normalizedPhone,         // 08123456789
+      strippedPhone,           // +628123456789 or as-is
+    ]
+    // Also add +62 variant if we have 0-prefix
+    if (normalizedPhone.startsWith('0')) {
+      phoneVariants.push('+62' + normalizedPhone.slice(1))  // +628123456789
+      phoneVariants.push('62' + normalizedPhone.slice(1))   // 628123456789
+    }
+
     const user = await db.user.findFirst({
-      where: { phone: normalizedPhone },
+      where: {
+        phone: { in: phoneVariants.filter((v, i, a) => a.indexOf(v) === i) } // unique variants
+      },
       include: {
         seller: true,
         wallet: true,
