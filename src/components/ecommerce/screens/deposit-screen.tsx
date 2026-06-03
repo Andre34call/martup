@@ -8,14 +8,15 @@ import { PageHeader, SectionHeader, PrimaryButton, InlineSpinner } from "../shar
 import { useState, useEffect, useCallback, useRef } from "react"
 import {
   Wallet, CreditCard, Check, ChevronRight, ChevronLeft,
-  Upload, Copy, CheckCircle, Clock, Building2, Smartphone,
-  ArrowRight, Info, ImageIcon, AlertCircle
+  Copy, CheckCircle, Clock, Building2, Smartphone,
+  ArrowRight, Info, AlertCircle, QrCode, RefreshCw
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { apiClient, ApiClientError } from '@/lib/api-client'
 import { handleApiError } from '@/lib/handle-api-error'
+import { openSnapPayment } from '@/lib/midtrans'
 
 // ==================== CONSTANTS ====================
 
@@ -31,38 +32,66 @@ const quickAmounts = [
   { label: "1M", value: 1_000_000 },
 ]
 
+// Midtrans-supported payment methods for deposits
 const paymentMethods = [
-  { key: "bank_transfer", label: "Transfer Bank", color: "bg-slate-600", icon: "🏦", desc: "BCA, Mandiri, BNI, dll" },
-  { key: "gopay", label: "GoPay", color: "bg-green-500", icon: "💳", desc: "GoPay / GoPayLater" },
-  { key: "ovo", label: "OVO", color: "bg-purple-500", icon: "💜", desc: "OVO Cash" },
-  { key: "dana", label: "DANA", color: "bg-sky-500", icon: "🔵", desc: "DANA Balance" },
-  { key: "shopeepay", label: "ShopeePay", color: "bg-orange-500", icon: "🧡", desc: "ShopeePay Balance" },
-  { key: "linkaja", label: "LinkAja", color: "bg-red-500", icon: "🔴", desc: "LinkAja Syariah" },
+  {
+    key: "bank_transfer",
+    label: "Virtual Account",
+    color: "bg-slate-600",
+    icon: <Building2 className="w-5 h-5 text-white" />,
+    desc: "BCA, BNI, BRI, Mandiri, Permata",
+  },
+  {
+    key: "gopay",
+    label: "GoPay",
+    color: "bg-green-500",
+    icon: <Smartphone className="w-5 h-5 text-white" />,
+    desc: "GoPay / GoPayLater",
+  },
+  {
+    key: "shopeepay",
+    label: "ShopeePay",
+    color: "bg-orange-500",
+    icon: <Smartphone className="w-5 h-5 text-white" />,
+    desc: "ShopeePay Balance",
+  },
+  {
+    key: "qris",
+    label: "QRIS",
+    color: "bg-red-500",
+    icon: <QrCode className="w-5 h-5 text-white" />,
+    desc: "Scan QR — semua e-wallet & bank",
+  },
 ]
 
 // ==================== TYPES ====================
 
-interface DestinationAccount {
-  type: 'bank' | 'ewallet'
-  bankName?: string
-  accountNumber?: string
-  accountHolder?: string
-  ewalletName?: string  // Fallback: uses bankName if not set
-  phoneNumber?: string  // Fallback: uses accountNumber if not set
-}
-
-interface DepositData {
+interface MidtransDepositData {
   depositId: string
   amount: number
   method: string
   methodLabel: string
   status: string
-  destinationAccount: DestinationAccount | null
+  snapToken: string
+  redirectUrl?: string
+  midtransOrderId: string
   expiredAt: string
   message?: string
 }
 
 type Step = 1 | 2 | 3
+
+type PaymentResult = {
+  status: 'success' | 'pending' | 'error' | 'closed'
+  result?: {
+    status_code?: string
+    transaction_status?: string
+    order_id?: string
+    payment_type?: string
+    gross_amount?: string
+    [key: string]: unknown
+  }
+}
 
 // ==================== ANIMATION VARIANTS ====================
 
@@ -87,14 +116,13 @@ function StepIndicator({ currentStep }: { currentStep: Step }) {
   const steps = [
     { num: 1, label: "Nominal" },
     { num: 2, label: "Bayar" },
-    { num: 3, label: "Transfer" },
+    { num: 3, label: "Selesai" },
   ]
 
   return (
     <div className="flex items-center justify-center gap-0 px-4 py-4">
       {steps.map((step, idx) => (
         <div key={step.num} className="flex items-center">
-          {/* Step circle + label */}
           <div className="flex flex-col items-center gap-1">
             <motion.div
               animate={{
@@ -122,7 +150,6 @@ function StepIndicator({ currentStep }: { currentStep: Step }) {
               {step.label}
             </span>
           </div>
-          {/* Connecting line */}
           {idx < steps.length - 1 && (
             <div className="w-12 sm:w-16 h-0.5 mx-1 mb-5 relative overflow-hidden rounded-full bg-muted">
               <motion.div
@@ -155,16 +182,14 @@ export function DepositScreen() {
   // Step 2: Payment method
   const [selectedMethod, setSelectedMethod] = useState<string | null>(null)
 
-  // Step 3: Deposit data & proof upload
-  const [depositData, setDepositData] = useState<DepositData | null>(null)
+  // Step 3: Deposit data & payment status
+  const [depositData, setDepositData] = useState<MidtransDepositData | null>(null)
   const [isCreating, setIsCreating] = useState(false)
-  const [senderName, setSenderName] = useState("")
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
-  const [isUploading, setIsUploading] = useState(false)
-  const [proofUploaded, setProofUploaded] = useState(false)
+  const [isSnapOpen, setIsSnapOpen] = useState(false)
+  const [paymentResult, setPaymentResult] = useState<PaymentResult | null>(null)
+  const [depositStatus, setDepositStatus] = useState<string | null>(null)
+  const [isPolling, setIsPolling] = useState(false)
   const [timeRemaining, setTimeRemaining] = useState("")
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Computed: effective amount
   const effectiveAmount = selectedAmount || (customAmount ? Number(customAmount) : 0)
@@ -172,7 +197,8 @@ export function DepositScreen() {
   // ==================== COUNTDOWN TIMER ====================
 
   useEffect(() => {
-    if (!depositData?.expiredAt || proofUploaded) return
+    if (!depositData?.expiredAt) return
+    if (depositStatus === 'success' || depositStatus === 'failed' || depositStatus === 'expired') return
 
     const updateTimer = () => {
       const now = new Date().getTime()
@@ -196,12 +222,56 @@ export function DepositScreen() {
     updateTimer()
     const interval = setInterval(updateTimer, 1000)
     return () => clearInterval(interval)
-  }, [depositData?.expiredAt, proofUploaded])
+  }, [depositData?.expiredAt, depositStatus])
+
+  // ==================== POLLING DEPOSIT STATUS ====================
+
+  const pollDepositStatus = useCallback(async (depositId: string): Promise<string | null> => {
+    try {
+      const result = await apiClient.get<{
+        success: boolean
+        data: { status: string }
+      }>(`/api/deposit/status?depositId=${depositId}`)
+      return result.data.status
+    } catch {
+      return null
+    }
+  }, [])
+
+  // Start polling after Snap popup closes or on pending
+  useEffect(() => {
+    if (!depositData?.depositId || isPolling) return
+    if (depositStatus === 'success' || depositStatus === 'failed' || depositStatus === 'expired') return
+
+    // Only poll if payment was made (pending or success from Snap callback)
+    if (!paymentResult || paymentResult.status === 'closed') return
+
+    setIsPolling(true)
+
+    const poll = async () => {
+      const status = await pollDepositStatus(depositData.depositId)
+      if (status) {
+        setDepositStatus(status)
+        if (status === 'success' || status === 'failed' || status === 'expired') {
+          setIsPolling(false)
+          return
+        }
+      }
+      // Continue polling
+      setTimeout(poll, 3000)
+    }
+
+    // Initial check after 2 seconds
+    const timer = setTimeout(poll, 2000)
+    return () => {
+      clearTimeout(timer)
+      setIsPolling(false)
+    }
+  }, [depositData?.depositId, paymentResult, depositStatus, pollDepositStatus, isPolling])
 
   // ==================== VALIDATION ====================
 
   const isAmountValid = effectiveAmount >= MIN_AMOUNT && effectiveAmount <= MAX_AMOUNT
-
   const canAdvanceStep1 = isAmountValid
   const canAdvanceStep2 = selectedMethod !== null
 
@@ -210,14 +280,6 @@ export function DepositScreen() {
   const goToStep = (step: Step) => {
     setDirection(step > currentStep ? 1 : -1)
     setCurrentStep(step)
-  }
-
-  const handleNext = () => {
-    if (currentStep === 1 && canAdvanceStep1) {
-      goToStep(2)
-    } else if (currentStep === 2 && canAdvanceStep2) {
-      createDeposit()
-    }
   }
 
   const handleBack = () => {
@@ -238,20 +300,44 @@ export function DepositScreen() {
     })
   }
 
-  // ==================== CREATE DEPOSIT ====================
+  // ==================== CREATE MIDTRANS DEPOSIT & OPEN SNAP ====================
 
-  const createDeposit = async () => {
+  const handlePayment = async () => {
     if (!selectedMethod || !effectiveAmount) return
     setIsCreating(true)
 
     try {
-      const result = await apiClient.post<{ success: boolean; data: DepositData }>(
-        '/api/wallet/topup',
-        { amount: effectiveAmount, method: selectedMethod, senderName: senderName || undefined }
-      )
+      // Step 1: Create Midtrans deposit — get snap token
+      const result = await apiClient.post<{
+        success: boolean
+        data: MidtransDepositData
+      }>('/api/deposit/midtrans/create', {
+        amount: effectiveAmount,
+        method: selectedMethod,
+      })
 
-      setDepositData(result.data)
+      const deposit = result.data
+      setDepositData(deposit)
+
+      // Step 2: Open Midtrans Snap popup
+      setIsSnapOpen(true)
       goToStep(3)
+
+      const snapResult = await openSnapPayment(deposit.snapToken)
+      setPaymentResult(snapResult)
+      setIsSnapOpen(false)
+
+      // Step 3: Handle the result
+      if (snapResult.status === 'success') {
+        showToast('Pembayaran berhasil diproses!', 'success')
+        // Polling will pick up the status
+      } else if (snapResult.status === 'pending') {
+        showToast('Pembayaran menunggu konfirmasi. Silakan selesaikan pembayaran.', 'info')
+      } else if (snapResult.status === 'error') {
+        showToast('Pembayaran gagal. Silakan coba lagi.', 'error')
+      } else if (snapResult.status === 'closed') {
+        showToast('Popup pembayaran ditutup. Anda bisa membuka kembali.', 'info')
+      }
     } catch (error) {
       if (error instanceof ApiClientError) {
         showToast(error.message, "error")
@@ -263,81 +349,28 @@ export function DepositScreen() {
     }
   }
 
-  // ==================== FILE HANDLING ====================
+  // ==================== RE-OPEN SNAP ====================
 
-  const handleFileSelect = () => {
-    fileInputRef.current?.click()
-  }
-
-  const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    // Validate file type
-    if (!file.type.startsWith("image/")) {
-      showToast("Hanya file gambar yang diperbolehkan", "error")
-      return
-    }
-
-    // Validate file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      showToast("Ukuran file maksimal 5MB", "error")
-      return
-    }
-
-    setSelectedFile(file)
-    const url = URL.createObjectURL(file)
-    setPreviewUrl(url)
-  }
-
-  // ==================== UPLOAD PROOF ====================
-
-  const handleUploadProof = async () => {
-    if (!selectedFile || !depositData) return
-    setIsUploading(true)
-
+  const handleReopenSnap = async () => {
+    if (!depositData?.snapToken) return
     try {
-      // Step 1: Upload image to Supabase
-      const formData = new FormData()
-      formData.append("file", selectedFile)
-      formData.append("bucket", "deposits")
-      formData.append("folder", "proofs")
+      setIsSnapOpen(true)
+      const snapResult = await openSnapPayment(depositData.snapToken)
+      setPaymentResult(snapResult)
+      setIsSnapOpen(false)
 
-      const uploadRes = await fetch("/api/upload", { method: "POST", body: formData })
-      const uploadData = await uploadRes.json()
-
-      if (!uploadData.data?.url) {
-        throw new Error("Gagal mengunggah bukti transfer")
+      if (snapResult.status === 'success') {
+        showToast('Pembayaran berhasil diproses!', 'success')
+      } else if (snapResult.status === 'pending') {
+        showToast('Pembayaran menunggu konfirmasi.', 'info')
+      } else if (snapResult.status === 'error') {
+        showToast('Pembayaran gagal. Silakan coba lagi.', 'error')
       }
-
-      // Step 2: Submit proof URL
-      await apiClient.post(`/api/wallet/deposits/${depositData.depositId}/proof`, {
-        proofUrl: uploadData.data.url,
-        senderName: senderName || undefined,
-      })
-
-      setProofUploaded(true)
-      showToast("Bukti transfer berhasil diunggah!", "success")
-    } catch (error) {
-      if (error instanceof ApiClientError) {
-        showToast(error.message, "error")
-      } else if (error instanceof Error) {
-        showToast(error.message, "error")
-      } else {
-        showToast("Gagal mengunggah bukti transfer", "error")
-      }
-    } finally {
-      setIsUploading(false)
+    } catch {
+      setIsSnapOpen(false)
+      showToast('Gagal membuka popup pembayaran', 'error')
     }
   }
-
-  // ==================== CLEANUP PREVIEW URL ====================
-
-  useEffect(() => {
-    return () => {
-      if (previewUrl) URL.revokeObjectURL(previewUrl)
-    }
-  }, [previewUrl])
 
   // ==================== RENDER: STEP 1 - CHOOSE AMOUNT ====================
 
@@ -427,6 +460,16 @@ export function DepositScreen() {
           </p>
         </motion.div>
       )}
+
+      {/* Info about Midtrans */}
+      <motion.div {...fadeIn}>
+        <div className="flex gap-2 p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+          <Info className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-blue-700 dark:text-blue-300 leading-relaxed">
+            Pembayaran diproses otomatis via Midtrans. Saldo akan langsung masuk setelah pembayaran berhasil — tanpa perlu verifikasi admin.
+          </p>
+        </div>
+      </motion.div>
     </motion.div>
   )
 
@@ -464,7 +507,7 @@ export function DepositScreen() {
       <motion.div {...fadeIn}>
         <SectionHeader
           title="Metode Pembayaran"
-          subtitle="Pilih metode pembayaran"
+          subtitle="Diproses otomatis via Midtrans"
           icon={<CreditCard className="w-4 h-4" />}
         />
         <div className="space-y-2 mt-3">
@@ -482,7 +525,7 @@ export function DepositScreen() {
                 onClick={() => setSelectedMethod(method.key)}
               >
                 <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-xl ${method.color} flex items-center justify-center text-lg flex-shrink-0`}>
+                  <div className={`w-10 h-10 rounded-xl ${method.color} flex items-center justify-center flex-shrink-0`}>
                     {method.icon}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -506,13 +549,23 @@ export function DepositScreen() {
           ))}
         </div>
       </motion.div>
+
+      {/* Sandbox notice */}
+      <motion.div {...fadeIn}>
+        <div className="flex gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+          <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-amber-700 dark:text-amber-300 leading-relaxed">
+            Mode Sandbox aktif — pembayaran tidak akan benar-benar terbayar. Ini untuk testing saja.
+          </p>
+        </div>
+      </motion.div>
     </motion.div>
   )
 
-  // ==================== RENDER: STEP 3 - TRANSFER INSTRUCTIONS ====================
+  // ==================== RENDER: STEP 3 - PAYMENT STATUS ====================
 
   const renderStep3 = () => {
-    if (isCreating) {
+    if (isCreating && !depositData) {
       return (
         <motion.div
           key="step3-loading"
@@ -521,29 +574,50 @@ export function DepositScreen() {
           className="flex flex-col items-center justify-center py-16"
         >
           <InlineSpinner className="w-8 h-8 border-emerald-500/30 border-t-emerald-500" />
-          <p className="text-sm text-muted-foreground mt-4">Membuat deposit...</p>
+          <p className="text-sm text-muted-foreground mt-4">Membuat transaksi pembayaran...</p>
         </motion.div>
       )
     }
 
-    if (proofUploaded) {
+    if (isSnapOpen) {
+      return (
+        <motion.div
+          key="step3-snap"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="flex flex-col items-center justify-center py-16"
+        >
+          <InlineSpinner className="w-8 h-8 border-emerald-500/30 border-t-emerald-500" />
+          <p className="text-sm text-muted-foreground mt-4">Menunggu pembayaran di popup Midtrans...</p>
+          <p className="text-xs text-muted-foreground mt-2">Jangan tutup halaman ini</p>
+        </motion.div>
+      )
+    }
+
+    // Payment successful
+    if (depositStatus === 'success') {
       return renderSuccessState()
     }
 
+    // Payment failed
+    if (depositStatus === 'failed' || depositStatus === 'expired') {
+      return renderFailedState()
+    }
+
+    // Pending or waiting for payment
     if (!depositData) return null
 
-    const { destinationAccount } = depositData
-    const isBank = destinationAccount?.type === "bank"
-    const isEwallet = destinationAccount?.type === "ewallet"
+    return renderPendingState()
+  }
 
-    // Resolve e-wallet display name: ewalletName takes priority, falls back to bankName
-    const ewalletDisplayName = destinationAccount?.ewalletName || destinationAccount?.bankName || "-"
-    // Resolve phone/account: phoneNumber takes priority, falls back to accountNumber
-    const ewalletNumber = destinationAccount?.phoneNumber || destinationAccount?.accountNumber || "-"
+  // ==================== RENDER: PENDING STATE ====================
+
+  const renderPendingState = () => {
+    if (!depositData) return null
 
     return (
       <motion.div
-        key="step3"
+        key="step3-pending"
         custom={direction}
         variants={stepVariants}
         initial="enter"
@@ -572,248 +646,82 @@ export function DepositScreen() {
         {/* Transfer Amount */}
         <motion.div {...fadeIn}>
           <Card className="p-5 bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800">
-            <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium text-center">Total Transfer</p>
+            <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium text-center">Total Pembayaran</p>
             <p className="text-3xl font-bold text-emerald-700 dark:text-emerald-300 text-center mt-1">
               {formatPrice(depositData.amount)}
             </p>
             <p className="text-[10px] text-emerald-500/70 dark:text-emerald-400/60 text-center mt-1">
-              Pastikan jumlah transfer sesuai
+              via {depositData.methodLabel}
             </p>
           </Card>
         </motion.div>
 
-        {/* Destination Account */}
-        {destinationAccount ? (
-          <motion.div {...fadeIn}>
-            <SectionHeader
-              title="Tujuan Transfer"
-              subtitle={depositData.methodLabel}
-              icon={isBank ? <Building2 className="w-4 h-4" /> : <Smartphone className="w-4 h-4" />}
-            />
-            <Card className="mt-3 p-4 space-y-3">
-              {isBank ? (
-                <>
-                  {/* Bank Name */}
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">Nama Bank</span>
-                    <span className="text-sm font-semibold text-foreground">
-                      {destinationAccount.bankName || "-"}
-                    </span>
-                  </div>
-                  <div className="h-px bg-border" />
-                  {/* Account Number */}
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">Nomor Rekening</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold text-foreground tracking-wide">
-                        {destinationAccount.accountNumber || "-"}
-                      </span>
-                      <motion.button
-                        whileTap={{ scale: 0.9 }}
-                        onClick={() => copyToClipboard(destinationAccount.accountNumber || "")}
-                        className="w-7 h-7 rounded-lg bg-muted hover:bg-emerald-100 dark:hover:bg-emerald-900/30 flex items-center justify-center transition-colors"
-                      >
-                        <Copy className="w-3.5 h-3.5 text-emerald-600" />
-                      </motion.button>
-                    </div>
-                  </div>
-                  <div className="h-px bg-border" />
-                  {/* Account Holder */}
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">Atas Nama</span>
-                    <span className="text-sm font-semibold text-foreground">
-                      {destinationAccount.accountHolder || "-"}
-                    </span>
-                  </div>
-                </>
-              ) : isEwallet ? (
-                <>
-                  {/* E-Wallet Name */}
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">E-Wallet</span>
-                    <span className="text-sm font-semibold text-foreground">
-                      {ewalletDisplayName}
-                    </span>
-                  </div>
-                  <div className="h-px bg-border" />
-                  {/* Phone/Account */}
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">No. HP / Akun</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold text-foreground tracking-wide">
-                        {ewalletNumber}
-                      </span>
-                      <motion.button
-                        whileTap={{ scale: 0.9 }}
-                        onClick={() => copyToClipboard(ewalletNumber)}
-                        className="w-7 h-7 rounded-lg bg-muted hover:bg-emerald-100 dark:hover:bg-emerald-900/30 flex items-center justify-center transition-colors"
-                      >
-                        <Copy className="w-3.5 h-3.5 text-emerald-600" />
-                      </motion.button>
-                    </div>
-                  </div>
-                  <div className="h-px bg-border" />
-                  {/* Account Holder */}
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">Atas Nama</span>
-                    <span className="text-sm font-semibold text-foreground">
-                      {destinationAccount.accountHolder || "-"}
-                    </span>
-                  </div>
-                </>
-              ) : (
-                /* Unknown type fallback — show all fields */
-                <>
-                  {destinationAccount.bankName && (
-                    <>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-muted-foreground">Bank/E-Wallet</span>
-                        <span className="text-sm font-semibold text-foreground">{destinationAccount.bankName}</span>
-                      </div>
-                      <div className="h-px bg-border" />
-                    </>
-                  )}
-                  {destinationAccount.accountNumber && (
-                    <>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-muted-foreground">Nomor Rekening</span>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-bold text-foreground tracking-wide">{destinationAccount.accountNumber}</span>
-                          <motion.button
-                            whileTap={{ scale: 0.9 }}
-                            onClick={() => copyToClipboard(destinationAccount.accountNumber || "")}
-                            className="w-7 h-7 rounded-lg bg-muted hover:bg-emerald-100 dark:hover:bg-emerald-900/30 flex items-center justify-center transition-colors"
-                          >
-                            <Copy className="w-3.5 h-3.5 text-emerald-600" />
-                          </motion.button>
-                        </div>
-                      </div>
-                      <div className="h-px bg-border" />
-                    </>
-                  )}
-                  {destinationAccount.accountHolder && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-muted-foreground">Atas Nama</span>
-                      <span className="text-sm font-semibold text-foreground">{destinationAccount.accountHolder}</span>
-                    </div>
-                  )}
-                </>
-              )}
-            </Card>
-          </motion.div>
-        ) : (
-          /* No destination account configured */
-          <motion.div {...fadeIn}>
-            <div className="flex gap-2 p-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
-              <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
-              <div className="space-y-1">
-                <p className="text-xs text-amber-700 dark:text-amber-300 font-medium">
-                  Rekening tujuan belum dikonfigurasi
-                </p>
-                <p className="text-xs text-amber-600/70 dark:text-amber-400/60">
-                  Silakan hubungi admin untuk mendapatkan informasi rekening tujuan transfer.
-                </p>
+        {/* Order ID */}
+        <motion.div {...fadeIn}>
+          <Card className="p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">Order ID</span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-mono text-foreground">{depositData.midtransOrderId}</span>
+                <motion.button
+                  whileTap={{ scale: 0.9 }}
+                  onClick={() => copyToClipboard(depositData.midtransOrderId)}
+                  className="w-6 h-6 rounded-lg bg-muted hover:bg-emerald-100 dark:hover:bg-emerald-900/30 flex items-center justify-center transition-colors"
+                >
+                  <Copy className="w-3 h-3 text-emerald-600" />
+                </motion.button>
               </div>
+            </div>
+          </Card>
+        </motion.div>
+
+        {/* Status Info */}
+        {isPolling && (
+          <motion.div {...fadeIn}>
+            <div className="flex items-center gap-2 p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+              <InlineSpinner className="w-4 h-4 border-blue-500/30 border-t-blue-500" />
+              <p className="text-xs text-blue-700 dark:text-blue-300">
+                Memeriksa status pembayaran...
+              </p>
             </div>
           </motion.div>
         )}
 
-        {/* Info note */}
+        {/* Info */}
         <motion.div {...fadeIn}>
           <div className="flex gap-2 p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
             <Info className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
-            <p className="text-xs text-blue-700 dark:text-blue-300 leading-relaxed">
-              Transfer tepat sesuai nominal yang tertera. Setelah transfer, unggah bukti transfer di bawah untuk mempercepat verifikasi.
-            </p>
+            <div className="space-y-1">
+              <p className="text-xs text-blue-700 dark:text-blue-300 leading-relaxed">
+                {paymentResult?.status === 'pending'
+                  ? 'Pembayaran sedang diproses. Untuk VA, selesaikan transfer sebelum batas waktu.'
+                  : paymentResult?.status === 'closed'
+                    ? 'Anda menutup popup pembayaran. Klik tombol di bawah untuk membuka kembali.'
+                    : 'Selesaikan pembayaran di popup Midtrans. Saldo akan otomatis masuk setelah pembayaran berhasil.'}
+              </p>
+            </div>
           </div>
         </motion.div>
 
-        {/* Sender Name */}
-        <motion.div {...fadeIn}>
-          <SectionHeader
-            title="Nama Pengirim (Opsional)"
-            subtitle="Untuk verifikasi pembayaran"
-            icon={<CreditCard className="w-4 h-4" />}
-          />
-          <div className="mt-3">
-            <Input
-              value={senderName}
-              onChange={(e) => setSenderName(e.target.value)}
-              placeholder="Nama sesuai rekening pengirim"
-              className="h-11 rounded-xl"
-            />
-          </div>
-        </motion.div>
+        {/* Actions */}
+        <motion.div {...fadeIn} className="space-y-3">
+          <PrimaryButton
+            className="w-full rounded-xl h-12"
+            onClick={handleReopenSnap}
+            disabled={isSnapOpen}
+          >
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Buka Kembali Pembayaran
+          </PrimaryButton>
 
-        {/* Upload Proof */}
-        <motion.div {...fadeIn}>
-          <SectionHeader
-            title="Unggah Bukti Transfer"
-            subtitle="Format: JPG, PNG (Maks. 5MB)"
-            icon={<ImageIcon className="w-4 h-4" />}
-          />
-          <div className="mt-3">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={onFileChange}
-            />
-            {previewUrl ? (
-              <Card className="p-3 space-y-3">
-                <div className="relative rounded-xl overflow-hidden bg-muted">
-                  <img
-                    src={previewUrl}
-                    alt="Bukti transfer"
-                    className="w-full max-h-48 object-contain"
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    className="flex-1 h-10 rounded-xl text-xs"
-                    onClick={() => {
-                      setSelectedFile(null)
-                      setPreviewUrl(null)
-                      if (fileInputRef.current) fileInputRef.current.value = ""
-                    }}
-                  >
-                    Ganti Foto
-                  </Button>
-                  <PrimaryButton
-                    className="flex-1 h-10 rounded-xl text-xs"
-                    onClick={handleUploadProof}
-                    disabled={isUploading}
-                  >
-                    {isUploading ? (
-                      <>
-                        <InlineSpinner className="w-4 h-4 mr-2" />
-                        Mengunggah...
-                      </>
-                    ) : (
-                      <>
-                        <Upload className="w-4 h-4 mr-2" />
-                        Kirim Bukti
-                      </>
-                    )}
-                  </PrimaryButton>
-                </div>
-              </Card>
-            ) : (
-              <motion.button
-                whileTap={{ scale: 0.98 }}
-                onClick={handleFileSelect}
-                className="w-full py-8 rounded-xl border-2 border-dashed border-muted-foreground/30 hover:border-emerald-400 dark:hover:border-emerald-600 bg-muted/30 hover:bg-emerald-50/50 dark:hover:bg-emerald-900/10 transition-colors flex flex-col items-center gap-2"
-              >
-                <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center">
-                  <Upload className="w-6 h-6 text-muted-foreground" />
-                </div>
-                <span className="text-sm font-medium text-muted-foreground">Pilih Foto Bukti Transfer</span>
-                <span className="text-xs text-muted-foreground/70">Ketuk untuk memilih file</span>
-              </motion.button>
-            )}
-          </div>
+          <Button
+            variant="outline"
+            className="w-full rounded-xl h-12"
+            onClick={() => navigate('deposit-history')}
+          >
+            <Clock className="w-4 h-4 mr-2" />
+            Lihat Riwayat Deposit
+          </Button>
         </motion.div>
       </motion.div>
     )
@@ -850,16 +758,16 @@ export function DepositScreen() {
         transition={{ delay: 0.4 }}
         className="text-xl font-bold text-foreground mb-2"
       >
-        Bukti Terkirim!
+        Top Up Berhasil!
       </motion.h3>
 
       <motion.p
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.5 }}
-        className="text-sm text-muted-foreground text-center max-w-[260px] mb-2"
+        className="text-sm text-muted-foreground text-center max-w-[280px] mb-2"
       >
-        Bukti transfer berhasil diunggah. Tim kami akan memverifikasi pembayaran Anda.
+        Saldo Anda telah ditambahkan secara otomatis melalui Midtrans.
       </motion.p>
 
       {depositData && (
@@ -869,7 +777,7 @@ export function DepositScreen() {
           transition={{ delay: 0.6 }}
           className="text-lg font-bold text-emerald-600 dark:text-emerald-400 mb-6"
         >
-          {formatPrice(depositData.amount)}
+          +{formatPrice(depositData.amount)}
         </motion.p>
       )}
 
@@ -898,14 +806,95 @@ export function DepositScreen() {
     </motion.div>
   )
 
+  // ==================== RENDER: FAILED STATE ====================
+
+  const renderFailedState = () => (
+    <motion.div
+      key="failed"
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ type: "spring", stiffness: 300, damping: 25 }}
+      className="flex flex-col items-center justify-center py-8 px-4"
+    >
+      <motion.div
+        initial={{ scale: 0 }}
+        animate={{ scale: 1 }}
+        transition={{ type: "spring", stiffness: 400, damping: 15, delay: 0.1 }}
+        className="w-20 h-20 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mb-5"
+      >
+        <motion.div
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          transition={{ type: "spring", stiffness: 500, damping: 15, delay: 0.3 }}
+        >
+          <AlertCircle className="w-10 h-10 text-red-500" />
+        </motion.div>
+      </motion.div>
+
+      <motion.h3
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.4 }}
+        className="text-xl font-bold text-foreground mb-2"
+      >
+        {depositStatus === 'expired' ? 'Pembayaran Kadaluarsa' : 'Pembayaran Gagal'}
+      </motion.h3>
+
+      <motion.p
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.5 }}
+        className="text-sm text-muted-foreground text-center max-w-[280px] mb-6"
+      >
+        {depositStatus === 'expired'
+          ? 'Batas waktu pembayaran telah habis. Silakan buat top up baru.'
+          : 'Pembayaran tidak berhasil. Silakan coba lagi.'}
+      </motion.p>
+
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.7 }}
+        className="w-full space-y-3"
+      >
+        <PrimaryButton
+          className="w-full rounded-xl h-12"
+          onClick={() => {
+            setCurrentStep(1)
+            setDirection(-1)
+            setDepositData(null)
+            setPaymentResult(null)
+            setDepositStatus(null)
+            setIsPolling(false)
+            setSelectedMethod(null)
+          }}
+        >
+          <RefreshCw className="w-4 h-4 mr-2" />
+          Top Up Lagi
+        </PrimaryButton>
+
+        <Button
+          variant="outline"
+          className="w-full rounded-xl h-12"
+          onClick={() => goBack()}
+        >
+          Kembali ke Dompet
+        </Button>
+      </motion.div>
+    </motion.div>
+  )
+
   // ==================== MAIN RENDER ====================
+
+  // Determine if step 3 is in a final state
+  const isFinalState = depositStatus === 'success' || depositStatus === 'failed' || depositStatus === 'expired'
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <PageHeader title="Top Up Saldo" />
 
-      {/* Step Indicator */}
-      {!proofUploaded && <StepIndicator currentStep={currentStep} />}
+      {/* Step Indicator — hide when in success/failed state */}
+      {!isFinalState && <StepIndicator currentStep={currentStep} />}
 
       {/* Content */}
       <div className="flex-1 px-4 pb-28 overflow-y-auto">
@@ -917,7 +906,7 @@ export function DepositScreen() {
       </div>
 
       {/* Bottom Action Bar */}
-      {!proofUploaded && (
+      {!isFinalState && currentStep < 3 && (
         <div className="fixed bottom-0 left-0 right-0 bg-background/80 backdrop-blur-xl border-t border-border px-4 py-3 z-50">
           <div className="flex gap-3 max-w-lg mx-auto">
             <Button
@@ -926,27 +915,25 @@ export function DepositScreen() {
               onClick={handleBack}
             >
               <ChevronLeft className="w-4 h-4 mr-1" />
-              {currentStep === 1 ? "Kembali" : "Kembali"}
+              Kembali
             </Button>
 
-            {currentStep < 3 && (
-              <PrimaryButton
-                className="h-11 rounded-xl flex-1"
-                disabled={
-                  (currentStep === 1 && !canAdvanceStep1) ||
-                  (currentStep === 2 && !canAdvanceStep2) ||
-                  isCreating
-                }
-                onClick={handleNext}
-              >
-                {isCreating ? (
-                  <InlineSpinner className="w-4 h-4 mr-2" />
-                ) : (
-                  <ArrowRight className="w-4 h-4 mr-1" />
-                )}
-                {currentStep === 1 ? "Lanjut" : "Buat Deposit"}
-              </PrimaryButton>
-            )}
+            <PrimaryButton
+              className="h-11 rounded-xl flex-1"
+              disabled={
+                (currentStep === 1 && !canAdvanceStep1) ||
+                (currentStep === 2 && !canAdvanceStep2) ||
+                isCreating
+              }
+              onClick={currentStep === 1 ? () => goToStep(2) : handlePayment}
+            >
+              {isCreating ? (
+                <InlineSpinner className="w-4 h-4 mr-2" />
+              ) : (
+                <ArrowRight className="w-4 h-4 mr-1" />
+              )}
+              {currentStep === 1 ? "Lanjut" : "Bayar Sekarang"}
+            </PrimaryButton>
           </div>
         </div>
       )}

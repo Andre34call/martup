@@ -154,22 +154,27 @@ model WalletMutation {
 }
 
 model Deposit {
-  id                String    @id @default(cuid())
-  userId            String
-  amount            Decimal
-  method            String    // bank_transfer, gopay, ovo, dana, shopeepay, linkaja
-  status            String    @default("pending") // pending, proof_uploaded, success, failed, expired
-  proofUrl          String?
-  adminNote         String?
-  destinationAccount String?  // JSON string: MartUp bank/e-wallet account user should transfer to
-  senderName        String?   // Name of the sender (for verification)
-  expiredAt         DateTime? // Deposit expiration time (24 hours from creation)
-  verifiedAt        DateTime? // When admin approved/rejected
-  verifiedBy        String?   // Admin user ID who verified
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  id                     String    @id @default(cuid())
+  userId                 String
+  amount                 Decimal
+  method                 String    // bank_transfer, gopay, shopeepay, qris, midtrans
+  status                 String    @default("pending") // pending, proof_uploaded, success, failed, expired
+  proofUrl               String?
+  adminNote              String?
+  destinationAccount     String?   // JSON string: MartUp bank/e-wallet account user should transfer to (manual flow)
+  senderName             String?   // Name of the sender (for verification)
+  expiredAt              DateTime? // Deposit expiration time (24 hours from creation)
+  verifiedAt             DateTime? // When admin approved/rejected (manual) or Midtrans confirmed (auto)
+  verifiedBy             String?   // Admin user ID who verified (manual flow)
+  // Midtrans integration fields
+  midtransOrderId        String?   @unique // Midtrans order ID (format: DEPOSIT-{id})
+  midtransTransactionId  String?   // Midtrans transaction ID from webhook
+  snapToken              String?   // Snap.js token for opening payment popup
+  paymentType            String?   // Midtrans payment type (bca_va, gopay, shopeepay, qris, etc.)
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
 
-  user              User      @relation(fields: [userId], references: [id])
+  user                   User      @relation(fields: [userId], references: [id])
 
   @@index([userId, status])
   @@index([status, createdAt])
