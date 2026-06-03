@@ -37,6 +37,7 @@ export async function GET(request: NextRequest) {
         expiredAt: true,
         verifiedAt: true,
         createdAt: true,
+        userId: true,
       },
     })
 
@@ -48,20 +49,19 @@ export async function GET(request: NextRequest) {
     }
 
     // SECURITY: Users can only check their own deposits (ALL deposit types)
-    const fullDeposit = await db.deposit.findUnique({
-      where: { id: depositId },
-      select: { userId: true },
-    })
-    if (fullDeposit && fullDeposit.userId !== authResult.user.id) {
+    if (deposit.userId !== authResult.user.id) {
       return NextResponse.json(
         { success: false, error: 'Anda tidak memiliki akses ke deposit ini' },
         { status: 403 }
       )
     }
 
+    // Remove userId from response data
+    const { userId: _, ...depositData } = deposit
+
     return NextResponse.json(serializeDecimal({
       success: true,
-      data: deposit,
+      data: depositData,
     }))
   } catch (error: unknown) {
     logger.error({ err: error }, 'Deposit Status GET error')

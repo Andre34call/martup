@@ -14,6 +14,7 @@ const REQUIRED_BUCKETS = [
   { id: 'banners', name: 'banners', public: true, fileSizeLimit: 10 * 1024 * 1024 },
   { id: 'streams', name: 'streams', public: true, fileSizeLimit: 100 * 1024 * 1024 },
   { id: 'reviews', name: 'reviews', public: true, fileSizeLimit: 10 * 1024 * 1024 },
+  { id: 'deposits', name: 'deposits', public: true, fileSizeLimit: 5 * 1024 * 1024 },
 ]
 
 // ==================== HELPER: Supabase Storage REST API ====================
@@ -50,7 +51,7 @@ async function createBucket(bucket: typeof REQUIRED_BUCKETS[number]): Promise<{ 
       name: bucket.name,
       public: bucket.public,
       fileSizeLimit: bucket.fileSizeLimit,
-      allowedMimeTypes: bucket.id === 'avatars'
+      allowedMimeTypes: (bucket.id === 'avatars' || bucket.id === 'deposits')
         ? ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
         : bucket.id === 'streams'
           ? ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/webm', 'video/quicktime']

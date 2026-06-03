@@ -58,10 +58,40 @@ export const env = {
   NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL || '',
   NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
   SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
-  TOKEN_SECRET: process.env.TOKEN_SECRET || process.env.NEXTAUTH_SECRET || '',
-  CSRF_SECRET: process.env.CSRF_SECRET || process.env.NEXTAUTH_SECRET || '',
+  // SECURITY: All secrets below MUST be set explicitly in production.
+  // In development, they fall back to NEXTAUTH_SECRET for convenience.
+  // In production, an empty string is returned if not set — features will fail rather than use a shared secret.
+  TOKEN_SECRET: (() => {
+    const val = process.env.TOKEN_SECRET
+    if (val) return val
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('[WARN] TOKEN_SECRET not set — falling back to NEXTAUTH_SECRET in development mode. Set TOKEN_SECRET in production!')
+      return process.env.NEXTAUTH_SECRET || ''
+    }
+    console.error('[SECURITY] TOKEN_SECRET not set in production! Bearer token signing will fail.')
+    return ''
+  })(),
+  CSRF_SECRET: (() => {
+    const val = process.env.CSRF_SECRET
+    if (val) return val
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('[WARN] CSRF_SECRET not set — falling back to NEXTAUTH_SECRET in development mode. Set CSRF_SECRET in production!')
+      return process.env.NEXTAUTH_SECRET || ''
+    }
+    console.error('[SECURITY] CSRF_SECRET not set in production! CSRF protection will fail.')
+    return ''
+  })(),
   CRON_SECRET: process.env.CRON_SECRET || '',
-  ADMIN_SETUP_SECRET: process.env.ADMIN_SETUP_SECRET || process.env.NEXTAUTH_SECRET || '',
+  ADMIN_SETUP_SECRET: (() => {
+    const val = process.env.ADMIN_SETUP_SECRET
+    if (val) return val
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('[WARN] ADMIN_SETUP_SECRET not set — falling back to NEXTAUTH_SECRET in development mode. Set ADMIN_SETUP_SECRET in production!')
+      return process.env.NEXTAUTH_SECRET || ''
+    }
+    console.error('[SECURITY] ADMIN_SETUP_SECRET not set in production! Admin setup will fail.')
+    return ''
+  })(),
   // SECURITY: Super Admin email — MUST be set via SUPER_ADMIN_EMAIL env var.
   // No hardcoded fallback — an empty string means no super admin privileges are granted.
   SUPER_ADMIN_EMAIL: process.env.SUPER_ADMIN_EMAIL || '',
@@ -75,8 +105,8 @@ export const env = {
       console.warn('[WARN] INTERNAL_API_SECRET not set — falling back to NEXTAUTH_SECRET in development mode. Set INTERNAL_API_SECRET in production!')
       return process.env.NEXTAUTH_SECRET || ''
     }
-    console.error('[SECURITY] INTERNAL_API_SECRET not set in production! Service-to-service auth will use NEXTAUTH_SECRET as fallback, which is insecure.')
-    return process.env.NEXTAUTH_SECRET || ''
+    console.error('[SECURITY] INTERNAL_API_SECRET not set in production! Service-to-service auth will fail.')
+    return ''
   })(),
   SMS_PROVIDER: process.env.SMS_PROVIDER || 'mock',
   MIDTRANS_SERVER_KEY: process.env.MIDTRANS_SERVER_KEY || '',
