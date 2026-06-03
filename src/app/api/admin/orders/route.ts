@@ -112,7 +112,7 @@ export async function GET(request: NextRequest) {
 const adminOrderUpdateSchema = z.object({
   orderId: z.string().min(1, 'Order ID wajib diisi'),
   status: z.enum(['processing', 'shipped', 'delivered', 'cancelled', 'paid'], {
-    errorMap: () => ({ message: 'Status tidak valid. Pilihan: processing, shipped, delivered, cancelled, paid' }),
+    message: 'Status tidak valid. Pilihan: processing, shipped, delivered, cancelled, paid',
   }),
   cancelReason: z.string().optional(),
   trackingNumber: z.string().optional(),
@@ -126,7 +126,7 @@ export async function PUT(request: NextRequest) {
     const body = await request.json()
     const validation = adminOrderUpdateSchema.safeParse(body)
     if (!validation.success) {
-      const firstError = validation.error.errors[0]
+      const firstError = validation.error.issues[0]
       return NextResponse.json(
         { success: false, error: firstError?.message || 'Input tidak valid' },
         { status: 400 }

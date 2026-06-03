@@ -68,6 +68,31 @@ export const AUTO_COMPLETE_DAYS = 7
 /** Days before auto-confirming buyer receipt for service orders */
 export const AUTO_CONFIRM_DAYS = 3
 
+// ==================== SHIPPING ====================
+
+import type { ShippingOption } from '@/lib/types'
+
+/** Shipping options displayed in the product detail "Cek Ongkir" modal */
+export const SHIPPING_OPTIONS: ShippingOption[] = [
+  { provider: 'jne', service: 'REG', name: 'JNE Reguler', price: 0, estimatedDays: '2-3 hari', logo: '📦' },
+  { provider: 'jne', service: 'YES', name: 'JNE YES', price: 15000, estimatedDays: '1 hari', logo: '⚡' },
+  { provider: 'sicepat', service: 'REG', name: 'SiCepat Reguler', price: 0, estimatedDays: '2-3 hari', logo: '🚀' },
+  { provider: 'sicepat', service: 'BEST', name: 'SiCepat BEST', price: 18000, estimatedDays: '1 hari', logo: '⭐' },
+  { provider: 'jnt', service: 'EZ', name: 'J&T EZ', price: 0, estimatedDays: '2-3 hari', logo: '✈️' },
+  { provider: 'anteraja', service: 'REG', name: 'AnterAja Reguler', price: 5000, estimatedDays: '3-4 hari', logo: '🚛' },
+  { provider: 'tiki', service: 'REG', name: 'TIKI Reguler', price: 8000, estimatedDays: '2-3 hari', logo: '📬' },
+  { provider: 'pos', service: 'KILAT', name: 'POS Kilat Khusus', price: 10000, estimatedDays: '2-3 hari', logo: '📮' },
+]
+
+/** Fallback shipping options used in checkout when API rates are unavailable */
+export const DEFAULT_SHIPPING_OPTIONS: ShippingOption[] = [
+  { provider: 'jne', service: 'REG', name: 'JNE Reguler', price: 15000, estimatedDays: '2-3 hari', logo: '📦' },
+  { provider: 'jne', service: 'YES', name: 'JNE YES', price: 30000, estimatedDays: '1 hari', logo: '⚡' },
+  { provider: 'sicepat', service: 'REG', name: 'SiCepat Reguler', price: 13000, estimatedDays: '2-3 hari', logo: '🚀' },
+  { provider: 'sicepat', service: 'BEST', name: 'SiCepat BEST', price: 28000, estimatedDays: '1 hari', logo: '⭐' },
+  { provider: 'jnt', service: 'EZ', name: 'J&T EZ', price: 14000, estimatedDays: '2-3 hari', logo: '✈️' },
+]
+
 // ==================== PAGINATION ====================
 
 /** Default page size for list endpoints */
