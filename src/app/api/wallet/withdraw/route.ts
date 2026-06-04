@@ -1,17 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
-import { paymentLimiter, rateLimitHeaders } from '@/lib/rate-limit'
+import { verifyAuth, checkRateLimit, authErrorResponse } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
 import { logger, logBusinessEvent } from '@/lib/logger'
 import { createWorkItemFromEntity } from '@/lib/workflow'
-import { validateCsrfRequest } from '@/lib/csrf'
+import { z } from 'zod'
 
 // ==================== WALLET WITHDRAW ====================
 // SECURITY: Requires authentication + seller verification
 // Creates a PENDING withdrawal — MUST be approved by admin
 // Balance is moved to holdBalance (escrow) until admin approves/rejects
 // Rejection refunds the holdBalance back to balance
+
+const withdrawSchema = z.object({
+  amount: z.number().positive('Jumlah penarikan harus lebih dari 0'),
+  bankAccount: z.string().min(5, 'Nomor rekening minimal 5 karakter').max(30, 'Nomor rekening maksimal 30 karakter').trim(),
+  bankName: z.string().min(2, 'Nama bank minimal 2 karakter').max(50, 'Nama bank maksimal 50 karakter').trim(),
+  bankHolder: z.string().min(2, 'Nama pemilik rekening minimal 2 karakter').max(100, 'Nama pemilik rekening maksimal 100 karakter').trim().replace(/[<>"'&]/g, ''),
+})
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,18 +28,11 @@ export async function POST(request: NextRequest) {
     }
 
     // SECURITY: Rate limit — 3 withdrawal requests per minute per user
-    const rlResult = await paymentLimiter.check(`withdraw:${authResult.user.id}`)
-    if (!rlResult.allowed) {
+    if (!checkRateLimit(`withdraw:${authResult.user.id}`, 3)) {
       return NextResponse.json(
         { success: false, error: 'Terlalu banyak request. Coba lagi dalam 1 menit.' },
-        { status: 429, headers: rateLimitHeaders(rlResult) }
+        { status: 429 }
       )
-    }
-
-    // SECURITY: CSRF protection
-    const csrfResult = await validateCsrfRequest(request)
-    if (!csrfResult.valid) {
-      return NextResponse.json({ success: false, error: 'Keamanan request tidak valid. Refresh halaman dan coba lagi.' }, { status: 403 })
     }
 
     // Verify seller account
@@ -46,21 +45,19 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { amount, bankAccount, bankName, bankHolder } = body as {
-      amount?: number
-      bankAccount?: string
-      bankName?: string
-      bankHolder?: string
-    }
 
-    // Validate amount
-    if (!amount || typeof amount !== 'number' || amount <= 0 || !Number.isInteger(amount)) {
+    // SECURITY: Zod validation for all inputs
+    const parsed = withdrawSchema.safeParse(body)
+    if (!parsed.success) {
+      const firstError = parsed.error.issues[0]
       return NextResponse.json(
-        { success: false, error: 'Jumlah penarikan harus berupa bilangan bulat lebih dari 0' },
+        { success: false, error: firstError?.message || 'Input tidak valid' },
         { status: 400 }
       )
     }
+    const { amount, bankAccount, bankName, bankHolder } = parsed.data
 
+    // Validate minimum amount
     if (amount < 10000) {
       return NextResponse.json(
         { success: false, error: 'Penarikan minimal Rp 10.000' },
@@ -68,32 +65,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // SECURITY: Cap maximum withdrawal amount to prevent draining entire balance at once
-    const MAX_WITHDRAWAL = 10_000_000 // Rp 10,000,000 per transaction
-    if (amount > MAX_WITHDRAWAL) {
-      return NextResponse.json(
-        { success: false, error: `Penarikan maksimal Rp ${MAX_WITHDRAWAL.toLocaleString('id-ID')} per transaksi` },
-        { status: 400 }
-      )
-    }
-
-    // Validate bank details
-    if (!bankAccount || !bankName || !bankHolder) {
-      return NextResponse.json(
-        { success: false, error: 'Detail rekening bank wajib diisi: bankAccount, bankName, bankHolder' },
-        { status: 400 }
-      )
-    }
-
     // Resolve bank details: body params override seller's stored bank details
-    // SECURITY: Sanitize bank detail strings to prevent XSS
-    const sanitizeString = (val: unknown): string | undefined => {
-      if (typeof val !== 'string') return undefined
-      return val.trim().slice(0, 100).replace(/[<>"'&]/g, '')
-    }
-    const resolvedBankAccount = sanitizeString(bankAccount) || sanitizeString(seller.bankAccount)
-    const resolvedBankName = sanitizeString(bankName) || sanitizeString(seller.bankName)
-    const resolvedBankHolder = sanitizeString(bankHolder) || sanitizeString(seller.bankHolder)
+    const resolvedBankAccount = bankAccount || seller.bankAccount
+    const resolvedBankName = bankName || seller.bankName
+    const resolvedBankHolder = bankHolder || seller.bankHolder
 
     if (!resolvedBankAccount || !resolvedBankName || !resolvedBankHolder) {
       return NextResponse.json(
@@ -119,7 +94,7 @@ export async function POST(request: NextRequest) {
     // SECURITY: Check sufficient balance (only available balance, not hold/pending)
     if (Number(wallet.balance) < amount) {
       return NextResponse.json(
-        { success: false, error: 'Saldo tidak mencukupi' },
+        { success: false, error: `Saldo tidak mencukupi. Saldo tersedia: Rp ${Number(wallet.balance).toLocaleString('id-ID')}` },
         { status: 400 }
       )
     }
@@ -143,11 +118,6 @@ export async function POST(request: NextRequest) {
           holdBalance: { increment: amount },
         },
       })
-
-      // SECURITY: Verify balance didn't go negative (safety net)
-      if (updatedWallet.balance.lessThan(0)) {
-        throw new Error('INSUFFICIENT_BALANCE')
-      }
 
       // Create withdrawal record with PENDING status — admin must approve
       const newWithdrawal = await tx.withdrawal.create({

@@ -109,12 +109,13 @@ export async function POST(request: NextRequest) {
     }
 
     // SEC-15: Verify the gross_amount matches the order's totalAmount to prevent amount manipulation
-    if (Number(gross_amount) !== Number(order.totalAmount)) {
+    // SECURITY: Use string comparison to avoid floating-point precision loss with Number()
+    if (String(gross_amount) !== String(order.totalAmount)) {
       logger.error({
         orderId: order.id,
         orderNumber: order.orderNumber,
-        expectedAmount: Number(order.totalAmount),
-        receivedAmount: Number(gross_amount),
+        expectedAmount: String(order.totalAmount),
+        receivedAmount: String(gross_amount),
       }, 'Midtrans notification: gross_amount does not match order totalAmount')
       return NextResponse.json(
         { success: false, error: 'Amount mismatch' },

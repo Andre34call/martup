@@ -5,6 +5,7 @@ generator client {
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
+  directUrl = env("SUPABASE_DIRECT_URL")
 }
 
 // ==================== USER & AUTH ====================
@@ -39,10 +40,10 @@ model User {
   coins         Decimal   @default(0)
   dailyCheckIn  DateTime?
   fcmToken      String?
-  buyerRating   Float     @default(0) // Average rating from sellers
-  buyerRatingCount Int    @default(0) // Number of ratings received
-  cancellationCount Int   @default(0) // Number of cancelled orders
-  returnCount     Int     @default(0) // Number of returned orders
+  buyerRating       Float    @default(0)     // Average rating from sellers (0-5)
+  buyerRatingCount  Int      @default(0)     // Number of seller ratings received
+  cancellationCount Int      @default(0)     // Orders cancelled by this buyer
+  returnCount       Int      @default(0)     // Orders returned by this buyer
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -50,7 +51,7 @@ model User {
   wallet        Wallet?
   addresses     Address[]
   orders        Order[]
-  reviews       Review[]
+  reviews       Review[]      @relation("UserReviews")
   notifications Notification[]
   chats         ChatParticipant[]
   wishlists     Wishlist[]
@@ -58,6 +59,7 @@ model User {
   transactions  Transaction[]
   deposits      Deposit[]
   referrals     Referral[] @relation("UserReferrals")
+  referredByReferrals Referral[] @relation("ReferredUsers")
   division      Division? @relation(fields: [divisionId], references: [id])
   ledDivision   Division? @relation("DivisionHead")
   userSettings  UserSetting[]
@@ -67,9 +69,17 @@ model User {
   streamComments StreamComment[]
   streamLikes    StreamLike[]
   streamCommentLikes StreamCommentLike[]
-  givenBuyerRatings  BuyerRating[] @relation("SellerRatings")
-  receivedBuyerRatings BuyerRating[] @relation("BuyerReceivedRatings")
-  streamPostReports  StreamPostReport[]
+  streamReports  StreamPostReport[]
+  complaints     Complaint[]    @relation("UserComplaints")
+  chatMessages   ChatMessage[]  @relation("MessageSender")
+  sellerBuyerRatings BuyerRating[] @relation("SellerRatings")    // ratings this user gave as seller
+  buyerRatings   BuyerRating[]  @relation("BuyerReceivedRatings") // ratings this user received as buyer
+
+  @@index([role])
+  @@index([isActive])
+  @@index([createdAt])
+  @@index([divisionId])
+  @@index([referredBy])
 }
 
 model Seller {
@@ -98,13 +108,18 @@ model Seller {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  user            User     @relation(fields: [userId], references: [id])
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   products        Product[]
   orders          Order[]
   wallet          Wallet?
   campaigns       Campaign[]
   vouchers        Voucher[]
   followers       FollowedStore[]
+  withdrawals     Withdrawal[]
+
+  @@index([isVerified])
+  @@index([isPremium])
+  @@index([createdAt])
 }
 
 model Address {
@@ -121,30 +136,13 @@ model Address {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  user        User     @relation(fields: [userId], references: [id])
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders      Order[]
 
   @@index([userId])
 }
 
 // ==================== WALLET & TRANSACTIONS ====================
-
-model PlatformBankAccount {
-  id            String   @id @default(cuid())
-  bankName      String   // e.g. "Bank BCA", "Bank Mandiri"
-  bankCode      String?  // e.g. "bca", "mandiri"
-  accountNumber String   // e.g. "1234567890"
-  accountHolder String   // e.g. "PT MartUp Indonesia"
-  branch        String?  // e.g. "Jakarta Pusat"
-  isActive      Boolean  @default(true)
-  isDefault     Boolean  @default(false)
-  sortOrder     Int      @default(0)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  orders        Order[]  // Orders directed to this escrow account
-
-  @@index([isActive, sortOrder])
-}
 
 model Wallet {
   id             String   @id @default(cuid())
@@ -156,8 +154,8 @@ model Wallet {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  user      User?    @relation(fields: [userId], references: [id])
-  seller    Seller?  @relation(fields: [sellerId], references: [id])
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  seller    Seller?  @relation(fields: [sellerId], references: [id], onDelete: Cascade)
   mutations WalletMutation[]
 }
 
@@ -172,37 +170,34 @@ model WalletMutation {
   refId       String?
   createdAt   DateTime @default(now())
 
-  wallet      Wallet   @relation(fields: [walletId], references: [id])
+  wallet      Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
 
   @@index([walletId, createdAt])
+  @@index([refType, refId])
 }
 
 model Deposit {
-  id                     String    @id @default(cuid())
-  userId                 String
-  amount                 Decimal
-  method                 String    // bank_transfer, gopay, shopeepay, qris, midtrans
-  status                 String    @default("pending") // pending, proof_uploaded, success, failed, expired
-  proofUrl               String?
-  adminNote              String?
-  destinationAccount     String?   // JSON string: MartUp bank/e-wallet account user should transfer to (manual flow)
-  senderName             String?   // Name of the sender (for verification)
-  expiredAt              DateTime? // Deposit expiration time (24 hours from creation)
-  verifiedAt             DateTime? // When admin approved/rejected (manual) or Midtrans confirmed (auto)
-  verifiedBy             String?   // Admin user ID who verified (manual flow)
-  // Midtrans integration fields
-  midtransOrderId        String?   @unique // Midtrans order ID (format: DEPOSIT-{id})
-  midtransTransactionId  String?   // Midtrans transaction ID from webhook
-  snapToken              String?   // Snap.js token for opening payment popup
-  paymentType            String?   // Midtrans payment type (bca_va, gopay, shopeepay, qris, etc.)
-  createdAt              DateTime  @default(now())
-  updatedAt              DateTime  @updatedAt
+  id                  String   @id @default(cuid())
+  userId              String
+  amount              Decimal
+  method              String   // bank_transfer, gopay, ovo, dana
+  status              String   @default("pending") // pending, verified, failed
+  proofUrl            String?
+  platformBankAccountId String? // FK — which platform bank account the user transferred to
+  senderName          String?  // Name of the sender for verification
+  senderBank          String?  // Bank the sender transferred from
+  adminNote           String?
+  verifiedAt          DateTime?
+  verifiedBy          String?   // admin user ID who verified
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
-  user                   User      @relation(fields: [userId], references: [id])
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platformBankAccount PlatformBankAccount? @relation(fields: [platformBankAccountId], references: [id], onDelete: SetNull)
 
   @@index([userId, status])
   @@index([status, createdAt])
-  @@index([expiredAt])
+  @@index([platformBankAccountId])
 }
 
 model Withdrawal {
@@ -217,6 +212,8 @@ model Withdrawal {
   processedAt DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  seller    Seller   @relation(fields: [sellerId], references: [id], onDelete: Cascade)
 
   @@index([status, createdAt])
   @@index([sellerId])
@@ -235,12 +232,11 @@ model Transaction {
   refId       String?
   createdAt   DateTime  @default(now())
 
-  user        User      @relation(fields: [userId], references: [id])
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
+  @@index([refId])
 }
-
-// ==================== CATALOG ====================
 
 model Category {
   id        String    @id @default(cuid())
@@ -254,7 +250,7 @@ model Category {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
-  parent    Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  parent    Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
   children  Category[] @relation("CategoryHierarchy")
   products  Product[]
 
@@ -276,18 +272,21 @@ model Product {
   stock         Int       @default(0)
   sold          Int       @default(0)
   minOrder      Int       @default(1)
-  weight        Float     // grams
+  weight        Float?    // grams — null for jasa (service) products
   condition     String    @default("new") // new, used
+  productType   String    @default("product") // product (barang), jasa (service)
+  serviceDuration String?   // e.g., "1 jam", "1 hari", "1 minggu" — for jasa
+  serviceLocation String?  // e.g., "Online", "Jakarta", "Surabaya" — for jasa
   status        String    @default("active") // active, draft, blocked
   rating        Float     @default(0)
   reviewCount   Int       @default(0)
-  viewCount     Int       @default(0) // Total product views
-  viralScore    Float     @default(0) // Calculated: sold*3 + rating*reviewCount*5 + viewCount*0.1
-  isFeatured    Boolean   @default(false)
+  viewCount     Int       @default(0)          // total views for viral score
+  viralScore    Float     @default(0)          // computed viral ranking score
+  isFeatured    Boolean   @default(false)       // admin editorial pick
+  isPromoted    Boolean   @default(false)       // paid ad/promoted product
+  promotedUntil DateTime?                      // promotion expiry time
+  promotedBy    String?                       // admin who set promotion
   isFlashSale   Boolean   @default(false)
-  isPromoted    Boolean   @default(false) // Admin-paid promotion (ads)
-  promotedUntil DateTime? // When promotion expires
-  promotedBy    String?   // Admin user ID who promoted
   flashSaleEnd  DateTime?
   tags          String?   // JSON array
   createdAt     DateTime  @default(now())
@@ -298,38 +297,19 @@ model Product {
   variants      ProductVariant[]
   cartItems     CartItem[]
   orderItems    OrderItem[]
-  reviews       Review[]
+  reviews       Review[]  @relation("ProductReviews")
   wishlists     Wishlist[]
   streamPosts   StreamPost[]
-  stockLogs     StockLog[]
 
   @@index([categoryId, status])
+  @@index([categoryId])
   @@index([sellerId, status])
   @@index([isFlashSale, status])
+  @@index([isFeatured, status])
+  @@index([isPromoted, promotedUntil, status])
+  @@index([viralScore, status])
+  @@index([viewCount])
   @@index([status, createdAt])
-  @@index([isPromoted, status])
-}
-
-model StockLog {
-  id          String   @id @default(cuid())
-  productId   String
-  variantId   String?
-  type        String   // in, out, adjustment, return
-  quantity    Int      // positive for in, negative for out
-  previousStock Int
-  newStock    Int
-  reason      String?
-  orderId     String?  // FK to Order if stock change is from an order
-  createdBy   String?  // User ID who made the change
-  createdAt   DateTime @default(now())
-
-  product     Product       @relation(fields: [productId], references: [id])
-  variant     ProductVariant? @relation(fields: [variantId], references: [id])
-  order       Order?        @relation(fields: [orderId], references: [id])
-
-  @@index([productId, createdAt])
-  @@index([type])
-  @@index([createdAt])
 }
 
 model ProductVariant {
@@ -342,12 +322,12 @@ model ProductVariant {
   stock     Int      @default(0)
   image     String?
 
-  product   Product       @relation(fields: [productId], references: [id])
+  product   Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
   cartItems CartItem[]
   orderItems OrderItem[]
-  stockLogs StockLog[]
 
   @@index([productId])
+  @@index([sku])
 }
 
 // ==================== CART & ORDER ====================
@@ -362,9 +342,9 @@ model CartItem {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user      User     @relation(fields: [userId], references: [id])
-  product   Product  @relation(fields: [productId], references: [id])
-  variant   ProductVariant? @relation(fields: [variantId], references: [id])
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant   ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
 
   @@unique([userId, productId, variantId])
   @@index([userId])
@@ -375,7 +355,7 @@ model Order {
   orderNumber     String     @unique
   userId          String
   sellerId        String
-  addressId       String
+  addressId       String?    // null for service orders (no shipping)
   status          String     @default("pending") // pending, paid, processing, shipped, delivered, cancelled, refunded
   subtotal        Decimal
   shippingCost    Decimal
@@ -383,41 +363,43 @@ model Order {
   taxAmount       Decimal    @default(0)
   platformFee     Decimal    @default(0)
   totalAmount     Decimal
-  paymentMethod   String?
-  paymentStatus   String     @default("unpaid")
-  escrowStatus    String     @default("none") // none, held, released, refunded — tracks escrow for manual bank transfer orders
-  paidAt          DateTime?
-  shippedAt       DateTime?
-  deliveredAt     DateTime?
-  cancelledAt     DateTime?
-  cancelReason    String?
-  note            String?
-  paymentProof    String?    // URL of payment proof image (escrow)
-  paymentBankName String?    // Bank name buyer transferred from (escrow)
-  platformBankAccountId String? // FK to PlatformBankAccount — which escrow account buyer was told to transfer to
-  buyerRating   Int?     // Seller's rating of the buyer (1-5, null if not yet rated)
-  isServiceOrder Boolean  @default(false) // True if order is for a service (not physical product)
-  autoConfirmAt DateTime? // When to auto-confirm service orders (3 days after proof submitted)
-  buyerConfirmedAt DateTime? // When buyer manually confirmed receipt
-  serviceProofImages String? // JSON array of service proof image URLs
-  sellerCompletedAt DateTime? // When seller submitted service completion proof
-  createdAt       DateTime   @default(now())
-  updatedAt       DateTime   @updatedAt
+  paymentMethod       String?
+  paymentStatus       String     @default("unpaid") // unpaid, pending_verification, paid, failed
+  paymentProofUrl     String?    // Buyer-uploaded bukti transfer for manual bank transfer
+  platformBankAccountId String?  // Which MartUp bank account the buyer transferred to
+  escrowStatus        String     @default("none") // none, held, released, refunded — escrow tracking
+  escrowReleasedAt    DateTime?  // When escrow funds were released to seller
+  isServiceOrder      Boolean    @default(false) // true if ALL items are jasa (service) products
+  serviceProofImages  String?    // JSON array — seller-uploaded proof of service completion
+  sellerCompletedAt   DateTime?  // when seller marked service as completed
+  buyerConfirmedAt    DateTime?  // when buyer confirmed service/delivery completion
+  autoConfirmAt       DateTime?  // auto-release escrow after this time if buyer doesn't respond
+  paidAt              DateTime?
+  shippedAt           DateTime?
+  deliveredAt         DateTime?
+  cancelledAt         DateTime?
+  cancelReason        String?
+  note                String?
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
 
-  user            User       @relation(fields: [userId], references: [id])
-  seller          Seller     @relation(fields: [sellerId], references: [id])
-  items           OrderItem[]
-  shipping        Shipping?
-  voucherUsages   VoucherUsage[]
-  complaint       Complaint?
-  platformBankAccount PlatformBankAccount? @relation(fields: [platformBankAccountId], references: [id])
-  stockLogs           StockLog[]
+  user                User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  seller              Seller     @relation(fields: [sellerId], references: [id])
+  address             Address?   @relation(fields: [addressId], references: [id])
+  items               OrderItem[]
+  shipping            Shipping?
+  voucherUsages       VoucherUsage[]
+  complaint           Complaint?
+  buyerRating         BuyerRating?
+  platformBankAccount PlatformBankAccount? @relation(fields: [platformBankAccountId], references: [id], onDelete: SetNull)
 
   @@index([userId, status])
   @@index([sellerId])
   @@index([status, paymentStatus])
   @@index([status])
   @@index([createdAt])
+  @@index([isServiceOrder])
+  @@index([autoConfirmAt])
 }
 
 model OrderItem {
@@ -432,9 +414,9 @@ model OrderItem {
   subtotal    Decimal
   image       String?
 
-  order       Order   @relation(fields: [orderId], references: [id])
+  order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product     Product @relation(fields: [productId], references: [id])
-  variant     ProductVariant? @relation(fields: [variantId], references: [id])
+  variant     ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
   review      Review?
 
   @@index([orderId])
@@ -452,15 +434,17 @@ model Shipping {
   shippedAt      DateTime?
   deliveredAt    DateTime?
 
-  order          Order    @relation(fields: [orderId], references: [id])
+  order          Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([trackingNumber])
 }
 
 // ==================== REVIEWS & WISHLIST ====================
 
 model Review {
   id            String    @id @default(cuid())
-  userId        String
-  productId     String
+  userId        String?
+  productId     String?
   orderItemId   String?   @unique
   rating        Int       // 1-5
   content       String?
@@ -471,26 +455,30 @@ model Review {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @default(now()) @updatedAt
 
-  user      User       @relation(fields: [userId], references: [id])
-  product   Product    @relation(fields: [productId], references: [id])
-  orderItem OrderItem? @relation(fields: [orderItemId], references: [id])
+  user      User?      @relation("UserReviews", fields: [userId], references: [id], onDelete: SetNull)
+  product   Product?   @relation("ProductReviews", fields: [productId], references: [id], onDelete: SetNull)
+  orderItem OrderItem? @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
 
   @@index([productId, createdAt])
   @@index([userId])
 }
 
+// ==================== BUYER RATING ====================
+// Sellers rate buyers after order completion — protects sellers from problematic buyers
 model BuyerRating {
-  id        String   @id @default(cuid())
-  orderId   String   @unique // One rating per order
-  sellerId  String   // User ID of the seller who rates
-  buyerId   String   // User ID of the buyer being rated
-  rating    Int      // 1-5
-  content   String?  // Optional comment
-  tags      String?  // JSON array of rating tags (e.g. ["responsive","friendly"])
-  createdAt DateTime @default(now())
+  id          String   @id @default(cuid())
+  orderId     String   @unique  // One rating per order
+  sellerId    String
+  buyerId     String
+  rating      Int      // 1-5
+  content     String?  // Optional review text
+  tags        String?  // JSON array: ["bayar_cepat", "komunikatif", "responsible", ...]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  seller    User     @relation("SellerRatings", fields: [sellerId], references: [id])
-  buyer     User     @relation("BuyerReceivedRatings", fields: [buyerId], references: [id])
+  seller      User     @relation("SellerRatings", fields: [sellerId], references: [id], onDelete: Cascade)
+  buyer       User     @relation("BuyerReceivedRatings", fields: [buyerId], references: [id], onDelete: Cascade)
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([buyerId, createdAt])
   @@index([sellerId])
@@ -502,10 +490,11 @@ model Wishlist {
   productId String
   createdAt DateTime @default(now())
 
-  user      User     @relation(fields: [userId], references: [id])
-  product   Product  @relation(fields: [productId], references: [id])
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@unique([userId, productId])
+  @@index([productId])
 }
 
 model FollowedStore {
@@ -514,11 +503,12 @@ model FollowedStore {
   sellerId  String
   createdAt DateTime @default(now())
 
-  user      User     @relation(fields: [userId], references: [id])
-  seller    Seller   @relation(fields: [sellerId], references: [id])
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  seller    Seller   @relation(fields: [sellerId], references: [id], onDelete: Cascade)
 
   @@unique([userId, sellerId])
   @@index([userId])
+  @@index([sellerId])
 }
 
 // ==================== CHAT ====================
@@ -531,6 +521,9 @@ model ChatRoom {
 
   participants ChatParticipant[]
   messages     ChatMessage[]
+
+  @@index([productId])
+  @@index([updatedAt])
 }
 
 model ChatParticipant {
@@ -539,8 +532,8 @@ model ChatParticipant {
   userId   String
   lastRead DateTime @default(now())
 
-  room     ChatRoom @relation(fields: [roomId], references: [id])
-  user     User     @relation(fields: [userId], references: [id])
+  room     ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([roomId, userId])
 }
@@ -554,7 +547,8 @@ model ChatMessage {
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
 
-  room      ChatRoom @relation(fields: [roomId], references: [id])
+  room      ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  sender    User     @relation("MessageSender", fields: [senderId], references: [id])
 
   @@index([roomId, createdAt])
   @@index([senderId])
@@ -573,10 +567,11 @@ model Notification {
   refId     String?
   createdAt DateTime @default(now())
 
-  user      User     @relation(fields: [userId], references: [id])
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, isRead])
   @@index([userId, createdAt])
+  @@index([type])
 }
 
 // ==================== VOUCHER & PROMO ====================
@@ -599,8 +594,10 @@ model Voucher {
   isActive      Boolean   @default(true)
   createdAt     DateTime  @default(now())
 
-  seller        Seller?   @relation(fields: [sellerId], references: [id])
+  seller        Seller?   @relation(fields: [sellerId], references: [id], onDelete: SetNull)
   usages        VoucherUsage[]
+
+  @@index([isActive, validFrom, validUntil])
 }
 
 model VoucherUsage {
@@ -611,10 +608,11 @@ model VoucherUsage {
   usedAt    DateTime @default(now())
 
   voucher   Voucher  @relation(fields: [voucherId], references: [id])
-  order     Order    @relation(fields: [orderId], references: [id])
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@unique([voucherId, userId, orderId])
   @@index([voucherId, userId])
+  @@index([orderId])
 }
 
 model Campaign {
@@ -628,7 +626,7 @@ model Campaign {
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
 
-  seller      Seller   @relation(fields: [sellerId], references: [id])
+  seller      Seller   @relation(fields: [sellerId], references: [id], onDelete: Cascade)
 
   @@index([sellerId])
   @@index([isActive, startDate, endDate])
@@ -668,7 +666,11 @@ model Complaint {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  order       Order    @relation(fields: [orderId], references: [id])
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user        User     @relation("UserComplaints", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([status])
 }
 
 // ==================== REFERRAL ====================
@@ -681,8 +683,10 @@ model Referral {
   isClaimed   Boolean  @default(false)
   createdAt   DateTime @default(now())
 
-  referrer    User     @relation("UserReferrals", fields: [referrerId], references: [id])
+  referrer    User     @relation("UserReferrals", fields: [referrerId], references: [id], onDelete: Cascade)
+  referred    User     @relation("ReferredUsers", fields: [referredId], references: [id], onDelete: Cascade)
 
+  @@unique([referredId])
   @@index([referrerId])
   @@index([referredId])
 }
@@ -740,6 +744,26 @@ model WorkItem {
 
 // ==================== PLATFORM SETTINGS ====================
 
+model PlatformBankAccount {
+  id            String   @id @default(cuid())
+  bankName      String   // BCA, Mandiri, BNI, BRI, etc.
+  bankCode      String?  // Bank code for reference
+  accountNumber String   // Account number
+  accountHolder String   // Account holder name (PT MartUp Indonesia, etc.)
+  branch        String?  // Branch name
+  isActive      Boolean  @default(true)
+  isDefault     Boolean  @default(false) // Primary account shown to buyers
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  deposits      Deposit[]
+  orders        Order[]
+
+  @@index([isActive, sortOrder])
+  @@index([isDefault])
+}
+
 model PlatformSetting {
   key   String @id
   value String // JSON string
@@ -753,7 +777,7 @@ model UserSetting {
   key    String
   value  String // JSON string
 
-  user   User   @relation(fields: [userId], references: [id])
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, key])
   @@index([userId])
@@ -775,13 +799,13 @@ model StreamPost {
   commentCount Int      @default(0)
   isActive     Boolean  @default(true)
   isHidden     Boolean  @default(false) // admin can hide inappropriate posts
-  isEdited     Boolean  @default(false) // true if content was edited after creation
-  isPrivate    Boolean  @default(false) // true if post is only visible to followers
+  isPrivate    Boolean  @default(false) // private post — only owner can see
+  isEdited     Boolean  @default(false) // whether post has been edited
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  user       User            @relation(fields: [userId], references: [id])
-  product    Product?        @relation(fields: [productId], references: [id])
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product    Product?        @relation(fields: [productId], references: [id], onDelete: SetNull)
   likes      StreamLike[]
   comments   StreamComment[]
   reports    StreamPostReport[]
@@ -790,6 +814,7 @@ model StreamPost {
   @@index([isActive, createdAt])
   @@index([isHidden, createdAt])
   @@index([createdAt])
+  @@index([productId])
 }
 
 model StreamComment {
@@ -802,9 +827,9 @@ model StreamComment {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user      User           @relation(fields: [userId], references: [id])
-  post      StreamPost     @relation(fields: [postId], references: [id])
-  parent    StreamComment? @relation("CommentReplies", fields: [parentId], references: [id])
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post      StreamPost     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  parent    StreamComment? @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
   replies   StreamComment[] @relation("CommentReplies")
   likes     StreamCommentLike[]
 
@@ -819,24 +844,8 @@ model StreamLike {
   userId    String
   createdAt DateTime @default(now())
 
-  post      StreamPost @relation(fields: [postId], references: [id])
-  user      User       @relation(fields: [userId], references: [id])
-
-  @@unique([postId, userId])
-  @@index([postId])
-  @@index([userId])
-}
-
-model StreamPostReport {
-  id          String   @id @default(cuid())
-  postId      String
-  userId      String
-  reason      String   // spam, harassment, inappropriate_content, scam, other
-  description String?
-  createdAt   DateTime @default(now())
-
-  post        StreamPost @relation(fields: [postId], references: [id])
-  user        User       @relation(fields: [userId], references: [id])
+  post      StreamPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([postId, userId])
   @@index([postId])
@@ -854,4 +863,23 @@ model StreamCommentLike {
   @@unique([commentId, userId])
   @@index([commentId])
   @@index([userId])
+}
+
+model StreamPostReport {
+  id          String   @id @default(cuid())
+  postId      String
+  userId      String   // who reported
+  reason      String   // spam, harassment, inappropriate_content, scam, other
+  description String?  // optional additional details
+  status      String   @default("pending") // pending, reviewed, dismissed, actioned
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  post        StreamPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId]) // one report per user per post
+  @@index([postId])
+  @@index([userId])
+  @@index([status, createdAt])
 }
