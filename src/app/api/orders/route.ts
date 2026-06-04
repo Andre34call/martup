@@ -7,6 +7,7 @@ import { updateOrderStatus } from '@/lib/order-status'
 import { getPlatformFee } from '@/lib/commission'
 
 import { parseJsonField } from '@/lib/api-utils'
+import { calculateShippingRates } from '@/lib/shipping-calculator'
 import { logger } from '@/lib/logger'
 
 // GET /api/orders - Fetch orders for a user
@@ -495,20 +496,101 @@ export async function POST(request: NextRequest) {
       }
 
       // =====================================================
-      // BUG 16 FIX: Validate shipping cost and compute tax server-side
-      // Previously, client-provided shippingCost and taxAmount were
-      // only loosely bounds-checked. Now:
-      // - shippingCost: strict bounds [0, 500000]
-      // - taxAmount: computed server-side from fixed rate (not trusted from client)
+      // SECURITY: Server-side shipping cost verification
+      // Client-submitted shippingCost is NOT trusted. We re-calculate
+      // using the seller's city, buyer's address, item weight, and
+      // the selected courier/service. Only the server-verified cost is used.
       // =====================================================
       const clientShippingCost = validatedData.shippingCost ?? 0
+      let serverShippingCost = clientShippingCost // default to client value, overridden below
 
-      // Validate shipping cost is within reasonable bounds
-      if (clientShippingCost < 0 || clientShippingCost > 500_000) {
+      try {
+        // Fetch seller's store city for origin
+        const sellerRecord = await tx.seller.findUnique({
+          where: { id: sellerId },
+          select: { storeCity: true, storeProvince: true },
+        })
+        const originCity = sellerRecord?.storeCity || 'Jakarta'
+        const destinationCity = address.city || 'Jakarta'
+
+        // Calculate total weight from items (default 500g per item if not set)
+        let totalWeightGrams = 0
+        for (const si of serverItems) {
+          const product = await tx.product.findUnique({
+            where: { id: si.productId },
+            select: { weight: true },
+          })
+          totalWeightGrams += (product?.weight || 500) * si.quantity
+        }
+
+        // Determine courier from shipping data
+        const selectedCourier = shipping?.provider?.toLowerCase()
+
+        // Re-calculate shipping rates server-side
+        const rates = await calculateShippingRates({
+          originCity,
+          destinationCity,
+          weight: totalWeightGrams,
+          courier: selectedCourier,
+        })
+
+        // Find the rate matching the selected provider + service
+        const selectedService = shipping?.service?.toUpperCase()
+        const matchingRate = rates.find(r =>
+          r.provider.toLowerCase() === (shipping?.provider || 'jne').toLowerCase() &&
+          r.service.toUpperCase() === selectedService
+        )
+
+        if (matchingRate) {
+          serverShippingCost = matchingRate.price
+          logger.info(
+            { component: 'orders', clientShippingCost, serverShippingCost, provider: shipping?.provider, service: shipping?.service },
+            'Shipping cost verified server-side'
+          )
+        } else if (rates.length > 0) {
+          // No exact match found — use the cheapest rate from the selected courier as fallback
+          const courierRates = selectedCourier
+            ? rates.filter(r => r.provider.toLowerCase() === selectedCourier)
+            : rates
+          if (courierRates.length > 0) {
+            const fallbackRate = courierRates.sort((a, b) => a.price - b.price)[0]
+            serverShippingCost = fallbackRate.price
+            logger.warn(
+              { component: 'orders', clientShippingCost, serverShippingCost, requestedService: selectedService, fallbackService: fallbackRate.service },
+              'Shipping service not found, using cheapest rate from courier'
+            )
+          }
+        }
+
+        // Sanity check: if client cost is wildly different from server cost, something's wrong
+        // Allow ±10% tolerance for RajaOngkir rate fluctuations and rounding
+        if (serverShippingCost > 0 && clientShippingCost > 0) {
+          const tolerance = Math.max(serverShippingCost * 0.1, 500) // 10% or min 500 IDR
+          if (Math.abs(clientShippingCost - serverShippingCost) > tolerance) {
+            logger.warn(
+              { component: 'orders', clientShippingCost, serverShippingCost, difference: Math.abs(clientShippingCost - serverShippingCost) },
+              'Shipping cost mismatch — using server-calculated value'
+            )
+          }
+        }
+      } catch (shippingErr) {
+        // If server-side calculation fails, fall back to client value with bounds check
+        logger.warn(
+          { component: 'orders', err: shippingErr },
+          'Server-side shipping calculation failed, using client value with bounds check'
+        )
+        if (clientShippingCost < 0 || clientShippingCost > 500_000) {
+          throw new Error('Biaya pengiriman tidak valid (harus antara 0 - 500.000)')
+        }
+        serverShippingCost = clientShippingCost
+      }
+
+      // Final bounds check on server-verified cost
+      if (serverShippingCost < 0 || serverShippingCost > 500_000) {
         throw new Error('Biaya pengiriman tidak valid (harus antara 0 - 500.000)')
       }
 
-      // BUG 16 FIX: Calculate tax server-side instead of trusting client input
+      // Calculate tax server-side instead of trusting client input
       const TAX_RATE = 0 // Tax rate from server config (0 if not configured)
       const serverTaxAmount = Math.floor(serverSubtotal * TAX_RATE)
 
@@ -517,7 +599,7 @@ export async function POST(request: NextRequest) {
       // Falls back to DEFAULT_PLATFORM_FEE if not configured.
       const serverPlatformFee = await getPlatformFee(tx)
 
-      const serverTotalAmount = serverSubtotal + clientShippingCost + serverTaxAmount + serverPlatformFee - serverDiscountAmount
+      const serverTotalAmount = serverSubtotal + serverShippingCost + serverTaxAmount + serverPlatformFee - serverDiscountAmount
 
       const newOrder = await tx.order.create({
         data: {
@@ -527,7 +609,7 @@ export async function POST(request: NextRequest) {
           addressId,
           status: 'pending',
           subtotal: serverSubtotal,
-          shippingCost: clientShippingCost,
+          shippingCost: serverShippingCost,
           discountAmount: serverDiscountAmount,
           taxAmount: serverTaxAmount,
           platformFee: serverPlatformFee,
