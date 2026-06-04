@@ -122,7 +122,7 @@ export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set
 
       // On success: optionally update local state with server response
       if (data.data) {
-        const serverOrder = mapOrder(data.data as Parameters<typeof mapOrder>[0])
+        const serverOrder = mapOrder(data.data as unknown as Parameters<typeof mapOrder>[0])
         set((state) => ({
           orders: state.orders.map(o => o.id === orderId ? serverOrder : o),
         }))
@@ -204,7 +204,7 @@ export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set
 
         const statusData = await statusRes.json()
         if (statusData.success && statusData.data) {
-          const serverOrder = mapOrder(statusData.data as Parameters<typeof mapOrder>[0])
+          const serverOrder = mapOrder(statusData.data as unknown as Parameters<typeof mapOrder>[0])
           set((state) => ({
             orders: state.orders.map(o => o.id === orderId ? serverOrder : o),
           }))
@@ -296,7 +296,7 @@ export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set
 
       // On success: update with server response
       if (data.data) {
-        const serverOrder = mapOrder(data.data as Parameters<typeof mapOrder>[0])
+        const serverOrder = mapOrder(data.data as unknown as Parameters<typeof mapOrder>[0])
         set((state) => ({
           orders: state.orders.map(o => o.id === orderId ? serverOrder : o),
         }))
@@ -336,7 +336,7 @@ export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set
 
       // On success: update with server response
       if (data.data) {
-        const serverOrder = mapOrder(data.data as Parameters<typeof mapOrder>[0])
+        const serverOrder = mapOrder(data.data as unknown as Parameters<typeof mapOrder>[0])
         set((state) => ({
           orders: state.orders.map(o => o.id === orderId ? serverOrder : o),
         }))
@@ -359,7 +359,7 @@ export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set
       const data = await apiClient.get<OrdersResponse>('/api/orders', { userId })
 
       if (data.success && Array.isArray(data.data)) {
-        const serverOrders = data.data.map((raw: Record<string, unknown>) => mapOrder(raw as Parameters<typeof mapOrder>[0]))
+        const serverOrders = data.data.map((raw: Record<string, unknown>) => mapOrder(raw as unknown as Parameters<typeof mapOrder>[0]))
         set({
           orders: serverOrders,
           isOrdersLoaded: true,
