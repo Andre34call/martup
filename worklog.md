@@ -2408,3 +2408,32 @@ Stage Summary:
 - 2 unused PageHeader imports cleaned
 - 4 dead code files deleted (~22KB removed)
 - 1 dead code file retained (api-types.ts) due to active import — noted for follow-up
+
+---
+Task ID: 1+2+3
+Agent: Main
+Task: RajaOngkir integration, header consistency fixes, dead code cleanup, and store refactoring
+
+Work Log:
+- Created src/lib/rajaongkir.ts — Full RajaOngkir API client with city caching, city ID resolution (4-tier matching), and cost calculation
+- Created src/app/api/shipping/cities/route.ts — GET /api/shipping/cities endpoint for frontend city search
+- Updated src/lib/shipping-calculator.ts — Replaced stub fetchRajaOngkirRates with proper implementation using rajaongkir.ts
+- Updated src/lib/env.ts — Added RAJAONGKIR_API_KEY and RAJAONGKIR_PACKAGE to recommended vars
+- Updated .env and .env.example — Added RajaOngkir env vars
+- Fixed 4 screens with inconsistent headers: search, stream-search, user-profile, chat-room → now use PageHeader
+- Cleaned unused PageHeader imports from seller-dashboard.tsx, admin/dashboard.tsx
+- Deleted 5 dead code files: api.ts, api-types.ts, mock-data.ts, auth-store.ts, shared.tsx.bak
+- Migrated SellerWalletData type from api-types.ts to types.ts before deletion
+- Unified order mapping: deleted mapServerOrder from order.ts, using mapOrder from mappers.ts
+- Deduplicated wallet mutation mapping: using mapWalletMutation from mappers.ts in wallet.ts
+- Wired store-helpers.ts: replaced getAuthResetState with getResetState, used mapSellerWalletToBalance
+- Consolidated cart redundant getters (getCheckedTotalPrice → getCheckedTotal alias)
+- Replaced local safeJsonParse in cart routes with shared parseJsonField from api-utils.ts
+- Fixed ELEVATED_ROLES unsafe cast in auth-middleware.ts
+
+Stage Summary:
+- RajaOngkir fully integrated — just set RAJAONGKIR_API_KEY to activate
+- All 44 screens now have consistent headers (4 fixed)
+- 5 dead code files deleted (~500+ lines removed)
+- Store code deduplicated across 6+ files
+- Lint: 0 new errors
