@@ -2287,3 +2287,22 @@ Stage Summary:
 - Critical wallet deduction bug fixed: local wallet only deducts what server actually debited
 - Platform fee now distributed proportionally across multi-seller orders (not duplicated)
 - Cart total now has Math.max(0, ...) guard matching checkout
+
+---
+Task ID: 3+4
+Agent: Main
+Task: Fix Critical #1 (platform fee client/server mismatch) and Critical #2 (wallet balance deducted on failure)
+
+Work Log:
+- Added getPlatformFee() to src/lib/commission.ts — reads flat IDR fee from PlatformSetting table (same source as client), falls back to DEFAULT_PLATFORM_FEE (1000)
+- Fixed server (orders/route.ts): replaced hardcoded PLATFORM_FEE_RATE=0.03 (3% of subtotal) with await getPlatformFee(tx) — now charges the same flat fee the buyer sees
+- Fixed client (checkout/checkout-screen.tsx): distributed platformFee proportionally across seller groups using integer division with remainder — ensures sum of group fees = total platform fee
+- Fixed wallet deduction (checkout/checkout-screen.tsx): moved deductWallet() inside success condition, uses server-confirmed totalDebited instead of locally-computed totalAmount, handles partial failures
+- Fixed cart screen negative total guard: Math.max(0, ...) for totalAmount calculation
+
+Stage Summary:
+- Critical #1: Buyer now sees and pays the same platform fee (flat Rp 1,000 vs old 3% that could charge Rp 15,000+ on large orders)
+- Critical #2: Wallet balance no longer desyncs when payment API calls fail — only deducts server-confirmed amounts
+- 4 files changed: commission.ts, orders/route.ts, checkout-screen.tsx, cart-screen.tsx
+- Lint: 0 new errors (3 pre-existing in test-login-api.cjs)
+- Dev server: compiles successfully
