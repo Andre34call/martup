@@ -15,6 +15,7 @@ const REQUIRED_BUCKETS = [
   { id: 'streams', name: 'streams', public: true, fileSizeLimit: 100 * 1024 * 1024 },
   { id: 'reviews', name: 'reviews', public: true, fileSizeLimit: 10 * 1024 * 1024 },
   { id: 'deposits', name: 'deposits', public: true, fileSizeLimit: 5 * 1024 * 1024 },
+  { id: 'payments', name: 'payments', public: true, fileSizeLimit: 10 * 1024 * 1024 },
 ]
 
 // ==================== HELPER: Supabase Storage REST API ====================

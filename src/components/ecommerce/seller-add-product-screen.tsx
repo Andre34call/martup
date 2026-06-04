@@ -11,15 +11,16 @@ import { uploadFile } from "@/lib/upload"
 import { formatPrice } from "@/lib/utils"
 import { fadeIn } from '@/lib/animations'
 import { PageHeader, PrimaryButton, InlineSpinner } from "./shared"
+import { UPLOAD_LIMITS } from '@/lib/upload-limits'
 import type { Product } from "@/lib/types"
 import { logger } from '@/lib/logger'
 import { mapSeller } from '@/lib/mappers'
 import { useState, useRef } from "react"
 
 // ==================== CONSTANTS ====================
-const MAX_PRODUCT_IMAGES = 8
-const MAX_PRODUCT_IMAGE_SIZE_MB = 5
-const MAX_VIDEO_SIZE_MB = 30
+const MAX_PRODUCT_IMAGES = UPLOAD_LIMITS.MAX_PRODUCT_IMAGES
+const MAX_PRODUCT_IMAGE_SIZE_MB = UPLOAD_LIMITS.MAX_PRODUCT_IMAGE_SIZE_MB
+const MAX_VIDEO_SIZE_MB = UPLOAD_LIMITS.MAX_VIDEO_SIZE_MB
 
 // ==================== VARIANT GROUP TYPE ====================
 interface VariantGroup {
