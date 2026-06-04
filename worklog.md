@@ -2260,3 +2260,30 @@ testing after database errors (Prisma connection pool exhaustion from ECIRCUITBR
 This is expected behavior when the database is unreachable — the server tries to
 connect, fails, and the unhandled Prisma initialization error can crash the process.
 In a Vercel serverless environment with a working database, this would not occur.
+
+---
+Task ID: 3+4
+Agent: Main
+Task: Fix two critical checkout bugs — platform fee mismatch & wallet deduction on failure
+
+Work Log:
+1. **Critical #1: Platform Fee Client/Server Mismatch**
+   - **src/lib/commission.ts**: Already had correct `getPlatformFee()` function and `DEFAULT_PLATFORM_FEE` constant with proper `PrismaClient` import from `@prisma/client`. No changes needed.
+   - **src/app/api/orders/route.ts**: Replaced hardcoded `PLATFORM_FEE_RATE = 0.03` (3% rate) with `await getPlatformFee(tx)` which reads the flat IDR amount from PlatformSetting table. Added `import { getPlatformFee } from '@/lib/commission'`. This ensures server charges the same flat fee the client displays (default Rp 1,000 instead of 3% of subtotal).
+   - **src/components/ecommerce/checkout/checkout-screen.tsx**: Fixed platformFee distribution across seller groups. Previously, the FULL `platformFee` was sent to EACH seller group order, causing N× overcharge. Now uses integer division with remainder distribution: `baseFee = Math.floor(platformFee / groupCount)`, with remainder distributed to first N groups. Updated `orderPayload.platformFee` and `localOrder.platformFee` to use `groupPlatformFee` instead of `platformFee`.
+
+2. **Critical #2: Wallet Balance Deducted Locally Even When Payment Fails**
+   - **src/components/ecommerce/checkout/checkout-screen.tsx**: Moved `deductWallet()` call inside the success check. Added `totalDebited` counter tracking sum of actually debited amounts from server. On full success: deduct `totalDebited` and remove cart items. On partial failure: deduct only `totalDebited` (what server actually took) with "parsial" description and show warning toast. On full failure: no local deduction at all. Removed the unconditional `deductWallet(Math.max(0, totalAmount), ...)` that ran outside the success block.
+
+3. **Cart Screen: Negative Total Guard**
+   - **src/components/ecommerce/cart-screen.tsx**: Changed `const totalAmount = checkedTotal - voucherDiscount + platformFee` to `const totalAmount = Math.max(0, checkedTotal - voucherDiscount + platformFee)` to prevent negative total display, matching the checkout screen's `Math.max(0, ...)` guard.
+
+Lint: 0 new errors (3 pre-existing errors in test-login-api.cjs, 3 pre-existing warnings in auth.ts)
+Dev server: Compiles successfully
+
+Stage Summary:
+- 4 files changed (commission.ts verified correct, route.ts, checkout-screen.tsx, cart-screen.tsx)
+- Critical platform fee mismatch fixed: client and server now use the same flat IDR fee from PlatformSetting
+- Critical wallet deduction bug fixed: local wallet only deducts what server actually debited
+- Platform fee now distributed proportionally across multi-seller orders (not duplicated)
+- Cart total now has Math.max(0, ...) guard matching checkout

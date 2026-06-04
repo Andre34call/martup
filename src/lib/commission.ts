@@ -1,8 +1,12 @@
-// ==================== COMMISSION RATE UTILITY ====================
-// Shared business logic for calculating the effective commission rate.
-// Used by both order-utils.ts and wallet/debit/route.ts to ensure consistency.
+// ==================== PLATFORM SETTINGS UTILITY ====================
+// Shared business logic for reading platform settings (commission, fees).
+// Used by order creation, wallet/debit, payment/notification, and checkout.
 
 import { db } from '@/lib/db'
+import { PrismaClient } from '@prisma/client'
+
+/** Default platform fee per order (IDR) — used when PlatformSetting is not configured */
+export const DEFAULT_PLATFORM_FEE = 1000
 
 /**
  * Read the platform-wide commission rate from PlatformSetting table.
@@ -21,6 +25,32 @@ async function getPlatformCommissionRate(): Promise<number | null> {
     // Fallback to null
   }
   return null
+}
+
+/**
+ * Read the platform fee from PlatformSetting table.
+ * This is a flat IDR amount per order (e.g., 1000 = Rp 1,000).
+ * MUST match what the client displays — the source of truth for buyer-facing prices.
+ *
+ * Can be called inside a transaction by passing `tx` (Prisma transaction client).
+ * Falls back to DEFAULT_PLATFORM_FEE (1000) if not configured.
+ */
+export async function getPlatformFee(
+  tx?: Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'>
+): Promise<number> {
+  try {
+    const client = tx || db
+    const row = await client.platformSetting.findUnique({ where: { key: 'platform_settings' } })
+    if (row) {
+      const settings = JSON.parse(row.value) as Record<string, number | boolean | string>
+      if (typeof settings.platformFee === 'number' && settings.platformFee >= 0) {
+        return Math.floor(settings.platformFee)
+      }
+    }
+  } catch {
+    // Fallback to default
+  }
+  return DEFAULT_PLATFORM_FEE
 }
 
 /**

@@ -278,12 +278,18 @@ export function CheckoutScreen() {
       const isImmediatePayment = selectedPayment === 'wallet'
       const createdOrders: { id: string; totalAmount: number }[] = []
 
-      for (const group of groupedBySeller) {
+      for (let groupIndex = 0; groupIndex < groupedBySeller.length; groupIndex++) {
+        const group = groupedBySeller[groupIndex]
         const sellerShipping = shippingBySeller[group.seller.id]
         const groupSubtotal = group.items.reduce((sum, i) => sum + ((i.product.discountPrice || i.product.price) * i.quantity), 0)
         const groupShipping = sellerShipping?.price || 0
         const groupDiscount = subtotal > 0 ? Math.round(validatedVoucherDiscount * (groupSubtotal / subtotal)) : 0
-        const groupTotal = groupSubtotal + groupShipping - groupDiscount + platformFee
+        // Distribute platformFee proportionally across seller groups (like voucher discount)
+        // Use integer division with remainder distribution to ensure sum matches total
+        const baseFee = Math.floor(platformFee / groupedBySeller.length)
+        const remainder = platformFee - baseFee * groupedBySeller.length
+        const groupPlatformFee = baseFee + (groupIndex < remainder ? 1 : 0)
+        const groupTotal = groupSubtotal + groupShipping - groupDiscount + groupPlatformFee
 
         const orderPayload = {
           userId: currentUser?.id || '',
@@ -293,7 +299,7 @@ export function CheckoutScreen() {
           shippingCost: groupShipping,
           discountAmount: groupDiscount,
           taxAmount: 0,
-          platformFee,
+          platformFee: groupPlatformFee,
           totalAmount: groupTotal,
           paymentMethod: PAYMENT_METHODS.find(m => m.id === selectedPayment)?.name || selectedPayment,
           items: group.items.map((item) => ({
@@ -333,7 +339,7 @@ export function CheckoutScreen() {
               shippingCost: groupShipping,
               discountAmount: groupDiscount,
               taxAmount: 0,
-              platformFee,
+              platformFee: groupPlatformFee,
               totalAmount: groupTotal,
               paymentMethod: PAYMENT_METHODS.find(m => m.id === selectedPayment)?.name || selectedPayment,
               paymentStatus: orderPaymentStatus,
@@ -380,6 +386,7 @@ export function CheckoutScreen() {
         if (selectedVoucher) markVoucherUsed(selectedVoucher.id)
 
         let walletPaymentSuccess = true
+        let totalDebited = 0 // Track sum of actually debited amounts from server
         for (const order of createdOrders) {
           try {
             const walletRes = await apiClient.rawPost('/api/wallet/debit', {
@@ -388,7 +395,9 @@ export function CheckoutScreen() {
               description: `Pembayaran pesanan via MartUp Pay`,
             })
             const walletData: WalletDebitResponse = await walletRes.json()
-            if (!walletData.success) {
+            if (walletData.success) {
+              totalDebited += order.totalAmount // Only count successful debits
+            } else {
               walletPaymentSuccess = false
               showToast(walletData.error || 'Pembayaran wallet gagal', 'error')
             }
@@ -398,13 +407,17 @@ export function CheckoutScreen() {
           }
         }
 
-        // Update local wallet balance
-        deductWallet(Math.max(0, totalAmount), 'Pembayaran pesanan via MartUp Pay')
-
-        // BUG 10 FIX: Remove cart items only after wallet payment succeeds
-        if (walletPaymentSuccess) {
+        // CRITICAL FIX: Only deduct from local wallet if payment succeeded
+        // Use the server-confirmed total (sum of successful debits), NOT the locally-computed total
+        if (walletPaymentSuccess && totalDebited > 0) {
+          deductWallet(totalDebited, 'Pembayaran pesanan via MartUp Pay')
           const checkedItemIds = checkedItems.map(i => i.id)
           checkedItemIds.forEach(id => removeItem(id))
+        } else if (totalDebited > 0) {
+          // Partial failure: some orders paid, some failed
+          // Deduct only what the server actually took
+          deductWallet(totalDebited, 'Pembayaran pesanan (parsial)')
+          showToast('Sebagian pembayaran berhasil. Pesanan yang gagal tersimpan sebagai "Belum Bayar".', 'warning')
         }
 
         setIsProcessing(false)
@@ -415,7 +428,6 @@ export function CheckoutScreen() {
             navigate('orders')
           }, 2500)
         } else {
-          showToast('Pembayaran wallet gagal. Pesanan tersimpan sebagai "Belum Bayar".', 'error')
           navigate('orders')
         }
 

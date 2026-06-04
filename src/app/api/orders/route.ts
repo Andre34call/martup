@@ -4,6 +4,7 @@ import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
 import { validateBody, createOrderSchema, updateOrderSchema } from '@/lib/validations'
 import { updateOrderStatus } from '@/lib/order-status'
+import { getPlatformFee } from '@/lib/commission'
 
 import { parseJsonField } from '@/lib/api-utils'
 import { logger } from '@/lib/logger'
@@ -511,10 +512,10 @@ export async function POST(request: NextRequest) {
       const TAX_RATE = 0 // Tax rate from server config (0 if not configured)
       const serverTaxAmount = Math.floor(serverSubtotal * TAX_RATE)
 
-      // SECURITY: Compute platform fee server-side (typically 1-5% of subtotal)
-      // Client should not control this value — it directly affects revenue
-      const PLATFORM_FEE_RATE = 0.03 // 3% platform fee
-      const serverPlatformFee = Math.floor(serverSubtotal * PLATFORM_FEE_RATE)
+      // SECURITY: Read platform fee from PlatformSetting (same source as client display)
+      // This ensures what the buyer sees is exactly what they get charged.
+      // Falls back to DEFAULT_PLATFORM_FEE if not configured.
+      const serverPlatformFee = await getPlatformFee(tx)
 
       const serverTotalAmount = serverSubtotal + clientShippingCost + serverTaxAmount + serverPlatformFee - serverDiscountAmount
 

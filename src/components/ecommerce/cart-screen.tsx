@@ -238,7 +238,7 @@ export function CartScreen() {
     return selectedVoucher.value
   }, [selectedVoucher, checkedTotal])
 
-  const totalAmount = checkedTotal - voucherDiscount + platformFee
+  const totalAmount = Math.max(0, checkedTotal - voucherDiscount + platformFee)
 
   const handleItemClick = (product: Product) => {
     setSelectedProduct(product.id)
