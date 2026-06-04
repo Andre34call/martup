@@ -18,7 +18,7 @@ import { Card } from "@/components/ui/card"
 import { useAppStore } from "@/lib/store"
 import { formatPrice } from "@/lib/utils"
 import { fadeIn, stagger } from '@/lib/animations'
-import { PageHeader, SectionHeader, AdminScreenWrapper } from "../shared"
+import { SectionHeader, AdminScreenWrapper } from "../shared"
 import { useState, useRef, useEffect } from "react"
 import { AnimatePresence } from "framer-motion"
 

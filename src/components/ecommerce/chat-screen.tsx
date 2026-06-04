@@ -163,28 +163,10 @@ function ChatRoomView({ room, onBack }: { room: ChatRoom; onBack: () => void }) 
   return (
     <div className="flex flex-col h-dvh bg-background">
       {/* Header */}
-      <div className="flex-shrink-0 z-40 glass">
-        <div className="flex items-center justify-between h-14 px-4">
-          <div className="flex items-center gap-3">
-            <motion.button
-              whileTap={{ scale: 0.9 }}
-              onClick={onBack}
-              className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-muted transition-colors"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </motion.button>
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-emerald-500 text-white font-bold flex items-center justify-center text-xs">
-                {room.seller.storeName.charAt(0)}
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-foreground">{room.seller.storeName}</p>
-                <p className={`text-[10px] ${isSocketConnected ? 'text-emerald-500' : 'text-amber-500'}`}>
-                  {isSocketConnected ? 'Online' : 'Connecting...'}
-                </p>
-              </div>
-            </div>
-          </div>
+      <PageHeader
+        title={room.seller.storeName}
+        onBack={onBack}
+        rightAction={
           <div className="flex items-center gap-1">
             <button
               className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-muted transition-colors"
@@ -199,8 +181,8 @@ function ChatRoomView({ room, onBack }: { room: ChatRoom; onBack: () => void }) 
               <MoreVertical className="w-4.5 h-4.5 text-muted-foreground" />
             </button>
           </div>
-        </div>
-      </div>
+        }
+      />
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">

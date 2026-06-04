@@ -3,23 +3,13 @@ import { db } from '@/lib/db'
 import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
 import { createRateLimiter } from '@/lib/rate-limit'
 import { serializeDecimal } from '@/lib/decimal-utils'
+import { parseJsonField } from '@/lib/api-utils'
 
 import { logger } from '@/lib/logger'
 // Rate limiter: 30 cart update operations per minute
 const cartPutLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 30, keyPrefix: 'rl:cart:put:' })
 
 const MAX_QUANTITY = 99
-
-// Helper: safely parse JSON field
-function safeJsonParse(value: string | null | undefined): unknown[] {
-  if (!value) return []
-  try {
-    const parsed = JSON.parse(value)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
 
 const cartItemInclude = {
   product: {
@@ -127,7 +117,7 @@ export async function PUT(
       product: updated.product
         ? {
             ...updated.product,
-            images: safeJsonParse(updated.product.images as unknown as string),
+            images: parseJsonField(updated.product.images as unknown as string),
           }
         : null,
     }

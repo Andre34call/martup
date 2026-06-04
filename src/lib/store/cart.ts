@@ -286,15 +286,12 @@ export const useCartStore = create<CartState>()(
       getTotalPrice: () =>
         get().items.reduce((sum, item) => sum + getItemPrice(item) * item.quantity, 0),
 
-      getCheckedTotalPrice: () =>
-        get().items.filter((i) => i.isChecked)
-          .reduce((sum, item) => sum + getItemPrice(item) * item.quantity, 0),
+      getCheckedTotalPrice: () => get().getCheckedTotal(),
 
       getTotalItemCount: () =>
         get().items.reduce((sum, item) => sum + item.quantity, 0),
 
-      getCheckedItemCount: () =>
-        get().items.filter((i) => i.isChecked).reduce((sum, item) => sum + item.quantity, 0),
+      getCheckedItemCount: () => get().getCheckedCount(),
 
       getCheckedItems: () =>
         get().items.filter((i) => i.isChecked),

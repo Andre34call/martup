@@ -423,9 +423,10 @@ export async function calculateShippingRates(
 // ==================== RAJAONGKIR API INTEGRATION ====================
 
 /**
- * Fetch shipping rates from RajaOngkir Starter API.
- * This is a stub that will be enabled when RAJAONGKIR_API_KEY is set.
- * 
+ * Fetch shipping rates from RajaOngkir API.
+ * Uses the rajaongkir.ts module for city ID resolution and cost calculation.
+ * Falls back to local calculation if city IDs cannot be resolved.
+ *
  * RajaOngkir Starter API supports: jne, pos, tiki
  * RajaOngkir Pro API supports: jne, pos, tiki, wahana, jnt, rpx, pandu, sicepat, anteraja, dse, lion, ncs, star, tiki
  */
@@ -438,86 +439,36 @@ async function fetchRajaOngkirRates(
 ): Promise<ShippingRateResult[]> {
   if (!apiKey) return []
 
-  // RajaOngkir uses city IDs, not city names.
-  // In a full integration, we would need a city lookup table.
-  // For now, this stub returns empty results and falls back to local calculation.
-  // To complete this integration:
-  // 1. Query RajaOngkir /city endpoint to get city IDs
-  // 2. Cache city ID mappings in database
-  // 3. Call /cost endpoint with city IDs
-  
-  logger.info(
-    { component: 'shipping', originCity, destinationCity, courier },
-    'RajaOngkir API integration stub — falling back to local calculation'
-  )
-
-  // Attempt to call RajaOngkir API if city mapping is available
   try {
-    const couriersParam = courier ? courier.toLowerCase() : 'jne:pos:tiki:sicepat:jnt:anteraja'
+    // Import dynamically to avoid circular deps and allow tree-shaking when not configured
+    const { findCityId, calculateRajaOngkirCost } = await import('@/lib/rajaongkir')
 
-    const response = await fetch('https://api.rajaongkir.com/starter/cost', {
-      method: 'POST',
-      headers: {
-        'key': apiKey,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams({
-        origin: '1', // Placeholder — would need city ID lookup
-        destination: '1', // Placeholder — would need city ID lookup
-        weight: String(Math.max(1000, weight)),
-        courier: couriersParam,
-      }),
-    })
+    // Resolve city names to RajaOngkir city IDs
+    const [originId, destinationId] = await Promise.all([
+      findCityId(originCity),
+      findCityId(destinationCity),
+    ])
 
-    if (!response.ok) {
-      logger.warn(
-        { component: 'shipping', status: response.status },
-        'RajaOngkir API returned non-OK status'
+    if (!originId || !destinationId) {
+      logger.info(
+        { component: 'shipping', originCity, destinationCity, originId, destinationId },
+        'Could not resolve RajaOngkir city IDs — falling back to local calculation'
       )
       return []
     }
 
-    const data = await response.json()
+    const rates = await calculateRajaOngkirCost(originId, destinationId, weight, courier)
 
-    if (data.rajaongkir?.status?.code !== 200) {
-      logger.warn(
-        { component: 'shipping', rajaongkirStatus: data.rajaongkir?.status },
-        'RajaOngkir API returned error status'
-      )
-      return []
-    }
+    logger.info(
+      { component: 'shipping', originCity, destinationCity, originId, destinationId, rateCount: rates.length },
+      'RajaOngkir rates fetched successfully'
+    )
 
-    const results: ShippingRateResult[] = []
-    const results_data = data.rajaongkir?.results || []
-
-    for (const courierResult of results_data) {
-      const providerName = courierResult.name?.toUpperCase() || courierResult.code
-      const logoMap: Record<string, string> = {
-        'jne': '📦', 'pos': '🏣', 'tiki': '📬',
-        'sicepat': '✈️', 'j&t': '🚚', 'anteraja': '📮',
-      }
-      const logo = logoMap[courierResult.code?.toLowerCase()] || '📦'
-
-      for (const cost of courierResult.costs || []) {
-        const costDetail = cost.cost?.[0]
-        if (!costDetail) continue
-
-        results.push({
-          provider: providerName,
-          service: cost.service,
-          name: `${providerName} ${cost.service}`,
-          price: costDetail.value || 0,
-          estimatedDays: costDetail.etd ? `${costDetail.etd} hari` : '2-3 hari',
-          logo,
-        })
-      }
-    }
-
-    return results
+    return rates
   } catch (err) {
     logger.warn(
-      { component: 'shipping', err },
-      'RajaOngkir API call failed'
+      { component: 'shipping', err, originCity, destinationCity },
+      'RajaOngkir integration error — falling back to local calculation'
     )
     return []
   }

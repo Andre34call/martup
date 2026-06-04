@@ -2,6 +2,7 @@ import type { StateCreator } from 'zustand'
 import type { WalletSlice, AppStore } from './types'
 import { apiClient } from '@/lib/api-client'
 import { logger } from '@/lib/logger'
+import { mapWalletMutation } from '../mappers'
 
 interface WalletBalanceResponse {
   success: boolean
@@ -127,15 +128,7 @@ export const createWalletSlice: StateCreator<AppStore, [], [], WalletSlice> = (s
         isWalletLoaded: true,
         // Include mutations if returned by the wallet endpoint
         ...(wallet?.mutations ? {
-          walletMutations: wallet.mutations.map((m: Record<string, unknown>) => ({
-            id: String(m.id),
-            type: m.type as 'credit' | 'debit',
-            amount: Number(m.amount),
-            balance: Number(m.balance),
-            description: String(m.description || ''),
-            refType: m.refType ? String(m.refType) : undefined,
-            createdAt: m.createdAt ? String(m.createdAt) : new Date().toISOString(),
-          })),
+          walletMutations: wallet.mutations.map(mapWalletMutation),
         } : {}),
       })
     } catch (error: unknown) {
@@ -153,15 +146,7 @@ export const createWalletSlice: StateCreator<AppStore, [], [], WalletSlice> = (s
       const mutations = result.items || result.mutations || result
       if (Array.isArray(mutations)) {
         set({
-          walletMutations: (mutations as Array<Record<string, unknown>>).map((m: Record<string, unknown>) => ({
-            id: String(m.id),
-            type: m.type as 'credit' | 'debit',
-            amount: Number(m.amount),
-            balance: Number(m.balance),
-            description: String(m.description || ''),
-            refType: m.refType ? String(m.refType) : undefined,
-            createdAt: m.createdAt ? String(m.createdAt) : new Date().toISOString(),
-          })),
+          walletMutations: (mutations as Array<Record<string, unknown>>).map(mapWalletMutation),
         })
       }
     } catch (error: unknown) {

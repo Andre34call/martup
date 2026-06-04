@@ -5,6 +5,8 @@ import type { UserRole } from '../types'
 import { ELEVATED_ROLES } from '../types'
 import { apiClient } from '@/lib/api-client'
 import { mapUser, mapSeller, mapWalletMutation, mapOrder, mapNotification, mapAddress, mapReview, mapBanner } from '../mappers'
+import { mapSellerWalletToBalance } from '../store-helpers'
+import type { SellerWalletData } from '../types'
 import { useWishlistStore } from './wishlist'
 
 // API response types
@@ -40,17 +42,8 @@ export const createDataFetchSlice: StateCreator<AppStore, [], [], DataFetchSlice
 
         // Update seller balance from seller wallet
         if (data.seller.wallet) {
-          const walletBal = data.seller.wallet.balance || 0
-          const walletHold = data.seller.wallet.holdBalance || 0
-          const walletPending = data.seller.wallet.pendingBalance || 0
           set({
-            sellerBalance: {
-              availableBalance: walletBal,
-              pendingBalance: walletPending,
-              holdBalance: walletHold,
-              totalBalance: walletBal + walletHold + walletPending,
-              totalWithdrawn: 0,
-            }
+            sellerBalance: mapSellerWalletToBalance(data.seller.wallet as SellerWalletData),
           })
         }
       }

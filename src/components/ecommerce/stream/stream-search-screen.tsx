@@ -3,12 +3,13 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import {
-  ArrowLeft, Search, X, Clock, TrendingUp, Flame, Trash2,
+  Search, X, Clock, TrendingUp, Flame, Trash2,
   Heart, MessageCircle, Play, Package, Loader2, Sparkles, Verified,
 } from "lucide-react"
 import { useAppStore } from "@/lib/store"
 import { apiClient } from "@/lib/api-client"
 import { StreamCommentSheet } from "./stream-comment-sheet"
+import { PageHeader } from "../shared"
 import { formatRelativeTime, formatPrice, truncateText } from "@/lib/utils"
 import { fadeIn } from "@/lib/animations"
 import { Input } from "@/components/ui/input"
@@ -152,17 +153,26 @@ export function StreamSearchScreen() {
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
-      {/* Search Header */}
-      <div className="sticky top-0 z-40 glass">
-        <div className="h-[2px] bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-500" />
-        <div className="flex items-center gap-2 h-14 px-4">
-          <motion.button
-            whileTap={{ scale: 0.9 }}
-            onClick={() => navigate("stream")}
-            className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-muted transition-colors flex-shrink-0"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </motion.button>
+      <PageHeader
+        title="Cari"
+        onBack={() => navigate("stream")}
+        rightAction={
+          query.trim() ? (
+            <motion.button
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              onClick={() => handleSearch(query)}
+              className="text-sm font-medium text-emerald-600 hover:text-emerald-700"
+            >
+              Cari
+            </motion.button>
+          ) : undefined
+        }
+      />
+
+      {/* Search Bar */}
+      <div className="sticky top-14 z-30 glass border-b border-border/30">
+        <div className="flex items-center gap-2 px-4 py-2">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
@@ -179,16 +189,6 @@ export function StreamSearchScreen() {
               </button>
             )}
           </div>
-          {query.trim() && (
-            <motion.button
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              onClick={() => handleSearch(query)}
-              className="text-sm font-medium text-emerald-600 hover:text-emerald-700 flex-shrink-0"
-            >
-              Cari
-            </motion.button>
-          )}
         </div>
       </div>
 

@@ -22,6 +22,8 @@ const recommendedVars = [
   'MIDTRANS_SERVER_KEY',
   'NEXT_PUBLIC_MIDTRANS_CLIENT_KEY',
   'NEXT_PUBLIC_MIDTRANS_IS_PRODUCTION',
+  'RAJAONGKIR_API_KEY',
+  'RAJAONGKIR_PACKAGE',
 ] as const
 
 // Validate at module load time — but NOT during Next.js build phase
@@ -115,5 +117,7 @@ export const env = {
   GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET || '',
   EMAIL_PROVIDER: process.env.EMAIL_PROVIDER || 'mock',
   RESEND_API_KEY: process.env.RESEND_API_KEY || '',
+  RAJAONGKIR_API_KEY: process.env.RAJAONGKIR_API_KEY || '',
+  RAJAONGKIR_PACKAGE: process.env.RAJAONGKIR_PACKAGE || 'starter',
   NODE_ENV: process.env.NODE_ENV || 'development',
 } as const

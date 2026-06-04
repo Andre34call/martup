@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
 import { createRateLimiter } from '@/lib/rate-limit'
 import { serializeDecimal } from '@/lib/decimal-utils'
+import { parseJsonField } from '@/lib/api-utils'
 
 import { logger } from '@/lib/logger'
 // Rate limiter: 30 cart add operations per minute
@@ -165,7 +166,7 @@ export async function POST(request: NextRequest) {
         product: updatedItem.product
           ? {
               ...updatedItem.product,
-              images: safeJsonParse(updatedItem.product.images as unknown as string),
+              images: parseJsonField(updatedItem.product.images as unknown as string),
             }
           : null,
       }
@@ -189,19 +190,19 @@ export async function POST(request: NextRequest) {
       include: cartItemInclude,
     })
 
-    const responseItem = {
+    const responseItem2 = {
       ...cartItem,
       product: cartItem.product
         ? {
             ...cartItem.product,
-            images: safeJsonParse(cartItem.product.images as unknown as string),
+            images: parseJsonField(cartItem.product.images as unknown as string),
           }
         : null,
     }
 
     return NextResponse.json(serializeDecimal({
       success: true,
-      data: responseItem,
+      data: responseItem2,
       message: 'Produk ditambahkan ke keranjang',
     }), { status: 201 })
   } catch (error) {
@@ -213,13 +214,3 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Helper: safely parse JSON field
-function safeJsonParse(value: string | null | undefined): unknown[] {
-  if (!value) return []
-  try {
-    const parsed = JSON.parse(value)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}

@@ -5,8 +5,7 @@
  * reusable functions with proper typing.
  */
 
-import type { SellerBalance } from './types'
-import type { SellerWalletData } from './api-types'
+import type { SellerBalance, SellerWalletData } from './types'
 
 // ==================== SELLER BALANCE MAPPING ====================
 
@@ -162,26 +161,5 @@ export function mapChatSeller(otherUser: Record<string, unknown> | undefined) {
     rating: (sellerData.rating as number) || 0,
     totalSales: (sellerData.totalSales as number) || 0,
     totalProducts: (sellerData.totalProducts as number) || 0,
-  }
-}
-
-// ==================== WALLET MUTATION MAPPING ====================
-
-/**
- * Map a raw wallet mutation record to the WalletMutation store shape.
- *
- * Used in:
- *   - store/wallet.ts (fetchWalletBalance)
- *   - store/wallet.ts (fetchWalletMutations)
- */
-export function mapWalletMutationRaw(m: Record<string, unknown>) {
-  return {
-    id: String(m.id),
-    type: m.type as 'credit' | 'debit',
-    amount: Number(m.amount),
-    balance: Number(m.balance),
-    description: String(m.description || ''),
-    refType: m.refType ? String(m.refType) : undefined,
-    createdAt: m.createdAt ? String(m.createdAt) : new Date().toISOString(),
   }
 }

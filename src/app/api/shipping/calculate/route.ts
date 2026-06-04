@@ -20,6 +20,10 @@ export async function POST(request: NextRequest) {
       return authErrorResponse(authResult)
     }
 
+    // Log RajaOngkir configuration status
+    const { isRajaOngkirConfigured } = await import('@/lib/rajaongkir').catch(() => ({ isRajaOngkirConfigured: () => false }))
+    logger.info({ component: 'shipping-api', rajaongkir: isRajaOngkirConfigured() }, 'Shipping calculation requested')
+
     // Rate limit: 20 req/min per user
     const rateLimit = await shippingCalcLimiter.check(authResult.user.id)
     if (!rateLimit.allowed) {

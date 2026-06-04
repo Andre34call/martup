@@ -33,9 +33,9 @@ interface RawOrderItem {
   productName: string
   variantName?: string
   variantId?: string
-  price: number
-  quantity: number
-  subtotal: number
+  price: number | { toNumber?: () => number }
+  quantity: number | { toNumber?: () => number }
+  subtotal: number | { toNumber?: () => number }
   image?: string
   product?: { images?: string[] }
 }
@@ -55,12 +55,12 @@ interface RawOrder {
   userId: string
   sellerId: string
   status: OrderStatus
-  subtotal: number
-  shippingCost: number
-  discountAmount?: number
-  taxAmount?: number
-  platformFee?: number
-  totalAmount: number
+  subtotal: number | { toNumber?: () => number }
+  shippingCost: number | { toNumber?: () => number }
+  discountAmount?: number | { toNumber?: () => number }
+  taxAmount?: number | { toNumber?: () => number }
+  platformFee?: number | { toNumber?: () => number }
+  totalAmount: number | { toNumber?: () => number }
   paymentMethod?: string
   paymentStatus: string
   paymentProof?: string
@@ -68,11 +68,13 @@ interface RawOrder {
   items?: RawOrderItem[]
   shipping?: RawShipping
   addressId?: string
-  seller?: RawSeller
-  createdAt: string
-  paidAt?: string
-  shippedAt?: string
-  deliveredAt?: string
+  address?: Order['address']
+  seller?: RawSeller | Order['seller']
+  buyerName?: string
+  createdAt: string | Date | number
+  paidAt?: string | Date | number | null
+  shippedAt?: string | Date | number | null
+  deliveredAt?: string | Date | number | null
 }
 
 interface RawReviewUser {
@@ -144,39 +146,112 @@ export function mapSeller(raw: RawSeller): Seller {
 }
 
 /**
- * Map raw API wallet mutation data to typed WalletMutation object
+ * Map raw API wallet mutation data to typed WalletMutation object.
+ * Uses Number() and String() for safe conversion from Prisma Decimal/string fields.
  */
 export function mapWalletMutation(raw: Record<string, unknown>): WalletMutation {
   return {
-    id: raw.id as string,
+    id: String(raw.id),
     type: raw.type as 'credit' | 'debit',
-    amount: raw.amount as number,
-    balance: raw.balance as number,
-    description: raw.description as string,
-    refType: (raw.refType as string) || undefined,
-    createdAt: raw.createdAt as string,
+    amount: Number(raw.amount),
+    balance: Number(raw.balance),
+    description: String(raw.description || ''),
+    refType: raw.refType ? String(raw.refType) : undefined,
+    createdAt: raw.createdAt ? String(raw.createdAt) : new Date().toISOString(),
   }
+}
+
+/** Helper: safely convert Prisma Decimal or number to JS number */
+function toNumber(value: number | { toNumber?: () => number } | undefined | null, fallback = 0): number {
+  if (value == null) return fallback
+  if (typeof value === 'number') return value
+  if (typeof value === 'object' && typeof value.toNumber === 'function') return value.toNumber()
+  return fallback
+}
+
+/** Helper: normalize a date field to ISO string */
+function normalizeDate(value: string | Date | number | null | undefined): string | undefined {
+  if (!value) return undefined
+  if (typeof value === 'string') return value
+  return new Date(value as number | Date).toISOString()
 }
 
 /**
  * Map raw API order data to typed Order object.
- * Requires currentUser for default address fallback.
+ * Handles Prisma Decimal fields, Date objects, and missing relations.
+ * Requires currentUser for default address fallback when no address is present.
  */
 export function mapOrder(raw: RawOrder, currentUser?: User | null): Order {
+  // If seller is already a mapped object (has storeName), pass through; otherwise map it
+  const seller: Order['seller'] = raw.seller
+    ? ('storeName' in raw.seller && typeof raw.seller.storeName === 'string'
+      ? raw.seller as Order['seller']
+      : {
+          id: (raw.seller as RawSeller).id,
+          userId: (raw.seller as RawSeller).userId || '',
+          storeName: (raw.seller as RawSeller).storeName || 'Unknown Store',
+          storeSlug: (raw.seller as RawSeller).storeSlug || '',
+          storeAvatar: (raw.seller as RawSeller).storeAvatar || undefined,
+          isVerified: (raw.seller as RawSeller).isVerified || false,
+          isPremium: (raw.seller as RawSeller).isPremium || false,
+          rating: (raw.seller as RawSeller).rating || 0,
+          totalSales: (raw.seller as RawSeller).totalSales || 0,
+          totalProducts: (raw.seller as RawSeller).totalProducts || 0,
+          storeCity: (raw.seller as RawSeller).storeCity || undefined,
+        })
+    : {
+        id: '',
+        userId: '',
+        storeName: 'Unknown Seller',
+        storeSlug: '',
+        isVerified: false,
+        isPremium: false,
+        rating: 0,
+        totalSales: 0,
+        totalProducts: 0,
+      }
+
+  // If address is already a mapped object, pass through; otherwise construct from addressId or fallback
+  const address: Order['address'] = raw.address
+    ? raw.address
+    : raw.addressId
+      ? {
+          id: raw.addressId,
+          label: '',
+          recipient: '',
+          phone: '',
+          address: '',
+          city: '',
+          province: '',
+          postalCode: '',
+          isDefault: false,
+        }
+      : {
+          id: 'default',
+          label: 'Alamat',
+          recipient: currentUser?.name || '',
+          phone: currentUser?.phone || '',
+          address: 'Alamat pengiriman',
+          city: '',
+          province: '',
+          postalCode: '',
+          isDefault: true,
+        }
+
   return {
     id: raw.id,
     orderNumber: raw.orderNumber,
     userId: raw.userId,
     sellerId: raw.sellerId,
     status: raw.status,
-    subtotal: raw.subtotal,
-    shippingCost: raw.shippingCost,
-    discountAmount: raw.discountAmount || 0,
-    taxAmount: raw.taxAmount || 0,
-    platformFee: raw.platformFee || 0,
-    totalAmount: raw.totalAmount,
+    subtotal: toNumber(raw.subtotal),
+    shippingCost: toNumber(raw.shippingCost),
+    discountAmount: toNumber(raw.discountAmount),
+    taxAmount: toNumber(raw.taxAmount),
+    platformFee: toNumber(raw.platformFee),
+    totalAmount: toNumber(raw.totalAmount),
     paymentMethod: raw.paymentMethod || undefined,
-    paymentStatus: raw.paymentStatus,
+    paymentStatus: raw.paymentStatus || 'unpaid',
     paymentProof: raw.paymentProof || undefined,
     paymentBankName: raw.paymentBankName || undefined,
     items: (raw.items || []).map((item: RawOrderItem): OrderItem => ({
@@ -185,9 +260,9 @@ export function mapOrder(raw: RawOrder, currentUser?: User | null): Order {
       productName: item.productName,
       variantName: item.variantName || undefined,
       variantId: item.variantId || undefined,
-      price: item.price,
-      quantity: item.quantity,
-      subtotal: item.subtotal,
+      price: toNumber(item.price),
+      quantity: toNumber(item.quantity),
+      subtotal: toNumber(item.subtotal),
       image: item.image || (item.product?.images?.[0]) || undefined,
     })),
     shipping: raw.shipping ? {
@@ -198,54 +273,13 @@ export function mapOrder(raw: RawOrder, currentUser?: User | null): Order {
       estimatedDays: raw.shipping.estimatedDays || undefined,
       status: raw.shipping.status,
     } as Shipping : undefined,
-    address: raw.addressId ? {
-      id: raw.addressId,
-      label: '',
-      recipient: '',
-      phone: '',
-      address: '',
-      city: '',
-      province: '',
-      postalCode: '',
-      isDefault: false,
-    } : {
-      id: 'default',
-      label: 'Alamat',
-      recipient: currentUser?.name || '',
-      phone: currentUser?.phone || '',
-      address: 'Alamat pengiriman',
-      city: '',
-      province: '',
-      postalCode: '',
-      isDefault: true,
-    },
-    seller: raw.seller ? {
-      id: raw.seller.id,
-      userId: raw.seller.userId || '',
-      storeName: raw.seller.storeName || 'Unknown Store',
-      storeSlug: raw.seller.storeSlug || '',
-      storeAvatar: raw.seller.storeAvatar || undefined,
-      isVerified: raw.seller.isVerified || false,
-      isPremium: raw.seller.isPremium || false,
-      rating: raw.seller.rating || 0,
-      totalSales: raw.seller.totalSales || 0,
-      totalProducts: raw.seller.totalProducts || 0,
-      storeCity: raw.seller.storeCity || undefined,
-    } : {
-      id: '',
-      userId: '',
-      storeName: 'Unknown Seller',
-      storeSlug: '',
-      isVerified: false,
-      isPremium: false,
-      rating: 0,
-      totalSales: 0,
-      totalProducts: 0,
-    },
-    createdAt: raw.createdAt,
-    paidAt: raw.paidAt || undefined,
-    shippedAt: raw.shippedAt || undefined,
-    deliveredAt: raw.deliveredAt || undefined,
+    address,
+    seller,
+    buyerName: raw.buyerName || undefined,
+    createdAt: normalizeDate(raw.createdAt) || String(raw.createdAt),
+    paidAt: normalizeDate(raw.paidAt),
+    shippedAt: normalizeDate(raw.shippedAt),
+    deliveredAt: normalizeDate(raw.deliveredAt),
   }
 }
 

@@ -347,6 +347,14 @@ export interface SellerBalance {
   lastWithdrawDate?: string
 }
 
+/** Wallet data as returned from API (Decimals serialized to numbers) */
+export interface SellerWalletData {
+  id: string
+  balance: number
+  holdBalance: number
+  pendingBalance: number
+}
+
 // ==================== DIVISION / DEPARTMENT TYPES ====================
 
 export interface Division {

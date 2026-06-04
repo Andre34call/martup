@@ -2,6 +2,7 @@ import type { StateCreator } from 'zustand'
 import type { OrderSlice, AppStore } from './types'
 import type { Order, OrderStatus } from '../types'
 import { apiClient } from '@/lib/api-client'
+import { mapOrder } from '../mappers'
 
 // Type alias for API response (avoids TSX generic parsing issues)
 type OrdersResponse = { success: boolean; data?: any[]; error?: string }
@@ -18,60 +19,6 @@ function snapshotOrders(state: AppStore): Order[] {
  */
 function restoreOrders(orders: Order[]) {
   return { orders }
-}
-
-/**
- * Map a raw server order object to the local Order type.
- * Server responses may contain extra DB fields (createdAt as Date, Decimal numbers, etc.)
- * that we need to normalize for local state.
- */
-function mapServerOrder(raw: Record<string, unknown>): Order {
-  return {
-    id: raw.id as string,
-    orderNumber: raw.orderNumber as string,
-    userId: raw.userId as string,
-    sellerId: raw.sellerId as string,
-    status: raw.status as OrderStatus,
-    subtotal: Number(raw.subtotal ?? 0),
-    shippingCost: Number(raw.shippingCost ?? 0),
-    discountAmount: Number(raw.discountAmount ?? 0),
-    taxAmount: Number(raw.taxAmount ?? 0),
-    platformFee: Number(raw.platformFee ?? 0),
-    totalAmount: Number(raw.totalAmount ?? 0),
-    paymentMethod: (raw.paymentMethod as string) || undefined,
-    paymentStatus: (raw.paymentStatus as string) || 'unpaid',
-    items: Array.isArray(raw.items)
-      ? raw.items.map((item: Record<string, unknown>) => ({
-          id: item.id as string,
-          productId: item.productId as string,
-          productName: item.productName as string,
-          variantName: (item.variantName as string) || undefined,
-          variantId: (item.variantId as string) || undefined,
-          price: Number(item.price ?? 0),
-          quantity: Number(item.quantity ?? 0),
-          subtotal: Number(item.subtotal ?? 0),
-          image: (item.image as string) || undefined,
-        }))
-      : [],
-    shipping: raw.shipping
-      ? {
-          id: (raw.shipping as Record<string, unknown>).id as string,
-          provider: (raw.shipping as Record<string, unknown>).provider as string,
-          service: (raw.shipping as Record<string, unknown>).service as string,
-          trackingNumber: ((raw.shipping as Record<string, unknown>).trackingNumber as string) || undefined,
-          estimatedDays: ((raw.shipping as Record<string, unknown>).estimatedDays as string) || undefined,
-          status: (raw.shipping as Record<string, unknown>).status as string,
-        }
-      : undefined,
-    // address may not be present in list API responses
-    address: raw.address as Order['address'],
-    seller: raw.seller as Order['seller'],
-    buyerName: (raw.buyerName as string) || undefined,
-    createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : new Date(raw.createdAt as number | string).toISOString(),
-    paidAt: typeof raw.paidAt === 'string' ? raw.paidAt : raw.paidAt ? new Date(raw.paidAt as number | string).toISOString() : undefined,
-    shippedAt: typeof raw.shippedAt === 'string' ? raw.shippedAt : raw.shippedAt ? new Date(raw.shippedAt as number | string).toISOString() : undefined,
-    deliveredAt: typeof raw.deliveredAt === 'string' ? raw.deliveredAt : raw.deliveredAt ? new Date(raw.deliveredAt as number | string).toISOString() : undefined,
-  }
 }
 
 export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set, get) => ({
@@ -175,7 +122,7 @@ export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set
 
       // On success: optionally update local state with server response
       if (data.data) {
-        const serverOrder = mapServerOrder(data.data)
+        const serverOrder = mapOrder(data.data as Parameters<typeof mapOrder>[0])
         set((state) => ({
           orders: state.orders.map(o => o.id === orderId ? serverOrder : o),
         }))
@@ -257,7 +204,7 @@ export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set
 
         const statusData = await statusRes.json()
         if (statusData.success && statusData.data) {
-          const serverOrder = mapServerOrder(statusData.data)
+          const serverOrder = mapOrder(statusData.data as Parameters<typeof mapOrder>[0])
           set((state) => ({
             orders: state.orders.map(o => o.id === orderId ? serverOrder : o),
           }))
@@ -349,7 +296,7 @@ export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set
 
       // On success: update with server response
       if (data.data) {
-        const serverOrder = mapServerOrder(data.data)
+        const serverOrder = mapOrder(data.data as Parameters<typeof mapOrder>[0])
         set((state) => ({
           orders: state.orders.map(o => o.id === orderId ? serverOrder : o),
         }))
@@ -389,7 +336,7 @@ export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set
 
       // On success: update with server response
       if (data.data) {
-        const serverOrder = mapServerOrder(data.data)
+        const serverOrder = mapOrder(data.data as Parameters<typeof mapOrder>[0])
         set((state) => ({
           orders: state.orders.map(o => o.id === orderId ? serverOrder : o),
         }))
@@ -412,7 +359,7 @@ export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set
       const data = await apiClient.get<OrdersResponse>('/api/orders', { userId })
 
       if (data.success && Array.isArray(data.data)) {
-        const serverOrders = data.data.map((raw: Record<string, unknown>) => mapServerOrder(raw))
+        const serverOrders = data.data.map((raw: Record<string, unknown>) => mapOrder(raw as Parameters<typeof mapOrder>[0]))
         set({
           orders: serverOrders,
           isOrdersLoaded: true,

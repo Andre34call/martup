@@ -3,10 +3,10 @@
 import { motion, AnimatePresence } from "framer-motion"
 import { useAppStore, useWishlistStore } from "@/lib/store"
 import { formatPrice, formatRelativeTime } from "@/lib/utils"
-import { PageHeader, ProductCard, EmptyState, SearchBar, SectionHeader } from "./shared"
+import { PageHeader, ProductCard, EmptyState, SectionHeader } from "./shared"
 import type { Product } from "@/lib/types"
 import { useState, useEffect, useRef, useMemo, useCallback } from "react"
-import { ArrowLeft, Search, X, Clock, TrendingUp, Flame, Trash2, ChevronRight, Loader2, SlidersHorizontal, ChevronDown, ChevronUp } from "lucide-react"
+import { Search, X, Clock, TrendingUp, Flame, Trash2, ChevronRight, Loader2, SlidersHorizontal, ChevronDown, ChevronUp } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -316,16 +316,26 @@ export function SearchScreen() {
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
-      {/* Sticky Search Bar */}
-      <div className="sticky top-0 z-40 glass">
-        <div className="flex items-center gap-2 h-14 px-4">
-          <motion.button
-            whileTap={{ scale: 0.9 }}
-            onClick={() => navigate("home")}
-            className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-muted transition-colors flex-shrink-0"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </motion.button>
+      <PageHeader
+        title="Cari"
+        onBack={() => navigate("home")}
+        rightAction={
+          query.trim() ? (
+            <motion.button
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              onClick={() => handleSearch(query)}
+              className="text-sm font-medium text-emerald-600 hover:text-emerald-700"
+            >
+              Cari
+            </motion.button>
+          ) : undefined
+        }
+      />
+
+      {/* Search Bar */}
+      <div className="sticky top-14 z-30 glass border-b border-border/30">
+        <div className="flex items-center gap-2 px-4 py-2">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
@@ -349,16 +359,6 @@ export function SearchScreen() {
               </button>
             )}
           </div>
-          {query.trim() && (
-            <motion.button
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              onClick={() => handleSearch(query)}
-              className="text-sm font-medium text-emerald-600 hover:text-emerald-700 flex-shrink-0"
-            >
-              Cari
-            </motion.button>
-          )}
         </div>
       </div>
 

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { ArrowLeft, Heart, MessageCircle, Eye, Play, Pause, Package, Store, Verified, Mail, Calendar, Grid3X3, Share2, Bookmark, MoreHorizontal, Lock, ShoppingBag, Send } from "lucide-react"
+import { Heart, MessageCircle, Eye, Play, Pause, Package, Store, Verified, Mail, Calendar, Grid3X3, Share2, Bookmark, MoreHorizontal, Lock, ShoppingBag, Send } from "lucide-react"
 import { useAppStore } from "@/lib/store"
 import { apiClient } from "@/lib/api-client"
 import { formatRelativeTime, formatPrice, truncateText } from "@/lib/utils"
@@ -12,6 +12,7 @@ import { PostActionMenu } from "./stream-post-menu"
 import { StreamReportDialog } from "./stream-report-dialog"
 import { StreamEditScreen } from "./stream-edit-screen"
 import { ConfirmDialog } from "../confirm-dialog"
+import { PageHeader } from "../shared"
 import type { StreamPost, LikeResponse } from "./stream-types"
 
 // ==================== TYPES ====================
@@ -416,26 +417,10 @@ export function StreamUserProfileScreen() {
   return (
     <div className="min-h-screen bg-background pb-20">
       {/* ===== HEADER ===== */}
-      <div className="sticky top-0 z-40">
-        <div className="h-[2px] bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-500" />
-        <div className="glass">
-          <div className="flex items-center gap-2 h-14 px-4">
-            <motion.button
-              whileTap={{ scale: 0.9 }}
-              onClick={() => navigate("stream")}
-              className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-muted transition-colors flex-shrink-0"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </motion.button>
-            <div className="flex-1 text-center min-w-0">
-              <p className="text-sm font-bold text-foreground truncate">
-                {user.username ? `@${user.username}` : user.name}
-              </p>
-            </div>
-            <div className="w-9 h-9 flex-shrink-0" />
-          </div>
-        </div>
-      </div>
+      <PageHeader
+        title={user.username ? `@${user.username}` : user.name}
+        onBack={() => navigate("stream")}
+      />
 
       {/* ===== PROFILE CARD ===== */}
       <motion.div

@@ -11,7 +11,7 @@ import { Separator } from "@/components/ui/separator"
 import { useAppStore } from "@/lib/store"
 import { formatPrice } from "@/lib/utils"
 import { fadeIn, stagger } from '@/lib/animations'
-import { PageHeader, SectionHeader, StatusBadge } from "../shared"
+import { SectionHeader, StatusBadge } from "../shared"
 import type { Order } from "@/lib/types"
 import { useState, useRef, useEffect } from "react"
 import { AnimatePresence } from "framer-motion"

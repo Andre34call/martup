@@ -21,9 +21,9 @@ import { SESSION_COOKIE_NAME } from '@/lib/session-cookie'
 // All roles that have admin/staff-level access (above seller/buyer)
 // SINGLE SOURCE OF TRUTH: Defined in @/lib/types.ts, re-exported here for backward compatibility
 import { ELEVATED_ROLES as ELEVATED_ROLES_BASE, STAFF_ROLES } from '@/lib/types'
-const ELEVATED_ROLES = ELEVATED_ROLES_BASE as unknown as readonly ['admin', 'manager', 'finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr']
+const ELEVATED_ROLES = ELEVATED_ROLES_BASE
 // Division-specific roles (below manager, above regular admin in division scope)
-const DIVISION_ROLES = STAFF_ROLES.filter(r => r !== 'manager') as unknown as readonly ['finance', 'pr', 'tech', 'cs', 'marketing', 'operations', 'legal', 'hr']
+const DIVISION_ROLES = STAFF_ROLES.filter(r => r !== 'manager')
 // Roles that a Manager can assign (division admins + regular admin)
 const MANAGER_ASSIGNABLE_ROLES = ['admin', ...DIVISION_ROLES] as const
 
@@ -256,7 +256,7 @@ export function isManager(role: string): boolean {
  * Check if a user has any elevated role (admin, manager, or division staff).
  */
 export function isElevatedRole(role: string): boolean {
-  return (ELEVATED_ROLES as readonly string[]).includes(role)
+  return ELEVATED_ROLES.includes(role as (typeof ELEVATED_ROLES)[number])
 }
 
 // ==================== ROLE-LEVEL VERIFICATION ====================
