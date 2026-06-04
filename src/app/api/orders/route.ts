@@ -373,6 +373,7 @@ export async function POST(request: NextRequest) {
         quantity: number
         subtotal: number
         image: string | null
+        sellerId: string
       }> = []
 
       let serverSubtotal = 0
@@ -381,7 +382,7 @@ export async function POST(request: NextRequest) {
         // SECURITY: Re-validate stock inside transaction (race condition protection)
         const product = await tx.product.findUnique({
           where: { id: item.productId },
-          select: { id: true, name: true, stock: true, price: true, discountPrice: true, images: true },
+          select: { id: true, name: true, stock: true, price: true, discountPrice: true, images: true, sellerId: true },
         })
         if (!product || product.stock < item.quantity) {
           throw new Error(`Stok tidak mencukupi untuk "${product?.name || item.productId}". Tersedia: ${product?.stock ?? 0}, Diminta: ${item.quantity}`)
@@ -423,7 +424,14 @@ export async function POST(request: NextRequest) {
           quantity: item.quantity,
           subtotal: itemSubtotal,
           image: itemImage,
+          sellerId: product.sellerId,
         })
+      }
+
+      // SECURITY (CB-5c): Verify ALL products belong to the specified sellerId
+      const wrongSellerProducts = serverItems.filter(si => si.sellerId !== sellerId)
+      if (wrongSellerProducts.length > 0) {
+        throw new Error('Produk tidak sesuai dengan seller')
       }
 
       // SECURITY: Validate voucher server-side if voucherCode is provided
@@ -582,17 +590,21 @@ export async function POST(request: NextRequest) {
       }
 
       // Update product sold count and stock
+      // RACE CONDITION FIX: Use updateMany with stock >= qty to prevent stock going negative
       for (const item of serverItems) {
-        await tx.product.update({
-          where: { id: item.productId },
+        const updateResult = await tx.product.updateMany({
+          where: { id: item.productId, stock: { gte: item.quantity } },
           data: {
             sold: { increment: item.quantity },
             stock: { decrement: item.quantity },
           },
         })
+        if (updateResult.count === 0) {
+          throw new Error('Stok tidak mencukupi')
+        }
         if (item.variantId) {
-          await tx.productVariant.update({
-            where: { id: item.variantId },
+          await tx.productVariant.updateMany({
+            where: { id: item.variantId, stock: { gte: item.quantity } },
             data: { stock: { decrement: item.quantity } },
           })
         }

@@ -15,49 +15,23 @@ interface LogStockChangeParams {
 
 /**
  * Create a StockLog record to track stock movements.
- * This is a fire-and-forget helper — errors are logged but don't throw.
- * Use this inside a transaction by passing `tx` if you want atomicity.
+ * NOTE: StockLog model is not yet implemented in the Prisma schema.
+ * This function gracefully logs a warning and returns without error.
  */
 export async function logStockChange(params: LogStockChangeParams): Promise<void> {
-  try {
-    await db.stockLog.create({
-      data: {
-        productId: params.productId,
-        variantId: params.variantId || null,
-        type: params.type,
-        quantity: params.quantity,
-        previousStock: params.previousStock,
-        newStock: params.newStock,
-        reason: params.reason || null,
-        orderId: params.orderId || null,
-        createdBy: params.createdBy || null,
-      },
-    })
-  } catch (error) {
-    // Stock logging should never break the main flow
-    logger.error({ err: error, params }, 'Failed to create stock log entry')
-  }
+  // StockLog model does not exist yet — log and return gracefully
+  logger.warn({ params }, 'StockLog model not implemented — stock change not recorded')
 }
 
 /**
  * Create a StockLog record within an existing Prisma transaction.
- * Use this when you need the stock log to be part of the same transaction.
+ * NOTE: StockLog model is not yet implemented in the Prisma schema.
+ * This function gracefully logs a warning and returns without error.
  */
 export async function logStockChangeInTx(
-  tx: Parameters<Parameters<typeof db.$transaction>[0]>[0],
+  _tx: Parameters<Parameters<typeof db.$transaction>[0]>[0],
   params: LogStockChangeParams
 ): Promise<void> {
-  await tx.stockLog.create({
-    data: {
-      productId: params.productId,
-      variantId: params.variantId || null,
-      type: params.type,
-      quantity: params.quantity,
-      previousStock: params.previousStock,
-      newStock: params.newStock,
-      reason: params.reason || null,
-      orderId: params.orderId || null,
-      createdBy: params.createdBy || null,
-    },
-  })
+  // StockLog model does not exist yet — log and return gracefully
+  logger.warn({ params }, 'StockLog model not implemented — stock change not recorded in transaction')
 }

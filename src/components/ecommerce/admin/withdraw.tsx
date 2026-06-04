@@ -13,9 +13,11 @@ import { useAppStore } from "@/lib/store"
 import type { WithdrawStatus } from "@/lib/types"
 import { formatPrice, formatRelativeTime } from "@/lib/utils"
 import { stagger } from '@/lib/animations'
-import { PageHeader, SectionHeader, EmptyState, AdminScreenWrapper, PrimaryButton } from "../shared"
+import { PageHeader, SectionHeader, EmptyState, AdminScreenWrapper, PrimaryButton, InlineSpinner } from "../shared"
 import { useState, useEffect } from "react"
 import { ConfirmDialog } from "../confirm-dialog"
+import { apiClient, ApiClientError } from '@/lib/api-client'
+import { handleApiError } from '@/lib/handle-api-error'
 
 
 export function AdminWithdraw() {
@@ -29,6 +31,7 @@ export function AdminWithdraw() {
   }, [fetchAdminWithdrawals])
   const [showRejectModal, setShowRejectModal] = useState<string | null>(null)
   const [rejectReason, setRejectReason] = useState('')
+  const [processingId, setProcessingId] = useState<string | null>(null)
 
   const pendingWithdrawals = withdrawRequests.filter(w => w.status === 'pending')
   const historyWithdrawals = withdrawRequests.filter(w => w.status !== 'pending')
@@ -37,23 +40,61 @@ export function AdminWithdraw() {
     : activeTab === 'all' ? withdrawRequests
     : withdrawRequests.filter(w => w.status === activeTab)
 
-  const handleApprove = (id: string) => {
-    updateWithdrawStatus(id, 'approved')
-    showToast("Penarikan disetujui", "success")
+  const handleApprove = async (id: string) => {
+    setProcessingId(id)
+    try {
+      const data = await apiClient.put<{ success: boolean; error?: string }>('/api/admin/withdrawals', { withdrawalId: id, status: 'approved' })
+      if (data.success) {
+        updateWithdrawStatus(id, 'approved')
+        showToast("Penarikan disetujui", "success")
+      } else {
+        showToast(data.error || "Gagal menyetujui penarikan", "error")
+      }
+    } catch (err) {
+      showToast(err instanceof ApiClientError ? err.message : "Gagal menyetujui penarikan", "error")
+    } finally {
+      setProcessingId(null)
+    }
   }
 
   const handleReject = () => {
     if (!showRejectModal) return
     setConfirmAction({
-      action: () => { updateWithdrawStatus(showRejectModal, 'rejected', rejectReason || 'Tidak memenuhi syarat'); showToast("Penarikan ditolak", "info"); setShowRejectModal(null); setRejectReason('') },
+      action: async () => {
+        try {
+          const data = await apiClient.put<{ success: boolean; error?: string }>('/api/admin/withdrawals', { withdrawalId: showRejectModal, status: 'rejected', adminNote: rejectReason || 'Tidak memenuhi syarat' })
+          if (data.success) {
+            updateWithdrawStatus(showRejectModal, 'rejected', rejectReason || 'Tidak memenuhi syarat')
+            showToast("Penarikan ditolak", "info")
+            setShowRejectModal(null)
+            setRejectReason('')
+          } else {
+            showToast(data.error || "Gagal menolak penarikan", "error")
+          }
+        } catch (err) {
+          showToast(err instanceof ApiClientError ? err.message : "Gagal menolak penarikan", "error")
+        }
+      },
       title: 'Tolak Penarikan',
       message: 'Apakah Anda yakin ingin menolak permintaan penarikan ini? Dana tidak akan ditransfer ke penjual.'
     })
   }
 
-  const handleMarkCompleted = (id: string) => {
-    updateWithdrawStatus(id, 'completed')
-    showToast("Penarikan selesai - dana telah ditransfer", "success")
+  const handleMarkCompleted = async (id: string) => {
+    setProcessingId(id)
+    try {
+      const data = await apiClient.put<{ success: boolean; error?: string }>('/api/admin/withdrawals', { withdrawalId: id, status: 'completed' })
+      if (data.success) {
+        updateWithdrawStatus(id, 'completed')
+        showToast("Penarikan selesai - dana telah ditransfer", "success")
+      } else {
+        showToast(data.error || "Gagal menandai penarikan selesai", "error")
+      }
+    } catch (err) {
+      showToast(err instanceof ApiClientError ? err.message : "Gagal menandai penarikan selesai", "error")
+    } finally {
+      setProcessingId(null)
+    }
   }
 
   const statusColorMap: Record<WithdrawStatus, string> = {
@@ -180,8 +221,8 @@ export function AdminWithdraw() {
                   </div>
                   {withdrawal.status === 'pending' && (
                     <div className="flex gap-2 mt-3 pt-3 border-t border-border/50">
-                      <PrimaryButton size="sm" className="flex-1 h-8 text-xs rounded-lg" onClick={() => handleApprove(withdrawal.id)}>
-                        <Check className="w-3 h-3 mr-1" /> Approve
+                      <PrimaryButton size="sm" className="flex-1 h-8 text-xs rounded-lg" onClick={() => handleApprove(withdrawal.id)} disabled={processingId === withdrawal.id}>
+                        {processingId === withdrawal.id ? <InlineSpinner className="w-3 h-3 mr-1" /> : <Check className="w-3 h-3 mr-1" />} Approve
                       </PrimaryButton>
                       <Button variant="outline" size="sm" className="flex-1 h-8 text-xs rounded-lg text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20" onClick={() => setShowRejectModal(withdrawal.id)}>
                         <X className="w-3 h-3 mr-1" /> Reject
@@ -190,8 +231,8 @@ export function AdminWithdraw() {
                   )}
                   {withdrawal.status === 'approved' && (
                     <div className="mt-3 pt-3 border-t border-border/50">
-                      <Button size="sm" className="w-full h-8 text-xs rounded-lg bg-blue-500 hover:bg-blue-600 text-white" onClick={() => handleMarkCompleted(withdrawal.id)}>
-                        <Check className="w-3 h-3 mr-1" /> Tandai Selesai Transfer
+                      <Button size="sm" className="w-full h-8 text-xs rounded-lg bg-blue-500 hover:bg-blue-600 text-white" onClick={() => handleMarkCompleted(withdrawal.id)} disabled={processingId === withdrawal.id}>
+                        {processingId === withdrawal.id ? <InlineSpinner className="w-3 h-3 mr-1" /> : <Check className="w-3 h-3 mr-1" />} Tandai Selesai Transfer
                       </Button>
                     </div>
                   )}

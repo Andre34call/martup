@@ -28,6 +28,15 @@ export async function GET(
 
     const deposit = await db.deposit.findUnique({
       where: { id: depositId },
+      include: {
+        platformBankAccount: {
+          select: {
+            bankName: true,
+            accountNumber: true,
+            accountHolder: true,
+          },
+        },
+      },
     })
 
     if (!deposit) {
@@ -52,7 +61,9 @@ export async function GET(
       status: deposit.status,
       proofUrl: deposit.proofUrl,
       adminNote: deposit.adminNote,
-      destinationAccount: deposit.destinationAccount,
+      platformBankAccount: deposit.platformBankAccount
+        ? { bankName: deposit.platformBankAccount.bankName, accountNumber: deposit.platformBankAccount.accountNumber, accountHolder: deposit.platformBankAccount.accountHolder }
+        : null,
       senderName: deposit.senderName,
       expiredAt: deposit.expiredAt?.toISOString() || null,
       createdAt: deposit.createdAt.toISOString(),

@@ -311,6 +311,45 @@ Work Log:
 The codebase demonstrates strong security architecture — HMAC tokens, tokenVersion-based session invalidation, server-side price computation, proper CSRF, comprehensive role hierarchy, and atomic financial transactions. The critical blockers are operational (secrets in git, missing Sentry, no distributed rate limiting) rather than code-level vulnerabilities.
 
 ---
+Task ID: 5-b
+Agent: Security Fix Agent
+Task: Fix critical security issues in MartUp e-commerce application
+
+Work Log:
+1. **Proxy fail-open → fail-closed** (src/proxy.ts)
+   - Changed catch block from `NextResponse.next()` to `NextResponse.json({ success: false, error: 'Internal security error' }, { status: 500 })`
+   - A broken proxy now blocks requests instead of letting them bypass all security checks (CSRF, rate limiting, etc.)
+
+2. **Confirm-payment URL validation** (src/app/api/orders/[id]/confirm-payment/route.ts)
+   - Added Supabase URL validation for proofUrl (same pattern as wallet/deposits/[id]/proof/route.ts)
+   - Validates NEXT_PUBLIC_SUPABASE_URL is configured, checks URL format with `new URL()`, rejects non-Supabase URLs
+   - Prevents SSRF/XSS via javascript:, data:, or arbitrary URLs in payment proof
+
+3. **CSRF on admin/products** (src/app/api/admin/products/route.ts)
+   - Added `validateCsrfRequest` import from `@/lib/csrf`
+   - Added CSRF validation to both PUT and DELETE handlers before processing requests
+
+4. **Seller products: removed 'blocked' from allowed statuses** (src/app/api/seller/products/route.ts)
+   - Changed `['active', 'draft', 'blocked']` to `['active', 'draft']` in PUT handler status validation
+   - Sellers can no longer set their own products to 'blocked' status (admin-only operation)
+
+5. **Deposit amount comparison: String() instead of Number()** (src/app/api/payment/notification/route.ts)
+   - Changed `Number(gross_amount) !== Number(deposit.amount)` to `String(gross_amount) !== String(deposit.amount)`
+   - Updated log fields to use `String()` for expectedAmount/receivedAmount
+   - Prevents floating-point precision loss that could allow amount manipulation
+
+6. **Admin init CSRF exemption removal** (src/lib/csrf.ts)
+   - Removed `/api/admin/init` from `CSRF_EXEMPT_PATHS`
+   - Admin init endpoint now requires CSRF protection like other authenticated admin endpoints
+
+7. **Order status: division admin inclusion** (src/lib/order-status.ts + src/app/api/orders/[id]/route.ts)
+   - Imported `isElevatedRole` from `@/lib/auth-middleware` in both files
+   - Changed `['admin', 'manager'].includes(authUserRole)` to `isElevatedRole(authUserRole)`
+   - Division admin roles (finance, pr, tech, cs, marketing, operations, legal, hr) now have proper admin access for order status operations
+
+Lint result: 0 new errors on changed files. Pre-existing errors in test-login-api.cjs (unrelated).
+
+---
 Task ID: 1
 Agent: Explore
 Task: Audit frontend screens completeness
@@ -1590,3 +1629,441 @@ Stage Summary:
 - All Sprint 1 critical items now complete (SUPER_ADMIN_EMAIL, deposit ownership, dead code, CSRF, secret separation)
 - Storage buckets need to be created on Vercel after deployment (POST /api/setup/storage)
 - Remaining: Resend email (needs account), Google OAuth redirect URI (needs Google Console setup), Midtrans production (deferred)
+---
+Task ID: 4
+Agent: Bug Hunt
+Task: Bug hunt production crashes — runtime errors, unhandled edge cases, code that will break
+
+Work Log:
+- Read and analyzed 30+ source files: checkout screen, cart screen, product detail, order screen, seller screens, all Zustand stores, order creation API, wallet debit/withdraw APIs, payment create/notification APIs, order-status utility, validations, types, Prisma schema, decimal-utils, user delete route, admin deposits route
+- Found 12 production-crashing or data-corrupting bugs across frontend and backend
+
+# =====================================================================
+# BUG HUNT REPORT — 12 BUGS FOUND
+# =====================================================================
+
+## BUG 1: CRASH — `order.address` is null for service orders
+- **Severity**: CRITICAL (will crash)
+- **File**: `src/components/ecommerce/order-screen.tsx`, lines 469-477
+- **Code**:
+```tsx
+<p className="text-sm font-semibold text-foreground">{order.address.recipient}</p>
+<span className="text-xs text-muted-foreground">{order.address.phone}</span>
+...
+{order.address.address}, {order.address.city}, {order.address.province} {order.address.postalCode}
+```
+- **Problem**: The TypeScript type `Order.address` is defined as `Address` (non-optional) in `src/lib/types.ts` line 153, but the Prisma schema has `addressId String?` (nullable). Service orders (all jasa products) have no shipping address. The API may return orders without an address relation. Any access to `order.address.recipient` etc. will throw `TypeError: Cannot read properties of null`.
+- **Also in**: `src/lib/store/order.ts` line 67 — `address: raw.address as Order['address']` — unsafe cast that hides the null possibility.
+- **Steps to reproduce**: Create an order for a jasa (service) product with no address. View the order detail page → crash.
+- **Suggested fix**:
+  1. Change `Order.address` type to `Address | null` in `src/lib/types.ts`
+  2. Add null checks in OrderDetail component: `{order.address && (...)}`
+  3. In `mapServerOrder`, handle null: `address: raw.address as Order['address'] || undefined`
+
+## BUG 2: RACE CONDITION — Stock can go negative
+- **Severity**: HIGH (data corruption)
+- **File**: `src/app/api/orders/route.ts`, lines 586-598
+- **Code**:
+```typescript
+await tx.product.update({
+  where: { id: item.productId },
+  data: {
+    sold: { increment: item.quantity },
+    stock: { decrement: item.quantity },
+  },
+})
+```
+- **Problem**: The stock validation at line 386 (`product.stock < item.quantity`) is a simple read, not a conditional update. Two concurrent order creation requests can both pass the read check and then both decrement stock, resulting in negative stock. Prisma's `decrement` operator has no minimum guard.
+- **Steps to reproduce**: Two buyers simultaneously order the last item of a product. Both requests pass the stock check (stock=1), both decrement → stock=-1.
+- **Suggested fix**: Use `updateMany` with a WHERE condition:
+```typescript
+const result = await tx.product.updateMany({
+  where: { id: item.productId, stock: { gte: item.quantity } },
+  data: { sold: { increment: item.quantity }, stock: { decrement: item.quantity } },
+})
+if (result.count === 0) throw new Error(`Stok habis untuk produk "${item.productId}"`)
+```
+- **Same issue for variant stock** at lines 593-597.
+
+## BUG 3: WRONG PRICE — `getItemPrice` treats variant price 0 as falsy
+- **Severity**: HIGH (wrong price displayed/charged)
+- **File**: `src/lib/store/cart.ts`, line 55
+- **Code**:
+```typescript
+function getItemPrice(item: CartItem): number {
+  return item.variant?.price || item.product.discountPrice || item.product.price
+}
+```
+- **Problem**: JavaScript's `||` operator treats `0` as falsy. If a variant has `price: 0` (meaning "no additional cost — same as base price"), the `||` will skip it and fall through to `discountPrice` or `price`. This causes the cart total to be incorrect — it would add the base price ON TOP of the variant price instead of using the variant price.
+- **Steps to reproduce**: Create a product variant with price=0 (no extra charge). Add it to cart. Cart total uses `product.discountPrice || product.price` instead of `0`.
+- **Suggested fix**: Use nullish coalescing instead:
+```typescript
+function getItemPrice(item: CartItem): number {
+  return item.variant?.price ?? item.product.discountPrice ?? item.product.price
+}
+```
+
+## BUG 4: CRASH — Cart totalAmount can go negative
+- **Severity**: MEDIUM (wrong display, no crash but shows negative price)
+- **File**: `src/components/ecommerce/cart-screen.tsx`, line 241
+- **Code**:
+```typescript
+const totalAmount = checkedTotal - voucherDiscount + platformFee
+```
+- **Problem**: Unlike the checkout screen (which uses `Math.max(0, ...)`), the cart screen doesn't cap totalAmount at 0. If voucherDiscount > checkedTotal, totalAmount becomes negative. This displays a negative price to the user.
+- **Steps to reproduce**: Apply a voucher with high value (e.g., 50% off on a cheap item) where the discount exceeds the subtotal.
+- **Suggested fix**:
+```typescript
+const totalAmount = Math.max(0, checkedTotal - voucherDiscount + platformFee)
+```
+
+## BUG 5: DOUBLE API CALL — Order confirm delivered and cancel fire TWO API calls
+- **Severity**: HIGH (potential race condition / double-processing)
+- **File**: `src/components/ecommerce/order-screen.tsx`, lines 166 and 244
+- **Code** (confirm delivered):
+```typescript
+updateOrderStatus(order.id, "delivered")
+apiClient.rawPut(`/api/orders/${order.id}/status`, { status: 'delivered' }).catch(() => {})
+```
+- **Code** (cancel):
+```typescript
+cancelOrder(order.id)
+apiClient.rawPost(`/api/orders/${order.id}/cancel`, { reason: 'Dibatalkan oleh pembeli' }).catch(() => {})
+```
+- **Problem**: Both `updateOrderStatus()` and the direct API call update the same order status. `updateOrderStatus()` (in `src/lib/store/order.ts`) already calls `/api/orders/${orderId}/status`. This means the status update API is called TWICE for every confirm/cancel action. The second call may fail with "invalid status transition" since the first already moved the order, and the `.catch(() => {})` silently swallows the error. More critically, if the two calls race, it could trigger double refund/stock-restore logic.
+- **Steps to reproduce**: Click "Terima" (confirm delivered) on a shipped order. Check network tab — two PUT requests to `/api/orders/[id]/status`.
+- **Suggested fix**: Remove the direct API calls — `updateOrderStatus()` and `cancelOrder()` already handle the API sync with rollback. The duplicate calls should be deleted.
+
+## BUG 6: HIGH — `sold` count can go negative on cancellation
+- **Severity**: HIGH (data corruption)
+- **File**: `src/lib/order-status.ts`, lines 381-386
+- **Code**:
+```typescript
+await tx.product.update({
+  where: { id: item.productId },
+  data: {
+    stock: { increment: item.quantity },
+    sold: { decrement: item.quantity },
+  },
+})
+```
+- **Problem**: Prisma's `decrement` has no minimum guard. If `sold` is 0 (e.g., from a data migration or a race condition where the `sold` increment from the original order hasn't committed yet), decrementing makes it negative. Negative sold counts would display incorrectly.
+- **Suggested fix**: Add a guard:
+```typescript
+await tx.product.update({
+  where: { id: item.productId },
+  data: {
+    stock: { increment: item.quantity },
+    sold: { decrement: Math.min(item.quantity, productSold) },
+  },
+})
+```
+Or better, fetch current sold value first and cap it.
+
+## BUG 7: HIGH — Deposit status enum mismatch can cause double wallet credit
+- **Severity**: HIGH (double crediting wallet balance)
+- **Files**: `src/app/api/payment/notification/route.ts` line 459 vs `src/app/api/admin/deposits/route.ts` line 128
+- **Code** (Midtrans webhook idempotency check):
+```typescript
+if (deposit.status === 'success') { // line 459
+  // skip — already processed
+```
+- **Code** (Admin deposit approval check):
+```typescript
+if (deposit.status !== 'pending' && deposit.status !== 'proof_uploaded') { // line 128
+  throw new Error(`ALREADY_PROCESSED:${deposit.status}`)
+}
+```
+- **Problem**: The Midtrans webhook sets deposit status to `'success'` (line 478-479 of notification handler). The admin deposit action checks for `'pending'` or `'proof_uploaded'`. If a deposit is already `'success'` from Midtrans, the admin endpoint correctly rejects it. BUT the idempotency check in the webhook uses `deposit.status === 'success'`, while the Prisma schema comment says status values are `pending, verified, failed`. If an admin manually verifies a deposit (setting status to `'verified'` instead of `'success'`), the Midtrans webhook idempotency check would NOT catch it (`'verified' !== 'success'`), and the wallet would be credited AGAIN. This results in double crediting.
+- **Steps to reproduce**: 1) Admin manually approves a deposit (status='verified'). 2) Midtrans webhook arrives for the same deposit. 3) Check `deposit.status === 'success'` fails (it's 'verified'). 4) Wallet credited again.
+- **Suggested fix**: Check for terminal states instead of exact match:
+```typescript
+if (deposit.status === 'success' || deposit.status === 'verified') {
+  return NextResponse.json({ success: true, message: 'Deposit already processed' })
+}
+```
+
+## BUG 8: HIGH — Concurrent withdrawals can result in negative wallet balance
+- **Severity**: HIGH (data corruption — balance goes negative)
+- **File**: `src/app/api/wallet/withdraw/route.ts`, lines 114-119
+- **Code**:
+```typescript
+const updatedWallet = await tx.wallet.update({
+  where: { id: wallet.id },
+  data: {
+    balance: { decrement: amount },
+    holdBalance: { increment: amount },
+  },
+})
+```
+- **Problem**: Same pattern as Bug 2. The balance check at line 109 is a simple read. Two concurrent withdrawal requests can both pass the check and both decrement the balance. Result: negative balance. Unlike the wallet debit endpoint (which has idempotency + re-fetch), the withdraw endpoint relies on a simple read-check-then-update pattern.
+- **Suggested fix**: Use conditional update:
+```typescript
+const result = await tx.wallet.updateMany({
+  where: { id: wallet.id, balance: { gte: amount } },
+  data: { balance: { decrement: amount }, holdBalance: { increment: amount } },
+})
+if (result.count === 0) throw new Error('Saldo tidak mencukupi')
+```
+
+## BUG 9: HIGH — `addressId` required by validation but nullable in schema for service orders
+- **Severity**: HIGH (service orders can't be created via API)
+- **File**: `src/lib/validations.ts`, line 161
+- **Code**:
+```typescript
+addressId: z.string().min(1, 'addressId wajib diisi'),
+```
+- **Problem**: The Prisma schema allows `addressId String?` (nullable) for service orders (no shipping needed). But the Zod validation requires a non-empty string. This means the API cannot create service orders without an address, even though the database supports it. The checkout screen always sends an address, so this doesn't crash currently, but it prevents future jasa (service) product checkout flow.
+- **Suggested fix**:
+```typescript
+addressId: z.string().min(1, 'addressId wajib diisi').nullable().optional(),
+```
+
+## BUG 10: MEDIUM — `mapServerOrder` unsafely casts address
+- **Severity**: MEDIUM (hidden null that causes crashes later)
+- **File**: `src/lib/store/order.ts`, line 67
+- **Code**:
+```typescript
+address: raw.address as Order['address'],
+```
+- **Problem**: This cast hides the fact that `raw.address` could be null/undefined. The TypeScript type says `Address` (non-optional), so no null checks are added downstream. But API responses from list endpoints may not include the address relation at all.
+- **Suggested fix**: Map carefully with fallback:
+```typescript
+address: raw.address ? (map fields...) : undefined,
+```
+And update `Order.address` type to `Address | undefined`.
+
+## BUG 11: MEDIUM — Order number collision under concurrency
+- **Severity**: MEDIUM (500 error instead of graceful retry)
+- **File**: `src/app/api/orders/route.ts`, line 359
+- **Code**:
+```typescript
+const orderNumber = `ORD-${Date.now()}-${String(orderCount + 1).padStart(5, '0')}`
+```
+- **Problem**: `Date.now()` has millisecond precision. Two concurrent requests could get the same timestamp. `orderCount` is read before the transaction, so both requests read the same count. The `orderNumber` has a `@unique` constraint, so the second INSERT fails with a unique violation → 500 error.
+- **Suggested fix**: Use a more unique identifier like `cuid()` or add a random suffix:
+```typescript
+const orderNumber = `ORD-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`
+```
+
+## BUG 12: MEDIUM — No `sellerId` validation against products in order creation
+- **Severity**: MEDIUM (potential misattribution, but requires direct API abuse)
+- **File**: `src/app/api/orders/route.ts`, lines 513-517
+- **Problem**: The client provides `sellerId` in the request body. The API uses it directly when creating the order. There's NO validation that the products in the order actually belong to this seller. A malicious API call could create an order with `sellerId: <attacker-seller-id>` and products from a different seller, causing seller payouts to go to the wrong seller.
+- **Mitigation**: The server recomputes all prices from the DB (products can't be spoofed). And the items include `productId` which the server fetches from DB. But the `sellerId` on the order record is trusted from the client.
+- **Suggested fix**: After fetching all products inside the transaction, verify they all belong to the provided sellerId:
+```typescript
+const productSellerIds = new Set(serverItems.map(i => fetchedProducts[i.productId].sellerId))
+if (productSellerIds.size !== 1 || !productSellerIds.has(sellerId)) {
+  throw new Error('Produk tidak sesuai dengan seller')
+}
+```
+
+# =====================================================================
+# BUG SEVERITY SUMMARY
+# =====================================================================
+
+| # | Severity | Bug | File |
+|---|----------|-----|------|
+| 1 | CRITICAL | order.address null crash | order-screen.tsx:469 |
+| 2 | HIGH | Stock goes negative (race condition) | orders/route.ts:586 |
+| 3 | HIGH | Variant price 0 treated as falsy | store/cart.ts:55 |
+| 4 | MEDIUM | Cart totalAmount goes negative | cart-screen.tsx:241 |
+| 5 | HIGH | Double API call for order actions | order-screen.tsx:166,244 |
+| 6 | HIGH | sold count goes negative | order-status.ts:385 |
+| 7 | HIGH | Deposit double-credit from status mismatch | payment/notification + admin/deposits |
+| 8 | HIGH | Wallet balance goes negative (race) | wallet/withdraw/route.ts:114 |
+| 9 | HIGH | addressId required but nullable for service orders | validations.ts:161 |
+| 10 | MEDIUM | mapServerOrder unsafe cast | store/order.ts:67 |
+| 11 | MEDIUM | Order number collision | orders/route.ts:359 |
+| 12 | MEDIUM | No sellerId validation against products | orders/route.ts:513 |
+
+**CRITICAL**: 1 bug (will crash the app)
+**HIGH**: 7 bugs (data corruption or broken features)
+**MEDIUM**: 4 bugs (wrong behavior or edge cases)
+
+# =====================================================================
+# RECOMMENDED FIX PRIORITY
+# =====================================================================
+
+**Fix immediately (will crash/corrupt data)**:
+1. Bug 1: Add null check for `order.address` in OrderDetail component
+2. Bug 2: Change `product.update` to `product.updateMany` with stock WHERE condition
+3. Bug 3: Change `||` to `??` in getItemPrice
+4. Bug 8: Same fix as Bug 2 for wallet balance
+
+**Fix before launch**:
+5. Bug 5: Remove duplicate API calls in order actions
+6. Bug 7: Add 'verified' to deposit terminal state check in webhook
+7. Bug 6: Cap sold decrement at current sold value
+8. Bug 9: Make addressId optional in createOrderSchema
+
+**Fix when convenient**:
+9. Bug 4: Add Math.max(0, ...) to cart totalAmount
+10. Bug 10: Make Order.address optional and handle null
+11. Bug 11: Use more unique order number generation
+12. Bug 12: Validate sellerId matches products
+
+---
+Task ID: 5-c
+Agent: Financial Bug Fix Agent
+Task: Fix financial race conditions and logic bugs
+
+Work Log:
+
+1. **Stock goes negative under concurrent orders** (src/app/api/orders/route.ts)
+   - Changed `tx.product.update()` to `tx.product.updateMany()` with `where: { id: productId, stock: { gte: qty } }` condition
+   - If `updateResult.count === 0`, throws `'Stok tidak mencukupi'` — prevents stock from going negative even under concurrent transactions
+   - Also applied same fix to product variant stock decrement
+
+2. **Wallet balance goes negative under concurrent withdrawals** (src/app/api/wallet/withdraw/route.ts)
+   - Changed `tx.wallet.update()` to `tx.wallet.updateMany()` with `where: { id: wallet.id, balance: { gte: amount } }` condition
+   - If `updateResult.count === 0`, throws `'Saldo tidak mencukupi'` — prevents balance going negative under concurrent withdrawal requests
+   - Added re-fetch of wallet after atomic update to get correct balance for the mutation record
+
+3. **Sold count goes negative on order cancellation** (src/lib/order-status.ts)
+   - Replaced `sold: { decrement: quantity }` (which can go negative) with raw SQL:
+     `UPDATE "Product" SET sold = GREATEST(sold - ${quantity}, 0) WHERE id = ${productId}`
+   - This ensures sold count never drops below 0 even if there's a data inconsistency
+
+4. **Verify sellerId matches product owners in order creation** (src/app/api/orders/route.ts)
+   - Added `sellerId: true` to the product select inside the transaction
+   - Added `sellerId` field to the `serverItems` array type and populated it from fetched products
+   - After the item loop, added check: `serverItems.filter(si => si.sellerId !== sellerId)`
+   - Throws `'Produk tidak sesuai dengan seller'` if any product doesn't belong to the specified seller
+
+5. **Double escrow release — consistent refType** (src/lib/order-status.ts)
+   - Changed `refType: 'order'` to `refType: 'order_release'` in the delivered status wallet mutation
+   - Now matches the auto-complete cron job which already uses `'order_release'`
+   - This enables proper idempotency checks across both code paths
+
+6. **Seller payout idempotency in wallet/debit** (src/app/api/wallet/debit/route.ts)
+   - Added `walletMutation.findFirst` check before crediting seller's pendingBalance
+   - Checks for existing credit with `walletId`, `type: 'credit'`, `refType: 'order'`, `refId: orderId`
+   - If already credited, skips the entire seller payout (pendingBalance increment + wallet mutation + commission transaction)
+   - Prevents double payout if the debit endpoint is called multiple times for the same order
+   - Removed duplicate commission transaction code that was outside the idempotency check
+
+Lint result: 0 new errors on changed files. Pre-existing errors in test-login-api.cjs (unrelated) and warnings in auth.ts (unrelated).
+
+Files changed:
+- src/app/api/orders/route.ts
+- src/app/api/wallet/withdraw/route.ts
+- src/lib/order-status.ts
+- src/app/api/wallet/debit/route.ts
+
+---
+Task ID: 5-d
+Agent: Frontend Bug Fix Agent
+Task: Fix 7 critical frontend bugs in MartUp e-commerce application
+
+Work Log:
+
+1. **Admin Withdraw — Add API call** (src/components/ecommerce/admin/withdraw.tsx)
+   - Added `apiClient` and `ApiClientError` imports, plus `InlineSpinner` and `handleApiError`
+   - Changed `handleApprove` from sync to async; now calls `PUT /api/admin/withdrawals` with `{ withdrawalId, status: 'approved' }` before updating local state
+   - Changed `handleReject` confirm action to async; now calls `PUT /api/admin/withdrawals` with `{ withdrawalId, status: 'rejected', adminNote }` before updating local state
+   - Changed `handleMarkCompleted` from sync to async; now calls `PUT /api/admin/withdrawals` with `{ withdrawalId, status: 'completed' }` before updating local state
+   - Added `processingId` state to track which withdrawal is being processed
+   - Added loading spinners on approve/completed buttons when processing
+   - On API failure, shows error toast and does NOT update local Zustand state
+   - Pattern matches existing admin/deposits implementation
+
+2. **Order Screen — Remove duplicate API calls** (src/components/ecommerce/order-screen.tsx)
+   - Removed `apiClient.rawPut('/api/orders/${order.id}/status', { status: 'delivered' })` from OrderCard secondary button (shipped→delivered) — `updateOrderStatus` already makes this API call
+   - Removed `apiClient.rawPut` from OrderDetail "Konfirmasi Diterima" button — same reason
+   - Removed `apiClient.rawPost('/api/orders/${order.id}/cancel', ...)` from both cancel dialogs (OrderCard and OrderDetail) — `cancelOrder` already makes this API call
+   - Removed all "BUG 19 FIX" comments that were associated with the duplicate calls
+   - `apiClient` import retained (still used for bank accounts, upload, confirm-payment)
+
+3. **Cart stale rollback** (src/lib/store/cart.ts)
+   - Moved `const previousItems = get().items` to BEFORE the optimistic update in `addItem`
+   - Previously it was captured AFTER `set(optimisticUpdate)`, meaning rollback would restore to the already-updated state instead of the pre-update state
+   - Also changed the `existing` lookup and `optimisticUpdate` to use `previousItems` instead of `get().items`
+
+4. **Hardcoded seller ID mapping** (src/components/ecommerce/seller-withdraw-screens.tsx)
+   - Replaced the hardcoded `sellerMapping` object (`{ 'u2': 's1', 'u3': 's2', ... }`) with `useAppStore((s) => s.seller?.id) || 's1'`
+   - Now reads seller ID directly from the Zustand store instead of maintaining a fragile hardcoded mapping
+
+5. **Variant price 0 treated as falsy** (src/lib/store/cart.ts)
+   - Changed `item.variant?.price || item.product.discountPrice || item.product.price` to `item.variant?.price ?? item.product.discountPrice ?? item.product.price`
+   - Using nullish coalescing (`??`) ensures that a variant price of `0` is respected instead of falling through to discountPrice/price
+
+6. **Order address null guard** (src/components/ecommerce/order-screen.tsx)
+   - Wrapped the entire Shipping Address section with `{order.address && (...)}` in OrderDetail
+   - Prevents runtime error when `order.address` is null/undefined (can happen with some order types or incomplete data from list API)
+
+7. **deleteAccount type mismatch** (src/lib/store/types.ts)
+   - Changed `deleteAccount: () => void` to `deleteAccount: () => Promise<void>` in AuthSlice interface
+   - The actual implementation in `src/lib/store/auth.ts` was already async (`deleteAccount: async () => { ... }`), so the type was wrong
+
+Lint result: 0 new errors on all changed files. Pre-existing errors in test-login-api.cjs (unrelated).
+
+Files changed:
+- src/components/ecommerce/admin/withdraw.tsx
+- src/components/ecommerce/order-screen.tsx
+- src/lib/store/cart.ts
+- src/components/ecommerce/seller-withdraw-screens.tsx
+- src/lib/store/types.ts
+
+---
+Task ID: 5-a
+Agent: TypeScript Fix Agent
+Task: Fix TypeScript compilation errors in MartUp e-commerce application
+
+Work Log:
+
+### Group 1: Deposit model missing fields
+- Added `expiredAt` (DateTime?), `midtransOrderId` (String? @unique), `snapToken` (String?), `paymentType` (String?), `midtransTransactionId` (String?) to Deposit model in prisma/schema.prisma
+- Ran `bunx prisma generate` to regenerate Prisma client
+
+### Group 2: Order field name mismatches
+- `src/app/api/orders/[id]/confirm-payment/route.ts`: Changed `paymentProof` → `paymentProofUrl`, removed `paymentBankName` from update data and response
+- `src/app/api/orders/[id]/payment-proof/route.ts`: Changed `paymentProof` → `paymentProofUrl` in update, select, and response; fixed `platformBankAccount` reference in GET response
+
+### Group 3: Deposit destinationAccount — replaced with platformBankAccount relation
+- `src/app/api/wallet/deposit/route.ts`: Removed `destinationAccount` from deposit create data
+- `src/app/api/wallet/topup/route.ts`: Same fix
+- `src/app/api/admin/deposits/route.ts`: Replaced `destinationAccount` mapping with `platformBankAccount` relation (added include)
+- `src/app/api/wallet/deposits/route.ts`: Same fix (added include for platformBankAccount)
+- `src/app/api/wallet/deposits/[id]/route.ts`: Same fix (added include for platformBankAccount)
+- `src/app/api/wallet/deposits/[id]/proof/route.ts`: `expiredAt` now works after schema update
+
+### Group 4: StockLog model doesn't exist
+- `src/app/api/admin/stock-logs/route.ts`: Rewrote to return 501 (not implemented) instead of crashing
+- `src/lib/stock-utils.ts`: Made `logStockChange` and `logStockChangeInTx` return gracefully with warning logs instead of calling `db.stockLog`
+
+### Group 5: Null vs undefined in reviews
+- `src/app/api/admin/reviews/route.ts`: Added `?? undefined` and early return for null productId in PUT/DELETE handlers
+- `src/app/api/reviews/route.ts`: Added `?? undefined` for productId in aggregate/update where clauses, added null guard for DELETE
+- `src/app/api/reviews/reply/route.ts`: Added null check for `review.product` before accessing sellerId, used `?? ''` for userId, used `?.` for product name
+
+### Group 6: wallet/withdraw broken import and ZodString bug
+- `src/app/api/wallet/withdraw/route.ts`: Removed `checkRateLimit` from import (doesn't exist), added inline rate limiter using globalThis Map
+- Fixed `.replace()` on ZodString by using `.transform(v => v.replace(...))` instead
+
+### Group 7: checkout-screen.tsx address type
+- `src/lib/types.ts`: Changed `address: Address` to `address?: Address` in Order interface
+- `src/components/ecommerce/seller/seller-orders.tsx`: Changed `o.address.recipient` to `o.address?.recipient ?? '-'`
+
+### Verification
+- `npx tsc --noEmit` passes with 0 errors
+- `bun run lint` shows only pre-existing errors (test-login-api.cjs require imports) and warnings (auth.ts unused eslint-disable directives) — no new errors introduced
+
+### Files Changed (16 files):
+1. prisma/schema.prisma
+2. src/app/api/orders/[id]/confirm-payment/route.ts
+3. src/app/api/orders/[id]/payment-proof/route.ts
+4. src/app/api/wallet/deposit/route.ts
+5. src/app/api/wallet/topup/route.ts
+6. src/app/api/admin/deposits/route.ts
+7. src/app/api/wallet/deposits/route.ts
+8. src/app/api/wallet/deposits/[id]/route.ts
+9. src/app/api/admin/stock-logs/route.ts
+10. src/lib/stock-utils.ts
+11. src/app/api/admin/reviews/route.ts
+12. src/app/api/reviews/route.ts
+13. src/app/api/reviews/reply/route.ts
+14. src/app/api/wallet/withdraw/route.ts
+15. src/lib/types.ts
+16. src/components/ecommerce/seller/seller-orders.tsx

@@ -570,17 +570,8 @@ export function SellerWithdrawHistoryScreen() {
   const { withdrawRequests, currentUser } = useAppStore()
   const [activeTab, setActiveTab] = useState<"all" | "pending" | "completed" | "rejected">("all")
 
-  // Derive sellerId from currentUser
-  const sellerId = useMemo(() => {
-    const sellerMapping: Record<string, string> = {
-      'u2': 's1', // Gadget Pro Store
-      'u3': 's2', // Fashion Hub
-      'u4': 's3', // Beauty Corner
-      'u5': 's4', // Home Living ID
-      'u6': 's5', // Sport Zone
-    }
-    return sellerMapping[currentUser?.id || ''] || 's1'
-  }, [currentUser])
+  // Derive sellerId from store
+  const sellerId = useAppStore((s) => s.seller?.id) || 's1'
 
   // Only show current seller's withdraw requests
   const myRequests = withdrawRequests.filter(w => w.sellerId === sellerId)

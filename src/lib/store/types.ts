@@ -21,7 +21,7 @@ export interface AuthSlice {
   login: (user: User & { isSuperAdmin?: boolean }) => void
   logout: () => Promise<void>
   switchRole: (role: UserRole) => Promise<void>
-  deleteAccount: () => void
+  deleteAccount: () => Promise<void>
 }
 
 export interface SelectionSlice {

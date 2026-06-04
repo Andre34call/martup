@@ -442,12 +442,13 @@ async function handleDepositNotification({
   }
 
   // SECURITY: Verify gross_amount matches deposit amount
-  if (Number(gross_amount) !== Number(deposit.amount)) {
+  // Use string comparison to avoid floating-point precision loss with Number()
+  if (String(gross_amount) !== String(deposit.amount)) {
     logger.error({
       depositId: deposit.id,
       midtransOrderId: order_id,
-      expectedAmount: Number(deposit.amount),
-      receivedAmount: Number(gross_amount),
+      expectedAmount: String(deposit.amount),
+      receivedAmount: String(gross_amount),
     }, 'Midtrans deposit notification: gross_amount does not match deposit amount')
     return NextResponse.json(
       { success: false, error: 'Amount mismatch' },

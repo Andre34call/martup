@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { verifyAuth, checkRateLimit, authErrorResponse } from '@/lib/auth-middleware'
+import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
 import { logger, logBusinessEvent } from '@/lib/logger'
 import { createWorkItemFromEntity } from '@/lib/workflow'
@@ -16,7 +16,7 @@ const withdrawSchema = z.object({
   amount: z.number().positive('Jumlah penarikan harus lebih dari 0'),
   bankAccount: z.string().min(5, 'Nomor rekening minimal 5 karakter').max(30, 'Nomor rekening maksimal 30 karakter').trim(),
   bankName: z.string().min(2, 'Nama bank minimal 2 karakter').max(50, 'Nama bank maksimal 50 karakter').trim(),
-  bankHolder: z.string().min(2, 'Nama pemilik rekening minimal 2 karakter').max(100, 'Nama pemilik rekening maksimal 100 karakter').trim().replace(/[<>"'&]/g, ''),
+  bankHolder: z.string().min(2, 'Nama pemilik rekening minimal 2 karakter').max(100, 'Nama pemilik rekening maksimal 100 karakter').trim().transform(v => v.replace(/[<>"'&]/g, '')),
 })
 
 export async function POST(request: NextRequest) {
@@ -27,12 +27,23 @@ export async function POST(request: NextRequest) {
       return authErrorResponse(authResult)
     }
 
-    // SECURITY: Rate limit — 3 withdrawal requests per minute per user
-    if (!checkRateLimit(`withdraw:${authResult.user.id}`, 3)) {
-      return NextResponse.json(
-        { success: false, error: 'Terlalu banyak request. Coba lagi dalam 1 menit.' },
-        { status: 429 }
-      )
+    // SECURITY: Simple rate limit — 3 withdrawal requests per minute per user
+    const rateLimitKey = `withdraw:${authResult.user.id}`
+    const now = Date.now()
+    const rateLimitMap = (globalThis as Record<string, unknown>).__withdrawRateLimit as Map<string, { count: number; resetAt: number }> | undefined
+    const rlMap = rateLimitMap || new Map<string, { count: number; resetAt: number }>()
+    ;(globalThis as Record<string, unknown>).__withdrawRateLimit = rlMap
+    const rlEntry = rlMap.get(rateLimitKey)
+    if (rlEntry && rlEntry.resetAt > now) {
+      if (rlEntry.count >= 3) {
+        return NextResponse.json(
+          { success: false, error: 'Terlalu banyak request. Coba lagi dalam 1 menit.' },
+          { status: 429 }
+        )
+      }
+      rlEntry.count++
+    } else {
+      rlMap.set(rateLimitKey, { count: 1, resetAt: now + 60_000 })
     }
 
     // Verify seller account
@@ -110,13 +121,21 @@ export async function POST(request: NextRequest) {
         throw new Error('Saldo tidak mencukupi')
       }
 
-      // Move amount from balance to holdBalance (escrow until admin approves)
-      const updatedWallet = await tx.wallet.update({
-        where: { id: wallet.id },
+      // RACE CONDITION FIX: Use updateMany with balance >= amount to prevent balance going negative
+      const updateResult = await tx.wallet.updateMany({
+        where: { id: wallet.id, balance: { gte: amount } },
         data: {
           balance: { decrement: amount },
           holdBalance: { increment: amount },
         },
+      })
+      if (updateResult.count === 0) {
+        throw new Error('Saldo tidak mencukupi')
+      }
+
+      // Re-fetch wallet to get the updated balance for the mutation record
+      const updatedWallet = await tx.wallet.findUnique({
+        where: { id: wallet.id },
       })
 
       // Create withdrawal record with PENDING status — admin must approve
@@ -137,7 +156,7 @@ export async function POST(request: NextRequest) {
           walletId: wallet.id,
           type: 'debit',
           amount,
-          balance: updatedWallet.balance,
+          balance: updatedWallet!.balance,
           description: `Penarikan dana ke ${resolvedBankName} - ${resolvedBankAccount} (menunggu persetujuan admin)`,
           refType: 'withdraw',
           refId: newWithdrawal.id,

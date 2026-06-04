@@ -358,9 +358,9 @@ export async function PUT(request: NextRequest) {
     }
 
     // Validate status if provided
-    if (status !== undefined && !['active', 'draft', 'blocked'].includes(status)) {
+    if (status !== undefined && !['active', 'draft'].includes(status)) {
       return NextResponse.json(
-        { success: false, error: 'status must be "active", "draft", or "blocked"' },
+        { success: false, error: 'status must be "active" or "draft"' },
         { status: 400 }
       )
     }

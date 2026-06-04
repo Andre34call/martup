@@ -56,10 +56,10 @@ export async function proxy(request: NextRequest) {
   try {
     return await _proxyInner(request)
   } catch (err) {
-    // If the proxy crashes for ANY reason, let the request through.
-    // A broken proxy should never prevent the app from working.
+    // SECURITY: Fail-closed — if the proxy crashes, block the request instead of letting it through.
+    // A broken proxy should never bypass security checks (CSRF, rate limiting, etc.).
     console.error('[PROXY ERROR]', err)
-    return NextResponse.next()
+    return NextResponse.json({ success: false, error: 'Internal security error' }, { status: 500 })
   }
 }
 

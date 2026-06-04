@@ -1,5 +1,6 @@
 import { db } from '@/lib/db'
 import { Prisma } from '@prisma/client'
+import { isElevatedRole } from '@/lib/auth-middleware'
 import { logger } from '@/lib/logger'
 
 // ==================== Valid Status Transitions ====================
@@ -140,7 +141,7 @@ export async function updateOrderStatus(params: {
     select: { id: true },
   })
   const isSeller = seller !== null && order.sellerId === seller.id
-  const isAdmin = ['admin', 'manager'].includes(authUserRole)
+  const isAdmin = isElevatedRole(authUserRole)
 
   // ---- Authorization checks — who can set which status ----
 
@@ -324,6 +325,7 @@ export async function updateOrderStatus(params: {
         })
 
         // Record wallet mutation for seller (credit)
+        // BUG FIX: Use refType 'order_release' for consistency with auto-complete cron
         await tx.walletMutation.create({
           data: {
             walletId: sellerWallet.id,
@@ -331,7 +333,7 @@ export async function updateOrderStatus(params: {
             amount: new Prisma.Decimal(sellerEarnings),
             balance: new Prisma.Decimal(Number(updatedWallet.balance)),
             description: `Pencairan dana pesanan ${order.orderNumber} - ${order.seller.storeName}`,
-            refType: 'order',
+            refType: 'order_release',
             refId: order.id,
           },
         })
@@ -378,13 +380,16 @@ export async function updateOrderStatus(params: {
       if (status === 'cancelled') {
         // Restore product stock for all order items
         for (const item of order.items) {
+          // Restore stock
           await tx.product.update({
             where: { id: item.productId },
             data: {
               stock: { increment: item.quantity },
-              sold: { decrement: item.quantity },
             },
           })
+
+          // BUG FIX: Prevent sold count from going negative using GREATEST
+          await tx.$executeRaw`UPDATE "Product" SET sold = GREATEST(sold - ${item.quantity}, 0) WHERE id = ${item.productId}`
 
           if (item.variantId) {
             await tx.productVariant.update({

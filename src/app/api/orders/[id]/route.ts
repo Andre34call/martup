@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { verifyAuth } from '@/lib/auth-middleware'
+import { verifyAuth, isElevatedRole } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
 import { updateOrderStatus } from '@/lib/order-status'
 
@@ -69,7 +69,7 @@ export async function GET(
     const isBuyer = order.userId === user.id
     const seller = await db.seller.findUnique({ where: { userId: user.id } })
     const isSeller = seller !== null && order.sellerId === seller.id
-    const isAdmin = ['admin', 'manager'].includes(user.role)
+    const isAdmin = isElevatedRole(user.role)
 
     if (!isBuyer && !isSeller && !isAdmin) {
       return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 })

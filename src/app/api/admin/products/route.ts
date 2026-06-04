@@ -4,6 +4,7 @@ import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
 
 import { parseJsonField } from '@/lib/api-utils'
+import { validateCsrfRequest } from '@/lib/csrf'
 import { logger } from '@/lib/logger'
 
 // GET /api/admin/products - Fetch ALL products (including blocked/draft) with seller info
@@ -89,6 +90,12 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   const authResult = await verifyAdmin(request)
   if (!authResult.success) return authErrorResponse(authResult)
+
+  // SECURITY: CSRF protection
+  const csrfResult = await validateCsrfRequest(request)
+  if (!csrfResult.valid) {
+    return NextResponse.json({ success: false, error: 'CSRF validation failed. Silakan refresh halaman dan coba lagi.' }, { status: 403 })
+  }
 
   try {
     const body = await request.json()
@@ -206,6 +213,12 @@ export async function PUT(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   const authResult = await verifyAdmin(request)
   if (!authResult.success) return authErrorResponse(authResult)
+
+  // SECURITY: CSRF protection
+  const csrfResult = await validateCsrfRequest(request)
+  if (!csrfResult.valid) {
+    return NextResponse.json({ success: false, error: 'CSRF validation failed. Silakan refresh halaman dan coba lagi.' }, { status: 403 })
+  }
 
   try {
     const body = await request.json()

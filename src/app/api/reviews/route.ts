@@ -378,12 +378,12 @@ export async function PUT(request: NextRequest) {
 
       // Recalculate product rating
       const stats = await tx.review.aggregate({
-        where: { productId: existingReview.productId },
+        where: { productId: existingReview.productId ?? undefined },
         _avg: { rating: true },
         _count: { id: true },
       })
       await tx.product.update({
-        where: { id: existingReview.productId },
+        where: { id: existingReview.productId ?? '' },
         data: {
           rating: stats._avg.rating ? Math.round(stats._avg.rating * 10) / 10 : 0,
           reviewCount: stats._count.id,
@@ -394,7 +394,7 @@ export async function PUT(request: NextRequest) {
     })
 
     // Recalculate seller rating from their products' ratings (outside transaction to avoid deadlock)
-    const updatedProduct = await db.product.findUnique({ where: { id: existingReview.productId }, select: { sellerId: true } })
+    const updatedProduct = await db.product.findUnique({ where: { id: existingReview.productId ?? '' }, select: { sellerId: true } })
     if (updatedProduct) {
       await recalculateSellerRating(updatedProduct.sellerId)
     }
@@ -463,6 +463,13 @@ export async function DELETE(request: NextRequest) {
     }
 
     const productId = existingReview.productId
+
+    if (!productId) {
+      return NextResponse.json(
+        { success: false, error: 'Review tidak terhubung ke produk' },
+        { status: 400 }
+      )
+    }
 
     // Delete review and recalculate product rating in a transaction
     await db.$transaction(async (tx) => {

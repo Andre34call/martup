@@ -150,7 +150,7 @@ export interface Order {
   paymentBankName?: string
   items: OrderItem[]
   shipping?: Shipping
-  address: Address
+  address?: Address
   seller: Seller
   buyerName?: string
   createdAt: string

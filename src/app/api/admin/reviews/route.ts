@@ -79,12 +79,12 @@ export async function PUT(request: NextRequest) {
 
     // Recalculate product rating (hidden reviews shouldn't count)
     const stats = await db.review.aggregate({
-      where: { productId: review.productId, isHidden: false },
+      where: { productId: review.productId ?? undefined, isHidden: false },
       _avg: { rating: true },
       _count: { id: true },
     })
     await db.product.update({
-      where: { id: review.productId },
+      where: { id: review.productId ?? '' },
       data: {
         rating: stats._avg.rating ?? 0,
         reviewCount: stats._count.id,
@@ -118,6 +118,10 @@ export async function DELETE(request: NextRequest) {
     }
 
     const productId = review.productId
+
+    if (!productId) {
+      return NextResponse.json({ success: false, error: 'Review tidak terhubung ke produk' }, { status: 400 })
+    }
 
     await db.$transaction(async (tx) => {
       await tx.review.delete({ where: { id: reviewId } })

@@ -186,6 +186,11 @@ model Deposit {
   platformBankAccountId String? // FK — which platform bank account the user transferred to
   senderName          String?  // Name of the sender for verification
   senderBank          String?  // Bank the sender transferred from
+  expiredAt           DateTime?
+  midtransOrderId     String?  @unique
+  snapToken           String?
+  paymentType         String?
+  midtransTransactionId String?
   adminNote           String?
   verifiedAt          DateTime?
   verifiedBy          String?   // admin user ID who verified

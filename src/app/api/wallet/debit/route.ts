@@ -216,40 +216,49 @@ export async function POST(request: NextRequest) {
         })
       }
 
-      // Credit seller's pending balance
-      const updatedSellerWallet = await tx.wallet.update({
-        where: { id: sellerWallet.id },
-        data: { pendingBalance: { increment: sellerEarnings } },
+      // IDEMPOTENCY: Check if seller already credited for this order (prevents double payout)
+      const existingSellerCredit = await tx.walletMutation.findFirst({
+        where: { walletId: sellerWallet.id, type: 'credit', refType: 'order', refId: orderId },
       })
 
-      // Create seller wallet mutation (credit)
-      await tx.walletMutation.create({
-        data: {
-          walletId: sellerWallet.id,
-          type: 'credit',
-          amount: sellerEarnings,
-          balance: Number(updatedSellerWallet.balance),
-          description: `Pendapatan dari pesanan ${order.orderNumber} - ${order.seller.storeName}`,
-          refType: 'order',
-          refId: orderId,
-        },
-      })
+      if (existingSellerCredit) {
+        // Already credited — skip seller payout
+      } else {
+        // Credit seller's pending balance
+        const updatedSellerWallet = await tx.wallet.update({
+          where: { id: sellerWallet.id },
+          data: { pendingBalance: { increment: sellerEarnings } },
+        })
 
-      // Create commission transaction
-      if (commissionAmount > 0) {
-        await tx.transaction.create({
+        // Create seller wallet mutation (credit)
+        await tx.walletMutation.create({
           data: {
-            userId: order.seller.userId,
-            type: 'cashback',
-            amount: commissionAmount,
-            fee: 0,
-            netAmount: commissionAmount,
-            method: 'commission',
-            status: 'success',
-            description: `Platform commission (${(commissionRate * 100).toFixed(1)}%) from order ${order.orderNumber}`,
-            refId: order.orderNumber,
+            walletId: sellerWallet.id,
+            type: 'credit',
+            amount: sellerEarnings,
+            balance: Number(updatedSellerWallet.balance),
+            description: `Pendapatan dari pesanan ${order.orderNumber} - ${order.seller.storeName}`,
+            refType: 'order',
+            refId: orderId,
           },
         })
+
+        // Create commission transaction
+        if (commissionAmount > 0) {
+          await tx.transaction.create({
+            data: {
+              userId: order.seller.userId,
+              type: 'cashback',
+              amount: commissionAmount,
+              fee: 0,
+              netAmount: commissionAmount,
+              method: 'commission',
+              status: 'success',
+              description: `Platform commission (${(commissionRate * 100).toFixed(1)}%) from order ${order.orderNumber}`,
+              refId: order.orderNumber,
+            },
+          })
+        }
       }
 
       // 6. Create notifications

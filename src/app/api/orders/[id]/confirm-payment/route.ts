@@ -23,6 +23,29 @@ export async function POST(
       )
     }
 
+    // SECURITY: Validate proofUrl to prevent SSRF/XSS — must be from our Supabase storage
+    // Reject javascript:, data:, and non-Supabase URLs
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    if (!supabaseUrl) {
+      logger.error('NEXT_PUBLIC_SUPABASE_URL not configured — cannot validate proof URLs')
+      return NextResponse.json(
+        { success: false, error: 'Upload bukti pembayaran sedang tidak tersedia' },
+        { status: 503 }
+      )
+    }
+    try { new URL(proofUrl) } catch {
+      return NextResponse.json(
+        { success: false, error: 'URL bukti pembayaran tidak valid' },
+        { status: 400 }
+      )
+    }
+    if (!proofUrl.startsWith(supabaseUrl)) {
+      return NextResponse.json(
+        { success: false, error: 'Bukti pembayaran harus diupload melalui sistem kami' },
+        { status: 400 }
+      )
+    }
+
     if (!bankName || typeof bankName !== 'string' || bankName.trim().length === 0) {
       return NextResponse.json(
         { success: false, error: 'Nama bank pengirim wajib diisi' },
@@ -70,8 +93,7 @@ export async function POST(
     const updated = await db.order.update({
       where: { id: orderId },
       data: {
-        paymentProof: proofUrl.trim(),
-        paymentBankName: bankName.trim().slice(0, 50),
+        paymentProofUrl: proofUrl.trim(),
         paymentStatus: 'pending_verification',
       },
     })
@@ -87,8 +109,7 @@ export async function POST(
       data: {
         id: updated.id,
         paymentStatus: updated.paymentStatus,
-        paymentProof: updated.paymentProof,
-        paymentBankName: updated.paymentBankName,
+        paymentProofUrl: updated.paymentProofUrl,
       },
     })
   } catch (error: unknown) {

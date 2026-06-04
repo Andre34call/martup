@@ -43,7 +43,7 @@ export function SellerOrders() {
       return {
         id: o.id,
         orderNumber: o.orderNumber,
-        buyerName: o.address.recipient,
+        buyerName: o.address?.recipient ?? '-',
         items: o.items.map(i => `${i.productName} x${i.quantity}`).join(', '),
         itemIds: o.items.map(i => i.id),
         amount: o.totalAmount,

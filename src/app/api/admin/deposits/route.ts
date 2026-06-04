@@ -36,6 +36,13 @@ export async function GET(request: NextRequest) {
               avatar: true,
             },
           },
+          platformBankAccount: {
+            select: {
+              bankName: true,
+              accountNumber: true,
+              accountHolder: true,
+            },
+          },
         },
         orderBy: { createdAt: 'desc' },
         skip,
@@ -56,7 +63,9 @@ export async function GET(request: NextRequest) {
       status: d.status,
       proofUrl: d.proofUrl,
       adminNote: d.adminNote,
-      destinationAccount: d.destinationAccount,
+      platformBankAccount: d.platformBankAccount
+        ? { bankName: d.platformBankAccount.bankName, accountNumber: d.platformBankAccount.accountNumber, accountHolder: d.platformBankAccount.accountHolder }
+        : null,
       senderName: d.senderName,
       expiredAt: d.expiredAt?.toISOString() || null,
       verifiedAt: d.verifiedAt?.toISOString() || null,

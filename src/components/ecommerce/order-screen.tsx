@@ -161,9 +161,7 @@ function OrderCard({ order, onTap }: { order: Order; onTap: () => void }) {
               onClick={(e) => {
                 e.stopPropagation()
                 if (order.status === "shipped") {
-                  // BUG 19 FIX: Sync status update to server via API
                   updateOrderStatus(order.id, "delivered")
-                  apiClient.rawPut(`/api/orders/${order.id}/status`, { status: 'delivered' }).catch(() => {})
                   showToast("Pesanan dikonfirmasi diterima!", "success")
                 } else if (order.status === "delivered") {
                   const product = products.find(p => p.id === order.items[0]?.productId)
@@ -239,9 +237,7 @@ function OrderCard({ order, onTap }: { order: Order; onTap: () => void }) {
             </Button>
             <Button
               onClick={() => {
-                // BUG 19 FIX: Sync cancel to server via the cancel API endpoint
                 cancelOrder(order.id)
-                apiClient.rawPost(`/api/orders/${order.id}/cancel`, { reason: 'Dibatalkan oleh pembeli' }).catch(() => {})
                 showToast("Pesanan berhasil dibatalkan", "success")
                 setShowCancelDialog(false)
               }}
@@ -458,6 +454,7 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
         )}
 
         {/* Shipping Address */}
+        {order.address && (
         <div className="px-4 pb-4">
           <div className="bg-card rounded-xl border border-border/50 p-4">
             <h3 className="text-sm font-bold text-foreground mb-3 flex items-center gap-2">
@@ -480,6 +477,7 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
             </div>
           </div>
         </div>
+        )}
 
         {/* Product Items */}
         <div className="px-4 pb-4">
@@ -728,10 +726,8 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
           {order.status === "shipped" && (
             <PrimaryButton
               className="w-full h-12 rounded-xl text-sm font-semibold"
-              // BUG 19 FIX: Sync status update to server via API
               onClick={() => {
                 updateOrderStatus(order.id, "delivered")
-                apiClient.rawPut(`/api/orders/${order.id}/status`, { status: 'delivered' }).catch(() => {})
                 showToast("Pesanan dikonfirmasi diterima!", "success")
               }}
             >
@@ -780,9 +776,7 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
             </Button>
             <Button
               onClick={() => {
-                // BUG 19 FIX: Sync cancel to server via the cancel API endpoint
                 cancelOrder(order.id)
-                apiClient.rawPost(`/api/orders/${order.id}/cancel`, { reason: 'Dibatalkan oleh pembeli' }).catch(() => {})
                 showToast("Pesanan berhasil dibatalkan", "success")
                 setShowCancelDialog(false)
               }}

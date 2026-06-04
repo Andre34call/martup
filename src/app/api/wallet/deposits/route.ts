@@ -43,6 +43,15 @@ export async function GET(request: NextRequest) {
     const [deposits, total] = await Promise.all([
       db.deposit.findMany({
         where,
+        include: {
+          platformBankAccount: {
+            select: {
+              bankName: true,
+              accountNumber: true,
+              accountHolder: true,
+            },
+          },
+        },
         orderBy: { createdAt: 'desc' },
         skip,
         take: limit,
@@ -57,7 +66,9 @@ export async function GET(request: NextRequest) {
       status: d.status,
       proofUrl: d.proofUrl,
       adminNote: d.adminNote,
-      destinationAccount: d.destinationAccount,
+      platformBankAccount: d.platformBankAccount
+        ? { bankName: d.platformBankAccount.bankName, accountNumber: d.platformBankAccount.accountNumber, accountHolder: d.platformBankAccount.accountHolder }
+        : null,
       senderName: d.senderName,
       expiredAt: d.expiredAt?.toISOString() || null,
       createdAt: d.createdAt.toISOString(),

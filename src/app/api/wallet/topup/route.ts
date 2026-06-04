@@ -145,7 +145,6 @@ export async function POST(request: NextRequest) {
           amount,
           method,
           status: 'pending',
-          destinationAccount,
           senderName: sanitizedSenderName || null,
           expiredAt,
         },

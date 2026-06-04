@@ -52,7 +52,7 @@ function mapServerCartItem(raw: Record<string, unknown>): CartItem {
 
 /** Calculate the effective price for a cart item */
 function getItemPrice(item: CartItem): number {
-  return item.variant?.price || item.product.discountPrice || item.product.price
+  return item.variant?.price ?? item.product.discountPrice ?? item.product.price
 }
 
 // ==================== STORE ====================
@@ -66,20 +66,24 @@ export const useCartStore = create<CartState>()(
       // ==================== ADD ITEM ====================
       addItem: (product, variant, quantity = 1) => {
         const variantId = variant?.id
-        const existing = get().items.find(
+
+        // Capture previous items BEFORE optimistic update for rollback
+        const previousItems = get().items
+
+        const existing = previousItems.find(
           (i) => i.productId === product.id && i.variantId === variantId
         )
 
         // Build the optimistic local update
         const optimisticUpdate = existing
           ? {
-              items: get().items.map((i) =>
+              items: previousItems.map((i) =>
                 i.id === existing.id ? { ...i, quantity: i.quantity + quantity } : i
               ),
             }
           : {
               items: [
-                ...get().items,
+                ...previousItems,
                 {
                   id: `cart-${Date.now()}-${Math.random().toString(36).slice(2)}`,
                   productId: product.id,
@@ -97,7 +101,6 @@ export const useCartStore = create<CartState>()(
 
         // If authenticated, sync with server
         if (isUserAuthenticated()) {
-          const previousItems = existing ? get().items : optimisticUpdate.items
           apiClient.rawPost('/api/cart', { productId: product.id, variantId: variantId || null, quantity })
             .then((res) => res.json())
             .then((data) => {
