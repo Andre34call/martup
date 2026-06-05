@@ -1,7 +1,17 @@
 /**
  * MartUp Database Seed Script
  * Populates Supabase PostgreSQL with comprehensive demo data
+ * 
+ * ⚠️  DEVELOPMENT ONLY — This script TRUNCATES ALL TABLES before seeding.
+ * Running this in production will DESTROY all live data!
  */
+
+// SECURITY: Prevent accidental execution in production
+if (process.env.NODE_ENV === 'production') {
+  console.error('❌ CRITICAL: Seed script cannot run in production! This would destroy all live data.')
+  console.error('If you really need to seed, use NODE_ENV=development or run against a dev database.')
+  process.exit(1)
+}
 
 // Override system-level DATABASE_URL if it points to SQLite
 // (The .env file has the correct PostgreSQL URL, but system env takes precedence)

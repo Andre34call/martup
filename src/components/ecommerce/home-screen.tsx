@@ -229,8 +229,8 @@ export function HomeScreen() {
         </div>
       </div>
 
-      {/* ===== PRODUCT TYPE TOGGLE (BARANG / TOLONG MAS) — TOP OF PAGE ===== */}
-      <div className="px-4 pt-3">
+      {/* ===== PRODUCT TYPE TOGGLE (BARANG / TOLONG MAS) — STICKY BELOW HEADER ===== */}
+      <div className="sticky top-14 z-30 bg-background/95 backdrop-blur-sm border-b border-border/30 px-4 py-2">
         <div className="flex gap-2">
           {[
             { key: 'all' as const, label: 'Semua', icon: '🔥' },
@@ -241,7 +241,7 @@ export function HomeScreen() {
               key={type.key}
               whileTap={{ scale: 0.95 }}
               onClick={() => setActiveProductType(type.key)}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-semibold transition-all ${
                 activeProductType === type.key
                   ? type.key === 'jasa'
                     ? 'bg-purple-500 text-white shadow-md shadow-purple-500/25'

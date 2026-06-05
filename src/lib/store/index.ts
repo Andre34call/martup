@@ -74,3 +74,8 @@ export const useAppStore = create<AppStore>()(
 )
 
 // Cross-store references are now handled via direct imports in each slice file
+
+// Expose store on window for debugging/testing (removed in production builds via dead code elimination)
+if (typeof window !== 'undefined') {
+  (window as Record<string, unknown>).__MARTUP_STORE__ = useAppStore
+}

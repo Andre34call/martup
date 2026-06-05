@@ -6,17 +6,28 @@ import { authOptions } from '@/lib/auth'
 import { isSuperAdmin } from '@/lib/auth-middleware'
 import { logger } from '@/lib/logger'
 import { authLimiter } from '@/lib/rate-limit'
-import { setSessionCookies, REMEMBER_FLAG_COOKIE_NAME } from '@/lib/session-cookie'
+import { setSessionCookies, REMEMBER_FLAG_COOKIE_NAME, SESSION_COOKIE_NAME, AUTH_FLAG_COOKIE_NAME } from '@/lib/session-cookie'
 // GET /api/auth/me - Get current authenticated user
-// Supports two auth methods:
+// Supports three auth methods:
 // 1. NextAuth session (Google OAuth) — via verifyAuth
-// 2. HMAC-signed bearer token (email/password) — via verifyAuth
+// 2. HMAC-signed session cookie (email/password — sticky login)
+// 3. HMAC-signed bearer token (email/password — API fallback)
+//
+// IMPORTANT: For NextAuth (Google OAuth) users, this endpoint also sets
+// martup_session + martup_auth cookies so that on page refresh, the
+// DataFetcher can detect the session via Path 1 (session cookie) without
+// relying solely on useSession() which may have timing issues.
 //
 // FALLBACK: If a Google OAuth user exists in NextAuth session but NOT in our DB
 // (sync-user failed during signIn callback), we create the user here.
 export async function GET(request: NextRequest) {
   try {
-    // Use verifyAuth which checks both NextAuth session and HMAC bearer token
+    // Check if the request is coming from a NextAuth session
+    // (has next-auth.session-token cookie but no martup_session cookie)
+    const hasNextAuthCookie = !!request.cookies.get('next-auth.session-token')?.value
+    const hasMartupSessionCookie = !!request.cookies.get(SESSION_COOKIE_NAME)?.value
+
+    // Use verifyAuth which checks NextAuth session, HMAC session cookie, and bearer token
     const authResult = await verifyAuth(request)
 
     if (!authResult.success) {
@@ -79,10 +90,39 @@ export async function GET(request: NextRequest) {
               })
 
               const { password: _, ...userWithoutPassword } = newUser
-              return NextResponse.json({
+              const response = NextResponse.json({
                 success: true,
                 user: userWithoutPassword,
               })
+
+              // Set martup_session + martup_auth cookies for NextAuth users
+              // so that on page refresh, DataFetcher Path 1 can detect the session
+              const authToken = generateAuthToken(newUser.id, newUser.tokenVersion ?? 0)
+              setSessionCookies(response, authToken, false)
+              logger.info({ component: 'auth', userId: newUser.id }, 'Set martup session cookies for NextAuth fallback user')
+
+              return response
+            }
+
+            // User EXISTS in DB but verifyAuth still failed — this means the NextAuth session
+            // validated but something went wrong in verifyAuth. Most likely: the user has a
+            // valid next-auth.session-token but verifyAuth's NextAuth path failed silently.
+            // Try returning user data directly from the NextAuth session.
+            if (existingUser && existingUser.isActive) {
+              const { password: _, ...userWithoutPassword } = existingUser
+              const userIsSuperAdmin = isSuperAdmin(existingUser.role, existingUser.email)
+              const response = NextResponse.json({
+                success: true,
+                user: userWithoutPassword,
+                isSuperAdmin: userIsSuperAdmin,
+              })
+
+              // Set martup_session + martup_auth cookies for NextAuth users
+              const authToken = generateAuthToken(existingUser.id, existingUser.tokenVersion ?? 0)
+              setSessionCookies(response, authToken, false)
+              logger.info({ component: 'auth', userId: existingUser.id }, 'Set martup session cookies for existing NextAuth user (verifyAuth failed but session valid)')
+
+              return response
             }
           }
         }
@@ -137,17 +177,20 @@ export async function GET(request: NextRequest) {
       isSuperAdmin: userIsSuperAdmin,
     })
 
+    // For NextAuth users who don't have martup_session cookie yet,
+    // set our custom session cookies so that on page refresh,
+    // DataFetcher Path 1 (session cookie) can detect the session.
+    // This is critical because useSession() may have timing issues
+    // and the martup_auth cookie is needed for quick auth detection.
+    if (hasNextAuthCookie && !hasMartupSessionCookie) {
+      const authToken = generateAuthToken(user.id, user.tokenVersion ?? 0)
+      setSessionCookies(response, authToken, false)
+      logger.info({ component: 'auth', userId: user.id }, 'Set martup session cookies for NextAuth user (first /me call)')
+    }
+
     // TOKEN ROTATION: When the token is older than the rotation threshold,
     // we issue a fresh token in the response cookies. This limits the window
     // of opportunity for stolen cookies (especially with Remember Me).
-    //
-    // DESIGN TRADE-OFF: We do NOT increment tokenVersion here because that
-    // would invalidate ALL the user's existing tokens across all devices,
-    // forcing re-authentication on every device every hour. Instead, the
-    // old token continues to work until its 24-hour expiry, but the browser
-    // will use the new one for subsequent requests. For full invalidation
-    // of a stolen token, the user should use "Logout All Devices" which
-    // increments tokenVersion.
     if (authResult.shouldRotateToken) {
       const freshToken = generateAuthToken(user.id, user.tokenVersion ?? 0)
       // Check if the current session has Remember Me enabled

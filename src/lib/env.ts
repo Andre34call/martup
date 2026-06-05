@@ -97,25 +97,34 @@ export const env = {
   // SECURITY: Super Admin email — MUST be set via SUPER_ADMIN_EMAIL env var.
   // No hardcoded fallback — an empty string means no super admin privileges are granted.
   SUPER_ADMIN_EMAIL: process.env.SUPER_ADMIN_EMAIL || '',
-  // SECURITY: Internal API secret — separate from NEXTAUTH_SECRET.
-  // Used for service-to-service auth (e.g., NextAuth → sync-user).
-  // In production, MUST be set explicitly. Falls back to NEXTAUTH_SECRET only in development.
+  // SECURITY: Internal API secret — used for service-to-service auth (e.g., NextAuth → sync-user).
+  // Best practice: Set INTERNAL_API_SECRET explicitly in production for secret isolation.
+  // Fallback: Derives from NEXTAUTH_SECRET so Google OAuth sync-user works even without
+  // explicit INTERNAL_API_SECRET. This is safe because both secrets protect the same app.
   INTERNAL_API_SECRET: (() => {
     const val = process.env.INTERNAL_API_SECRET
     if (val) return val
-    if (process.env.NODE_ENV === 'development') {
+    // Always fall back to NEXTAUTH_SECRET (not just in dev) — without this,
+    // the NextAuth signIn callback can't call /api/auth/sync-user, breaking Google OAuth.
+    const fallback = process.env.NEXTAUTH_SECRET || ''
+    if (process.env.NODE_ENV === 'production' && fallback) {
+      console.warn('[WARN] INTERNAL_API_SECRET not set in production — falling back to NEXTAUTH_SECRET. Set INTERNAL_API_SECRET explicitly for better secret isolation.')
+    } else if (process.env.NODE_ENV === 'development') {
       console.warn('[WARN] INTERNAL_API_SECRET not set — falling back to NEXTAUTH_SECRET in development mode. Set INTERNAL_API_SECRET in production!')
-      return process.env.NEXTAUTH_SECRET || ''
+    } else if (!fallback) {
+      console.error('[SECURITY] Neither INTERNAL_API_SECRET nor NEXTAUTH_SECRET is set! Google OAuth will NOT work.')
     }
-    console.error('[SECURITY] INTERNAL_API_SECRET not set in production! Service-to-service auth will fail.')
-    return ''
+    return fallback
   })(),
-  SMS_PROVIDER: process.env.SMS_PROVIDER || 'mock',
+  // SMS/Email providers: Default to '' (fail loudly) instead of 'mock' (silent).
+  // In production, unconfigured providers should cause visible errors, not silent degradation.
+  // Set SMS_PROVIDER=resend|twilio|mock and EMAIL_PROVIDER=resend|mock explicitly.
+  SMS_PROVIDER: process.env.SMS_PROVIDER || (process.env.NODE_ENV === 'development' ? 'mock' : ''),
   MIDTRANS_SERVER_KEY: process.env.MIDTRANS_SERVER_KEY || '',
   MIDTRANS_IS_PRODUCTION: process.env.MIDTRANS_IS_PRODUCTION === 'true',
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || '',
   GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET || '',
-  EMAIL_PROVIDER: process.env.EMAIL_PROVIDER || 'mock',
+  EMAIL_PROVIDER: process.env.EMAIL_PROVIDER || (process.env.NODE_ENV === 'development' ? 'mock' : ''),
   RESEND_API_KEY: process.env.RESEND_API_KEY || '',
   RAJAONGKIR_API_KEY: process.env.RAJAONGKIR_API_KEY || '',
   RAJAONGKIR_PACKAGE: process.env.RAJAONGKIR_PACKAGE || 'starter',

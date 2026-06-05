@@ -883,6 +883,9 @@ export function ProductDetailScreen() {
                 <h3 className="text-base font-bold">Estimasi Ongkos Kirim</h3>
                 <button onClick={() => setShowShippingModal(false)} className="text-muted-foreground text-lg font-bold">✕</button>
               </div>
+              <p className="text-[10px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 px-3 py-1.5 rounded-lg">
+                ⚠️ Harga estimasi — ongkir akurat dihitung saat checkout berdasarkan alamat tujuan
+              </p>
               <div className="space-y-2 max-h-72 overflow-y-auto">
                 {SHIPPING_OPTIONS.map((opt) => (
                   <div key={`${opt.provider}-${opt.service}`} className="flex items-center justify-between p-3 bg-muted/30 rounded-xl">
