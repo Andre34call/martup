@@ -43,16 +43,15 @@ export async function processSellerPayout(params: {
   const commissionAmount = Math.round(subtotal * commissionRate)
   const sellerEarnings = subtotal - commissionAmount
 
-  // Find or create seller wallet
+  // Find or create seller wallet (unified — one wallet per user)
   let sellerWallet = await tx.wallet.findUnique({
-    where: { sellerId },
+    where: { userId: sellerUserId },
   })
 
   if (!sellerWallet) {
     sellerWallet = await tx.wallet.create({
       data: {
         userId: sellerUserId,
-        sellerId,
         balance: 0,
         holdBalance: 0,
         pendingBalance: 0,

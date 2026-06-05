@@ -185,11 +185,15 @@ async function _proxyInner(request: NextRequest) {
   // SECURITY: Validate the internal secret VALUE, not just header existence.
   // Only requests with the correct NEXTAUTH_SECRET as the header value are exempt.
   const internalSecret = request.headers.get('x-internal-secret')
-  const isInternalRequest = !!internalSecret && internalSecret === process.env.INTERNAL_API_SECRET
+  // Use env.INTERNAL_API_SECRET which falls back to NEXTAUTH_SECRET
+  // This must match what auth.ts uses when calling sync-user
+  const expectedSecret = process.env.INTERNAL_API_SECRET || process.env.NEXTAUTH_SECRET || ''
+  const isInternalRequest = !!internalSecret && !!expectedSecret && internalSecret === expectedSecret
   const isNextAuthRoute = pathname.startsWith('/api/auth/signin') ||
     pathname.startsWith('/api/auth/callback') ||
     pathname === '/api/auth/csrf' ||
     pathname === '/api/auth/session' ||
+    pathname === '/api/auth/signout' ||
     pathname === '/api/auth/_log'
   const isCsrfExemptAuthRoute = pathname === '/api/auth/login' ||
     pathname === '/api/auth/register' ||

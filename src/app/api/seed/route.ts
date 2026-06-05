@@ -69,12 +69,8 @@ export async function POST(request: NextRequest) {
             commissionRate: 0.05,
           },
         })
-        // Create wallet for seller (start with 0 balance — real data only)
-        await db.wallet.upsert({
-          where: { sellerId: seller.id },
-          update: {},
-          create: { userId: existingUser.id, sellerId: seller.id, balance: 0, holdBalance: 0 },
-        })
+        // Wallet is unified — user already has one from registration
+        // No need to create a separate seller wallet
         // Update user role
         await db.user.update({ where: { id: existingUser.id }, data: { role: 'seller', isVerified: sd.isVerified } })
         sellerUsers.push({ userId: existingUser.id, sellerId: seller.id, storeName: sd.storeName })

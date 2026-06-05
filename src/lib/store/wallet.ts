@@ -6,7 +6,7 @@ import { mapWalletMutation } from '../mappers'
 
 interface WalletBalanceResponse {
   success: boolean
-  data?: { balance: number; holdBalance: number; coins: number; mutations?: Array<Record<string, unknown>> }
+  data?: { balance: number; holdBalance: number; pendingBalance: number; coins: number; mutations?: Array<Record<string, unknown>> }
   error?: string
 }
 
@@ -18,6 +18,7 @@ interface WalletMutationsResponse {
 export const createWalletSlice: StateCreator<AppStore, [], [], WalletSlice> = (set, get) => ({
   walletBalance: 0,
   walletHoldBalance: 0,
+  walletPendingBalance: 0,
   walletCoins: 0,
   walletMutations: [],
   isWalletLoaded: false,
@@ -124,6 +125,7 @@ export const createWalletSlice: StateCreator<AppStore, [], [], WalletSlice> = (s
       set({
         walletBalance: Number(wallet?.balance) || 0,
         walletHoldBalance: Number(wallet?.holdBalance) || 0,
+        walletPendingBalance: Number(wallet?.pendingBalance) || 0,
         walletCoins: Number(wallet?.coins) || 0,
         isWalletLoaded: true,
         // Include mutations if returned by the wallet endpoint

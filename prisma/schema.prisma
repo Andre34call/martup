@@ -111,7 +111,6 @@ model Seller {
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   products        Product[]
   orders          Order[]
-  wallet          Wallet?
   campaigns       Campaign[]
   vouchers        Voucher[]
   followers       FollowedStore[]
@@ -147,15 +146,13 @@ model Address {
 model Wallet {
   id             String   @id @default(cuid())
   userId         String   @unique
-  sellerId       String?  @unique
   balance        Decimal  @default(0)
-  holdBalance    Decimal  @default(0) // escrow
-  pendingBalance Decimal  @default(0) // from orders not yet completed
+  holdBalance    Decimal  @default(0) // escrow for withdrawals & disputes
+  pendingBalance Decimal  @default(0) // from orders not yet completed (seller earnings)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  seller    Seller?  @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   mutations WalletMutation[]
 }
 

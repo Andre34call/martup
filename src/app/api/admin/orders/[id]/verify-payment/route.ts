@@ -138,15 +138,14 @@ export async function PUT(
         const commission = Math.floor(subtotal * commissionRate)
         const sellerEarnings = subtotal - commission
 
-        // Find or create seller wallet
+        // Find or create seller wallet (unified — one wallet per user)
         let sellerWallet = await tx.wallet.findUnique({
-          where: { sellerId: order.sellerId },
+          where: { userId: order.seller.userId },
         })
 
         if (!sellerWallet) {
           sellerWallet = await tx.wallet.create({
             data: {
-              sellerId: order.sellerId,
               userId: order.seller.userId,
               pendingBalance: sellerEarnings,
             },

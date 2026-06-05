@@ -147,28 +147,10 @@ export async function POST(request: NextRequest) {
         },
       })
 
-      // Link or create seller wallet
-      // Users already have a wallet from registration (with sellerId: null).
-      // We must UPDATE the existing wallet to link it to the seller,
-      // NOT create a new one (would violate Wallet.userId @unique constraint).
-      const existingWallet = await tx.wallet.findUnique({ where: { userId } })
-      if (existingWallet) {
-        // Link existing wallet to the new seller
-        await tx.wallet.update({
-          where: { id: existingWallet.id },
-          data: { sellerId: newSeller.id },
-        })
-      } else {
-        // No wallet exists — create one linked to both user and seller
-        await tx.wallet.create({
-          data: {
-            userId,
-            sellerId: newSeller.id,
-            balance: 0,
-            holdBalance: 0,
-          },
-        })
-      }
+      // Unified wallet: no need to create/link a separate seller wallet.
+      // The user already has a single wallet (created at registration) that serves
+      // both buyer and seller roles. Seller earnings go to pendingBalance, which
+      // is already part of the unified Wallet model.
 
       return newSeller
     })

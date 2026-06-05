@@ -27,13 +27,6 @@ async function buildSellerProfile(sellerId: string) {
   const fullSeller = await db.seller.findUnique({
     where: { id: sellerId },
     include: {
-      wallet: {
-        select: {
-          id: true,
-          balance: true,
-          holdBalance: true,
-        },
-      },
       _count: {
         select: {
           products: { where: { status: 'active' } },
@@ -81,7 +74,8 @@ async function buildSellerProfile(sellerId: string) {
     autoReply: fullSeller.autoReply,
     commissionRate: fullSeller.commissionRate,
     createdAt: fullSeller.createdAt,
-    wallet: fullSeller.wallet,
+    // Unified wallet: fetch the user's wallet separately
+    wallet: await db.wallet.findUnique({ where: { userId: fullSeller.userId }, select: { id: true, balance: true, holdBalance: true, pendingBalance: true } }),
     stats: {
       activeProducts: fullSeller._count.products,
       totalOrders: fullSeller._count.orders,

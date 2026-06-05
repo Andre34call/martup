@@ -156,7 +156,7 @@ export function HomeScreen() {
       transition={{ duration: 0.3 }}
       className="min-h-screen bg-background pb-20"
     >
-      {/* ===== TOP BAR ===== */}
+      {/* ===== TOP BAR WITH PRODUCT TYPE TOGGLE ===== */}
       <div className="sticky top-0 z-40 glass">
         <div className="flex items-center gap-3 px-4 h-14">
           {/* Logo */}
@@ -227,34 +227,34 @@ export function HomeScreen() {
             )}
           </motion.button>
         </div>
-      </div>
 
-      {/* ===== PRODUCT TYPE TOGGLE (BARANG / TOLONG MAS) — STICKY BELOW HEADER ===== */}
-      <div className="sticky top-14 z-30 bg-background/95 backdrop-blur-sm border-b border-border/30 px-4 py-2">
-        <div className="flex gap-2">
-          {[
-            { key: 'all' as const, label: 'Semua', icon: '🔥' },
-            { key: 'product' as const, label: '📦 Barang', icon: '📦' },
-            { key: 'jasa' as const, label: '🤝 Tolong Mas', icon: '🤝' },
-          ].map((type) => (
-            <motion.button
-              key={type.key}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setActiveProductType(type.key)}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-semibold transition-all ${
-                activeProductType === type.key
-                  ? type.key === 'jasa'
-                    ? 'bg-purple-500 text-white shadow-md shadow-purple-500/25'
-                    : type.key === 'product'
-                    ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/25'
-                    : 'bg-gradient-to-r from-emerald-500 to-purple-500 text-white shadow-md'
-                  : 'bg-muted/60 text-muted-foreground hover:bg-muted'
-              }`}
-            >
-              <span>{type.icon}</span>
-              <span>{type.label}</span>
-            </motion.button>
-          ))}
+        {/* ===== PRODUCT TYPE TOGGLE — INSIDE STICKY HEADER ===== */}
+        <div className="px-4 pb-2 pt-0 border-t border-border/20">
+          <div className="flex gap-2">
+            {[
+              { key: 'all' as const, label: 'Semua', icon: '🔥' },
+              { key: 'product' as const, label: '📦 Barang', icon: '📦' },
+              { key: 'jasa' as const, label: '🤝 Tolong Mas', icon: '🤝' },
+            ].map((type) => (
+              <motion.button
+                key={type.key}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setActiveProductType(type.key)}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-sm font-semibold transition-all ${
+                  activeProductType === type.key
+                    ? type.key === 'jasa'
+                      ? 'bg-purple-500 text-white shadow-md shadow-purple-500/25'
+                      : type.key === 'product'
+                      ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/25'
+                      : 'bg-gradient-to-r from-emerald-500 to-purple-500 text-white shadow-md'
+                    : 'bg-muted/60 text-muted-foreground hover:bg-muted'
+                }`}
+              >
+                <span>{type.icon}</span>
+                <span>{type.label}</span>
+              </motion.button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -369,7 +369,7 @@ export function HomeScreen() {
                 <Zap className="w-5 h-5 text-orange-500" />
                 <h2 className="text-base font-bold text-foreground">Flash Sale</h2>
                 <FlashSaleTimer
-                  endDate={flashSaleProducts[0].flashSaleEnd || "2025-12-31T23:59:59Z"}
+                  endDate={flashSaleProducts[0].flashSaleEnd || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()}
                   size="sm"
                 />
               </div>

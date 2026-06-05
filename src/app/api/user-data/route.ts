@@ -101,9 +101,6 @@ export async function GET(request: NextRequest) {
       // Seller profile (if exists)
       db.seller.findUnique({
         where: { userId },
-        include: {
-          wallet: true,
-        },
       }),
 
       // Wallet with recent mutations

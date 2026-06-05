@@ -69,7 +69,7 @@ function MutationItem({ mutation }: { mutation: WalletMutation }) {
 
 // ==================== WALLET SCREEN ====================
 export function WalletScreen() {
-  const { walletMutations, walletBalance, walletHoldBalance, walletCoins, showToast, navigate } = useAppStore()
+  const { walletMutations, walletBalance, walletHoldBalance, walletPendingBalance, walletCoins, showToast, navigate } = useAppStore()
   const [showBalance, setShowBalance] = useState(true)
   const [filterType, setFilterType] = useState<"all" | "credit" | "debit">("all")
 
@@ -139,6 +139,13 @@ export function WalletScreen() {
                 <Shield className="w-3.5 h-3.5" />
                 <span>Hold: {showBalance ? formatPrice(walletHoldBalance) : "•••••"}</span>
               </div>
+
+              {walletPendingBalance > 0 && (
+                <div className="flex items-center gap-2 text-xs opacity-80">
+                  <Clock className="w-3.5 h-3.5" />
+                  <span>Pending: {showBalance ? formatPrice(walletPendingBalance) : "•••••"}</span>
+                </div>
+              )}
 
               <div className="flex items-center gap-1.5 mt-1 text-xs opacity-80">
                 <Gift className="w-3.5 h-3.5" />

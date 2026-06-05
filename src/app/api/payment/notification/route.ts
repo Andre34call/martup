@@ -89,7 +89,6 @@ export async function POST(request: NextRequest) {
             userId: true,
             storeName: true,
             commissionRate: true,
-            wallet: true,
           },
         },
         user: {
@@ -304,15 +303,15 @@ export async function POST(request: NextRequest) {
         const commissionAmount = Math.round(subtotal * commissionRate)
         const sellerEarnings = subtotal - commissionAmount
 
+        // Find or create seller wallet (unified — one wallet per user)
         let sellerWallet = await tx.wallet.findUnique({
-          where: { sellerId: order.sellerId },
+          where: { userId: order.seller.userId },
         })
 
         if (!sellerWallet) {
           sellerWallet = await tx.wallet.create({
             data: {
               userId: order.seller.userId,
-              sellerId: order.sellerId,
               balance: 0,
               holdBalance: 0,
               pendingBalance: 0,

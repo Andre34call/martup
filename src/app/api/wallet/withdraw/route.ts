@@ -88,10 +88,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get seller wallet
+    // Get unified wallet (one wallet per user)
     const wallet = await db.wallet.findUnique({
-      where: { sellerId: seller.id },
-    }) || await db.wallet.findUnique({
       where: { userId: authResult.user.id },
     })
 

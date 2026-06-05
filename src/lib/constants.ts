@@ -72,16 +72,16 @@ export const AUTO_CONFIRM_DAYS = 3
 
 import type { ShippingOption } from '@/lib/types'
 
-/** Shipping options displayed in the product detail "Cek Ongkir" modal */
+/** Shipping providers displayed in the product detail "Cek Ongkir" modal */
 export const SHIPPING_OPTIONS: ShippingOption[] = [
   { provider: 'jne', service: 'REG', name: 'JNE Reguler', price: 0, estimatedDays: '2-3 hari', logo: '📦' },
-  { provider: 'jne', service: 'YES', name: 'JNE YES', price: 15000, estimatedDays: '1 hari', logo: '⚡' },
+  { provider: 'jne', service: 'YES', name: 'JNE YES', price: 0, estimatedDays: '1 hari', logo: '⚡' },
   { provider: 'sicepat', service: 'REG', name: 'SiCepat Reguler', price: 0, estimatedDays: '2-3 hari', logo: '🚀' },
-  { provider: 'sicepat', service: 'BEST', name: 'SiCepat BEST', price: 18000, estimatedDays: '1 hari', logo: '⭐' },
+  { provider: 'sicepat', service: 'BEST', name: 'SiCepat BEST', price: 0, estimatedDays: '1 hari', logo: '⭐' },
   { provider: 'jnt', service: 'EZ', name: 'J&T EZ', price: 0, estimatedDays: '2-3 hari', logo: '✈️' },
-  { provider: 'anteraja', service: 'REG', name: 'AnterAja Reguler', price: 5000, estimatedDays: '3-4 hari', logo: '🚛' },
-  { provider: 'tiki', service: 'REG', name: 'TIKI Reguler', price: 8000, estimatedDays: '2-3 hari', logo: '📬' },
-  { provider: 'pos', service: 'KILAT', name: 'POS Kilat Khusus', price: 10000, estimatedDays: '2-3 hari', logo: '📮' },
+  { provider: 'anteraja', service: 'REG', name: 'AnterAja Reguler', price: 0, estimatedDays: '3-4 hari', logo: '🚛' },
+  { provider: 'tiki', service: 'REG', name: 'TIKI Reguler', price: 0, estimatedDays: '2-3 hari', logo: '📬' },
+  { provider: 'pos', service: 'KILAT', name: 'POS Kilat Khusus', price: 0, estimatedDays: '2-3 hari', logo: '📮' },
 ]
 
 // ==================== PAGINATION ====================

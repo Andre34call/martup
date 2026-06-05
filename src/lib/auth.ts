@@ -87,11 +87,17 @@ export const authOptions: NextAuthOptions = {
         // SECURITY: Store tokenVersion from DB at sign-in time so we can
         // detect password changes on subsequent JWT refreshes.
         if (user.email) {
-          const dbUser = await db.user.findUnique({
-            where: { email: user.email },
-            select: { tokenVersion: true },
-          })
-          token.tokenVersion = dbUser?.tokenVersion ?? 0
+          try {
+            const dbUser = await db.user.findUnique({
+              where: { email: user.email },
+              select: { tokenVersion: true },
+            })
+            token.tokenVersion = dbUser?.tokenVersion ?? 0
+          } catch (error) {
+            logger.error({ component: 'auth', err: error }, 'JWT callback: DB query failed during sign-in')
+            // Don't block sign-in — tokenVersion will be checked on next refresh
+            token.tokenVersion = 0
+          }
         }
       }
 
@@ -99,23 +105,29 @@ export const authOptions: NextAuthOptions = {
       // If the user changed their password (incrementing tokenVersion),
       // this session should be invalidated — return an empty token to force re-auth.
       if (token.email) {
-        const dbUser = await db.user.findUnique({
-          where: { email: token.email as string },
-          select: { tokenVersion: true, isActive: true },
-        })
-        if (!dbUser || !dbUser.isActive) {
-          // User deactivated or deleted — force re-auth by clearing identifying fields
-          // Returning a stripped token (no email) causes the session callback to return null
-          return { ...token, email: undefined, sub: undefined } as any
+        try {
+          const dbUser = await db.user.findUnique({
+            where: { email: token.email as string },
+            select: { tokenVersion: true, isActive: true },
+          })
+          if (!dbUser || !dbUser.isActive) {
+            // User deactivated or deleted — force re-auth by clearing identifying fields
+            // Returning a stripped token (no email) causes the session callback to return null
+            return { ...token, email: undefined, sub: undefined } as any
+          }
+          if (dbUser.tokenVersion !== (token.tokenVersion as number)) {
+            // tokenVersion changed since last sign-in/refresh — password was changed
+            // Force re-auth by clearing identifying fields
+            logger.info({ component: 'auth', email: token.email }, 'NextAuth JWT invalidated — tokenVersion mismatch')
+            return { ...token, email: undefined, sub: undefined } as any
+          }
+          // Keep tokenVersion in sync (in case it was missing from older tokens)
+          token.tokenVersion = dbUser.tokenVersion
+        } catch (error) {
+          // DB unreachable — don't invalidate the session just because the DB is down
+          // The tokenVersion check will be retried on the next JWT refresh
+          logger.error({ component: 'auth', err: error }, 'JWT callback: DB query failed on refresh — keeping session alive')
         }
-        if (dbUser.tokenVersion !== (token.tokenVersion as number)) {
-          // tokenVersion changed since last sign-in/refresh — password was changed
-          // Force re-auth by clearing identifying fields
-          logger.info({ component: 'auth', email: token.email }, 'NextAuth JWT invalidated — tokenVersion mismatch (password changed)')
-          return { ...token, email: undefined, sub: undefined } as any
-        }
-        // Keep tokenVersion in sync (in case it was missing from older tokens)
-        token.tokenVersion = dbUser.tokenVersion
       }
       return token
     },
@@ -144,7 +156,7 @@ export const authOptions: NextAuthOptions = {
         // SECURITY: Add internal secret to verify this is from NextAuth callback, not external caller
         const internalSecret = env.INTERNAL_API_SECRET
         if (!internalSecret) {
-          logger.error({ component: 'auth' }, 'NEXTAUTH_SECRET not set — cannot sync Google OAuth user')
+          logger.error({ component: 'auth' }, 'INTERNAL_API_SECRET not set — cannot sync Google OAuth user')
           return true // Still allow sign-in, /api/auth/me will handle user creation as fallback
         }
 
@@ -178,6 +190,7 @@ export const authOptions: NextAuthOptions = {
             provider: account?.provider || 'google',
             providerAccountId: account?.providerAccountId,
           }),
+          signal: AbortSignal.timeout(10000), // 10-second timeout
         })
 
         if (!response.ok) {

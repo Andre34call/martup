@@ -83,9 +83,11 @@ export async function PUT(
 
       // If rejected, refund the amount from holdBalance back to balance
       if (status === 'rejected') {
-        const wallet = await tx.wallet.findUnique({
-          where: { sellerId: withdrawal.sellerId },
-        })
+        // Find seller's userId to locate the unified wallet
+        const sellerRecord = await tx.seller.findUnique({ where: { id: withdrawal.sellerId }, select: { userId: true } })
+        const wallet = sellerRecord ? await tx.wallet.findUnique({
+          where: { userId: sellerRecord.userId },
+        }) : null
         if (wallet) {
           // SECURITY: Decrement holdBalance AND increment balance to prevent phantom funds
           const updatedWallet = await tx.wallet.update({
@@ -112,9 +114,11 @@ export async function PUT(
 
       // When processing (completing) a withdrawal, reduce holdBalance
       if (status === 'processed') {
-        const wallet = await tx.wallet.findUnique({
-          where: { sellerId: withdrawal.sellerId },
-        })
+        // Find seller's userId to locate the unified wallet
+        const sellerRecord = await tx.seller.findUnique({ where: { id: withdrawal.sellerId }, select: { userId: true } })
+        const wallet = sellerRecord ? await tx.wallet.findUnique({
+          where: { userId: sellerRecord.userId },
+        }) : null
         if (wallet) {
           const updatedWallet = await tx.wallet.update({
             where: { id: wallet.id },

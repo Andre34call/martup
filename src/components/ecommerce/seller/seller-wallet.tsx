@@ -13,7 +13,7 @@ import { PageHeader, SectionHeader, EmptyState } from "../shared"
 import { useState } from "react"
 
 export function SellerWallet() {
-  const { navigate, showToast, sellerBalance, sellerBankAccounts, withdrawRequests, seller, walletMutations } = useAppStore()
+  const { navigate, showToast, sellerBalance, sellerBankAccounts, withdrawRequests, seller, walletMutations, commissionRate } = useAppStore()
 
   // Derive sellerId from store seller
   const sellerId = seller?.id || ''
@@ -164,7 +164,7 @@ export function SellerWallet() {
                   <p className="text-xs text-muted-foreground">Dipotong dari penjualan</p>
                 </div>
               </div>
-              <p className="text-lg font-bold text-foreground">5%</p>
+              <p className="text-lg font-bold text-foreground">{(commissionRate * 100).toFixed(0)}%</p>
             </div>
           </Card>
         </motion.div>

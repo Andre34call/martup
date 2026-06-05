@@ -107,6 +107,7 @@ export interface AddressSlice {
 export interface WalletSlice {
   walletBalance: number
   walletHoldBalance: number
+  walletPendingBalance: number
   walletCoins: number
   walletMutations: WalletMutation[]
   isWalletLoaded: boolean

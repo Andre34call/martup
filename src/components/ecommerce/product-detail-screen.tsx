@@ -884,7 +884,7 @@ export function ProductDetailScreen() {
                 <button onClick={() => setShowShippingModal(false)} className="text-muted-foreground text-lg font-bold">✕</button>
               </div>
               <p className="text-[10px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 px-3 py-1.5 rounded-lg">
-                ⚠️ Harga estimasi — ongkir akurat dihitung saat checkout berdasarkan alamat tujuan
+                ⚠️ Ongkir akurat dihitung saat checkout berdasarkan alamat tujuan
               </p>
               <div className="space-y-2 max-h-72 overflow-y-auto">
                 {SHIPPING_OPTIONS.map((opt) => (
@@ -896,7 +896,7 @@ export function ProductDetailScreen() {
                         <p className="text-[10px] text-muted-foreground">Estimasi {opt.estimatedDays}</p>
                       </div>
                     </div>
-                    <span className="text-sm font-bold">{opt.price === 0 ? 'Gratis' : formatPrice(opt.price)}</span>
+                    <span className="text-xs font-medium text-muted-foreground">Cek saat checkout</span>
                   </div>
                 ))}
               </div>

@@ -156,9 +156,11 @@ export async function PUT(request: NextRequest) {
 
       // CRITICAL: On rejection, refund holdBalance back to seller's balance
       if (status === 'rejected') {
-        const wallet = await tx.wallet.findUnique({
-          where: { sellerId: current.sellerId },
-        })
+        // Find seller's userId to locate the unified wallet
+        const seller = await tx.seller.findUnique({ where: { id: current.sellerId }, select: { userId: true } })
+        const wallet = seller ? await tx.wallet.findUnique({
+          where: { userId: seller.userId },
+        }) : null
 
         if (wallet) {
           const updatedWallet = await tx.wallet.update({
@@ -185,9 +187,11 @@ export async function PUT(request: NextRequest) {
 
       // When processing (completing) a withdrawal, reduce holdBalance
       if (status === 'processed') {
-        const wallet = await tx.wallet.findUnique({
-          where: { sellerId: current.sellerId },
-        })
+        // Find seller's userId to locate the unified wallet
+        const seller = await tx.seller.findUnique({ where: { id: current.sellerId }, select: { userId: true } })
+        const wallet = seller ? await tx.wallet.findUnique({
+          where: { userId: seller.userId },
+        }) : null
 
         if (wallet) {
           const updatedWallet = await tx.wallet.update({

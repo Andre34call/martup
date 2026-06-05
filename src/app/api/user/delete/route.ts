@@ -145,10 +145,8 @@ export async function DELETE(request: NextRequest) {
           await tx.order.deleteMany({ where: { id: { in: sellerOrderIds } } })
         }
 
-        // Delete seller wallet
-        await tx.walletMutation.deleteMany({ where: { wallet: { sellerId: seller.id } } })
-        await tx.wallet.deleteMany({ where: { sellerId: seller.id } })
-
+        // Delete seller — the unified wallet is NOT deleted here;
+        // it will be deleted when the user is deleted (cascade on User → Wallet)
         // Delete seller
         await tx.seller.delete({ where: { userId } })
       }

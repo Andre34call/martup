@@ -128,7 +128,6 @@ export async function updateOrderStatus(params: UpdateOrderStatusParams): Promis
             storeName: true,
             storeAvatar: true,
             commissionRate: true,
-            wallet: true,
           },
         },
         shipping: true,
@@ -235,16 +234,15 @@ export async function updateOrderStatus(params: UpdateOrderStatusParams): Promis
         const commissionAmount = Math.round(subtotal * commissionRate)
         const sellerEarnings = subtotal - commissionAmount
 
-        // Find or create seller's wallet
+        // Find or create seller's wallet (unified — one wallet per user)
         let sellerWallet = await tx.wallet.findUnique({
-          where: { sellerId: order.sellerId },
+          where: { userId: order.seller.userId },
         })
 
         if (!sellerWallet) {
           sellerWallet = await tx.wallet.create({
             data: {
               userId: order.seller.userId,
-              sellerId: order.sellerId,
               balance: 0,
               holdBalance: 0,
               pendingBalance: 0,
@@ -382,7 +380,7 @@ export async function updateOrderStatus(params: UpdateOrderStatusParams): Promis
 
           // Deduct from seller's pending balance (escrow reversal)
           const sellerWallet = await tx.wallet.findUnique({
-            where: { sellerId: order.sellerId },
+            where: { userId: order.seller.userId },
           })
 
           if (sellerWallet) {

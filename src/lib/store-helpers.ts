@@ -56,6 +56,7 @@ export function getResetState() {
     selectedAddressId: null as string | null,
     walletBalance: 0,
     walletHoldBalance: 0,
+    walletPendingBalance: 0,
     walletCoins: 0,
     walletMutations: [],
     reviews: [],

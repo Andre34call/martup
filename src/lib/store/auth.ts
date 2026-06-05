@@ -6,8 +6,7 @@ import type { UserRole } from '../types'
 import { apiClient } from '@/lib/api-client'
 import { useCartStore } from './cart'
 import { deleteAuthFlagCookie } from '@/lib/session-cookie'
-import { getResetState, mapSellerWalletToBalance } from '../store-helpers'
-import type { SellerWalletData } from '../types'
+import { getResetState } from '../store-helpers'
 
 // Shared client-side cleanup: clear cookies, localStorage, NextAuth session
 async function clearClientAuthState() {
@@ -116,11 +115,21 @@ export const createAuthSlice: StateCreator<AppStore, [], [], AuthSlice> = (set, 
                 const seller = mapSeller(userData.seller as unknown as Parameters<typeof mapSeller>[0])
                 set({ seller })
 
-                // Also update seller balance from wallet
-                const sellerWallet = (userData.seller as Record<string, unknown>)?.wallet as SellerWalletData | undefined
-                if (sellerWallet) {
+                // Unified wallet: derive seller balance from the user's wallet
+                // The wallet data is separate from seller data now
+                if (userData.wallet) {
+                  const w = userData.wallet as Record<string, unknown>
+                  const walletBalance = Number(w.balance) || 0
+                  const walletHoldBalance = Number(w.holdBalance) || 0
+                  const walletPendingBalance = Number(w.pendingBalance) || 0
                   set({
-                    sellerBalance: mapSellerWalletToBalance(sellerWallet),
+                    sellerBalance: {
+                      availableBalance: walletBalance,
+                      pendingBalance: walletPendingBalance,
+                      holdBalance: walletHoldBalance,
+                      totalBalance: walletBalance + walletPendingBalance + walletHoldBalance,
+                      totalWithdrawn: 0,
+                    },
                   })
                 }
               } else {

@@ -27,7 +27,7 @@ export async function POST(
       // both pass the status check before either updates the DB
       const order = await tx.order.findUnique({
         where: { id },
-        include: { items: true },
+        include: { items: true, seller: { select: { id: true, userId: true } } },
       })
 
       if (!order) {
@@ -94,7 +94,7 @@ export async function POST(
       // Regardless of payment method, the seller's pendingBalance was credited during
       // payment and must be reversed on cancellation
       if (order.paymentStatus === 'paid') {
-        const sellerWallet = await tx.wallet.findFirst({ where: { sellerId: order.sellerId } })
+        const sellerWallet = await tx.wallet.findFirst({ where: { userId: order.seller.userId } })
         if (sellerWallet && Number(sellerWallet.pendingBalance) > 0) {
           const decrementAmount = Math.min(Number(order.totalAmount), Number(sellerWallet.pendingBalance))
           await tx.wallet.update({

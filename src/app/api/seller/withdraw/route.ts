@@ -129,9 +129,9 @@ export async function POST(request: NextRequest) {
 
     // Step 5: Use a transaction to atomically check wallet balance and move funds to hold
     const withdrawal = await db.$transaction(async (tx) => {
-      // Find the seller's wallet
+      // Find the seller's wallet (unified — one wallet per user)
       const wallet = await tx.wallet.findUnique({
-        where: { sellerId: seller.id },
+        where: { userId: authResult.user.id },
       })
 
       if (!wallet) {

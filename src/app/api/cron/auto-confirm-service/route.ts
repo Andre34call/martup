@@ -108,7 +108,6 @@ async function autoConfirmServiceOrders(): Promise<{
           storeName: true,
           storeAvatar: true,
           commissionRate: true,
-          wallet: true,
         },
       },
     },
@@ -157,16 +156,15 @@ async function autoConfirmServiceOrders(): Promise<{
         const commissionAmount = Math.round(subtotal * commissionRate)
         const sellerEarnings = subtotal - commissionAmount
 
-        // Find or create seller's wallet
+        // Find or create seller's wallet (unified — one wallet per user)
         let sellerWallet = await tx.wallet.findUnique({
-          where: { sellerId: order.sellerId },
+          where: { userId: order.seller.userId },
         })
 
         if (!sellerWallet) {
           sellerWallet = await tx.wallet.create({
             data: {
               userId: order.seller.userId,
-              sellerId: order.sellerId,
               balance: 0,
               holdBalance: 0,
               pendingBalance: 0,

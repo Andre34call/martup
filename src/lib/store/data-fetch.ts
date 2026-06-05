@@ -5,8 +5,6 @@ import type { UserRole } from '../types'
 import { ELEVATED_ROLES } from '../types'
 import { apiClient } from '@/lib/api-client'
 import { mapUser, mapSeller, mapWalletMutation, mapOrder, mapNotification, mapAddress, mapReview, mapBanner } from '../mappers'
-import { mapSellerWalletToBalance } from '../store-helpers'
-import type { SellerWalletData } from '../types'
 import { useWishlistStore } from './wishlist'
 
 // API response types
@@ -40,20 +38,27 @@ export const createDataFetchSlice: StateCreator<AppStore, [], [], DataFetchSlice
         const seller = mapSeller(data.seller)
         set({ seller })
 
-        // Update seller balance from seller wallet
-        if (data.seller.wallet) {
-          set({
-            sellerBalance: mapSellerWalletToBalance(data.seller.wallet as SellerWalletData),
-          })
-        }
+        // Unified wallet: derive seller balance from the user's single wallet
+        // (the wallet is fetched separately, so we'll update sellerBalance from there)
       }
 
-      // Update wallet
+      // Update wallet (unified — single wallet per user)
       if (data.wallet) {
+        const walletBalance = Number(data.wallet.balance) || 0
+        const walletHoldBalance = Number(data.wallet.holdBalance) || 0
+        const walletPendingBalance = Number(data.wallet.pendingBalance) || 0
         set({
-          walletBalance: data.wallet.balance || 0,
-          walletHoldBalance: data.wallet.holdBalance || 0,
+          walletBalance,
+          walletHoldBalance,
           walletMutations: (data.wallet.mutations || []).map(mapWalletMutation),
+          // Derive seller balance from the unified wallet
+          sellerBalance: {
+            availableBalance: walletBalance,
+            pendingBalance: walletPendingBalance,
+            holdBalance: walletHoldBalance,
+            totalBalance: walletBalance + walletPendingBalance + walletHoldBalance,
+            totalWithdrawn: state.sellerBalance.totalWithdrawn,
+          },
         })
       }
 
