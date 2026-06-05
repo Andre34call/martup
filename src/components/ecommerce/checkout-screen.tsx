@@ -4,7 +4,8 @@ import { motion, AnimatePresence } from "framer-motion"
 import {
   MapPin, ChevronRight, Truck, Ticket, CreditCard, Wallet,
   Check, ShoppingBag, Clock, BadgeCheck, ArrowRight,
-  ShieldCheck, Info, Banknote, Smartphone, AlertTriangle, Building2, RefreshCw
+  ShieldCheck, Info, Banknote, Smartphone, AlertTriangle, Building2, RefreshCw,
+  Plus, Minus, Trash2
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -342,8 +343,8 @@ function ShippingSelector({
 
 // ==================== MAIN COMPONENT ====================
 export function CheckoutScreen() {
-  const { navigate, addresses, selectedAddressId, selectedVoucher, addOrder, showToast, walletBalance, deductWallet, useVoucher: markVoucherUsed, currentUser, selectVoucher, platformSettings } = useAppStore()
-  const { items, getCheckedItems, getCheckedTotal, getCheckedCount, clearCart, removeItem } = useCartStore()
+  const { navigate, addresses, selectedAddressId, selectedVoucher, addOrder, showToast, walletBalance, deductWallet, useVoucher: markVoucherUsed, currentUser, selectVoucher, platformSettings, setSelectedProduct } = useAppStore()
+  const { items, getCheckedItems, getCheckedTotal, getCheckedCount, clearCart, removeItem, updateQuantity } = useCartStore()
 
   const [selectedPayment, setSelectedPayment] = useState<string | null>(null)
   const [shippingBySeller, setShippingBySeller] = useState<Record<string, ShippingOption>>({})
@@ -918,6 +919,9 @@ export function CheckoutScreen() {
               <div className="px-4 py-2 divide-y divide-border/20">
                 {group.items.map((item) => {
                   const itemPrice = item.product.discountPrice || item.product.price
+                  const itemTotal = itemPrice * item.quantity
+                  const maxStock = item.variant ? item.variant.stock : item.product.stock
+                  const isJasa = (item.product as any).productType === 'jasa'
                   const colors = [
                     "bg-emerald-100 dark:bg-emerald-900/30",
                     "bg-orange-100 dark:bg-orange-900/30",
@@ -927,7 +931,15 @@ export function CheckoutScreen() {
 
                   return (
                     <div key={item.id} className="flex gap-3 py-2.5">
-                      <div className="w-14 h-14 rounded-lg overflow-hidden flex-shrink-0">
+                      {/* Product Image — clickable */}
+                      <motion.button
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => {
+                          setSelectedProduct(item.product.id)
+                          navigate('product-detail')
+                        }}
+                        className="w-14 h-14 rounded-lg overflow-hidden flex-shrink-0"
+                      >
                         {item.product.images && item.product.images.length > 0 ? (
                           <img
                             src={item.product.images[0]}
@@ -939,17 +951,74 @@ export function CheckoutScreen() {
                             <span className="text-sm font-bold text-emerald-600">{item.product.name.charAt(0)}</span>
                           </div>
                         )}
-                      </div>
+                      </motion.button>
+
                       <div className="flex-1 min-w-0">
-                        <h4 className="text-sm font-medium line-clamp-1">{item.product.name}</h4>
+                        {/* Product Name — clickable */}
+                        <motion.button
+                          whileTap={{ scale: 0.98 }}
+                          onClick={() => {
+                            setSelectedProduct(item.product.id)
+                            navigate('product-detail')
+                          }}
+                          className="text-left w-full"
+                        >
+                          <h4 className="text-sm font-medium line-clamp-1 hover:text-emerald-600 transition-colors">{item.product.name}</h4>
+                        </motion.button>
                         {item.variant && (
                           <p className="text-[10px] text-muted-foreground">
                             {item.variant.name}: {item.variant.value}
                           </p>
                         )}
                         <div className="flex items-center justify-between mt-1">
-                          <span className="text-sm font-bold text-emerald-600">{formatPrice(itemPrice)}</span>
-                          <span className="text-xs text-muted-foreground">x{item.quantity}</span>
+                          <div>
+                            <span className="text-sm font-bold text-emerald-600">{formatPrice(itemTotal)}</span>
+                            {item.quantity > 1 && (
+                              <span className="text-[10px] text-muted-foreground ml-1">({formatPrice(itemPrice)}/pcs)</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Quantity Controls */}
+                        <div className="flex items-center gap-2 mt-2">
+                          <div className="flex items-center bg-muted/50 rounded-lg border border-border/50">
+                            <motion.button
+                              whileTap={{ scale: 0.9 }}
+                              onClick={() => {
+                                if (item.quantity <= 1) {
+                                  removeItem(item.id)
+                                  showToast("Produk dihapus dari keranjang", "info")
+                                } else {
+                                  updateQuantity(item.id, item.quantity - 1)
+                                }
+                              }}
+                              className="w-7 h-7 flex items-center justify-center rounded-l-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                            >
+                              {item.quantity <= 1 ? (
+                                <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                              ) : (
+                                <Minus className="w-3.5 h-3.5 text-muted-foreground" />
+                              )}
+                            </motion.button>
+                            <span className="w-8 text-center text-xs font-bold text-foreground">{item.quantity}</span>
+                            <motion.button
+                              whileTap={{ scale: 0.9 }}
+                              onClick={() => {
+                                if (!isJasa && item.quantity >= maxStock) {
+                                  showToast(`Stok tersedia: ${maxStock}`, "warning")
+                                  return
+                                }
+                                updateQuantity(item.id, item.quantity + 1)
+                              }}
+                              disabled={!isJasa && item.quantity >= maxStock}
+                              className="w-7 h-7 flex items-center justify-center rounded-r-lg hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                            >
+                              <Plus className="w-3.5 h-3.5 text-emerald-600" />
+                            </motion.button>
+                          </div>
+                          {isJasa && (
+                            <span className="text-[10px] text-purple-500 font-medium">🤝 Stok unlimited</span>
+                          )}
                         </div>
                       </div>
                     </div>
