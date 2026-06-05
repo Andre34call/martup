@@ -98,6 +98,7 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, account, user }) {
       // Initial sign in
       if (account && user) {
+        logger.info({ component: 'auth', email: user.email, provider: account.provider }, 'JWT callback: initial sign-in')
         token.accessToken = account.access_token
         token.provider = account.provider
         // SECURITY: Store tokenVersion from DB at sign-in time so we can
@@ -109,8 +110,9 @@ export const authOptions: NextAuthOptions = {
               select: { tokenVersion: true },
             })
             token.tokenVersion = dbUser?.tokenVersion ?? 0
+            logger.info({ component: 'auth', email: user.email, tokenVersion: token.tokenVersion }, 'JWT callback: tokenVersion fetched from DB')
           } catch (error) {
-            logger.error({ component: 'auth', err: error }, 'JWT callback: DB query failed during sign-in')
+            logger.error({ component: 'auth', err: error, email: user.email }, 'JWT callback: DB query failed during sign-in')
             // Don't block sign-in — tokenVersion will be checked on next refresh
             token.tokenVersion = 0
           }
@@ -159,17 +161,23 @@ export const authOptions: NextAuthOptions = {
       return session
     },
     async signIn({ user, account, profile }) {
+      logger.info({
+        component: 'auth',
+        email: user?.email,
+        name: user?.name,
+        provider: account?.provider,
+        providerAccountId: account?.providerAccountId,
+        hasAccessToken: !!account?.access_token,
+      }, 'signIn callback triggered')
+
       // Check if Google OAuth is properly configured
       if (!googleClientId || !googleClientSecret) {
         logger.error({ component: 'auth' }, 'Google OAuth credentials not configured — cannot sign in with Google')
-        // Return false to prevent sign-in without proper configuration
-        // This shows an error on the login page instead of silently failing
         return '/?error=google_oauth_not_configured'
       }
 
       // Sync user to our database
       try {
-        // SECURITY: Add internal secret to verify this is from NextAuth callback, not external caller
         const internalSecret = env.INTERNAL_API_SECRET
         if (!internalSecret) {
           logger.error({ component: 'auth' }, 'INTERNAL_API_SECRET not set — cannot sync Google OAuth user')
@@ -177,16 +185,14 @@ export const authOptions: NextAuthOptions = {
         }
 
         // Build the sync-user URL — must be reachable from the server
-        // Priority: VERCEL_URL (auto-set) > NEXTAUTH_URL (manual) > localhost fallback
+        // On Vercel, use VERCEL_URL for the internal fetch (same-server, avoids DNS)
+        // The redirect_uri for Google is determined by NEXTAUTH_URL, not this URL
         let baseUrl: string
         if (process.env.VERCEL_URL) {
-          // On Vercel: use the auto-provided VERCEL_URL (always correct)
           baseUrl = `https://${process.env.VERCEL_URL}`
         } else if (env.NEXTAUTH_URL && env.NEXTAUTH_URL !== 'http://localhost:3000') {
-          // Custom NEXTAUTH_URL that's not the default localhost
           baseUrl = env.NEXTAUTH_URL
         } else {
-          // Local development
           baseUrl = 'http://localhost:3000'
         }
 
@@ -209,18 +215,21 @@ export const authOptions: NextAuthOptions = {
           signal: AbortSignal.timeout(10000), // 10-second timeout
         })
 
+        logger.info({ component: 'auth', status: response.status, email: user.email }, 'sync-user response received')
+
         if (!response.ok) {
-          logger.warn({ component: 'auth', status: response.status, email: user.email }, 'sync-user returned non-OK status — fallback to /api/auth/me')
+          const errorText = await response.text().catch(() => 'failed to read body')
+          logger.warn({ component: 'auth', status: response.status, body: errorText.substring(0, 200), email: user.email }, 'sync-user returned non-OK status — fallback to /api/auth/me')
         } else {
           try {
             const data = await response.json()
             if (!data.success) {
               logger.warn({ component: 'auth', error: data.error, email: user.email }, 'Failed to sync Google user — fallback to /api/auth/me')
             } else {
-              logger.info({ component: 'auth', email: user.email, isNewUser: data.isNewUser }, 'Google OAuth user synced successfully')
+              logger.info({ component: 'auth', email: user.email, isNewUser: data.isNewUser, userId: data.user?.id }, 'Google OAuth user synced successfully')
             }
-          } catch {
-            logger.warn({ component: 'auth', email: user.email }, 'Failed to parse sync-user response — fallback to /api/auth/me')
+          } catch (parseError) {
+            logger.warn({ component: 'auth', err: parseError, email: user.email }, 'Failed to parse sync-user response — fallback to /api/auth/me')
           }
         }
       } catch (error) {
@@ -228,15 +237,24 @@ export const authOptions: NextAuthOptions = {
       }
 
       // Always allow sign-in — /api/auth/me handles fallback user creation
-      // The DataFetcher component on the frontend will detect the NextAuth session
-      // and call /api/auth/me which creates the user if missing
+      logger.info({ component: 'auth', email: user.email }, 'signIn callback: allowing sign-in')
       return true
+    },
+    async redirect({ url, baseUrl }) {
+      // Allows relative callback URLs
+      if (url.startsWith('/')) return `${baseUrl}${url}`
+      // Allows callback URLs on the same origin
+      else if (new URL(url).origin === baseUrl) return url
+      // If the callback URL is on a different origin (e.g., Vercel deployment URL),
+      // redirect to the base URL instead to avoid CORS/cookie issues
+      logger.info({ component: 'auth', url, baseUrl }, 'redirect callback: redirecting to baseUrl')
+      return baseUrl
     },
   },
   pages: {
     signIn: '/',
     error: '/',
   },
-  debug: process.env.NODE_ENV === 'development',
+  debug: true, // Temporarily enabled for production debugging — disable after Google OAuth is confirmed working
   secret: nextauthSecret || undefined,
 }
