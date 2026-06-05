@@ -266,6 +266,6 @@ export const authOptions: NextAuthOptions = {
     signIn: '/',
     error: '/',
   },
-  debug: true, // Temporarily enabled for production debugging — disable after Google OAuth is confirmed working
+  debug: process.env.NODE_ENV === 'development',
   secret: nextauthSecret || undefined,
 }
