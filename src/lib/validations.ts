@@ -158,7 +158,7 @@ export const createOrderSchema = z.object({
     variantName: z.string().nullable().optional(),
     image: z.string().nullable().optional(),
   })).min(1, 'Items tidak boleh kosong'),
-  addressId: z.string().min(1, 'addressId wajib diisi'),
+  addressId: z.string().nullable().optional(),
   subtotal: z.number().min(0).optional(),
   shippingCost: z.number().min(0).optional(),
   discountAmount: z.number().min(0).optional(),

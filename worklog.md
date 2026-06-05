@@ -2437,3 +2437,155 @@ Stage Summary:
 - 5 dead code files deleted (~500+ lines removed)
 - Store code deduplicated across 6+ files
 - Lint: 0 new errors
+
+---
+Task ID: 3
+Agent: full-stack-developer
+Task: Fix Jasa feature in orders API (isServiceOrder, address, shipping, stock)
+
+Work Log:
+- Read worklog.md for project context and prior agent work
+- Read src/lib/validations.ts, src/app/api/orders/route.ts, src/lib/types.ts, and prisma/schema.prisma
+- Confirmed Prisma schema already has `isServiceOrder Boolean @default(false)` and `weight Float?` (null for jasa)
+- Fixed Bug 1: Changed `addressId: z.string().min(1, 'addressId wajib diisi')` to `z.string().nullable().optional()` in createOrderSchema
+- Fixed Bug 2: Added isServiceOrder detection logic throughout POST handler:
+  - Pre-check product types before address validation to know if address is required
+  - Added `productType` to serverItems array type and populated from DB fetch
+  - After serverItems populated, `const isServiceOrder = serverItems.every(si => si.productType === 'jasa')`
+  - Address validation: required for physical products, optional for jasa-only orders
+  - If jasa order provides address, still verify ownership
+  - Order create: `addressId: isServiceOrder ? null : addressId`, `isServiceOrder` flag set
+  - Shipping record creation: skipped for jasa-only orders
+  - Stock deduction: skipped for jasa products (unlimited availability)
+  - Stock validation (pre-transaction): skipped for jasa products
+  - Stock validation (in-transaction): skipped for jasa products
+- Fixed Bug 3: Shipping cost verification:
+  - Entire shipping calculation block wrapped in `if (!isServiceOrder)` — jasa orders get shippingCost = 0
+  - Weight calculation: `if (si.productType === 'jasa') continue` — jasa products don't add weight
+  - Destination city uses `address?.city` with null-safe fallback
+- Updated types.ts: `weight: number | null` on Product, added `isServiceOrder?`, `serviceProofImages?`, `autoConfirmAt?` to Order interface
+- Ran `bun run lint` — 0 errors
+
+Stage Summary:
+- 3 files modified: validations.ts, orders/route.ts, types.ts
+- Bug 1 fixed: addressId now nullable — jasa-only orders can omit address
+- Bug 2 fixed: isServiceOrder flag correctly set on order creation based on product types
+- Bug 3 fixed: shipping cost is 0 for jasa-only orders; mixed orders only count physical product weight
+- No schema changes needed (Prisma already has isServiceOrder, nullable weight, serviceProofImages, autoConfirmAt)
+- Existing physical product order flow unchanged — all jasa logic is additive/conditional
+- Lint: 0 errors
+
+---
+Task ID: 4
+Agent: full-stack-developer
+Task: Add "Jasa" (service) badge/indicator to product cards and product detail screen
+
+Work Log:
+
+1. **ProductCard - Grid Layout** (src/components/ecommerce/shared/product.tsx)
+   - Added 🛠️ Jasa badge (bg-purple-500) at top-2 left-2 when product.productType === 'jasa'
+   - Discount badge shifts to top-8 left-2 when both Jasa and discount badges exist (avoids overlap)
+   - Flash sale badge stays at top-2 right-2 (no conflict)
+
+2. **ProductCard - List Layout** (src/components/ecommerce/shared/product.tsx)
+   - Added 🛠️ Jasa badge at top-1 left-1 when product.productType === 'jasa'
+   - Flash sale badge moved to top-1 right-1 to avoid overlap
+
+3. **Product Detail Screen - ImageGallery** (src/components/ecommerce/product-detail-screen.tsx)
+   - Added productType prop to ImageGallery component
+   - Shows 🛠️ Jasa badge at top-3 left-3 for jasa products
+   - Flash sale badge shifts down when both present
+
+4. **Product Detail Screen - Product Info** (src/components/ecommerce/product-detail-screen.tsx)
+   - Added "🛠️ Layanan Jasa" Badge (purple) next to product name for jasa products
+   - Weight detail row hidden for jasa products
+   - Shows serviceDuration (e.g., "Durasi: 1 jam") if available
+   - Shows serviceLocation (e.g., "Lokasi: Online") if available
+   - Added purple escrow notice box: "Pesanan jasa tidak memerlukan pengiriman fisik. Pembayaran ditahan (escrow) sampai jasa selesai."
+   - Shipping info section hidden entirely for jasa products (no physical shipping needed)
+
+5. **Seller Product List** (src/components/ecommerce/seller/seller-products.tsx)
+   - Added "Jasa" badge (purple, bg-purple-500) next to product name for jasa products
+   - Added "Barang" badge (outline style) for regular products
+   - Sellers can now distinguish product types at a glance
+
+Lint result: 0 errors
+Prisma schema: NOT changed (as instructed)
+
+Stage Summary:
+- 3 files modified: product.tsx, product-detail-screen.tsx, seller-products.tsx
+- Purple color scheme used consistently for Jasa badges
+- Used existing shadcn/ui Badge component
+- No breaking changes — all existing product cards continue to work
+
+---
+Task ID: 6
+Agent: full-stack-developer
+Task: Add service proof UI for sellers and buyers in order screens
+
+Work Log:
+
+1. **Updated Order Mapper** (src/lib/mappers.ts)
+   - Added `isServiceOrder`, `serviceProofImages`, `autoConfirmAt` fields to `RawOrder` interface
+   - Added mapping of `isServiceOrder` (boolean), `serviceProofImages` (JSON string → string[]), `autoConfirmAt` (date normalization) in `mapOrder()`
+   - `serviceProofImages` parsed from JSON string with safe fallback (handles both string and array formats)
+   - These fields already existed in the `Order` type but were not being mapped from API responses
+
+2. **Seller Orders: Service Proof Upload** (src/components/ecommerce/seller/seller-orders.tsx)
+   - Added "Jasa" badge (purple) to order cards for service orders
+   - For service orders with status "processing": replaced "Kirim" button with "Upload Bukti Jasa" button (purple)
+   - Added Service Proof Upload Dialog with:
+     - Image URL input with validation (http/https only)
+     - File upload button (uploads to Supabase via /api/upload)
+     - Image preview grid (1-5 images) with remove buttons
+     - Submit calls POST `/api/orders/[id]/service-proof` with `{ proofImages: [...] }`
+     - On success, refreshes orders from API to get updated status
+   - Added `computeCountdown()` and `useCountdown()` hooks for auto-confirm countdown display
+
+3. **Seller Orders: Service Proof Status View** (src/components/ecommerce/seller/seller-orders.tsx)
+   - For service orders with status "shipped" and proof images: shows purple status card
+     - "Menunggu konfirmasi pembeli" (Waiting for buyer confirmation) message
+     - Thumbnail previews of proof images (up to 3 shown, +N for more)
+     - "Lihat Detail" (View Details) button
+   - Added Service Proof View Dialog that:
+     - Fetches proof data via GET `/api/orders/[id]/service-proof`
+     - Shows full-size proof images in a 2-column grid
+     - Shows timeline info (proof sent date, auto-confirm countdown, buyer confirmed date)
+     - Uses `ServiceProofCountdown` component with `useCountdown` hook
+
+4. **Buyer Orders: Service Proof Confirmation** (src/components/ecommerce/order-screen.tsx)
+   - Added `SERVICE_TRACKING_STEPS` with jasa-specific labels (e.g., "Bukti Jasa Dikirim" instead of "Pesanan Dikirim")
+   - Added "Jasa" badge (purple) to order card headers for service orders
+   - For service orders with status "shipped": shows "Konfirmasi" button (purple) instead of "Lacak"
+   - Confirmation calls PUT `/api/orders/[orderId]` with `{ status: 'delivered' }` to release escrow
+   - Added service proof banner in OrderCard for shipped service orders:
+     - Shows proof image thumbnails
+     - Shows auto-confirm countdown
+   - Added `ServiceProofData` type and `ServiceProofCountdown` component
+
+5. **Buyer Order Detail: Service Proof View** (src/components/ecommerce/order-screen.tsx)
+   - For service orders with status "shipped" or "delivered":
+     - Fetches service proof via GET `/api/orders/[id]/service-proof` on mount
+     - Shows "Bukti Penyelesaian Jasa" section with full-size proof images
+     - Shows auto-confirm countdown notice with amber styling
+     - Shows "Jasa akan otomatis dikonfirmasi" notice if not yet confirmed
+   - For service orders with status "shipped":
+     - Purple "Konfirmasi Jasa Selesai" button (replaces "Konfirmasi Diterima")
+     - Hides shipping address section (not needed for services)
+     - Shows service-specific timeline with purple accent
+     - Status banner uses purple color scheme for service orders
+   - Timeline labels adapted for service orders (e.g., "Jasa Sedang Dikerjakan")
+
+6. **Lint Fixes**
+   - Fixed `react-hooks/set-state-in-effect` error in `useCountdown` hook
+   - Used `computeCountdown()` function for initial state calculation
+   - Used `queueMicrotask()` for deferred state update in effect
+   - Removed unused imports (`useCallback`, `ArrowLeft`, `ChevronRight`, `Phone`, `Wallet`, `ImagePlus`)
+   - Final lint: 0 errors, 0 warnings
+
+Files Modified:
+- src/lib/mappers.ts (added isServiceOrder, serviceProofImages, autoConfirmAt mapping)
+- src/components/ecommerce/seller/seller-orders.tsx (full rewrite with service proof UI)
+- src/components/ecommerce/order-screen.tsx (full rewrite with buyer service proof UI)
+
+No schema changes. No API route changes. All existing functionality preserved.

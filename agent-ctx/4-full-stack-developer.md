@@ -1,22 +1,39 @@
-# Task 4: Improve New User UX with Friendly Empty States
-
-**Agent:** full-stack-developer
-**Date:** 2026-03-05
-**Status:** Completed
+# Task 4 - Jasa Badge/Indicator Implementation
 
 ## Summary
-Improved empty state messages and call-to-action buttons across 4 screens to make new users feel welcome and guided instead of lost.
+Added "Jasa" (service) badge/indicator to product cards, product detail screen, and seller product list.
 
-## Files Modified
-1. `src/components/ecommerce/order-screen.tsx` — Per-tab contextual icons + friendly messages + "Mulai Belanja" CTA on "Semua" tab
-2. `src/components/ecommerce/notification-screen.tsx` — Per-tab contextual subtitles in Indonesian
-3. `src/components/ecommerce/chat-screen.tsx` — "Belum ada percakapan" title + improved subtitle + functional "Cari Produk" CTA
-4. `src/components/ecommerce/wallet-screen.tsx` — "Belum ada transaksi" + top-up CTA button
+## Changes Made
 
-## Screens Verified (No Changes Needed)
-- Cart Screen — Already has good empty state
-- Profile Screen — Already fixed in Task 2
-- Seller Dashboard — Already fixed in Task 9
+### 1. ProductCard Component (`src/components/ecommerce/shared/product.tsx`)
+- Added 🛠️ Jasa badge (purple background, `bg-purple-500`) to **grid layout** product cards when `product.productType === 'jasa'`
+  - Positioned at `top-2 left-2` in the image area
+  - When both Jasa badge and discount badge exist, discount badge shifts to `top-8 left-2`
+- Added 🛠️ Jasa badge to **list layout** product cards at `top-1 left-1`
+- Flash sale badge repositioned to right side in list layout to avoid overlap
+
+### 2. Product Detail Screen (`src/components/ecommerce/product-detail-screen.tsx`)
+- **ImageGallery**: Added `productType` prop, shows 🛠️ Jasa badge at `top-3 left-3` when jasa
+- **Product name**: Added "🛠️ Layanan Jasa" Badge (purple) next to product name when jasa
+- **Detail section**:
+  - Weight hidden for jasa products
+  - Shows `serviceDuration` (e.g., "Durasi: 1 jam") if available
+  - Shows `serviceLocation` (e.g., "Lokasi: Online") if available
+- **Escrow notice**: Purple info box with Shield icon showing "Pesanan jasa tidak memerlukan pengiriman fisik. Pembayaran ditahan (escrow) sampai jasa selesai."
+- **Shipping info section**: Hidden entirely for jasa products (no physical shipping needed)
+
+### 3. Seller Product List (`src/components/ecommerce/seller/seller-products.tsx`)
+- Added productType badge next to each product name:
+  - "Jasa" badge with purple background for jasa products
+  - "Barang" badge with outline style for regular products
+- Allows sellers to quickly distinguish between product types
+
+## Design Decisions
+- Purple color scheme used consistently for all Jasa badges (matching the add product form)
+- Used existing shadcn/ui Badge component
+- Badge positioned to not overlap with other badges (flash sale, discount)
+- Shipping section hidden rather than just badge-replaced for jasa products (cleaner UX)
+- Prisma schema NOT changed (as instructed)
 
 ## Lint Result
-✅ Clean, no errors
+0 errors — clean compilation

@@ -74,7 +74,7 @@ export interface Product {
   stock: number
   sold: number
   minOrder: number
-  weight: number
+  weight: number | null  // null for jasa (service) products
   condition: 'new' | 'used'
   productType: 'product' | 'jasa'
   serviceDuration?: string
@@ -151,6 +151,9 @@ export interface Order {
   paymentStatus: string
   paymentProof?: string
   paymentBankName?: string
+  isServiceOrder?: boolean
+  serviceProofImages?: string[]
+  autoConfirmAt?: string
   items: OrderItem[]
   shipping?: Shipping
   address?: Address

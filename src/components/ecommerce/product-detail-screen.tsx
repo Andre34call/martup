@@ -24,7 +24,7 @@ import { useState, useRef, useCallback, useMemo, useEffect } from "react"
 // Rating distribution is computed dynamically from store reviews
 
 // ==================== IMAGE GALLERY ====================
-function ImageGallery({ images, videoUrl, isFlashSale }: { images: string[]; videoUrl?: string; isFlashSale: boolean }) {
+function ImageGallery({ images, videoUrl, isFlashSale, productType }: { images: string[]; videoUrl?: string; isFlashSale: boolean; productType?: string }) {
   // Build media list: video first, then images
   const mediaItems: { type: 'video' | 'image'; url: string }[] = []
   if (videoUrl) {
@@ -114,9 +114,16 @@ function ImageGallery({ images, videoUrl, isFlashSale }: { images: string[]; vid
           </motion.div>
         </AnimatePresence>
 
+        {/* Jasa badge */}
+        {productType === 'jasa' && (
+          <div className="absolute top-3 left-3 bg-purple-500 text-white text-xs font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 z-10">
+            🛠️ Jasa
+          </div>
+        )}
+
         {/* Flash sale overlay badge */}
         {isFlashSale && (
-          <div className="absolute top-3 left-3 bg-orange-500 text-white text-xs font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 shimmer">
+          <div className={`absolute bg-orange-500 text-white text-xs font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 shimmer ${productType === 'jasa' ? 'top-11 left-3' : 'top-3 left-3'}`}>
             <Zap className="w-3.5 h-3.5" />
             FLASH SALE
           </div>
@@ -418,6 +425,7 @@ export function ProductDetailScreen() {
           images={product.images}
           videoUrl={product.videoUrl}
           isFlashSale={product.isFlashSale}
+          productType={product.productType}
         />
 
         <div className="px-4 space-y-4">
@@ -482,7 +490,14 @@ export function ProductDetailScreen() {
             transition={{ delay: 0.15 }}
             className="space-y-3"
           >
-            <h1 className="text-lg font-bold text-foreground leading-tight">{product.name}</h1>
+            <div className="flex items-start gap-2">
+              <h1 className="text-lg font-bold text-foreground leading-tight">{product.name}</h1>
+              {product.productType === 'jasa' && (
+                <Badge className="bg-purple-500 text-white text-xs font-bold px-2 py-0.5 rounded flex items-center gap-1 flex-shrink-0">
+                  🛠️ Layanan Jasa
+                </Badge>
+              )}
+            </div>
 
             <div className="flex items-center gap-3 flex-wrap">
               <RatingStars rating={product.rating} size="sm" reviewCount={product.reviewCount} />
@@ -542,7 +557,8 @@ export function ProductDetailScreen() {
 
           <Separator />
 
-          {/* 4. Shipping Info */}
+          {/* 4. Shipping Info (hidden for jasa) */}
+          {product.productType !== 'jasa' && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -575,6 +591,7 @@ export function ProductDetailScreen() {
               </Button>
             </div>
           </motion.div>
+          )}
 
           <Separator />
 
@@ -661,8 +678,24 @@ export function ProductDetailScreen() {
             <div className="space-y-2 pt-2">
               <p className="text-sm font-medium">Detail:</p>
               <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
-                <span className="text-muted-foreground">Berat</span>
-                <span className="text-foreground">{product.weight}g</span>
+                {product.productType !== 'jasa' && (
+                  <>
+                    <span className="text-muted-foreground">Berat</span>
+                    <span className="text-foreground">{product.weight}g</span>
+                  </>
+                )}
+                {product.productType === 'jasa' && product.serviceDuration && (
+                  <>
+                    <span className="text-muted-foreground">Durasi</span>
+                    <span className="text-foreground">{product.serviceDuration}</span>
+                  </>
+                )}
+                {product.productType === 'jasa' && product.serviceLocation && (
+                  <>
+                    <span className="text-muted-foreground">Lokasi</span>
+                    <span className="text-foreground">{product.serviceLocation}</span>
+                  </>
+                )}
                 <span className="text-muted-foreground">Kondisi</span>
                 <span className="text-foreground">{product.condition === 'new' ? 'Baru' : 'Bekas'}</span>
                 <span className="text-muted-foreground">Min. Pemesanan</span>
@@ -670,6 +703,16 @@ export function ProductDetailScreen() {
                 <span className="text-muted-foreground">Kategori</span>
                 <span className="text-foreground">{product.category.name}</span>
               </div>
+              {product.productType === 'jasa' && (
+                <div className="mt-3 p-3 bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800/30 rounded-xl">
+                  <div className="flex items-start gap-2">
+                    <Shield className="w-4 h-4 text-purple-600 dark:text-purple-400 mt-0.5 flex-shrink-0" />
+                    <p className="text-xs text-purple-700 dark:text-purple-300 leading-relaxed">
+                      Pesanan jasa tidak memerlukan pengiriman fisik. Pembayaran ditahan (escrow) sampai jasa selesai.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           </motion.div>
 

@@ -6,11 +6,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { formatPrice, formatRelativeTime } from "@/lib/utils"
 import { PageHeader, EmptyState, StatusBadge, TabBar, PrimaryButton } from "./shared"
 import type { Order, OrderStatus } from "@/lib/types"
-import { useState, useMemo, useCallback } from "react"
+import { useState, useMemo, useCallback, useEffect } from "react"
 import {
   ArrowLeft, Package, CreditCard, Truck, CheckCircle2, Star,
   ChevronRight, MapPin, Clock, ShoppingBag, RotateCcw, Copy,
-  Phone, MessageCircle, Store, Wallet, Receipt, Landmark, Upload, ImagePlus, CheckCircle
+  Phone, MessageCircle, Store, Wallet, Receipt, Landmark, Upload, ImagePlus, CheckCircle,
+  Image as ImageIcon, Timer
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -41,6 +42,27 @@ const TRACKING_STEPS = [
   { key: "delivered", label: "Pesanan Diterima", icon: CheckCircle2 },
 ]
 
+// Service order timeline steps (different labels)
+const SERVICE_TRACKING_STEPS = [
+  { key: "ordered", label: "Pesanan Dibuat", icon: ShoppingBag },
+  { key: "paid", label: "Pembayaran Dikonfirmasi", icon: CreditCard },
+  { key: "processing", label: "Jasa Sedang Dikerjakan", icon: Package },
+  { key: "shipped", label: "Bukti Jasa Dikirim", icon: CheckCircle2 },
+  { key: "delivered", label: "Jasa Dikonfirmasi Selesai", icon: CheckCircle2 },
+]
+
+// Service proof data type
+interface ServiceProofData {
+  orderId: string
+  orderNumber: string
+  isServiceOrder: boolean
+  status: string
+  proofImages: string[]
+  sellerCompletedAt: string | null
+  autoConfirmAt: string | null
+  buyerConfirmedAt: string | null
+}
+
 function getActiveStep(order: Order): number {
   switch (order.status) {
     case "pending": return 0
@@ -59,6 +81,9 @@ function getActionButton(order: Order): { label: string; variant: "default" | "o
     case "pending":
       return { label: "Bayar", variant: "default", icon: <CreditCard className="w-3.5 h-3.5" /> }
     case "shipped":
+      if (order.isServiceOrder) {
+        return { label: "Konfirmasi", variant: "default", icon: <CheckCircle2 className="w-3.5 h-3.5" /> }
+      }
       return { label: "Lacak", variant: "default", icon: <Truck className="w-3.5 h-3.5" /> }
     case "delivered":
       return { label: "Review", variant: "default", icon: <Star className="w-3.5 h-3.5" /> }
@@ -72,19 +97,73 @@ function getSecondaryButton(order: Order): { label: string } | null {
     case "delivered":
       return { label: "Beli Lagi" }
     case "shipped":
+      if (order.isServiceOrder) {
+        return null // No secondary button for service orders — primary is "Konfirmasi"
+      }
       return { label: "Terima" }
     default:
       return null
   }
 }
 
+// ==================== SERVICE PROOF COUNTDOWN ====================
+function ServiceProofCountdown({ autoConfirmAt }: { autoConfirmAt: string }) {
+  const [remaining, setRemaining] = useState("")
+
+  useEffect(() => {
+    const update = () => {
+      const target = new Date(autoConfirmAt).getTime()
+      const now = Date.now()
+      const diff = target - now
+      if (diff <= 0) { setRemaining("Otomatis dikonfirmasi"); return }
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+      if (days > 0) {
+        setRemaining(`${days} hari ${hours} jam lagi`)
+      } else if (hours > 0) {
+        setRemaining(`${hours} jam ${minutes} menit lagi`)
+      } else {
+        setRemaining(`${minutes} menit lagi`)
+      }
+    }
+    update()
+    const interval = setInterval(update, 60000)
+    return () => clearInterval(interval)
+  }, [autoConfirmAt])
+
+  return <>{remaining}</>
+}
+
 // ==================== ORDER CARD ====================
 function OrderCard({ order, onTap }: { order: Order; onTap: () => void }) {
-  const { showToast, updateOrderStatus, setSelectedOrder, navigate, payForOrder, cancelOrder, products } = useAppStore()
+  const { showToast, updateOrderStatus, setSelectedOrder, navigate, payForOrder, cancelOrder, products, fetchOrders } = useAppStore()
   const [showCancelDialog, setShowCancelDialog] = useState(false)
+  const [isConfirming, setIsConfirming] = useState(false)
   const { addItem } = useCartStore()
   const primaryBtn = getActionButton(order)
   const secondaryBtn = getSecondaryButton(order)
+
+  // Confirm service completion via API
+  const confirmServiceOrder = useCallback(async (orderId: string) => {
+    setIsConfirming(true)
+    try {
+      const res = await apiClient.rawPut(`/api/orders/${orderId}`, { status: 'delivered' })
+      const data = await res.json()
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Gagal mengkonfirmasi')
+      }
+      updateOrderStatus(orderId, 'delivered')
+      const userId = useAppStore.getState().currentUser?.id
+      if (userId) await fetchOrders(userId)
+      showToast("Jasa dikonfirmasi selesai! Dana escrow akan dilepas.", "success")
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Gagal mengkonfirmasi jasa'
+      showToast(message, "error")
+    } finally {
+      setIsConfirming(false)
+    }
+  }, [updateOrderStatus, showToast, fetchOrders])
 
   return (
     <motion.div
@@ -97,6 +176,11 @@ function OrderCard({ order, onTap }: { order: Order; onTap: () => void }) {
         <div className="flex items-center gap-2">
           <Store className="w-4 h-4 text-muted-foreground" />
           <span className="text-sm font-semibold text-foreground">{order.seller.storeName}</span>
+          {order.isServiceOrder && (
+            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
+              Jasa
+            </span>
+          )}
         </div>
         <StatusBadge status={order.status} size="sm" />
       </div>
@@ -125,6 +209,36 @@ function OrderCard({ order, onTap }: { order: Order; onTap: () => void }) {
           </div>
         ))}
       </div>
+
+      {/* Service order: waiting for buyer confirmation banner */}
+      {order.isServiceOrder && order.status === "shipped" && order.serviceProofImages && order.serviceProofImages.length > 0 && (
+        <div className="px-4 pb-2">
+          <div className="p-2.5 bg-purple-50 dark:bg-purple-950/30 rounded-lg border border-purple-200 dark:border-purple-800/50">
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <CheckCircle2 className="w-3.5 h-3.5 text-purple-600" />
+              <span className="text-xs font-semibold text-purple-700 dark:text-purple-400">Bukti jasa telah dikirim</span>
+            </div>
+            <div className="flex gap-1.5">
+              {order.serviceProofImages.slice(0, 3).map((img, idx) => (
+                <div key={idx} className="w-10 h-10 rounded-md overflow-hidden border border-purple-200 dark:border-purple-800/50">
+                  <img src={img} alt={`Bukti ${idx + 1}`} className="w-full h-full object-cover" />
+                </div>
+              ))}
+              {order.serviceProofImages.length > 3 && (
+                <div className="w-10 h-10 rounded-md bg-purple-100 dark:bg-purple-900/50 flex items-center justify-center border border-purple-200 dark:border-purple-800/50">
+                  <span className="text-[10px] font-medium text-purple-600">+{order.serviceProofImages.length - 3}</span>
+                </div>
+              )}
+            </div>
+            {order.autoConfirmAt && (
+              <p className="text-[10px] text-purple-600 dark:text-purple-400 mt-1.5 flex items-center gap-1">
+                <Timer className="w-3 h-3" />
+                Auto konfirmasi <ServiceProofCountdown autoConfirmAt={order.autoConfirmAt} />
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Total */}
       <div className="px-4 py-2.5 border-t border-border/30 flex items-center justify-between">
@@ -180,7 +294,8 @@ function OrderCard({ order, onTap }: { order: Order; onTap: () => void }) {
           {primaryBtn && (
             <PrimaryButton
               size="sm"
-              className="h-8 text-xs rounded-lg"
+              className={`h-8 text-xs rounded-lg ${order.isServiceOrder && order.status === "shipped" ? "bg-purple-500 hover:bg-purple-600 active:bg-purple-700" : ""}`}
+              disabled={isConfirming}
               onClick={async (e) => {
                 e.stopPropagation()
                 if (order.status === "pending") {
@@ -209,6 +324,9 @@ function OrderCard({ order, onTap }: { order: Order; onTap: () => void }) {
                     // Wallet payment was processed
                     showToast("Pembayaran berhasil diproses!", "success")
                   }
+                } else if (order.status === "shipped" && order.isServiceOrder) {
+                  // Service order: confirm via API to release escrow
+                  await confirmServiceOrder(order.id)
                 } else if (order.status === "shipped") {
                   onTap()
                 } else if (order.status === "delivered") {
@@ -217,8 +335,12 @@ function OrderCard({ order, onTap }: { order: Order; onTap: () => void }) {
                 }
               }}
             >
-              {primaryBtn.icon}
-              <span className="ml-1">{primaryBtn.label}</span>
+              {isConfirming ? (
+                <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin mr-1" />
+              ) : (
+                primaryBtn.icon
+              )}
+              <span className="ml-1">{isConfirming ? "Mengkonfirmasi..." : primaryBtn.label}</span>
             </PrimaryButton>
           )}
         </div>
@@ -254,13 +376,37 @@ function OrderCard({ order, onTap }: { order: Order; onTap: () => void }) {
 
 // ==================== ORDER DETAIL ====================
 function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
-  const { showToast, updateOrderStatus, setSelectedOrder, navigate, setSelectedChatRoom, chatRooms, payForOrder, cancelOrder, products } = useAppStore()
+  const { showToast, updateOrderStatus, setSelectedOrder, navigate, setSelectedChatRoom, chatRooms, payForOrder, cancelOrder, products, fetchOrders } = useAppStore()
   const [showCancelDialog, setShowCancelDialog] = useState(false)
   const [escrowBankAccounts, setEscrowBankAccounts] = useState<{ bankName: string; accountNumber: string; accountHolder: string }[]>([])
   const [isUploadingProof, setIsUploadingProof] = useState(false)
+  const [isConfirmingService, setIsConfirmingService] = useState(false)
+  const [serviceProofData, setServiceProofData] = useState<ServiceProofData | null>(null)
+  const [isLoadingServiceProof, setIsLoadingServiceProof] = useState(false)
   const { addItem } = useCartStore()
   const activeStep = getActiveStep(order)
   const isEscrowOrder = order.paymentMethod?.toLowerCase().includes('escrow')
+
+  // Fetch service proof data for service orders
+  useEffect(() => {
+    if (order.isServiceOrder && (order.status === 'shipped' || order.status === 'delivered')) {
+      setIsLoadingServiceProof(true)
+      apiClient.get<{ success: boolean; data: ServiceProofData }>(`/api/orders/${order.id}/service-proof`)
+        .then(data => {
+          if (data.success && data.data) {
+            setServiceProofData(data.data)
+          }
+        })
+        .catch(() => {
+          // silently fail — use local order data as fallback
+        })
+        .finally(() => setIsLoadingServiceProof(false))
+    }
+  }, [order.id, order.isServiceOrder, order.status])
+
+  // The proof images to display — prefer API data, fall back to order data
+  const proofImages = serviceProofData?.proofImages || order.serviceProofImages || []
+  const autoConfirmAt = serviceProofData?.autoConfirmAt || order.autoConfirmAt
 
   // Fetch MartUp bank accounts for escrow orders
   const fetchBankAccounts = useCallback(async () => {
@@ -335,6 +481,30 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
     input.click()
   }, [order.id, order.status, showToast, updateOrderStatus])
 
+  // Confirm service completion via API
+  const handleConfirmService = useCallback(async () => {
+    setIsConfirmingService(true)
+    try {
+      const res = await apiClient.rawPut(`/api/orders/${order.id}`, { status: 'delivered' })
+      const data = await res.json()
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Gagal mengkonfirmasi')
+      }
+      updateOrderStatus(order.id, 'delivered')
+      const userId = useAppStore.getState().currentUser?.id
+      if (userId) await fetchOrders(userId)
+      showToast("Jasa dikonfirmasi selesai! Dana escrow akan dilepas.", "success")
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Gagal mengkonfirmasi jasa'
+      showToast(message, "error")
+    } finally {
+      setIsConfirmingService(false)
+    }
+  }, [order.id, updateOrderStatus, showToast, fetchOrders])
+
+  // Choose timeline steps based on order type
+  const trackingSteps = order.isServiceOrder ? SERVICE_TRACKING_STEPS : TRACKING_STEPS
+
   return (
     <div className="flex flex-col min-h-screen bg-background">
       <PageHeader
@@ -357,9 +527,11 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
       <div className="flex-1 pb-20">
         {/* Status Banner */}
         <div className="px-4 py-4">
-          <div className="bg-emerald-50 dark:bg-emerald-950/30 rounded-xl p-4 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0">
-              {order.status === "shipped" ? (
+          <div className={`${order.isServiceOrder ? 'bg-purple-50 dark:bg-purple-950/30' : 'bg-emerald-50 dark:bg-emerald-950/30'} rounded-xl p-4 flex items-center gap-3`}>
+            <div className={`w-10 h-10 rounded-full ${order.isServiceOrder ? 'bg-purple-500' : 'bg-emerald-500'} flex items-center justify-center flex-shrink-0`}>
+              {order.status === "shipped" && order.isServiceOrder ? (
+                <CheckCircle2 className="w-5 h-5 text-white" />
+              ) : order.status === "shipped" ? (
                 <Truck className="w-5 h-5 text-white" />
               ) : order.status === "delivered" ? (
                 <CheckCircle2 className="w-5 h-5 text-white" />
@@ -372,8 +544,18 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
             <div>
               <p className="text-sm font-bold text-foreground">
                 <StatusBadge status={order.status} size="md" />
+                {order.isServiceOrder && (
+                  <span className="ml-1.5 text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
+                    Jasa
+                  </span>
+                )}
               </p>
-              {order.shipping?.estimatedDays && (
+              {order.isServiceOrder && order.status === "shipped" && (
+                <p className="text-xs text-purple-600 dark:text-purple-400 mt-0.5">
+                  Bukti jasa telah dikirim, menunggu konfirmasi Anda
+                </p>
+              )}
+              {!order.isServiceOrder && order.shipping?.estimatedDays && (
                 <p className="text-xs text-muted-foreground mt-0.5">
                   Estimasi {order.shipping.estimatedDays} hari
                 </p>
@@ -383,7 +565,7 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
         </div>
 
         {/* Shipping Tracking Timeline */}
-        {order.status !== "cancelled" && order.status !== "refunded" && (
+        {order.status !== "cancelled" && order.status !== "refunded" && !order.isServiceOrder && (
           <div className="px-4 pb-4">
             <div className="bg-card rounded-xl border border-border/50 p-4">
               <h3 className="text-sm font-bold text-foreground mb-4 flex items-center gap-2">
@@ -410,7 +592,7 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
 
               {/* Vertical Timeline */}
               <div className="space-y-0">
-                {TRACKING_STEPS.map((step, idx) => {
+                {trackingSteps.map((step, idx) => {
                   const isCompleted = idx <= activeStep
                   const isCurrent = idx === activeStep
                   const StepIcon = step.icon
@@ -432,7 +614,7 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
                         >
                           <StepIcon className={`w-4 h-4 ${isCompleted ? "text-white" : "text-muted-foreground"}`} />
                         </motion.div>
-                        {idx < TRACKING_STEPS.length - 1 && (
+                        {idx < trackingSteps.length - 1 && (
                           <div className={`w-0.5 h-8 ${idx < activeStep ? "bg-emerald-500" : "bg-border"}`} />
                         )}
                       </div>
@@ -453,8 +635,111 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
           </div>
         )}
 
-        {/* Shipping Address */}
-        {order.address && (
+        {/* Service Order Timeline (simplified) */}
+        {order.status !== "cancelled" && order.status !== "refunded" && order.isServiceOrder && (
+          <div className="px-4 pb-4">
+            <div className="bg-card rounded-xl border border-border/50 p-4">
+              <h3 className="text-sm font-bold text-foreground mb-4 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-purple-500" />
+                Status Jasa
+              </h3>
+              <div className="space-y-0">
+                {trackingSteps.map((step, idx) => {
+                  const isCompleted = idx <= activeStep
+                  const isCurrent = idx === activeStep
+                  const StepIcon = step.icon
+
+                  return (
+                    <div key={step.key} className="flex gap-3">
+                      <div className="flex flex-col items-center">
+                        <motion.div
+                          initial={false}
+                          animate={{
+                            scale: isCurrent ? [1, 1.2, 1] : 1,
+                            backgroundColor: isCompleted ? "#a855f7" : "#e5e7eb",
+                          }}
+                          transition={{ duration: 0.5 }}
+                          className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                            isCompleted ? "bg-purple-500" : "bg-muted"
+                          }`}
+                        >
+                          <StepIcon className={`w-4 h-4 ${isCompleted ? "text-white" : "text-muted-foreground"}`} />
+                        </motion.div>
+                        {idx < trackingSteps.length - 1 && (
+                          <div className={`w-0.5 h-8 ${idx < activeStep ? "bg-purple-500" : "bg-border"}`} />
+                        )}
+                      </div>
+                      <div className="pb-6">
+                        <p className={`text-sm font-medium ${isCompleted ? "text-foreground" : "text-muted-foreground"}`}>
+                          {step.label}
+                        </p>
+                        {isCurrent && (
+                          <p className="text-xs text-purple-600 mt-0.5">Sedang berlangsung</p>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Service Proof Images — show for service orders with status shipped or later */}
+        {order.isServiceOrder && (order.status === "shipped" || order.status === "delivered") && (
+          <div className="px-4 pb-4">
+            <div className="bg-card rounded-xl border border-border/50 p-4">
+              <h3 className="text-sm font-bold text-foreground mb-3 flex items-center gap-2">
+                <ImageIcon className="w-4 h-4 text-purple-500" />
+                Bukti Penyelesaian Jasa
+              </h3>
+              {isLoadingServiceProof ? (
+                <div className="flex items-center justify-center py-6">
+                  <div className="w-5 h-5 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />
+                </div>
+              ) : proofImages.length > 0 ? (
+                <>
+                  <div className="grid grid-cols-2 gap-2">
+                    {proofImages.map((img, idx) => (
+                      <div key={idx} className="w-full aspect-square rounded-lg overflow-hidden border border-border/50">
+                        <img src={img} alt={`Bukti jasa ${idx + 1}`} className="w-full h-full object-cover" />
+                      </div>
+                    ))}
+                  </div>
+                  {serviceProofData?.sellerCompletedAt && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Dikirim: {new Date(serviceProofData.sellerCompletedAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  )}
+                  {!serviceProofData?.sellerCompletedAt && order.shippedAt && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Dikirim: {new Date(order.shippedAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  )}
+                </>
+              ) : (
+                <p className="text-xs text-muted-foreground">Belum ada bukti penyelesaian dari penjual.</p>
+              )}
+
+              {/* Auto-confirm countdown notice */}
+              {order.status === "shipped" && autoConfirmAt && (
+                <div className="mt-3 p-2.5 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800/50">
+                  <p className="text-xs text-amber-700 dark:text-amber-400 flex items-center gap-1">
+                    <Timer className="w-3.5 h-3.5" />
+                    <span className="font-medium">Auto konfirmasi:</span>{' '}
+                    <ServiceProofCountdown autoConfirmAt={autoConfirmAt} />
+                  </p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    Jika tidak dikonfirmasi, pesanan akan otomatis dikonfirmasi dan dana escrow dilepas.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Shipping Address — only for non-service orders */}
+        {!order.isServiceOrder && order.address && (
         <div className="px-4 pb-4">
           <div className="bg-card rounded-xl border border-border/50 p-4">
             <h3 className="text-sm font-bold text-foreground mb-3 flex items-center gap-2">
@@ -672,7 +957,7 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
               )}
               {order.shippedAt && (
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Tanggal Kirim</span>
+                  <span className="text-xs text-muted-foreground">{order.isServiceOrder ? 'Bukti Dikirim' : 'Tanggal Kirim'}</span>
                   <span className="text-xs text-foreground">{formatRelativeTime(order.shippedAt)}</span>
                 </div>
               )}
@@ -723,7 +1008,23 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
               </Button>
             </>
           )}
-          {order.status === "shipped" && (
+          {/* Service order: shipped status — confirm service completion */}
+          {order.isServiceOrder && order.status === "shipped" && (
+            <PrimaryButton
+              className="w-full h-12 rounded-xl text-sm font-semibold bg-purple-500 hover:bg-purple-600 active:bg-purple-700"
+              disabled={isConfirmingService}
+              onClick={handleConfirmService}
+            >
+              {isConfirmingService ? (
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
+              ) : (
+                <CheckCircle2 className="w-4 h-4 mr-2" />
+              )}
+              {isConfirmingService ? "Mengkonfirmasi..." : "Konfirmasi Jasa Selesai"}
+            </PrimaryButton>
+          )}
+          {/* Regular order: shipped status — confirm delivery */}
+          {!order.isServiceOrder && order.status === "shipped" && (
             <PrimaryButton
               className="w-full h-12 rounded-xl text-sm font-semibold"
               onClick={() => {

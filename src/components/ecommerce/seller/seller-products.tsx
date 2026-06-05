@@ -60,7 +60,18 @@ export function SellerProducts() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2">
-                        <p className="text-sm font-medium text-foreground line-clamp-1">{product.name}</p>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <p className="text-sm font-medium text-foreground line-clamp-1">{product.name}</p>
+                          {product.productType === 'jasa' ? (
+                            <Badge className="bg-purple-500 text-white text-[9px] font-bold px-1.5 py-0 rounded flex-shrink-0">
+                              Jasa
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-[9px] font-medium px-1.5 py-0 border-border text-muted-foreground flex-shrink-0">
+                              Barang
+                            </Badge>
+                          )}
+                        </div>
                         <Badge variant="outline" className={`text-[10px] flex-shrink-0 ${product.status === "active" ? "border-emerald-300 text-emerald-600" : "border-amber-300 text-amber-600"}`}>
                           {product.status === "active" ? "Aktif" : "Draft"}
                         </Badge>

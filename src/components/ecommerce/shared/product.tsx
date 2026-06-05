@@ -97,8 +97,13 @@ export function ProductCard({ product, onClick, layout = "grid", showShareToStre
               </span>
             </div>
           )}
+          {product.productType === 'jasa' && (
+            <div className="absolute top-1 left-1 bg-purple-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-0.5 z-10">
+              🛠️ Jasa
+            </div>
+          )}
           {product.isFlashSale && (
-            <div className="absolute top-1 left-1 bg-orange-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-0.5">
+            <div className="absolute top-1 right-1 bg-orange-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-0.5">
               <Zap className="w-2.5 h-2.5" />
               FLASH
             </div>
@@ -151,9 +156,16 @@ export function ProductCard({ product, onClick, layout = "grid", showShareToStre
           </div>
         )}
 
+        {/* Jasa badge */}
+        {product.productType === 'jasa' && (
+          <div className="absolute top-2 left-2 bg-purple-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-0.5 z-10">
+            🛠️ Jasa
+          </div>
+        )}
+
         {/* Discount badge */}
         {discountPercent > 0 && (
-          <div className="absolute top-2 left-2 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md">
+          <div className={`absolute bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md ${product.productType === 'jasa' ? 'top-8 left-2' : 'top-2 left-2'}`}>
             -{discountPercent}%
           </div>
         )}

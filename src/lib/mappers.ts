@@ -65,6 +65,9 @@ interface RawOrder {
   paymentStatus: string
   paymentProof?: string
   paymentBankName?: string
+  isServiceOrder?: boolean
+  serviceProofImages?: string
+  autoConfirmAt?: string | Date | number | null
   items?: RawOrderItem[]
   shipping?: RawShipping
   addressId?: string
@@ -254,6 +257,13 @@ export function mapOrder(raw: RawOrder, currentUser?: User | null): Order {
     paymentStatus: raw.paymentStatus || 'unpaid',
     paymentProof: raw.paymentProof || undefined,
     paymentBankName: raw.paymentBankName || undefined,
+    isServiceOrder: raw.isServiceOrder || false,
+    serviceProofImages: (() => {
+      if (!raw.serviceProofImages) return undefined
+      if (Array.isArray(raw.serviceProofImages)) return raw.serviceProofImages as string[]
+      try { return JSON.parse(raw.serviceProofImages as string) as string[] } catch { return undefined }
+    })(),
+    autoConfirmAt: normalizeDate(raw.autoConfirmAt),
     items: (raw.items || []).map((item: RawOrderItem): OrderItem => ({
       id: item.id,
       productId: item.productId,

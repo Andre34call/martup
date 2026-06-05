@@ -294,12 +294,15 @@ export async function POST(request: NextRequest) {
       userId,
       sellerId,
       items,
-      addressId,
+      addressId: validatedAddressId,
       voucherCode,
       paymentMethod,
       note,
       shipping,
     } = validatedData
+
+    // Determine addressId — may be null for jasa-only orders
+    const addressId = validatedAddressId ?? null
 
     // SECURITY: Users can only create orders for themselves
     if (userId !== authResult.user.id) {
@@ -309,26 +312,60 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // SECURITY (CB-5): Verify address belongs to the user BEFORE the transaction
-    const address = await db.address.findUnique({ where: { id: addressId } })
-    if (!address) {
-      return NextResponse.json(
-        { success: false, error: 'Alamat pengiriman tidak ditemukan' },
-        { status: 400 }
-      )
+    // Pre-fetch product types to determine if this is a jasa-only order
+    // This must happen before address validation so we know whether address is required
+    let isServiceOrderPreCheck = true
+    for (const item of items as Array<{ productId: string; quantity: number; variantId?: string | null }>) {
+      const product = await db.product.findUnique({
+        where: { id: item.productId },
+        select: { productType: true },
+      })
+      if (!product || product.productType !== 'jasa') {
+        isServiceOrderPreCheck = false
+        break
+      }
     }
-    if (address.userId !== authResult.user.id) {
-      return NextResponse.json(
-        { success: false, error: 'Anda tidak memiliki akses ke alamat ini' },
-        { status: 403 }
-      )
+
+    // SECURITY (CB-5): Verify address belongs to the user BEFORE the transaction
+    // Required for physical product orders, optional for service (jasa) orders
+    let address: { id: string; userId: string; city: string } | null = null
+    if (!isServiceOrderPreCheck) {
+      // Physical products require an address
+      if (!addressId) {
+        return NextResponse.json(
+          { success: false, error: 'Alamat pengiriman wajib diisi untuk produk fisik' },
+          { status: 400 }
+        )
+      }
+      address = await db.address.findUnique({ where: { id: addressId } })
+      if (!address) {
+        return NextResponse.json(
+          { success: false, error: 'Alamat pengiriman tidak ditemukan' },
+          { status: 400 }
+        )
+      }
+      if (address.userId !== authResult.user.id) {
+        return NextResponse.json(
+          { success: false, error: 'Anda tidak memiliki akses ke alamat ini' },
+          { status: 403 }
+        )
+      }
+    } else if (addressId) {
+      // For service orders with an address provided, still verify ownership
+      address = await db.address.findUnique({ where: { id: addressId } })
+      if (address && address.userId !== authResult.user.id) {
+        return NextResponse.json(
+          { success: false, error: 'Anda tidak memiliki akses ke alamat ini' },
+          { status: 403 }
+        )
+      }
     }
 
     // SECURITY: Validate stock before entering transaction
     for (const item of items as Array<{ productId: string; quantity: number; variantId?: string | null }>) {
       const product = await db.product.findUnique({
         where: { id: item.productId },
-        select: { id: true, name: true, stock: true },
+        select: { id: true, name: true, stock: true, productType: true },
       })
       if (!product) {
         return NextResponse.json(
@@ -336,7 +373,8 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         )
       }
-      if (product.stock < item.quantity) {
+      // Skip stock check for jasa (service) products — unlimited availability
+      if (product.productType !== 'jasa' && product.stock < item.quantity) {
         return NextResponse.json(
           { success: false, error: `Stok tidak mencukupi untuk "${product.name}". Tersedia: ${product.stock}, Diminta: ${item.quantity}` },
           { status: 400 }
@@ -376,6 +414,7 @@ export async function POST(request: NextRequest) {
         subtotal: number
         image: string | null
         sellerId: string
+        productType: string
       }> = []
 
       let serverSubtotal = 0
@@ -384,10 +423,14 @@ export async function POST(request: NextRequest) {
         // SECURITY: Re-validate stock inside transaction (race condition protection)
         const product = await tx.product.findUnique({
           where: { id: item.productId },
-          select: { id: true, name: true, stock: true, price: true, discountPrice: true, images: true, sellerId: true },
+          select: { id: true, name: true, stock: true, price: true, discountPrice: true, images: true, sellerId: true, productType: true },
         })
-        if (!product || product.stock < item.quantity) {
-          throw new Error(`Stok tidak mencukupi untuk "${product?.name || item.productId}". Tersedia: ${product?.stock ?? 0}, Diminta: ${item.quantity}`)
+        // Skip stock validation for jasa (service) products — unlimited availability
+        if (!product) {
+          throw new Error(`Produk tidak ditemukan: ${item.productId}`)
+        }
+        if (product.productType !== 'jasa' && product.stock < item.quantity) {
+          throw new Error(`Stok tidak mencukupi untuk "${product.name}". Tersedia: ${product.stock}, Diminta: ${item.quantity}`)
         }
 
         let itemPrice = Number(product.price)
@@ -427,6 +470,7 @@ export async function POST(request: NextRequest) {
           subtotal: itemSubtotal,
           image: itemImage,
           sellerId: product.sellerId,
+          productType: product.productType,
         })
       }
 
@@ -501,94 +545,106 @@ export async function POST(request: NextRequest) {
       // using the seller's city, buyer's address, item weight, and
       // the selected courier/service. Only the server-verified cost is used.
       // =====================================================
-      const clientShippingCost = validatedData.shippingCost ?? 0
-      let serverShippingCost = clientShippingCost // default to client value, overridden below
 
-      try {
-        // Fetch seller's store city for origin
-        const sellerRecord = await tx.seller.findUnique({
-          where: { id: sellerId },
-          select: { storeCity: true, storeProvince: true },
-        })
-        const originCity = sellerRecord?.storeCity || 'Jakarta'
-        const destinationCity = address.city || 'Jakarta'
+      // Determine if this is a jasa-only (service) order
+      const isServiceOrder = serverItems.every(si => si.productType === 'jasa')
 
-        // Calculate total weight from items (default 500g per item if not set)
-        let totalWeightGrams = 0
-        for (const si of serverItems) {
-          const product = await tx.product.findUnique({
-            where: { id: si.productId },
-            select: { weight: true },
+      let serverShippingCost = 0
+
+      if (!isServiceOrder) {
+        // Physical products need shipping — verify cost server-side
+        const clientShippingCost = validatedData.shippingCost ?? 0
+        serverShippingCost = clientShippingCost // default to client value, overridden below
+
+        try {
+          // Fetch seller's store city for origin
+          const sellerRecord = await tx.seller.findUnique({
+            where: { id: sellerId },
+            select: { storeCity: true, storeProvince: true },
           })
-          totalWeightGrams += (product?.weight || 500) * si.quantity
-        }
+          const originCity = sellerRecord?.storeCity || 'Jakarta'
+          const destinationCity = address?.city || 'Jakarta'
 
-        // Determine courier from shipping data
-        const selectedCourier = shipping?.provider?.toLowerCase()
+          // Calculate total weight from items (skip jasa products — they have no weight)
+          let totalWeightGrams = 0
+          for (const si of serverItems) {
+            // Skip weight for jasa (service) products — they don't ship
+            if (si.productType === 'jasa') continue
+            const product = await tx.product.findUnique({
+              where: { id: si.productId },
+              select: { weight: true },
+            })
+            totalWeightGrams += (product?.weight || 500) * si.quantity
+          }
 
-        // Re-calculate shipping rates server-side
-        const rates = await calculateShippingRates({
-          originCity,
-          destinationCity,
-          weight: totalWeightGrams,
-          courier: selectedCourier,
-        })
+          // Determine courier from shipping data
+          const selectedCourier = shipping?.provider?.toLowerCase()
 
-        // Find the rate matching the selected provider + service
-        const selectedService = shipping?.service?.toUpperCase()
-        const matchingRate = rates.find(r =>
-          r.provider.toLowerCase() === (shipping?.provider || 'jne').toLowerCase() &&
-          r.service.toUpperCase() === selectedService
-        )
+          // Re-calculate shipping rates server-side
+          const rates = await calculateShippingRates({
+            originCity,
+            destinationCity,
+            weight: totalWeightGrams,
+            courier: selectedCourier,
+          })
 
-        if (matchingRate) {
-          serverShippingCost = matchingRate.price
-          logger.info(
-            { component: 'orders', clientShippingCost, serverShippingCost, provider: shipping?.provider, service: shipping?.service },
-            'Shipping cost verified server-side'
+          // Find the rate matching the selected provider + service
+          const selectedService = shipping?.service?.toUpperCase()
+          const matchingRate = rates.find(r =>
+            r.provider.toLowerCase() === (shipping?.provider || 'jne').toLowerCase() &&
+            r.service.toUpperCase() === selectedService
           )
-        } else if (rates.length > 0) {
-          // No exact match found — use the cheapest rate from the selected courier as fallback
-          const courierRates = selectedCourier
-            ? rates.filter(r => r.provider.toLowerCase() === selectedCourier)
-            : rates
-          if (courierRates.length > 0) {
-            const fallbackRate = courierRates.sort((a, b) => a.price - b.price)[0]
-            serverShippingCost = fallbackRate.price
-            logger.warn(
-              { component: 'orders', clientShippingCost, serverShippingCost, requestedService: selectedService, fallbackService: fallbackRate.service },
-              'Shipping service not found, using cheapest rate from courier'
+
+          if (matchingRate) {
+            serverShippingCost = matchingRate.price
+            logger.info(
+              { component: 'orders', clientShippingCost, serverShippingCost, provider: shipping?.provider, service: shipping?.service },
+              'Shipping cost verified server-side'
             )
+          } else if (rates.length > 0) {
+            // No exact match found — use the cheapest rate from the selected courier as fallback
+            const courierRates = selectedCourier
+              ? rates.filter(r => r.provider.toLowerCase() === selectedCourier)
+              : rates
+            if (courierRates.length > 0) {
+              const fallbackRate = courierRates.sort((a, b) => a.price - b.price)[0]
+              serverShippingCost = fallbackRate.price
+              logger.warn(
+                { component: 'orders', clientShippingCost, serverShippingCost, requestedService: selectedService, fallbackService: fallbackRate.service },
+                'Shipping service not found, using cheapest rate from courier'
+              )
+            }
           }
+
+          // Sanity check: if client cost is wildly different from server cost, something's wrong
+          // Allow ±10% tolerance for RajaOngkir rate fluctuations and rounding
+          if (serverShippingCost > 0 && clientShippingCost > 0) {
+            const tolerance = Math.max(serverShippingCost * 0.1, 500) // 10% or min 500 IDR
+            if (Math.abs(clientShippingCost - serverShippingCost) > tolerance) {
+              logger.warn(
+                { component: 'orders', clientShippingCost, serverShippingCost, difference: Math.abs(clientShippingCost - serverShippingCost) },
+                'Shipping cost mismatch — using server-calculated value'
+              )
+            }
+          }
+        } catch (shippingErr) {
+          // If server-side calculation fails, fall back to client value with bounds check
+          logger.warn(
+            { component: 'orders', err: shippingErr },
+            'Server-side shipping calculation failed, using client value with bounds check'
+          )
+          if (clientShippingCost < 0 || clientShippingCost > 500_000) {
+            throw new Error('Biaya pengiriman tidak valid (harus antara 0 - 500.000)')
+          }
+          serverShippingCost = clientShippingCost
         }
 
-        // Sanity check: if client cost is wildly different from server cost, something's wrong
-        // Allow ±10% tolerance for RajaOngkir rate fluctuations and rounding
-        if (serverShippingCost > 0 && clientShippingCost > 0) {
-          const tolerance = Math.max(serverShippingCost * 0.1, 500) // 10% or min 500 IDR
-          if (Math.abs(clientShippingCost - serverShippingCost) > tolerance) {
-            logger.warn(
-              { component: 'orders', clientShippingCost, serverShippingCost, difference: Math.abs(clientShippingCost - serverShippingCost) },
-              'Shipping cost mismatch — using server-calculated value'
-            )
-          }
-        }
-      } catch (shippingErr) {
-        // If server-side calculation fails, fall back to client value with bounds check
-        logger.warn(
-          { component: 'orders', err: shippingErr },
-          'Server-side shipping calculation failed, using client value with bounds check'
-        )
-        if (clientShippingCost < 0 || clientShippingCost > 500_000) {
+        // Final bounds check on server-verified cost
+        if (serverShippingCost < 0 || serverShippingCost > 500_000) {
           throw new Error('Biaya pengiriman tidak valid (harus antara 0 - 500.000)')
         }
-        serverShippingCost = clientShippingCost
       }
-
-      // Final bounds check on server-verified cost
-      if (serverShippingCost < 0 || serverShippingCost > 500_000) {
-        throw new Error('Biaya pengiriman tidak valid (harus antara 0 - 500.000)')
-      }
+      // For jasa-only orders: serverShippingCost stays 0 (no physical shipping)
 
       // Calculate tax server-side instead of trusting client input
       const TAX_RATE = 0 // Tax rate from server config (0 if not configured)
@@ -606,10 +662,11 @@ export async function POST(request: NextRequest) {
           orderNumber,
           userId,
           sellerId,
-          addressId,
+          addressId: isServiceOrder ? null : addressId,
+          isServiceOrder,
           status: 'pending',
           subtotal: serverSubtotal,
-          shippingCost: serverShippingCost,
+          shippingCost: isServiceOrder ? 0 : serverShippingCost,
           discountAmount: serverDiscountAmount,
           taxAmount: serverTaxAmount,
           platformFee: serverPlatformFee,
@@ -635,8 +692,8 @@ export async function POST(request: NextRequest) {
         },
       })
 
-      // Create shipping record if provided
-      if (shipping) {
+      // Create shipping record if provided (skip for jasa-only orders — no physical shipping)
+      if (shipping && !isServiceOrder) {
         await tx.shipping.create({
           data: {
             orderId: newOrder.id,
@@ -674,7 +731,10 @@ export async function POST(request: NextRequest) {
 
       // Update product sold count and stock
       // RACE CONDITION FIX: Use updateMany with stock >= qty to prevent stock going negative
+      // Skip stock deduction for jasa (service) products — unlimited availability
       for (const item of serverItems) {
+        if (item.productType === 'jasa') continue
+
         const updateResult = await tx.product.updateMany({
           where: { id: item.productId, stock: { gte: item.quantity } },
           data: {
