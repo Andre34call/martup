@@ -77,5 +77,5 @@ export const useAppStore = create<AppStore>()(
 
 // Expose store on window for debugging/testing (removed in production builds via dead code elimination)
 if (typeof window !== 'undefined') {
-  (window as Record<string, unknown>).__MARTUP_STORE__ = useAppStore
+  (window as unknown as Record<string, unknown>).__MARTUP_STORE__ = useAppStore
 }
