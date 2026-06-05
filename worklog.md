@@ -2589,3 +2589,151 @@ Files Modified:
 - src/components/ecommerce/order-screen.tsx (full rewrite with buyer service proof UI)
 
 No schema changes. No API route changes. All existing functionality preserved.
+
+---
+Task ID: 2
+Agent: full-stack-developer
+Task: Rename all user-facing display text "Jasa" to "Tolong Mas" across the entire UI
+
+Work Log:
+
+1. **seller-add-product-screen.tsx** (10 changes)
+   - Button text: "🛠️ Jasa" → "🤝 Tolong Mas"
+   - Description: Pilih "Jasa" jika kamu menjual layanan → Pilih 'Tolong Mas' jika kamu menjual layanan
+   - Section header: "Detail Jasa" → "Detail Tolong Mas"
+   - Label: "Durasi Jasa" → "Durasi Layanan"
+   - Helper text: "Berapa lama jasa dikerjakan" → "Berapa lama layanan dikerjakan"
+   - Label: "Lokasi Jasa" → "Lokasi Layanan"
+   - Helper text: "Apakah jasa dikerjakan online" → "Apakah layanan dikerjakan online"
+   - Info box: "Pesanan jasa tidak memerlukan pengiriman fisik..." → "Pesanan Tolong Mas tidak memerlukan pengiriman fisik... sampai layanan selesai"
+   - Stock hint: "Stok otomatis untuk jasa" → "Stok otomatis untuk layanan"
+   - Validation toast: "Durasi jasa harus diisi" → "Durasi layanan harus diisi"
+
+2. **shared/product.tsx** (2 changes)
+   - Badge in list view: "🛠️ Jasa" → "🤝 Tolong Mas"
+   - Badge in grid view: "🛠️ Jasa" → "🤝 Tolong Mas"
+
+3. **product-detail-screen.tsx** (3 changes)
+   - Gallery badge: "🛠️ Jasa" → "🤝 Tolong Mas"
+   - Info badge: "🛠️ Layanan Jasa" → "🤝 Tolong Mas"
+   - Info text: "Pesanan jasa tidak memerlukan pengiriman fisik. ...sampai jasa selesai" → "Pesanan Tolong Mas tidak memerlukan pengiriman fisik. ...sampai layanan selesai"
+
+4. **checkout-screen.tsx** (3 changes)
+   - Shipping name: 'Tanpa Pengiriman (Jasa)' → 'Tanpa Pengiriman (Tolong Mas)'
+   - Notice title: "Pesanan Jasa (Tanpa Pengiriman)" → "Tolong Mas (Tanpa Pengiriman)"
+   - Notice description: "Pesanan jasa tidak memerlukan alamat pengiriman... sampai jasa selesai" → "Pesanan Tolong Mas tidak memerlukan alamat pengiriman... sampai layanan selesai"
+
+5. **order-screen.tsx** (12 changes)
+   - Timeline: "Jasa Sedang Dikerjakan" → "Tolong Mas Sedang Dikerjakan"
+   - Timeline: "Bukti Jasa Dikirim" → "Bukti Tolong Mas Dikirim"
+   - Timeline: "Jasa Dikonfirmasi Selesai" → "Tolong Mas Dikonfirmasi Selesai"
+   - Badge in OrderCard: "Jasa" → "Tolong Mas"
+   - Badge in OrderDetail: "Jasa" → "Tolong Mas"
+   - Toast success: "Jasa dikonfirmasi selesai!" → "Tolong Mas dikonfirmasi selesai!" (×2)
+   - Toast error: "Gagal mengkonfirmasi jasa" → "Gagal mengkonfirmasi Tolong Mas" (×2)
+   - Status header: "Status Jasa" → "Status Tolong Mas"
+   - Proof section: "Bukti Penyelesaian Jasa" → "Bukti Penyelesaian Tolong Mas"
+   - Alt text: "Bukti jasa" → "Bukti Tolong Mas"
+   - Proof sent notice: "Bukti jasa telah dikirim" → "Bukti Tolong Mas telah dikirim"
+   - Confirmation detail: "Bukti jasa telah dikirim, menunggu konfirmasi Anda" → "Bukti Tolong Mas telah dikirim, menunggu konfirmasi Anda"
+   - Button: "Konfirmasi Jasa Selesai" → "Konfirmasi Tolong Mas Selesai"
+
+6. **seller-orders.tsx** (6 changes)
+   - Badge: "Jasa" → "Tolong Mas"
+   - Button: "Upload Bukti Jasa" → "Upload Bukti Tolong Mas"
+   - Dialog title: "Upload Bukti Penyelesaian Jasa" → "Upload Bukti Penyelesaian Tolong Mas"
+   - Dialog description: "Upload bukti bahwa jasa telah diselesaikan" → "Upload bukti bahwa layanan telah diselesaikan"
+   - View dialog title: "Bukti Penyelesaian Jasa" → "Bukti Penyelesaian Tolong Mas"
+   - Toast: "Bukti penyelesaian jasa berhasil dikirim!" → "Bukti penyelesaian Tolong Mas berhasil dikirim!"
+
+7. **seller-products.tsx** (1 change)
+   - Badge: "Jasa" → "Tolong Mas"
+
+**NOT changed** (per task rules):
+- All code logic values: `productType === 'jasa'`, `productType: 'jasa'` etc. — these are database values
+- Variable names: `isJasaOnlySeller`, `isAllJasa`, `hasAddressOrJasa`, `isSellerJasaOnly`
+- Comments: `{/* Jasa badge */}`, `// Jasa products have no physical weight`, etc.
+- Prisma schema: database field value `'jasa'` stays
+
+Branding applied:
+- 🤝 emoji for all Tolong Mas UI elements (handshake — fits the "helping" concept)
+- Purple color scheme maintained for all Tolong Mas UI elements
+- "Tolong Mas" = BRAND NAME for the service feature
+- "layanan" used when referring to the service concept generally (not as a brand)
+
+Lint result: 0 errors, 0 warnings
+
+Files changed: 7
+Display text changes: ~37
+Zero breaking changes — all code logic preserved
+
+---
+Task ID: 3+4
+Agent: full-stack-developer
+Task: Add "Tolong Mas" (service) feature awareness to admin panel and fix critical bug in order-status.ts
+
+Work Log:
+
+1. **CRITICAL FIX: order-status.ts** — Skip trackingNumber requirement for service orders
+   - Modified `updateOrderStatus` to accept `isServiceOrder` parameter
+   - TrackingNumber validation now skips when `isServiceOrder === true` (service orders use proof images instead)
+   - Authorization: Admin can now advance service orders to "shipped" status (`!(order.isServiceOrder && isAdmin)`)
+   - Shipping update: Only updates tracking number for non-service orders (`!order.isServiceOrder && trackingNumber`)
+   - Auto-confirm: When admin advances a service order to "shipped", sets `autoConfirmAt` (3-day countdown)
+   - Notification: Service order "shipped" notifications use different text ("Bukti Jasa Dikirim" vs "Pesanan Dikirim")
+   - Updated transition comments to reflect admin can also set shipped for service orders
+
+2. **Admin Orders API** (`src/app/api/admin/orders/route.ts`)
+   - GET: Added `isServiceOrder` filter support (`?isServiceOrder=true/false`)
+   - PUT: Looks up order's `isServiceOrder` before delegating to `updateOrderStatus`, passes it as parameter
+
+3. **Admin Products API** (`src/app/api/admin/products/route.ts`)
+   - GET: Added `productType` filter support (`?productType=jasa`)
+   - PUT: Added support for updating `productType`, `serviceDuration`, `serviceLocation` fields
+   - Validates `productType` against ['product', 'jasa']
+
+4. **Admin Dashboard API** (`src/app/api/admin/stats/route.ts`)
+   - Added 3 new parallel queries: serviceOrderCount, serviceOrderRevenue, pendingServiceConfirmations
+   - `serviceOrderCount`: Count of orders where `isServiceOrder = true`
+   - `serviceOrderRevenue`: Sum of `totalAmount` for service orders with `paymentStatus = 'paid'`
+   - `pendingServiceConfirmations`: Count of service orders with `status = 'shipped'` and `buyerConfirmedAt = null`
+   - All three fields included in API response
+
+5. **Types Updates** (`src/lib/types.ts`)
+   - `Order` interface: Added `sellerCompletedAt?: string` and `buyerConfirmedAt?: string`
+   - `AdminStats` interface: Added `serviceOrderCount?`, `serviceOrderRevenue?`, `pendingServiceConfirmations?`
+
+6. **Mappers Updates** (`src/lib/mappers.ts`)
+   - `RawOrder` type: Added `sellerCompletedAt` and `buyerConfirmedAt` fields
+   - `mapOrder`: Now maps `sellerCompletedAt` and `buyerConfirmedAt` using `normalizeDate()`
+
+7. **Admin Orders Screen** (`src/components/ecommerce/admin-orders-screen.tsx`)
+   - A) 🤝 Tolong Mas badge: Purple badge on service orders in order list
+   - B) Service proof display: Detail dialog shows service proof images, "Menunggu Konfirmasi" status with auto-confirm countdown, "Konfirmasi Selesai" button
+   - C) Skip tracking number: For service orders, shows "Bukti Penyelesaian" section instead of shipping info
+   - D) Filter: Added "🤝 Tolong Mas" tab to filter orders by `isServiceOrder`
+   - E) Summary card: Added Tolong Mas count to summary stats
+   - F) Service order actions: "Selesaikan" for processing, "Konfirmasi Selesai" for shipped
+   - G) AutoConfirmCountdown component: Shows time remaining until auto-confirm
+
+8. **Admin Products Screen** (`src/components/ecommerce/admin/products.tsx`)
+   - A) 🤝 Tolong Mas badge: Purple badge on jasa products in both regular and flagged lists
+   - B) Product type filter: Added "📦 Barang" | "🤝 Tolong Mas" filter buttons
+   - C) Product type in edit dialog: Added productType selector, conditional serviceDuration/serviceLocation fields
+   - D) Edit flow: Populate and save productType, serviceDuration, serviceLocation fields
+
+9. **Admin Dashboard** (`src/components/ecommerce/admin/dashboard.tsx`)
+   - A) 🤝 Tolong Mas metrics section: Purple-themed card with service order count, revenue, pending confirmations
+   - B) Pending service confirmations in "Tindakan Diperlukan" section
+   - C) Purple color scheme for all Tolong Mas UI elements
+   - D) Handshake icon imported from lucide-react
+
+Lint result: 0 errors
+TypeScript: 0 errors (tsc --noEmit passes)
+
+Stage Summary:
+- 10 files modified: order-status.ts, admin/orders/route.ts, admin/products/route.ts, admin/stats/route.ts, types.ts, mappers.ts, admin-orders-screen.tsx, products.tsx, dashboard.tsx
+- Prisma schema NOT changed (used existing isServiceOrder, serviceProofImages, sellerCompletedAt, buyerConfirmedAt, autoConfirmAt fields)
+- Database value 'jasa' preserved — only displayed as "Tolong Mas" in UI text
+- Purple color scheme used consistently for Tolong Mas branding
+- 🤝 emoji used for Tolong Mas branding throughout

@@ -1,7 +1,7 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { Package, Truck, CreditCard, Check, X, Eye, Printer, Clock } from "lucide-react"
+import { Package, Truck, CreditCard, Check, X, Eye, Printer, Clock, Handshake, Image as ImageIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
@@ -14,6 +14,7 @@ import { PageHeader, StatusBadge, EmptyState, AdminScreenWrapper } from "./share
 import type { OrderStatus, Order } from "@/lib/types"
 import { useState, useMemo, useEffect } from "react"
 import { ConfirmDialog } from "./confirm-dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 
 
 // ==================== TYPES ====================
@@ -28,6 +29,11 @@ interface AdminOrder {
   status: AdminOrderStatus
   date: string
   paymentMethod: string
+  isServiceOrder: boolean
+  serviceProofImages?: string[]
+  sellerCompletedAt?: string
+  buyerConfirmedAt?: string
+  autoConfirmAt?: string
 }
 
 // ==================== ORDER STATUS MAPPING ====================
@@ -53,6 +59,11 @@ function mapStoreOrderToAdminOrder(order: Order): AdminOrder {
     status: mapToAdminStatus(order.status),
     date: formatDate(order.createdAt),
     paymentMethod: order.paymentMethod || 'COD',
+    isServiceOrder: order.isServiceOrder || false,
+    serviceProofImages: order.serviceProofImages,
+    sellerCompletedAt: order.sellerCompletedAt,
+    buyerConfirmedAt: order.buyerConfirmedAt,
+    autoConfirmAt: order.autoConfirmAt,
   }
 }
 
@@ -64,6 +75,7 @@ const orderTabs: { key: string; label: string }[] = [
   { key: "shipped", label: "Dikirim" },
   { key: "delivered", label: "Selesai" },
   { key: "cancelled", label: "Dibatalkan" },
+  { key: "tolong-mas", label: "🤝 Tolong Mas" },
 ]
 
 // ==================== STATUS TO ORDERSTATUS MAPPING ====================
@@ -92,8 +104,42 @@ const statusColorMap: Record<AdminOrderStatus, string> = {
   cancelled: "text-red-600 bg-red-50 dark:bg-red-900/30",
 }
 
+// ==================== AUTO-CONFIRM COUNTDOWN ====================
+function AutoConfirmCountdown({ autoConfirmAt }: { autoConfirmAt?: string }) {
+  const [timeLeft, setTimeLeft] = useState<string>('')
+
+  useEffect(() => {
+    if (!autoConfirmAt) return
+    const target = new Date(autoConfirmAt).getTime()
+
+    const update = () => {
+      const now = Date.now()
+      const diff = target - now
+      if (diff <= 0) {
+        setTimeLeft('Otomatis dikonfirmasi')
+        return
+      }
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+      setTimeLeft(`${days}h ${hours}j ${minutes}m`)
+    }
+
+    update()
+    const interval = setInterval(update, 60000)
+    return () => clearInterval(interval)
+  }, [autoConfirmAt])
+
+  if (!autoConfirmAt) return null
+  return (
+    <span className="text-xs text-purple-600 dark:text-purple-400 font-medium">
+      ⏱ Konfirmasi otomatis: {timeLeft}
+    </span>
+  )
+}
+
 // ==================== ACTION BUTTONS CONFIG ====================
-function getOrderActions(status: AdminOrderStatus): { label: string; icon: React.ReactNode; variant: "default" | "outline"; className: string }[] {
+function getOrderActions(status: AdminOrderStatus, isServiceOrder: boolean): { label: string; icon: React.ReactNode; variant: "default" | "outline"; className: string }[] {
   switch (status) {
     case "pending":
       return [
@@ -101,10 +147,19 @@ function getOrderActions(status: AdminOrderStatus): { label: string; icon: React
         { label: "Batalkan", icon: <X className="w-3 h-3 mr-1" />, variant: "outline", className: "text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20" },
       ]
     case "processing":
-      return [
-        { label: "Kirim", icon: <Truck className="w-3 h-3 mr-1" />, variant: "default", className: "bg-cyan-500 hover:bg-cyan-600 text-white" },
-      ]
+      return isServiceOrder
+        ? [
+            { label: "Selesaikan", icon: <Check className="w-3 h-3 mr-1" />, variant: "default", className: "bg-purple-500 hover:bg-purple-600 text-white" },
+          ]
+        : [
+            { label: "Kirim", icon: <Truck className="w-3 h-3 mr-1" />, variant: "default", className: "bg-cyan-500 hover:bg-cyan-600 text-white" },
+          ]
     case "shipped":
+      if (isServiceOrder) {
+        return [
+          { label: "Konfirmasi Selesai", icon: <Check className="w-3 h-3 mr-1" />, variant: "default", className: "bg-purple-500 hover:bg-purple-600 text-white" },
+        ]
+      }
       return [
         { label: "Selesai", icon: <Check className="w-3 h-3 mr-1" />, variant: "default", className: "bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white" },
       ]
@@ -124,6 +179,7 @@ export function AdminOrdersScreen() {
   const [updating, setUpdating] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [confirmAction, setConfirmAction] = useState<{action: () => void, title: string, message: string} | null>(null)
+  const [detailOrder, setDetailOrder] = useState<AdminOrder | null>(null)
 
   useEffect(() => {
     Promise.all([fetchAdminStats(), fetchAdminOrders()]).finally(() => setIsLoading(false))
@@ -134,7 +190,6 @@ export function AdminOrdersScreen() {
     try {
       const data = await apiClient.put<{ success: boolean; error?: string }>('/api/admin/orders', { orderId, status: newStatus })
       if (data.success) {
-        // Refresh admin orders list
         await fetchAdminOrders()
       } else {
         showToast(data.error || 'Gagal mengubah status pesanan', 'error')
@@ -148,15 +203,21 @@ export function AdminOrdersScreen() {
 
   const orders = useMemo(() => adminOrders.map(mapStoreOrderToAdminOrder), [adminOrders])
 
-  const filtered = activeTab === "all"
-    ? orders
-    : orders.filter((o) => o.status === activeTab)
+  const filtered = useMemo(() => {
+    if (activeTab === "tolong-mas") {
+      return orders.filter(o => o.isServiceOrder)
+    }
+    return activeTab === "all"
+      ? orders
+      : orders.filter((o) => o.status === activeTab)
+  }, [activeTab, orders])
 
   const pendingCount = orders.filter((o) => o.status === "pending").length
   const processingCount = orders.filter((o) => o.status === "processing").length
   const shippedCount = orders.filter((o) => o.status === "shipped").length
   const deliveredCount = orders.filter((o) => o.status === "delivered").length
   const cancelledCount = orders.filter((o) => o.status === "cancelled").length
+  const tolongMasCount = orders.filter((o) => o.isServiceOrder).length
 
   const tabCounts: Record<string, number> = {
     all: orders.length,
@@ -165,6 +226,7 @@ export function AdminOrdersScreen() {
     shipped: shippedCount,
     delivered: deliveredCount,
     cancelled: cancelledCount,
+    'tolong-mas': tolongMasCount,
   }
 
   // Summary stats for top cards
@@ -173,6 +235,7 @@ export function AdminOrdersScreen() {
     { label: "Diproses", count: processingCount, icon: Package, color: "text-violet-600 bg-violet-50 dark:bg-violet-900/30 dark:text-violet-400" },
     { label: "Dikirim", count: shippedCount, icon: Truck, color: "text-cyan-600 bg-cyan-50 dark:bg-cyan-900/30 dark:text-cyan-400" },
     { label: "Selesai", count: deliveredCount, icon: Check, color: "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 dark:text-emerald-400" },
+    { label: "🤝 Tolong Mas", count: tolongMasCount, icon: Handshake, color: "text-purple-600 bg-purple-50 dark:bg-purple-900/30 dark:text-purple-400" },
   ]
 
   return (
@@ -181,15 +244,15 @@ export function AdminOrdersScreen() {
 
       <div className="px-4 space-y-4">
         {/* Summary Stats */}
-        <motion.div {...fadeIn} className="grid grid-cols-4 gap-2">
+        <motion.div {...fadeIn} className="grid grid-cols-5 gap-2">
           {summaryCards.map((card, i) => (
             <motion.div key={card.label} custom={i} variants={stagger} initial="initial" animate="animate">
-              <Card className="p-3 text-center">
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center mx-auto mb-1.5 ${card.color}`}>
-                  <card.icon className="w-4 h-4" />
+              <Card className="p-2.5 text-center">
+                <div className={`w-7 h-7 rounded-lg flex items-center justify-center mx-auto mb-1 ${card.color}`}>
+                  <card.icon className="w-3.5 h-3.5" />
                 </div>
                 <p className="text-lg font-bold text-foreground">{card.count}</p>
-                <p className="text-[10px] text-muted-foreground">{card.label}</p>
+                <p className="text-[9px] text-muted-foreground">{card.label}</p>
               </Card>
             </motion.div>
           ))}
@@ -204,7 +267,9 @@ export function AdminOrdersScreen() {
               onClick={() => setActiveTab(tab.key)}
               className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors border ${
                 activeTab === tab.key
-                  ? "bg-emerald-600 text-white border-emerald-600"
+                  ? tab.key === 'tolong-mas'
+                    ? "bg-purple-600 text-white border-purple-600"
+                    : "bg-emerald-600 text-white border-emerald-600"
                   : "bg-card text-foreground border-border hover:bg-muted"
               }`}
             >
@@ -230,14 +295,14 @@ export function AdminOrdersScreen() {
             />
           ) : (
             filtered.map((order, i) => {
-              const actions = getOrderActions(order.status)
+              const actions = getOrderActions(order.status, order.isServiceOrder)
               const itemsText = order.items.length > 1
                 ? `${order.items[0].name} +${order.items.length - 1} lainnya`
                 : order.items[0].name
 
               return (
                 <motion.div key={order.id} custom={i} variants={stagger} initial="initial" animate="animate">
-                  <Card className="p-4">
+                  <Card className={`p-4 ${order.isServiceOrder ? 'border-purple-200 dark:border-purple-900/50' : ''}`}>
                     {/* Order Header */}
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-2 min-w-0">
@@ -245,8 +310,13 @@ export function AdminOrdersScreen() {
                           {statusIconMap[order.status]}
                         </div>
                         <div className="min-w-0">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <p className="text-sm font-bold text-foreground">{order.orderNumber}</p>
+                            {order.isServiceOrder && (
+                              <Badge className="text-[9px] px-1.5 py-0.5 bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300 border-purple-200 dark:border-purple-800">
+                                🤝 Tolong Mas
+                              </Badge>
+                            )}
                           </div>
                           <p className="text-xs text-muted-foreground">{order.buyerName}</p>
                         </div>
@@ -273,11 +343,15 @@ export function AdminOrdersScreen() {
                         <Clock className="w-3.5 h-3.5 text-muted-foreground" />
                         <span className="text-xs text-muted-foreground">{order.date}</span>
                       </div>
+                      {/* Service order: show auto-confirm countdown */}
+                      {order.isServiceOrder && order.status === 'shipped' && order.autoConfirmAt && !order.buyerConfirmedAt && (
+                        <AutoConfirmCountdown autoConfirmAt={order.autoConfirmAt} />
+                      )}
                     </div>
 
                     {/* Action Buttons */}
                     {actions.length > 0 && (
-                      <div className="flex gap-2 mt-3 pt-3 border-t border-border/50">
+                      <div className="flex gap-2 mt-3 pt-3 border-t border-border/50 flex-wrap">
                         {actions.map((action) => (
                           <Button
                             key={action.label}
@@ -289,6 +363,8 @@ export function AdminOrdersScreen() {
                               else if (action.label === 'Batalkan') { setConfirmAction({ action: () => { handleStatusUpdate(order.id, 'cancelled'); showToast('Pesanan dibatalkan', 'info') }, title: 'Batalkan Pesanan', message: `Apakah Anda yakin ingin membatalkan pesanan ${order.orderNumber}? Tindakan ini tidak dapat dibatalkan.` }) }
                               else if (action.label === 'Kirim') { handleStatusUpdate(order.id, 'shipped'); showToast('Pesanan dikirim', 'success') }
                               else if (action.label === 'Selesai') { handleStatusUpdate(order.id, 'delivered'); showToast('Pesanan selesai', 'success') }
+                              else if (action.label === 'Selesaikan') { handleStatusUpdate(order.id, 'shipped'); showToast('Pesanan jasa ditandai selesai', 'success') }
+                              else if (action.label === 'Konfirmasi Selesai') { setConfirmAction({ action: () => { handleStatusUpdate(order.id, 'delivered'); showToast('Pesanan jasa dikonfirmasi selesai, escrow dicairkan', 'success') }, title: 'Konfirmasi Selesai', message: `Konfirmasi pesanan jasa ${order.orderNumber} sebagai selesai? Dana escrow akan dicairkan ke penjual.` }) }
                             }}
                             disabled={updating === order.id}
                           >
@@ -300,7 +376,7 @@ export function AdminOrdersScreen() {
                           variant="outline"
                           size="sm"
                           className="h-8 text-[11px] rounded-lg ml-auto"
-                          onClick={() => { setSelectedOrder(order.id); navigate('orders') }}
+                          onClick={() => setDetailOrder(order)}
                         >
                           <Eye className="w-3 h-3 mr-1" />
                           Detail
@@ -323,7 +399,7 @@ export function AdminOrdersScreen() {
                           variant="outline"
                           size="sm"
                           className="h-8 text-[11px] rounded-lg ml-auto"
-                          onClick={() => { setSelectedOrder(order.id); navigate('orders') }}
+                          onClick={() => setDetailOrder(order)}
                         >
                           <Eye className="w-3 h-3 mr-1" />
                           Detail
@@ -345,6 +421,147 @@ export function AdminOrdersScreen() {
           )}
         </div>
       </div>
+
+      {/* Order Detail Dialog */}
+      <Dialog open={!!detailOrder} onOpenChange={(open) => { if (!open) setDetailOrder(null) }}>
+        <DialogContent className="max-w-[420px] max-h-[85vh] overflow-y-auto rounded-2xl p-5">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold">Detail Pesanan</DialogTitle>
+          </DialogHeader>
+          {detailOrder && (
+            <div className="space-y-4 mt-2">
+              {/* Order Info */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-bold">{detailOrder.orderNumber}</p>
+                  <StatusBadge status={adminStatusToOrderStatus[detailOrder.status]} size="sm" />
+                </div>
+                {detailOrder.isServiceOrder && (
+                  <Badge className="text-xs px-2 py-1 bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300 border-purple-200 dark:border-purple-800">
+                    🤝 Tolong Mas (Jasa)
+                  </Badge>
+                )}
+                <div className="text-xs text-muted-foreground space-y-1">
+                  <p>Pembeli: {detailOrder.buyerName}</p>
+                  <p>Metode Pembayaran: {detailOrder.paymentMethod}</p>
+                  <p>Tanggal: {detailOrder.date}</p>
+                  <p className="text-sm font-bold text-emerald-600">Total: {formatPrice(detailOrder.totalAmount)}</p>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Items */}
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-foreground">Item Pesanan</p>
+                {detailOrder.items.map((item, idx) => (
+                  <div key={idx} className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">{item.name} x{item.quantity}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Service Order Specific Section */}
+              {detailOrder.isServiceOrder && (
+                <>
+                  <Separator />
+                  <div className="space-y-3">
+                    <p className="text-xs font-medium text-purple-700 dark:text-purple-300 flex items-center gap-1.5">
+                      <Handshake className="w-3.5 h-3.5" />
+                      Bukti Penyelesaian (Tolong Mas)
+                    </p>
+
+                    {detailOrder.status === 'shipped' && !detailOrder.buyerConfirmedAt && (
+                      <div className="p-3 rounded-xl bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800">
+                        <p className="text-xs font-medium text-purple-700 dark:text-purple-300 mb-1">
+                          ⏳ Menunggu Konfirmasi Pembeli
+                        </p>
+                        <AutoConfirmCountdown autoConfirmAt={detailOrder.autoConfirmAt} />
+                      </div>
+                    )}
+
+                    {detailOrder.buyerConfirmedAt && (
+                      <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+                        <p className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                          ✅ Dikonfirmasi pembeli pada {formatDate(detailOrder.buyerConfirmedAt)}
+                        </p>
+                      </div>
+                    )}
+
+                    {detailOrder.serviceProofImages && detailOrder.serviceProofImages.length > 0 ? (
+                      <div className="space-y-2">
+                        <p className="text-[10px] text-muted-foreground">Bukti penyelesaian dari penjual:</p>
+                        <div className="grid grid-cols-3 gap-2">
+                          {detailOrder.serviceProofImages.map((img, idx) => (
+                            <div key={idx} className="relative aspect-square rounded-lg overflow-hidden border border-border">
+                              <img src={img} alt={`Proof ${idx + 1}`} className="w-full h-full object-cover" />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-3 rounded-xl bg-muted/50 border border-border">
+                        <div className="flex items-center gap-2">
+                          <ImageIcon className="w-4 h-4 text-muted-foreground" />
+                          <p className="text-xs text-muted-foreground">
+                            {detailOrder.status === 'processing'
+                              ? 'Belum ada bukti penyelesaian dari penjual'
+                              : 'Bukti penyelesaian tidak tersedia'}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {detailOrder.sellerCompletedAt && (
+                      <p className="text-[10px] text-muted-foreground">
+                        Penyelesaian ditandai seller: {formatDate(detailOrder.sellerCompletedAt)}
+                      </p>
+                    )}
+
+                    {/* Konfirmasi Selesai button in dialog for shipped service orders */}
+                    {detailOrder.status === 'shipped' && !detailOrder.buyerConfirmedAt && (
+                      <Button
+                        className="w-full h-9 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs"
+                        onClick={() => {
+                          setConfirmAction({
+                            action: () => {
+                              handleStatusUpdate(detailOrder.id, 'delivered')
+                              setDetailOrder(null)
+                              showToast('Pesanan jasa dikonfirmasi selesai, escrow dicairkan', 'success')
+                            },
+                            title: 'Konfirmasi Selesai',
+                            message: `Konfirmasi pesanan jasa ${detailOrder.orderNumber} sebagai selesai? Dana escrow akan dicairkan ke penjual.`,
+                          })
+                        }}
+                      >
+                        <Check className="w-3.5 h-3.5 mr-1" />
+                        Konfirmasi Selesai
+                      </Button>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {/* Non-service order tracking number section */}
+              {!detailOrder.isServiceOrder && (
+                <>
+                  <Separator />
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-foreground flex items-center gap-1.5">
+                      <Truck className="w-3.5 h-3.5" />
+                      Pengiriman
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Nomor resi akan muncul setelah penjual mengirim pesanan.
+                    </p>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <ConfirmDialog
         isOpen={!!confirmAction}
         onClose={() => setConfirmAction(null)}

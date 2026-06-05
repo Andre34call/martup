@@ -46,9 +46,9 @@ const TRACKING_STEPS = [
 const SERVICE_TRACKING_STEPS = [
   { key: "ordered", label: "Pesanan Dibuat", icon: ShoppingBag },
   { key: "paid", label: "Pembayaran Dikonfirmasi", icon: CreditCard },
-  { key: "processing", label: "Jasa Sedang Dikerjakan", icon: Package },
-  { key: "shipped", label: "Bukti Jasa Dikirim", icon: CheckCircle2 },
-  { key: "delivered", label: "Jasa Dikonfirmasi Selesai", icon: CheckCircle2 },
+  { key: "processing", label: "Tolong Mas Sedang Dikerjakan", icon: Package },
+  { key: "shipped", label: "Bukti Tolong Mas Dikirim", icon: CheckCircle2 },
+  { key: "delivered", label: "Tolong Mas Dikonfirmasi Selesai", icon: CheckCircle2 },
 ]
 
 // Service proof data type
@@ -156,9 +156,9 @@ function OrderCard({ order, onTap }: { order: Order; onTap: () => void }) {
       updateOrderStatus(orderId, 'delivered')
       const userId = useAppStore.getState().currentUser?.id
       if (userId) await fetchOrders(userId)
-      showToast("Jasa dikonfirmasi selesai! Dana escrow akan dilepas.", "success")
+      showToast("Tolong Mas dikonfirmasi selesai! Dana escrow akan dilepas.", "success")
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Gagal mengkonfirmasi jasa'
+      const message = err instanceof Error ? err.message : 'Gagal mengkonfirmasi Tolong Mas'
       showToast(message, "error")
     } finally {
       setIsConfirming(false)
@@ -178,7 +178,7 @@ function OrderCard({ order, onTap }: { order: Order; onTap: () => void }) {
           <span className="text-sm font-semibold text-foreground">{order.seller.storeName}</span>
           {order.isServiceOrder && (
             <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
-              Jasa
+              Tolong Mas
             </span>
           )}
         </div>
@@ -216,7 +216,7 @@ function OrderCard({ order, onTap }: { order: Order; onTap: () => void }) {
           <div className="p-2.5 bg-purple-50 dark:bg-purple-950/30 rounded-lg border border-purple-200 dark:border-purple-800/50">
             <div className="flex items-center gap-1.5 mb-1.5">
               <CheckCircle2 className="w-3.5 h-3.5 text-purple-600" />
-              <span className="text-xs font-semibold text-purple-700 dark:text-purple-400">Bukti jasa telah dikirim</span>
+              <span className="text-xs font-semibold text-purple-700 dark:text-purple-400">Bukti Tolong Mas telah dikirim</span>
             </div>
             <div className="flex gap-1.5">
               {order.serviceProofImages.slice(0, 3).map((img, idx) => (
@@ -493,9 +493,9 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
       updateOrderStatus(order.id, 'delivered')
       const userId = useAppStore.getState().currentUser?.id
       if (userId) await fetchOrders(userId)
-      showToast("Jasa dikonfirmasi selesai! Dana escrow akan dilepas.", "success")
+      showToast("Tolong Mas dikonfirmasi selesai! Dana escrow akan dilepas.", "success")
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Gagal mengkonfirmasi jasa'
+      const message = err instanceof Error ? err.message : 'Gagal mengkonfirmasi Tolong Mas'
       showToast(message, "error")
     } finally {
       setIsConfirmingService(false)
@@ -546,13 +546,13 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
                 <StatusBadge status={order.status} size="md" />
                 {order.isServiceOrder && (
                   <span className="ml-1.5 text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
-                    Jasa
+                    Tolong Mas
                   </span>
                 )}
               </p>
               {order.isServiceOrder && order.status === "shipped" && (
                 <p className="text-xs text-purple-600 dark:text-purple-400 mt-0.5">
-                  Bukti jasa telah dikirim, menunggu konfirmasi Anda
+                  Bukti Tolong Mas telah dikirim, menunggu konfirmasi Anda
                 </p>
               )}
               {!order.isServiceOrder && order.shipping?.estimatedDays && (
@@ -641,7 +641,7 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
             <div className="bg-card rounded-xl border border-border/50 p-4">
               <h3 className="text-sm font-bold text-foreground mb-4 flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-purple-500" />
-                Status Jasa
+                Status Tolong Mas
               </h3>
               <div className="space-y-0">
                 {trackingSteps.map((step, idx) => {
@@ -691,7 +691,7 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
             <div className="bg-card rounded-xl border border-border/50 p-4">
               <h3 className="text-sm font-bold text-foreground mb-3 flex items-center gap-2">
                 <ImageIcon className="w-4 h-4 text-purple-500" />
-                Bukti Penyelesaian Jasa
+                Bukti Penyelesaian Tolong Mas
               </h3>
               {isLoadingServiceProof ? (
                 <div className="flex items-center justify-center py-6">
@@ -702,7 +702,7 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
                   <div className="grid grid-cols-2 gap-2">
                     {proofImages.map((img, idx) => (
                       <div key={idx} className="w-full aspect-square rounded-lg overflow-hidden border border-border/50">
-                        <img src={img} alt={`Bukti jasa ${idx + 1}`} className="w-full h-full object-cover" />
+                        <img src={img} alt={`Bukti Tolong Mas ${idx + 1}`} className="w-full h-full object-cover" />
                       </div>
                     ))}
                   </div>
@@ -1020,7 +1020,7 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
               ) : (
                 <CheckCircle2 className="w-4 h-4 mr-2" />
               )}
-              {isConfirmingService ? "Mengkonfirmasi..." : "Konfirmasi Jasa Selesai"}
+              {isConfirmingService ? "Mengkonfirmasi..." : "Konfirmasi Tolong Mas Selesai"}
             </PrimaryButton>
           )}
           {/* Regular order: shipped status — confirm delivery */}

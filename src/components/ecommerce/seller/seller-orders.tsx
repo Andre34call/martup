@@ -214,7 +214,7 @@ export function SellerOrders() {
       // Refresh orders to get updated status
       const userId = useAppStore.getState().currentUser?.id
       if (userId) await fetchOrders(userId)
-      showToast("Bukti penyelesaian jasa berhasil dikirim!", "success")
+      showToast("Bukti penyelesaian Tolong Mas berhasil dikirim!", "success")
       setShowServiceProofDialog(false)
       setServiceProofOrderId(null)
       setServiceProofImages([])
@@ -291,7 +291,7 @@ export function SellerOrders() {
                       <StatusBadge status={order.status} size="sm" />
                       {order.isServiceOrder && (
                         <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
-                          Jasa
+                          Tolong Mas
                         </span>
                       )}
                     </div>
@@ -355,7 +355,7 @@ export function SellerOrders() {
                       {/* Service order processing: show upload proof button */}
                       {order.isServiceOrder && order.status === "processing" && (
                         <Button size="sm" className="h-8 text-xs rounded-lg bg-purple-500 hover:bg-purple-600 active:bg-purple-700 text-white" onClick={() => openServiceProofDialog(order.id)}>
-                          <Upload className="w-3 h-3 mr-1" /> Upload Bukti Jasa
+                          <Upload className="w-3 h-3 mr-1" /> Upload Bukti Tolong Mas
                         </Button>
                       )}
                       {/* Regular order processing: show ship button */}
@@ -404,12 +404,12 @@ export function SellerOrders() {
           <DialogHeader>
             <DialogTitle className="text-base font-bold flex items-center gap-2">
               <Upload className="w-4 h-4 text-purple-500" />
-              Upload Bukti Penyelesaian Jasa
+              Upload Bukti Penyelesaian Tolong Mas
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3 mt-2">
             <p className="text-xs text-muted-foreground">
-              Upload bukti bahwa jasa telah diselesaikan. Pembeli akan mengonfirmasi dalam 3 hari atau otomatis dikonfirmasi.
+              Upload bukti bahwa layanan telah diselesaikan. Pembeli akan mengonfirmasi dalam 3 hari atau otomatis dikonfirmasi.
             </p>
 
             {/* Existing images */}
@@ -512,7 +512,7 @@ export function SellerOrders() {
           <DialogHeader>
             <DialogTitle className="text-base font-bold flex items-center gap-2">
               <CheckCircle className="w-4 h-4 text-purple-500" />
-              Bukti Penyelesaian Jasa
+              Bukti Penyelesaian Tolong Mas
             </DialogTitle>
           </DialogHeader>
           {isLoadingProof ? (

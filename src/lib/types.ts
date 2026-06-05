@@ -153,6 +153,8 @@ export interface Order {
   paymentBankName?: string
   isServiceOrder?: boolean
   serviceProofImages?: string[]
+  sellerCompletedAt?: string
+  buyerConfirmedAt?: string
   autoConfirmAt?: string
   items: OrderItem[]
   shipping?: Shipping
@@ -314,6 +316,10 @@ export interface AdminStats {
   categoryPerformance?: Array<{ name: string; revenue: number; percentage: number }>
   recentOrders?: Order[]
   recentUsers?: Array<{ id: string; name: string; email: string; joinedAt: string }>
+  // Tolong Mas (service) metrics
+  serviceOrderCount?: number
+  serviceOrderRevenue?: number
+  pendingServiceConfirmations?: number
 }
 
 // ==================== SELLER FINANCIAL TYPES ====================

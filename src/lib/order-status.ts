@@ -7,9 +7,9 @@ import { logger } from '@/lib/logger'
 // pending → cancelled (buyer or admin)
 // pending → paid (admin only, or via payment webhook)
 // paid → processing (seller only)
-// paid → shipped (seller only, requires trackingNumber)
+// paid → shipped (seller only, requires trackingNumber; admin can also for service orders)
 // paid → cancelled (seller or admin)
-// processing → shipped (seller only, requires trackingNumber)
+// processing → shipped (seller only, requires trackingNumber; admin can also for service orders)
 // processing → cancelled (seller or admin)
 // shipped → delivered (buyer only, triggers escrow release)
 // shipped → cancelled (admin only, triggers refund)
@@ -61,10 +61,11 @@ export async function updateOrderStatus(params: {
   status: string
   cancelReason?: string
   trackingNumber?: string
+  isServiceOrder?: boolean
   authUserId: string
   authUserRole: string
 }): Promise<{ success: boolean; data?: any; error?: string; status?: number }> {
-  const { orderId, status, cancelReason, trackingNumber, authUserId, authUserRole } = params
+  const { orderId, status, cancelReason, trackingNumber, isServiceOrder, authUserId, authUserRole } = params
 
   // ---- Input validation ----
 
@@ -86,8 +87,9 @@ export async function updateOrderStatus(params: {
     }
   }
 
-  // Validate trackingNumber when status is 'shipped'
-  if (status === 'shipped') {
+  // Validate trackingNumber when status is 'shipped' — but NOT for service orders
+  // Service orders use proof images via the service-proof API instead of tracking numbers
+  if (status === 'shipped' && !isServiceOrder) {
     if (!trackingNumber || typeof trackingNumber !== 'string' || trackingNumber.trim().length === 0) {
       return { success: false, error: 'Nomor resi wajib diisi saat mengubah status ke dikirim', status: 400 }
     }
@@ -168,7 +170,8 @@ export async function updateOrderStatus(params: {
       return { success: false, error: 'Hanya penjual yang dapat mengubah status menjadi diproses', status: 403 }
     }
   } else if (status === 'shipped') {
-    if (!isSeller) {
+    // For service orders, admin can also advance to shipped (no tracking number needed)
+    if (!isSeller && !(order.isServiceOrder && isAdmin)) {
       return { success: false, error: 'Hanya penjual yang dapat mengubah status menjadi dikirim', status: 403 }
     }
   } else if (status === 'delivered') {
@@ -265,15 +268,24 @@ export async function updateOrderStatus(params: {
       // ---- Status-specific logic ----
 
       if (status === 'shipped') {
-        // Update shipping with tracking number
-        if (order.shipping) {
+        // Update shipping with tracking number (only for non-service orders)
+        if (order.shipping && !order.isServiceOrder && trackingNumber) {
           await tx.shipping.update({
             where: { orderId },
             data: {
-              trackingNumber: trackingNumber!.trim(),
+              trackingNumber: trackingNumber.trim(),
               status: 'in_transit',
               shippedAt: new Date(),
             },
+          })
+        }
+        // For service orders, also set autoConfirmAt when admin manually advances to shipped
+        // This allows admin to advance service orders that haven't gone through the service-proof flow
+        if (order.isServiceOrder) {
+          const autoConfirmAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000) // 3 days
+          await tx.order.update({
+            where: { id: orderId },
+            data: { autoConfirmAt },
           })
         }
       }
@@ -496,12 +508,19 @@ export async function updateOrderStatus(params: {
           sellerTitle: 'Pesanan Diproses',
           sellerContent: `Pesanan ${order.orderNumber} telah Anda tandai sebagai diproses.`,
         },
-        shipped: {
-          buyerTitle: 'Pesanan Dikirim',
-          buyerContent: `Pesanan ${order.orderNumber} telah dikirim. Nomor resi: ${trackingNumber?.trim() || '-'}.`,
-          sellerTitle: 'Pesanan Dikirim',
-          sellerContent: `Pesanan ${order.orderNumber} telah Anda tandai sebagai dikirim. Nomor resi: ${trackingNumber?.trim() || '-'}.`,
-        },
+        shipped: order.isServiceOrder
+          ? {
+              buyerTitle: 'Bukti Jasa Dikirim',
+              buyerContent: `Bukti penyelesaian jasa untuk pesanan ${order.orderNumber} telah dikirim. Silakan konfirmasi dalam 3 hari.`,
+              sellerTitle: 'Pesanan Jasa Ditandai Selesai',
+              sellerContent: `Pesanan jasa ${order.orderNumber} telah ditandai sebagai selesai. Menunggu konfirmasi pembeli (maks 3 hari).`,
+            }
+          : {
+              buyerTitle: 'Pesanan Dikirim',
+              buyerContent: `Pesanan ${order.orderNumber} telah dikirim. Nomor resi: ${trackingNumber?.trim() || '-'}.`,
+              sellerTitle: 'Pesanan Dikirim',
+              sellerContent: `Pesanan ${order.orderNumber} telah Anda tandai sebagai dikirim. Nomor resi: ${trackingNumber?.trim() || '-'}.`,
+            },
         delivered: {
           buyerTitle: 'Pesanan Diterima',
           buyerContent: `Pesanan ${order.orderNumber} telah dikonfirmasi diterima. Dana penjual telah dicairkan.`,

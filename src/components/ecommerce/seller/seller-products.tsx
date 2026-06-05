@@ -64,7 +64,7 @@ export function SellerProducts() {
                           <p className="text-sm font-medium text-foreground line-clamp-1">{product.name}</p>
                           {product.productType === 'jasa' ? (
                             <Badge className="bg-purple-500 text-white text-[9px] font-bold px-1.5 py-0 rounded flex-shrink-0">
-                              Jasa
+                              Tolong Mas
                             </Badge>
                           ) : (
                             <Badge variant="outline" className="text-[9px] font-medium px-1.5 py-0 border-border text-muted-foreground flex-shrink-0">

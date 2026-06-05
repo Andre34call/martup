@@ -10,7 +10,8 @@ import {
   Check, AlertTriangle,
   TrendingUp, Megaphone, ImageIcon, BarChart3, MessageSquare,
   Building2, Tag, Wallet,
-  ClipboardList, Shield, Store, Clock, Eye, Star, FolderTree
+  ClipboardList, Shield, Store, Clock, Eye, Star, FolderTree,
+  Handshake
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -50,6 +51,9 @@ export function AdminDashboard() {
     categoryPerformance: adminStats.categoryPerformance ?? [],
     recentOrders: adminStats.recentOrders ?? [],
     recentUsers: adminStats.recentUsers ?? [],
+    serviceOrderCount: adminStats.serviceOrderCount ?? 0,
+    serviceOrderRevenue: adminStats.serviceOrderRevenue ?? 0,
+    pendingServiceConfirmations: adminStats.pendingServiceConfirmations ?? 0,
   } : {
     totalUsers: adminUsers.length,
     totalSellers: 0,
@@ -59,6 +63,9 @@ export function AdminDashboard() {
     activeProducts: products.filter(p => p.status === 'active').length,
     revenueChart: [] as { date: string; revenue: number }[],
     userGrowth: [] as { date: string; users: number }[],
+    serviceOrderCount: 0,
+    serviceOrderRevenue: 0,
+    pendingServiceConfirmations: 0,
   }
   const [showRoleMenu, setShowRoleMenu] = useState(false)
   const roleMenuRef = useRef<HTMLDivElement>(null)
@@ -182,6 +189,30 @@ export function AdminDashboard() {
           ))}
         </motion.div>
 
+        {/* 🤝 Tolong Mas Section */}
+        <motion.div {...fadeIn}>
+          <SectionHeader title="🤝 Tolong Mas" icon={<Handshake className="w-4 h-4 text-purple-600" />} />
+          <div className="grid grid-cols-3 gap-3 mt-3">
+            {[
+              { label: "Total Pesanan Jasa", value: (stats?.serviceOrderCount ?? 0).toLocaleString(), color: "text-purple-600 bg-purple-50 dark:bg-purple-900/30 dark:text-purple-400" },
+              { label: "Revenue Tolong Mas", value: formatPrice(stats?.serviceOrderRevenue ?? 0), color: "text-purple-600 bg-purple-50 dark:bg-purple-900/30 dark:text-purple-400" },
+              { label: "Menunggu Konfirmasi", value: (stats?.pendingServiceConfirmations ?? 0).toString(), color: "text-amber-600 bg-amber-50 dark:bg-amber-900/30 dark:text-amber-400" },
+            ].map((item, i) => (
+              <motion.div key={item.label} custom={i} variants={stagger} initial="initial" animate="animate">
+                <Card className="p-4 border-purple-200 dark:border-purple-900/50">
+                  <div className="text-center">
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center mx-auto mb-2 ${item.color}`}>
+                      <Handshake className="w-4 h-4" />
+                    </div>
+                    <p className="text-lg font-bold text-foreground">{item.value}</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">{item.label}</p>
+                  </div>
+                </Card>
+              </motion.div>
+            ))}
+          </div>
+        </motion.div>
+
         {/* Revenue Chart - Area Chart */}
         <motion.div {...fadeIn}>
           <SectionHeader title="Revenue Overview" icon={<DollarSign className="w-4 h-4" />} />
@@ -250,6 +281,7 @@ export function AdminDashboard() {
               { label: "Laporan Produk", count: 0, icon: Eye, color: "text-red-600 bg-red-50 dark:bg-red-900/30", screen: "admin-products" as const },
               { label: "Keluhan Terbuka", count: stats?.openComplaints ?? 0, icon: MessageSquare, color: "text-orange-600 bg-orange-50 dark:bg-orange-900/30", screen: "admin-complaints" as const },
               { label: "Alur Kerja Divisi", count: 0, icon: ClipboardList, color: "text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30", screen: "admin-workflow" as const },
+              { label: "🤝 Tolong Mas Menunggu", count: stats?.pendingServiceConfirmations ?? 0, icon: Handshake, color: "text-purple-600 bg-purple-50 dark:bg-purple-900/30", screen: "admin-orders" as const },
             ].map((item, i) => (
               <motion.div key={item.label} custom={i} variants={stagger} initial="initial" animate="animate">
                 <Card className="p-3">

@@ -99,7 +99,7 @@ export function ProductCard({ product, onClick, layout = "grid", showShareToStre
           )}
           {product.productType === 'jasa' && (
             <div className="absolute top-1 left-1 bg-purple-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-0.5 z-10">
-              🛠️ Jasa
+              🤝 Tolong Mas
             </div>
           )}
           {product.isFlashSale && (
@@ -159,7 +159,7 @@ export function ProductCard({ product, onClick, layout = "grid", showShareToStre
         {/* Jasa badge */}
         {product.productType === 'jasa' && (
           <div className="absolute top-2 left-2 bg-purple-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-0.5 z-10">
-            🛠️ Jasa
+            🤝 Tolong Mas
           </div>
         )}
 

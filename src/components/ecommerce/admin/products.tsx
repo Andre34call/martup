@@ -36,12 +36,16 @@ interface AdminProductItem {
   weight: number
   condition: string
   tags: string[]
+  productType: string
+  serviceDuration: string | null
+  serviceLocation: string | null
 }
 
 export function AdminProducts() {
   const { showToast } = useAppStore()
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
+  const [productTypeFilter, setProductTypeFilter] = useState<string>("all")
   const [adminProducts, setAdminProducts] = useState<AdminProductItem[]>([])
   const [loading, setLoading] = useState(true)
   const [confirmAction, setConfirmAction] = useState<{action: () => void, title: string, message: string} | null>(null)
@@ -57,6 +61,9 @@ export function AdminProducts() {
   const [editImages, setEditImages] = useState<string[]>([])
   const [editVideoUrl, setEditVideoUrl] = useState("")
   const [editTags, setEditTags] = useState("")
+  const [editProductType, setEditProductType] = useState("product")
+  const [editServiceDuration, setEditServiceDuration] = useState("")
+  const [editServiceLocation, setEditServiceLocation] = useState("")
   const [uploadingImage, setUploadingImage] = useState(false)
   const [uploadingVideo, setUploadingVideo] = useState(false)
   const [categories, setCategories] = useState<{id: string; name: string}[]>([])
@@ -84,6 +91,9 @@ export function AdminProducts() {
           weight: p.weight || 0,
           condition: p.condition || 'new',
           tags: Array.isArray(p.tags) ? p.tags : [],
+          productType: p.productType || 'product',
+          serviceDuration: p.serviceDuration || null,
+          serviceLocation: p.serviceLocation || null,
         }))
         setAdminProducts(mapped)
       }
@@ -208,7 +218,8 @@ export function AdminProducts() {
   const filtered = adminProducts.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) || p.sellerName.toLowerCase().includes(search.toLowerCase())
     const matchesStatus = statusFilter === "all" || p.status === statusFilter
-    return matchesSearch && matchesStatus
+    const matchesType = productTypeFilter === "all" || (productTypeFilter === "jasa" ? p.productType === 'jasa' : p.productType === 'product')
+    return matchesSearch && matchesStatus && matchesType
   })
 
   const flaggedProducts = adminProducts.filter(p => p.status === "blocked")
@@ -219,6 +230,30 @@ export function AdminProducts() {
 
       <div className="px-4 space-y-4">
         <SearchBar value={search} onChange={setSearch} placeholder="Cari produk atau seller..." />
+
+        {/* Product Type Filter - Tolong Mas */}
+        <div className="flex gap-2 overflow-x-auto no-scrollbar">
+          {[
+            { key: "all", label: "Semua" },
+            { key: "product", label: "📦 Barang" },
+            { key: "jasa", label: "🤝 Tolong Mas" },
+          ].map((filter) => (
+            <motion.button
+              key={filter.key}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setProductTypeFilter(filter.key)}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors border ${
+                productTypeFilter === filter.key
+                  ? filter.key === 'jasa'
+                    ? "bg-purple-600 text-white border-purple-600"
+                    : "bg-emerald-600 text-white border-emerald-600"
+                  : "bg-card text-foreground border-border hover:bg-muted"
+              }`}
+            >
+              {filter.label}
+            </motion.button>
+          ))}
+        </div>
 
         {/* Status Filter */}
         <div className="flex gap-2 overflow-x-auto no-scrollbar">
@@ -263,6 +298,11 @@ export function AdminProducts() {
                         <div className="flex items-center gap-2">
                           <p className="text-sm font-medium text-foreground truncate">{product.name}</p>
                           <Badge variant="outline" className="text-[9px] border-red-300 text-red-600">Blocked</Badge>
+                          {product.productType === 'jasa' && (
+                            <Badge className="text-[9px] px-1.5 py-0.5 bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300 border-purple-200 dark:border-purple-800">
+                              🤝 Tolong Mas
+                            </Badge>
+                          )}
                         </div>
                         <p className="text-xs text-muted-foreground">{product.sellerName} · {formatPrice(product.price)}</p>
                       </div>
@@ -284,6 +324,9 @@ export function AdminProducts() {
                         setEditImages(product.images || [])
                         setEditVideoUrl(product.videoUrl || '')
                         setEditTags((product.tags || []).join(', '))
+                        setEditProductType(product.productType || 'product')
+                        setEditServiceDuration(product.serviceDuration || '')
+                        setEditServiceLocation(product.serviceLocation || '')
                       }}>
                         <Edit className="w-3 h-3 mr-0.5" /> Edit
                       </Button>
@@ -332,6 +375,11 @@ export function AdminProducts() {
                         }`}>
                           {product.status === "active" ? "Aktif" : product.status === "draft" ? "Draft" : "Blocked"}
                         </Badge>
+                        {product.productType === 'jasa' && (
+                          <Badge className="text-[9px] px-1.5 py-0.5 bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300 border-purple-200 dark:border-purple-800">
+                            🤝 Tolong Mas
+                          </Badge>
+                        )}
                       </div>
                       <p className="text-xs text-muted-foreground">{product.sellerName} · Terjual {product.sold}</p>
                       <p className="text-sm font-bold text-emerald-600 mt-0.5">{formatPrice(product.price)}</p>
@@ -351,6 +399,9 @@ export function AdminProducts() {
                       setEditImages(product.images || [])
                       setEditVideoUrl(product.videoUrl || '')
                       setEditTags((product.tags || []).join(', '))
+                      setEditProductType(product.productType || 'product')
+                      setEditServiceDuration(product.serviceDuration || '')
+                      setEditServiceLocation(product.serviceLocation || '')
                     }}>
                       <Edit className="w-3 h-3 mr-0.5" /> Edit
                     </Button>
@@ -457,6 +508,32 @@ export function AdminProducts() {
               <Input value={editTags} onChange={e => setEditTags(e.target.value)} placeholder="tag1, tag2, tag3" className="rounded-xl" />
             </div>
 
+            {/* Product Type & Service Fields */}
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-foreground">Tipe Produk</label>
+              <select
+                value={editProductType}
+                onChange={e => setEditProductType(e.target.value)}
+                className="w-full h-9 rounded-xl border border-input bg-transparent px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+              >
+                <option value="product">📦 Barang</option>
+                <option value="jasa">🤝 Tolong Mas (Jasa)</option>
+              </select>
+            </div>
+            {editProductType === 'jasa' && (
+              <div className="space-y-3 p-3 rounded-xl bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800">
+                <p className="text-xs font-medium text-purple-700 dark:text-purple-300">🤝 Detail Tolong Mas</p>
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-foreground">Durasi Layanan</label>
+                  <Input value={editServiceDuration} onChange={e => setEditServiceDuration(e.target.value)} placeholder="contoh: 1 jam, 1 hari, 1 minggu" className="rounded-xl" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-foreground">Lokasi Layanan</label>
+                  <Input value={editServiceLocation} onChange={e => setEditServiceLocation(e.target.value)} placeholder="contoh: Online, Jakarta, Surabaya" className="rounded-xl" />
+                </div>
+              </div>
+            )}
+
             {/* Images */}
             <div className="space-y-2">
               <label className="text-xs font-medium text-foreground">Gambar Produk</label>
@@ -534,6 +611,9 @@ export function AdminProducts() {
                   images: editImages,
                   videoUrl: editVideoUrl || null,
                   tags: tagArray.length > 0 ? tagArray : undefined,
+                  productType: editProductType,
+                  serviceDuration: editProductType === 'jasa' ? editServiceDuration.trim() || null : null,
+                  serviceLocation: editProductType === 'jasa' ? editServiceLocation.trim() || null : null,
                 })
                 if (success) setEditProduct(null)
               }}

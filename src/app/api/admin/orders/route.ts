@@ -24,6 +24,14 @@ export async function GET(request: NextRequest) {
       where.status = status
     }
 
+    // Support isServiceOrder filter
+    const isServiceOrderFilter = searchParams.get('isServiceOrder')
+    if (isServiceOrderFilter === 'true') {
+      where.isServiceOrder = true
+    } else if (isServiceOrderFilter === 'false') {
+      where.isServiceOrder = false
+    }
+
     const [orders, total] = await Promise.all([
       db.order.findMany({
         where,
@@ -134,6 +142,12 @@ export async function PUT(request: NextRequest) {
     }
     const { orderId, status, cancelReason, trackingNumber } = validation.data
 
+    // Look up if this is a service order before delegating
+    const orderCheck = await db.order.findUnique({
+      where: { id: orderId },
+      select: { isServiceOrder: true },
+    })
+
     // Delegate to shared business logic (includes validation, authorization,
     // status transitions, escrow, stock restoration, refunds, notifications)
     const result = await updateOrderStatus({
@@ -141,6 +155,7 @@ export async function PUT(request: NextRequest) {
       status,
       cancelReason,
       trackingNumber,
+      isServiceOrder: orderCheck?.isServiceOrder ?? false,
       authUserId: authResult.user.id,
       authUserRole: authResult.user.role,
     })

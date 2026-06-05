@@ -23,6 +23,9 @@ export async function GET(request: NextRequest) {
       totalDivisions,
       totalStaff,
       paymentMethodRaw,
+      serviceOrderCount,
+      serviceOrderRevenue,
+      pendingServiceConfirmations,
     ] = await Promise.all([
       db.user.count(),
       db.seller.count(),
@@ -57,10 +60,24 @@ export async function GET(request: NextRequest) {
         GROUP BY "paymentMethod"
         ORDER BY count DESC
       `,
+      // Tolong Mas metrics
+      db.order.count({ where: { isServiceOrder: true } }),
+      db.order.aggregate({
+        _sum: { totalAmount: true },
+        where: { isServiceOrder: true, paymentStatus: 'paid' },
+      }),
+      db.order.count({
+        where: {
+          isServiceOrder: true,
+          status: 'shipped',
+          buyerConfirmedAt: null,
+        },
+      }),
     ])
 
     const totalRevenue = revenueResult._sum.totalAmount ?? 0
     const totalPendingWithdrawal = pendingWithdrawalAmount._sum.amount ?? 0
+    const totalServiceOrderRevenue = serviceOrderRevenue._sum.totalAmount ?? 0
 
     const paymentMethodDistribution = paymentMethodRaw.map((row) => ({
       paymentMethod: row.paymentMethod,
@@ -212,6 +229,10 @@ export async function GET(request: NextRequest) {
         userGrowth,
         topSellers,
         categoryPerformance,
+        // Tolong Mas (service) metrics
+        serviceOrderCount,
+        serviceOrderRevenue: totalServiceOrderRevenue,
+        pendingServiceConfirmations,
         recentOrders: recentOrders.map((o) => ({
           ...o,
           totalAmount: Number(o.totalAmount),

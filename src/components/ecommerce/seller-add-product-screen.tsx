@@ -403,7 +403,7 @@ export function SellerAddProductScreen() {
       return
     }
     if (productType === 'jasa' && !serviceDuration.trim()) {
-      showToast("Durasi jasa harus diisi", "error")
+      showToast("Durasi layanan harus diisi", "error")
       return
     }
 
@@ -917,7 +917,7 @@ export function SellerAddProductScreen() {
               <Package className="w-4 h-4 text-emerald-500" />
               <h3 className="text-sm font-semibold text-foreground">Tipe Produk</h3>
             </div>
-            <p className="text-xs text-muted-foreground">Pilih "Jasa" jika kamu menjual layanan yang tidak memerlukan pengiriman fisik.</p>
+            <p className="text-xs text-muted-foreground">Pilih 'Tolong Mas' jika kamu menjual layanan yang tidak memerlukan pengiriman fisik.</p>
             <div className="flex gap-2">
               <motion.button
                 whileTap={{ scale: 0.95 }}
@@ -939,7 +939,7 @@ export function SellerAddProductScreen() {
                     : "bg-card text-foreground border-border hover:border-purple-300"
                 }`}
               >
-                🛠️ Jasa
+                🤝 Tolong Mas
               </motion.button>
             </div>
           </div>
@@ -951,34 +951,34 @@ export function SellerAddProductScreen() {
             <div className="rounded-2xl border border-purple-200 bg-purple-50/50 dark:border-purple-900/30 dark:bg-purple-900/10 p-4 space-y-3">
               <div className="flex items-center gap-2">
                 <span className="text-sm">🛠️</span>
-                <h3 className="text-sm font-semibold text-purple-700 dark:text-purple-400">Detail Jasa</h3>
+                <h3 className="text-sm font-semibold text-purple-700 dark:text-purple-400">Detail Tolong Mas</h3>
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs font-medium text-muted-foreground">Durasi Jasa <span className="text-red-500">*</span></label>
+                <label className="text-xs font-medium text-muted-foreground">Durasi Layanan <span className="text-red-500">*</span></label>
                 <Input
                   value={serviceDuration}
                   onChange={(e) => setServiceDuration(e.target.value)}
                   placeholder="Contoh: 1 jam, 1 hari, 1 minggu"
                   className="rounded-xl h-10 focus:border-purple-500 focus:ring-purple-500/20"
                 />
-                <p className="text-[10px] text-muted-foreground">Berapa lama jasa dikerjakan</p>
+                <p className="text-[10px] text-muted-foreground">Berapa lama layanan dikerjakan</p>
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs font-medium text-muted-foreground">Lokasi Jasa</label>
+                <label className="text-xs font-medium text-muted-foreground">Lokasi Layanan</label>
                 <Input
                   value={serviceLocation}
                   onChange={(e) => setServiceLocation(e.target.value)}
                   placeholder="Contoh: Online, Jakarta, Surabaya"
                   className="rounded-xl h-10 focus:border-purple-500 focus:ring-purple-500/20"
                 />
-                <p className="text-[10px] text-muted-foreground">Apakah jasa dikerjakan online atau di lokasi tertentu</p>
+                <p className="text-[10px] text-muted-foreground">Apakah layanan dikerjakan online atau di lokasi tertentu</p>
               </div>
 
               <div className="rounded-xl bg-purple-100/50 dark:bg-purple-900/20 p-3">
                 <p className="text-[11px] text-purple-700 dark:text-purple-300 leading-relaxed">
-                  💡 <strong>Pesanan jasa</strong> tidak memerlukan pengiriman fisik. Pembayaran akan ditahan (escrow) sampai jasa selesai dan dikonfirmasi pembeli.
+                  💡 <strong>Pesanan Tolong Mas</strong> tidak memerlukan pengiriman fisik. Pembayaran akan ditahan (escrow) sampai layanan selesai dan dikonfirmasi pembeli.
                 </p>
               </div>
             </div>
@@ -1008,7 +1008,7 @@ export function SellerAddProductScreen() {
                   disabled={productType === 'jasa'}
                 />
                 {productType === 'jasa' && (
-                  <p className="text-[10px] text-purple-600 dark:text-purple-400">Stok otomatis untuk jasa</p>
+                  <p className="text-[10px] text-purple-600 dark:text-purple-400">Stok otomatis untuk layanan</p>
                 )}
               </div>
               <div className="space-y-2">

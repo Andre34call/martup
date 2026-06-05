@@ -31,6 +31,12 @@ export async function GET(request: NextRequest) {
       ]
     }
 
+    // Support productType filter (e.g., ?productType=jasa)
+    const productType = searchParams.get('productType')
+    if (productType) {
+      where.productType = productType
+    }
+
     const [products, total] = await Promise.all([
       db.product.findMany({
         where,
@@ -99,7 +105,7 @@ export async function PUT(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { productId, status, isFeatured, name, description, price, discountPrice, images, videoUrl, categoryId, condition, weight, stock, tags } = body
+    const { productId, status, isFeatured, name, description, price, discountPrice, images, videoUrl, categoryId, condition, weight, stock, tags, productType, serviceDuration, serviceLocation } = body
 
     if (!productId) {
       return NextResponse.json(
@@ -170,6 +176,17 @@ export async function PUT(request: NextRequest) {
         : null
       updateData.tags = validTags ? JSON.stringify(validTags) : existing.tags
     }
+
+    // Tolong Mas (jasa) fields
+    if (productType !== undefined) {
+      const validTypes = ['product', 'jasa']
+      if (!validTypes.includes(productType as string)) {
+        return NextResponse.json({ success: false, error: `Invalid productType. Must be one of: ${validTypes.join(', ')}` }, { status: 400 })
+      }
+      updateData.productType = productType
+    }
+    if (serviceDuration !== undefined) updateData.serviceDuration = serviceDuration || null
+    if (serviceLocation !== undefined) updateData.serviceLocation = serviceLocation || null
 
     const product = await db.product.update({
       where: { id: productId },

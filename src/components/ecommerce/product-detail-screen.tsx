@@ -117,7 +117,7 @@ function ImageGallery({ images, videoUrl, isFlashSale, productType }: { images: 
         {/* Jasa badge */}
         {productType === 'jasa' && (
           <div className="absolute top-3 left-3 bg-purple-500 text-white text-xs font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 z-10">
-            🛠️ Jasa
+            🤝 Tolong Mas
           </div>
         )}
 
@@ -494,7 +494,7 @@ export function ProductDetailScreen() {
               <h1 className="text-lg font-bold text-foreground leading-tight">{product.name}</h1>
               {product.productType === 'jasa' && (
                 <Badge className="bg-purple-500 text-white text-xs font-bold px-2 py-0.5 rounded flex items-center gap-1 flex-shrink-0">
-                  🛠️ Layanan Jasa
+                  🤝 Tolong Mas
                 </Badge>
               )}
             </div>
@@ -708,7 +708,7 @@ export function ProductDetailScreen() {
                   <div className="flex items-start gap-2">
                     <Shield className="w-4 h-4 text-purple-600 dark:text-purple-400 mt-0.5 flex-shrink-0" />
                     <p className="text-xs text-purple-700 dark:text-purple-300 leading-relaxed">
-                      Pesanan jasa tidak memerlukan pengiriman fisik. Pembayaran ditahan (escrow) sampai jasa selesai.
+                      Pesanan Tolong Mas tidak memerlukan pengiriman fisik. Pembayaran ditahan (escrow) sampai layanan selesai.
                     </p>
                   </div>
                 </div>
