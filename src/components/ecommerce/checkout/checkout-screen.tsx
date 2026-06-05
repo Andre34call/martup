@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { useAppStore, useCartStore } from "@/lib/store"
 import { formatPrice } from "@/lib/utils"
-import { DEFAULT_SHIPPING_OPTIONS } from "@/lib/constants"
+// DEFAULT_SHIPPING_OPTIONS removed — no more silent fallback to hardcoded rates
 import {
   PageHeader, EmptyState
 } from "../shared"
@@ -38,6 +38,7 @@ export function CheckoutScreen() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [shippingRatesBySeller, setShippingRatesBySeller] = useState<Record<string, ShippingOption[]>>({})
   const [isLoadingRates, setIsLoadingRates] = useState<Record<string, boolean>>({})
+  const [shippingError, setShippingError] = useState<Record<string, string>>({})
   const [escrowBankAccounts, setEscrowBankAccounts] = useState<EscrowBankAccount[]>([])
   const [isLoadingBankAccounts, setIsLoadingBankAccounts] = useState(false)
   const [copiedAccountId, setCopiedAccountId] = useState<string | null>(null)
@@ -81,6 +82,7 @@ export function CheckoutScreen() {
   // Fetch shipping rates from API when address is selected
   const fetchShippingRates = useCallback(async (sellerId: string, destinationCity: string, weightGrams: number, originCity?: string) => {
     setIsLoadingRates(prev => ({ ...prev, [sellerId]: true }))
+    setShippingError(prev => { const next = { ...prev }; delete next[sellerId]; return next })
     try {
       const res = await apiClient.rawPost('/api/shipping/calculate', {
         originCity: originCity || 'Jakarta', // Use seller's store city, fallback to Jakarta
@@ -91,13 +93,15 @@ export function CheckoutScreen() {
       if (data.success && data.data?.rates && data.data.rates.length > 0) {
         setShippingRatesBySeller(prev => ({ ...prev, [sellerId]: data.data!.rates } as Record<string, ShippingOption[]>))
       } else {
-        // Fallback to default options
-        setShippingRatesBySeller(prev => ({ ...prev, [sellerId]: DEFAULT_SHIPPING_OPTIONS }))
+        // No rates available — show error instead of hardcoded defaults
+        setShippingRatesBySeller(prev => ({ ...prev, [sellerId]: [] }))
+        setShippingError(prev => ({ ...prev, [sellerId]: 'Gagal menghitung ongkir. Periksa alamat pengiriman Anda.' }))
       }
     } catch (err) {
-      logger.warn({ component: 'checkout', err }, 'Shipping rate fetch failed, using defaults')
-      // Fallback to default options
-      setShippingRatesBySeller(prev => ({ ...prev, [sellerId]: DEFAULT_SHIPPING_OPTIONS }))
+      logger.warn({ component: 'checkout', err }, 'Shipping rate fetch failed')
+      // Show error instead of hardcoded defaults
+      setShippingRatesBySeller(prev => ({ ...prev, [sellerId]: [] }))
+      setShippingError(prev => ({ ...prev, [sellerId]: 'Gagal menghitung ongkir. Periksa alamat pengiriman Anda.' }))
     } finally {
       setIsLoadingRates(prev => ({ ...prev, [sellerId]: false }))
     }
@@ -153,9 +157,9 @@ export function CheckoutScreen() {
     setTimeout(() => setCopiedAccountId(null), 2000)
   }
 
-  // Get shipping options for a seller (dynamic or fallback)
+  // Get shipping options for a seller — returns empty array if no rates loaded (no hardcoded fallback)
   const getShippingOptions = useCallback((sellerId: string): ShippingOption[] => {
-    return shippingRatesBySeller[sellerId] || DEFAULT_SHIPPING_OPTIONS
+    return shippingRatesBySeller[sellerId] || []
   }, [shippingRatesBySeller])
 
   // Calculate totals — use platform settings with fallback defaults
@@ -189,14 +193,16 @@ export function CheckoutScreen() {
   }
 
   const isReadyToPay = useMemo(() => {
+    const hasNoShippingErrors = !groupedBySeller.some(g => shippingError[g.seller.id])
     return (
       selectedPayment !== null &&
       defaultAddress !== null &&
       Object.keys(shippingBySeller).length >= groupedBySeller.length &&
       checkedCount > 0 &&
-      !(selectedPayment === 'wallet' && walletBalance < totalAmount)
+      !(selectedPayment === 'wallet' && walletBalance < totalAmount) &&
+      hasNoShippingErrors
     )
-  }, [selectedPayment, defaultAddress, shippingBySeller, groupedBySeller, checkedCount, walletBalance, totalAmount])
+  }, [selectedPayment, defaultAddress, shippingBySeller, groupedBySeller, checkedCount, walletBalance, totalAmount, shippingError])
 
   // Handle payment method selection (with wallet insufficient toast)
   const handleSelectPayment = (id: string) => {

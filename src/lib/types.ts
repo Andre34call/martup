@@ -149,6 +149,7 @@ export interface Order {
   totalAmount: number
   paymentMethod?: string
   paymentStatus: string
+  paymentReference?: string
   paymentProof?: string
   paymentBankName?: string
   isServiceOrder?: boolean

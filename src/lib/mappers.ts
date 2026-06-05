@@ -63,6 +63,7 @@ interface RawOrder {
   totalAmount: number | { toNumber?: () => number }
   paymentMethod?: string
   paymentStatus: string
+  paymentReference?: string
   paymentProof?: string
   paymentBankName?: string
   isServiceOrder?: boolean
@@ -257,6 +258,7 @@ export function mapOrder(raw: RawOrder, currentUser?: User | null): Order {
     totalAmount: toNumber(raw.totalAmount),
     paymentMethod: raw.paymentMethod || undefined,
     paymentStatus: raw.paymentStatus || 'unpaid',
+    paymentReference: raw.paymentReference || undefined,
     paymentProof: raw.paymentProof || undefined,
     paymentBankName: raw.paymentBankName || undefined,
     isServiceOrder: raw.isServiceOrder || false,

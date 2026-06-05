@@ -370,6 +370,7 @@ model Order {
   totalAmount     Decimal
   paymentMethod       String?
   paymentStatus       String     @default("unpaid") // unpaid, pending_verification, paid, failed
+  paymentReference    String?    // JSON: { va_number, bank, payment_code, bill_key, biller_code, qr_url, etc. }
   paymentProofUrl     String?    // Buyer-uploaded bukti transfer for manual bank transfer
   platformBankAccountId String?  // Which MartUp bank account the buyer transferred to
   escrowStatus        String     @default("none") // none, held, released, refunded — escrow tracking

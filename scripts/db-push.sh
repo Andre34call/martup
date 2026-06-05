@@ -41,7 +41,7 @@ echo "   Using URL: $(echo $PUSH_URL | sed 's/:[^@]*@/:***@/')"
 mv .env .env.tmp 2>/dev/null || true
 
 # Run prisma db push with inline DATABASE_URL
-DATABASE_URL="$PUSH_URL" npx prisma db push --accept-data-loss 2>&1
+DATABASE_URL="$PUSH_URL" SUPABASE_DIRECT_URL="$DIRECT_URL" npx prisma db push --accept-data-loss 2>&1
 RESULT=$?
 
 # Restore .env

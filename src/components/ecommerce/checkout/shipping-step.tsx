@@ -2,7 +2,8 @@
 
 import { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { ChevronRight, Truck, Clock } from "lucide-react"
+import { ChevronRight, Truck, Clock, RefreshCw } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { formatPrice } from "@/lib/utils"
 import type { ShippingOption } from "@/lib/types"
 
@@ -11,14 +12,46 @@ export function ShippingSelector({
   selectedShipping,
   onSelect,
   options,
-  isLoading
+  isLoading,
+  error,
+  onRetry
 }: {
   selectedShipping: ShippingOption | null
   onSelect: (option: ShippingOption) => void
   options: ShippingOption[]
   isLoading?: boolean
+  error?: string
+  onRetry?: () => void
 }) {
   const [isExpanded, setIsExpanded] = useState(false)
+
+  // Show error state instead of shipping options
+  if (error && !isLoading) {
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <Truck className="w-4 h-4 text-red-500" />
+          <span className="text-sm font-medium text-red-600">Gagal Menghitung Ongkir</span>
+        </div>
+        <div className="p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800/50 rounded-xl">
+          <p className="text-xs text-red-600 dark:text-red-400">
+            Gagal menghitung ongkir ke alamat ini. Pastikan kota tujuan valid atau coba lagi.
+          </p>
+          {onRetry && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onRetry}
+              className="mt-2 h-7 text-[11px] rounded-lg border-red-300 text-red-600 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-950/30"
+            >
+              <RefreshCw className="w-3 h-3 mr-1" />
+              Hitung Ulang
+            </Button>
+          )}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-2">
@@ -58,7 +91,7 @@ export function ShippingSelector({
                 </div>
               ) : options.length === 0 ? (
                 <div className="p-3 text-center">
-                  <p className="text-xs text-muted-foreground">Tidak ada layanan pengiriman tersedia</p>
+                  <p className="text-xs text-muted-foreground">Ongkir tidak tersedia untuk alamat ini. Silakan gunakan kota yang valid.</p>
                 </div>
               ) : (
                 options.map((option) => {

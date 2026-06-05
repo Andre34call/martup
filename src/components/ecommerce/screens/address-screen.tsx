@@ -4,13 +4,194 @@ import { motion, AnimatePresence } from "framer-motion"
 import { useAppStore } from "@/lib/store"
 import { stagger } from '@/lib/animations'
 import { PageHeader, SectionHeader, PrimaryButton } from "../shared"
-import { useState } from "react"
-import { Plus, Edit, Trash2, MapPin } from "lucide-react"
+import { useState, useEffect, useRef, useCallback } from "react"
+import { Plus, Edit, Trash2, MapPin, Search, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 
+// ==================== CITY TYPE FROM RAJAONGKIR ====================
+interface CityOption {
+  id: string
+  name: string
+  type: string
+  province: string
+  postalCode: string
+}
+
+// ==================== CITY AUTOCOMPLETE INPUT ====================
+function CityAutocomplete({
+  value,
+  onChange,
+  onCitySelect,
+  placeholder
+}: {
+  value: string
+  onChange: (val: string) => void
+  onCitySelect: (city: CityOption) => void
+  placeholder: string
+}) {
+  const [cityResults, setCityResults] = useState<CityOption[]>([])
+  const [isSearchingCity, setIsSearchingCity] = useState(false)
+  const [showCityDropdown, setShowCityDropdown] = useState(false)
+  const [selectedIndex, setSelectedIndex] = useState(-1)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  // Debounced search
+  const searchCities = useCallback(async (query: string) => {
+    if (query.length < 2) {
+      setCityResults([])
+      setShowCityDropdown(false)
+      return
+    }
+
+    setIsSearchingCity(true)
+    try {
+      const res = await fetch(`/api/shipping/cities?q=${encodeURIComponent(query)}`)
+      const data = await res.json()
+      if (data.success && Array.isArray(data.data)) {
+        setCityResults(data.data)
+        setShowCityDropdown(data.data.length > 0)
+        setSelectedIndex(-1)
+      } else {
+        setCityResults([])
+        setShowCityDropdown(false)
+      }
+    } catch {
+      setCityResults([])
+      setShowCityDropdown(false)
+    } finally {
+      setIsSearchingCity(false)
+    }
+  }, [])
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value
+    onChange(val)
+    setSelectedIndex(-1)
+
+    // Debounce search
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      searchCities(val)
+    }, 300)
+  }
+
+  const handleSelectCity = (city: CityOption) => {
+    // Format: capitalize city name properly from RajaOngkir data
+    const cityName = city.type
+      ? `${city.type.charAt(0).toUpperCase() + city.type.slice(1)} ${city.name.charAt(0).toUpperCase() + city.name.slice(1)}`
+      : city.name.charAt(0).toUpperCase() + city.name.slice(1)
+
+    onChange(cityName)
+    onCitySelect(city)
+    setShowCityDropdown(false)
+    setCityResults([])
+    setSelectedIndex(-1)
+  }
+
+  // Keyboard navigation
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!showCityDropdown || cityResults.length === 0) return
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setSelectedIndex(prev => Math.min(prev + 1, cityResults.length - 1))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setSelectedIndex(prev => Math.max(prev - 1, 0))
+    } else if (e.key === 'Enter' && selectedIndex >= 0) {
+      e.preventDefault()
+      handleSelectCity(cityResults[selectedIndex])
+    } else if (e.key === 'Escape') {
+      setShowCityDropdown(false)
+    }
+  }
+
+  // Click outside closes dropdown
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node) &&
+          inputRef.current && !inputRef.current.contains(e.target as Node)) {
+        setShowCityDropdown(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  // Cleanup debounce on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [])
+
+  return (
+    <div className="relative">
+      <div className="relative">
+        <Input
+          ref={inputRef}
+          value={value}
+          onChange={handleInputChange}
+          onKeyDown={handleKeyDown}
+          onFocus={() => {
+            if (cityResults.length > 0) setShowCityDropdown(true)
+          }}
+          placeholder={placeholder}
+          className="rounded-xl h-9 pr-8"
+          autoComplete="off"
+        />
+        <div className="absolute right-2.5 top-1/2 -translate-y-1/2">
+          {isSearchingCity ? (
+            <Loader2 className="w-3.5 h-3.5 text-muted-foreground animate-spin" />
+          ) : (
+            <Search className="w-3.5 h-3.5 text-muted-foreground" />
+          )}
+        </div>
+      </div>
+
+      {/* Dropdown */}
+      <AnimatePresence>
+        {showCityDropdown && cityResults.length > 0 && (
+          <motion.div
+            ref={dropdownRef}
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.15 }}
+            className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-xl shadow-lg max-h-48 overflow-y-auto"
+          >
+            {cityResults.map((city, idx) => (
+              <button
+                key={city.id}
+                type="button"
+                onClick={() => handleSelectCity(city)}
+                className={`w-full text-left px-3 py-2 text-xs transition-colors ${
+                  idx === selectedIndex
+                    ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400'
+                    : 'hover:bg-muted/50 text-foreground'
+                } ${idx !== cityResults.length - 1 ? 'border-b border-border/30' : ''}`}
+              >
+                <span className="font-medium">
+                  {city.type.charAt(0).toUpperCase() + city.type.slice(1)} {city.name.charAt(0).toUpperCase() + city.name.slice(1)}
+                </span>
+                <span className="text-muted-foreground ml-1.5">
+                  — {city.province.charAt(0).toUpperCase() + city.province.slice(1)}
+                </span>
+              </button>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+// ==================== MAIN COMPONENT ====================
 export function AddressScreen() {
   const { addresses, addAddress, updateAddress, deleteAddress, setDefaultAddress, showToast } = useAppStore()
   const [showAddForm, setShowAddForm] = useState(false)
@@ -47,6 +228,17 @@ export function AddressScreen() {
   }
 
   const [isSaving, setIsSaving] = useState(false)
+
+  // Handle city selection from RajaOngkir autocomplete
+  const handleCitySelect = (city: CityOption) => {
+    // Auto-fill province when a city is selected
+    const provinceName = city.province.charAt(0).toUpperCase() + city.province.slice(1)
+    setFormProvince(provinceName)
+    // Auto-fill postal code if available and form is empty
+    if (city.postalCode && !formPostalCode) {
+      setFormPostalCode(city.postalCode)
+    }
+  }
 
   const handleSaveAddress = async () => {
     if (!formLabel.trim() || !formRecipient.trim() || !formPhone.trim() || !formAddress.trim() || !formCity.trim() || !formProvince.trim() || !formPostalCode.trim()) {
@@ -205,22 +397,39 @@ export function AddressScreen() {
                   <label className="text-xs font-medium text-foreground">Alamat Lengkap <span className="text-red-500">*</span></label>
                   <Input value={formAddress} onChange={(e) => setFormAddress(e.target.value)} placeholder="Jl. ..." className="rounded-xl h-9" />
                 </div>
+
+                {/* City + Province + Postal Code with RajaOngkir autocomplete */}
                 <div className="grid grid-cols-3 gap-3">
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-foreground">Kota <span className="text-red-500">*</span></label>
-                    <Input value={formCity} onChange={(e) => setFormCity(e.target.value)} placeholder="Jakarta" className="rounded-xl h-9" />
+                    <CityAutocomplete
+                      value={formCity}
+                      onChange={setFormCity}
+                      onCitySelect={handleCitySelect}
+                      placeholder="Cari kota..."
+                    />
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-foreground">Provinsi <span className="text-red-500">*</span></label>
-                    <Input value={formProvince} onChange={(e) => setFormProvince(e.target.value)} placeholder="DKI Jakarta" className="rounded-xl h-9" />
+                    <Input
+                      value={formProvince}
+                      onChange={(e) => setFormProvince(e.target.value)}
+                      placeholder="DKI Jakarta"
+                      className="rounded-xl h-9"
+                    />
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-foreground">Kode Pos <span className="text-red-500">*</span></label>
                     <Input value={formPostalCode} onChange={(e) => setFormPostalCode(e.target.value)} placeholder="12345" className="rounded-xl h-9" />
                   </div>
                 </div>
+
+                <p className="text-[10px] text-muted-foreground">
+                  Ketik nama kota untuk mencari dari database RajaOngkir. Provinsi akan terisi otomatis saat kota dipilih.
+                </p>
+
                 <PrimaryButton onClick={handleSaveAddress} className="w-full rounded-xl h-10">
-                  Simpan Alamat
+                  {isSaving ? 'Menyimpan...' : 'Simpan Alamat'}
                 </PrimaryButton>
               </Card>
             </motion.div>

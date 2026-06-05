@@ -84,15 +84,6 @@ export const SHIPPING_OPTIONS: ShippingOption[] = [
   { provider: 'pos', service: 'KILAT', name: 'POS Kilat Khusus', price: 10000, estimatedDays: '2-3 hari', logo: '📮' },
 ]
 
-/** Fallback shipping options used in checkout when API rates are unavailable */
-export const DEFAULT_SHIPPING_OPTIONS: ShippingOption[] = [
-  { provider: 'jne', service: 'REG', name: 'JNE Reguler', price: 15000, estimatedDays: '2-3 hari', logo: '📦' },
-  { provider: 'jne', service: 'YES', name: 'JNE YES', price: 30000, estimatedDays: '1 hari', logo: '⚡' },
-  { provider: 'sicepat', service: 'REG', name: 'SiCepat Reguler', price: 13000, estimatedDays: '2-3 hari', logo: '🚀' },
-  { provider: 'sicepat', service: 'BEST', name: 'SiCepat BEST', price: 28000, estimatedDays: '1 hari', logo: '⭐' },
-  { provider: 'jnt', service: 'EZ', name: 'J&T EZ', price: 14000, estimatedDays: '2-3 hari', logo: '✈️' },
-]
-
 // ==================== PAGINATION ====================
 
 /** Default page size for list endpoints */

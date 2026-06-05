@@ -175,6 +175,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Step 9: Call Midtrans Snap API to create a transaction token
+    // Note: authString is defined early so it can also be used in Step 8.5 for token reuse check
+    const authString = Buffer.from(MIDTRANS_SERVER_KEY + ':').toString('base64')
+
     // Step 8: Check if a pending transaction already exists for this order
     const existingTransaction = await db.transaction.findFirst({
       where: {
@@ -185,9 +189,60 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    // Step 9: Call Midtrans Snap API to create a transaction token
-    const authString = Buffer.from(MIDTRANS_SERVER_KEY + ':').toString('base64')
+    // Step 8.5: Reuse existing Snap token if there's a valid pending transaction
+    // and the order was created recently (within 2 hours — Snap token validity)
+    // This prevents creating a new VA number each time the user clicks "Bayar"
+    if (existingTransaction && existingTransaction.createdAt) {
+      const tokenAge = Date.now() - new Date(existingTransaction.createdAt).getTime()
+      const maxSnapTokenAge = 2 * 60 * 60 * 1000 // 2 hours
+      if (tokenAge < maxSnapTokenAge) {
+        // Try to get the existing Snap token from Midtrans
+        // Use the Midtrans transaction status API to check if token is still valid
+        const statusUrl = MIDTRANS_IS_PRODUCTION
+          ? `https://api.midtrans.com/v2/${order.orderNumber}/status`
+          : `https://api.sandbox.midtrans.com/v2/${order.orderNumber}/status`
 
+        try {
+          const statusResponse = await fetch(statusUrl, {
+            method: 'GET',
+            headers: {
+              Accept: 'application/json',
+              Authorization: `Basic ${authString}`,
+            },
+          })
+
+          if (statusResponse.ok) {
+            const statusData = await statusResponse.json()
+            // If the transaction is still pending and has a token, reuse it
+            if (statusData.transaction_status === 'pending' && statusData.token) {
+              logger.info({
+                orderId: order.id,
+                orderNumber: order.orderNumber,
+              }, 'Reusing existing Snap token for order')
+
+              return NextResponse.json(
+                serializeDecimal({
+                  success: true,
+                  data: {
+                    token: statusData.token,
+                    redirectUrl: statusData.redirect_url,
+                    orderId: order.id,
+                    orderNumber: order.orderNumber,
+                    totalAmount: order.totalAmount,
+                    reused: true,
+                  },
+                })
+              )
+            }
+          }
+        } catch (statusErr) {
+          // If status check fails, proceed to create a new token
+          logger.warn({ err: statusErr, orderId: order.id }, 'Failed to check existing Snap token status, creating new one')
+        }
+      }
+    }
+
+    // Step 10: Build Midtrans Snap payload
     const midtransPayload = {
       transaction_details: {
         order_id: order.orderNumber,
@@ -247,6 +302,7 @@ export async function POST(request: NextRequest) {
         finish: `${getBaseUrl()}/orders?payment=finish`,
         error: `${getBaseUrl()}/orders?payment=error`,
         pending: `${getBaseUrl()}/orders?payment=pending`,
+        notification_url: `${getBaseUrl()}/api/payment/notification`,
       },
     }
 

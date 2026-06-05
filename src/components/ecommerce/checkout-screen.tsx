@@ -4,14 +4,14 @@ import { motion, AnimatePresence } from "framer-motion"
 import {
   MapPin, ChevronRight, Truck, Ticket, CreditCard, Wallet,
   Check, ShoppingBag, Clock, BadgeCheck, ArrowRight,
-  ShieldCheck, Info, Banknote, Smartphone, AlertTriangle, Building2
+  ShieldCheck, Info, Banknote, Smartphone, AlertTriangle, Building2, RefreshCw
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { useAppStore, useCartStore } from "@/lib/store"
 import { formatPrice } from "@/lib/utils"
-import { DEFAULT_SHIPPING_OPTIONS } from "@/lib/constants"
+// DEFAULT_SHIPPING_OPTIONS removed — no more silent fallback to hardcoded rates
 import {
   PageHeader, EmptyState
 } from "./shared"
@@ -20,6 +20,57 @@ import { logger } from '@/lib/logger'
 import { useState, useMemo, useEffect, useCallback } from "react"
 import { openSnapPayment } from '@/lib/midtrans'
 import { apiClient } from '@/lib/api-client'
+
+// ==================== PAYMENT REFERENCE EXTRACTOR ====================
+// Extracts payment reference data (VA number, payment code, etc.) from Midtrans Snap result
+// Exported for reuse in order-screen.tsx
+export function extractPaymentReference(result: Record<string, unknown> | undefined): Record<string, unknown> | null {
+  if (!result) return null
+  const ref: Record<string, unknown> = {}
+
+  // VA numbers (bank_transfer)
+  const vaNumbers = result.va_numbers as Array<{ bank: string; va_number: string }> | undefined
+  if (vaNumbers && vaNumbers.length > 0) {
+    ref.va_numbers = vaNumbers
+    ref.va_number = vaNumbers[0].va_number
+    ref.bank = vaNumbers[0].bank
+  }
+
+  // Permata VA number (single field)
+  if (result.permata_va_number) {
+    ref.permata_va_number = result.permata_va_number
+    if (!ref.va_number) {
+      ref.va_number = result.permata_va_number as string
+      ref.bank = 'permata'
+    }
+  }
+
+  // Payment code (for cstore / indomaret / alfamart)
+  if (result.payment_code) {
+    ref.payment_code = result.payment_code
+  }
+
+  // Bill key / biller code (for mandiri bill payment)
+  if (result.bill_key) ref.bill_key = result.bill_key
+  if (result.biller_code) ref.biller_code = result.biller_code
+
+  // QR URL (for QRIS / gopay)
+  if (result.qr_url) ref.qr_url = result.qr_url
+
+  // Actions (may contain payment URL for e-wallets)
+  if (result.actions && Array.isArray(result.actions)) {
+    ref.actions = result.actions
+  }
+
+  // Payment type for display
+  if (result.payment_type) ref.payment_type = result.payment_type
+
+  // Only return if we have at least one reference field
+  if (ref.va_number || ref.payment_code || ref.bill_key || ref.qr_url || ref.actions) {
+    return ref
+  }
+  return null
+}
 
 // ==================== API RESPONSE TYPES ====================
 type ShippingResponse = { success: boolean; data?: { rates?: ShippingOption[] }; error?: string }
@@ -153,14 +204,46 @@ function ShippingSelector({
   selectedShipping,
   onSelect,
   options,
-  isLoading
+  isLoading,
+  error,
+  onRetry
 }: {
   selectedShipping: ShippingOption | null
   onSelect: (option: ShippingOption) => void
   options: ShippingOption[]
   isLoading?: boolean
+  error?: string
+  onRetry?: () => void
 }) {
   const [isExpanded, setIsExpanded] = useState(false)
+
+  // Show error state instead of shipping options
+  if (error && !isLoading) {
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <Truck className="w-4 h-4 text-red-500" />
+          <span className="text-sm font-medium text-red-600">Gagal Menghitung Ongkir</span>
+        </div>
+        <div className="p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800/50 rounded-xl">
+          <p className="text-xs text-red-600 dark:text-red-400">
+            Gagal menghitung ongkir ke alamat ini. Pastikan kota tujuan valid atau coba lagi.
+          </p>
+          {onRetry && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onRetry}
+              className="mt-2 h-7 text-[11px] rounded-lg border-red-300 text-red-600 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-950/30"
+            >
+              <RefreshCw className="w-3 h-3 mr-1" />
+              Hitung Ulang
+            </Button>
+          )}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-2">
@@ -200,7 +283,7 @@ function ShippingSelector({
                 </div>
               ) : options.length === 0 ? (
                 <div className="p-3 text-center">
-                  <p className="text-xs text-muted-foreground">Tidak ada layanan pengiriman tersedia</p>
+                  <p className="text-xs text-muted-foreground">Ongkir tidak tersedia untuk alamat ini. Silakan gunakan kota yang valid.</p>
                 </div>
               ) : (
                 options.map((option) => {
@@ -269,6 +352,7 @@ export function CheckoutScreen() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [shippingRatesBySeller, setShippingRatesBySeller] = useState<Record<string, ShippingOption[]>>({})
   const [isLoadingRates, setIsLoadingRates] = useState<Record<string, boolean>>({})
+  const [shippingError, setShippingError] = useState<Record<string, string>>({})
 
   const checkedItems = getCheckedItems()
   const checkedTotal = getCheckedTotal()
@@ -318,6 +402,7 @@ export function CheckoutScreen() {
   // Fetch shipping rates from API when address is selected
   const fetchShippingRates = useCallback(async (sellerId: string, destinationCity: string, weightGrams: number, originCity?: string) => {
     setIsLoadingRates(prev => ({ ...prev, [sellerId]: true }))
+    setShippingError(prev => { const next = { ...prev }; delete next[sellerId]; return next })
     try {
       const res = await apiClient.rawPost('/api/shipping/calculate', {
         originCity: originCity || 'Jakarta', // Use seller's store city, fallback to Jakarta
@@ -328,13 +413,15 @@ export function CheckoutScreen() {
       if (data.success && data.data?.rates && data.data.rates.length > 0) {
         setShippingRatesBySeller(prev => ({ ...prev, [sellerId]: data.data!.rates } as Record<string, ShippingOption[]>))
       } else {
-        // Fallback to default options
-        setShippingRatesBySeller(prev => ({ ...prev, [sellerId]: DEFAULT_SHIPPING_OPTIONS }))
+        // No rates available — show error instead of hardcoded defaults
+        setShippingRatesBySeller(prev => ({ ...prev, [sellerId]: [] }))
+        setShippingError(prev => ({ ...prev, [sellerId]: 'Gagal menghitung ongkir. Periksa alamat pengiriman Anda.' }))
       }
     } catch (err) {
-      logger.warn({ component: 'checkout', err }, 'Shipping rate fetch failed, using defaults')
-      // Fallback to default options
-      setShippingRatesBySeller(prev => ({ ...prev, [sellerId]: DEFAULT_SHIPPING_OPTIONS }))
+      logger.warn({ component: 'checkout', err }, 'Shipping rate fetch failed')
+      // Show error instead of hardcoded defaults
+      setShippingRatesBySeller(prev => ({ ...prev, [sellerId]: [] }))
+      setShippingError(prev => ({ ...prev, [sellerId]: 'Gagal menghitung ongkir. Periksa alamat pengiriman Anda.' }))
     } finally {
       setIsLoadingRates(prev => ({ ...prev, [sellerId]: false }))
     }
@@ -373,9 +460,9 @@ export function CheckoutScreen() {
     })
   }, [defaultAddress?.city])
 
-  // Get shipping options for a seller (dynamic or fallback)
+  // Get shipping options for a seller — returns empty array if no rates loaded (no hardcoded fallback)
   const getShippingOptions = useCallback((sellerId: string): ShippingOption[] => {
-    return shippingRatesBySeller[sellerId] || DEFAULT_SHIPPING_OPTIONS
+    return shippingRatesBySeller[sellerId] || []
   }, [shippingRatesBySeller])
 
   // Calculate totals — use platform settings with fallback defaults
@@ -421,8 +508,9 @@ export function CheckoutScreen() {
     const hasShipping = isAllJasa || Object.keys(shippingBySeller).length >= groupedBySeller.length
     const hasItems = checkedCount > 0
     const hasBalance = !(selectedPayment === 'wallet' && walletBalance < totalAmount)
-    return hasPayment && hasAddressOrJasa && hasShipping && hasItems && hasBalance
-  }, [selectedPayment, defaultAddress, shippingBySeller, groupedBySeller, checkedCount, walletBalance, totalAmount, isAllJasa])
+    const hasNoShippingErrors = isAllJasa || !groupedBySeller.some(g => shippingError[g.seller.id])
+    return hasPayment && hasAddressOrJasa && hasShipping && hasItems && hasBalance && hasNoShippingErrors
+  }, [selectedPayment, defaultAddress, shippingBySeller, groupedBySeller, checkedCount, walletBalance, totalAmount, isAllJasa, shippingError])
 
   const handlePay = async () => {
     if (!selectedPayment) {
@@ -678,6 +766,16 @@ export function CheckoutScreen() {
                 } else if (snapResult.status === 'pending') {
                   anyPending = true
                   allSuccess = false
+                  // Save payment reference from Snap result so buyer can see VA number / payment code later
+                  try {
+                    const ref = extractPaymentReference(snapResult.result)
+                    if (ref && createdOrders[i]) {
+                      await apiClient.rawPost('/api/payment/save-reference', {
+                        orderId: createdOrders[i].id,
+                        paymentReference: JSON.stringify(ref),
+                      })
+                    }
+                  } catch { /* non-critical — best effort */ }
                 } else if (snapResult.status === 'closed') {
                   allSuccess = false
                   // User closed popup — stop processing remaining orders
@@ -866,6 +964,11 @@ export function CheckoutScreen() {
                   onSelect={(option) => handleShippingSelect(group.seller.id, option)}
                   options={getShippingOptions(group.seller.id)}
                   isLoading={isLoadingRates[group.seller.id]}
+                  error={shippingError[group.seller.id]}
+                  onRetry={() => {
+                    const weight = weightBySeller[group.seller.id] || 1000
+                    fetchShippingRates(group.seller.id, defaultAddress?.city || '', weight, group.seller.storeCity)
+                  }}
                 />
               </div>
             </div>

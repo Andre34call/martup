@@ -152,6 +152,7 @@ export async function POST(request: NextRequest) {
     let paidAt: Date | null = null
     let cancelledAt: Date | null = null
     let cancelReason: string | null = null
+    let paymentReference: string | null = null
 
     switch (transaction_status) {
       case 'capture':
@@ -177,6 +178,30 @@ export async function POST(request: NextRequest) {
 
       case 'pending':
         newPaymentStatus = 'pending'
+        // Save payment reference from notification (VA numbers, payment codes, etc.)
+        if (body.va_numbers || body.permata_va_number || body.payment_code || body.bill_key || body.biller_code) {
+          const ref: Record<string, unknown> = {}
+          if (body.va_numbers && Array.isArray(body.va_numbers)) {
+            ref.va_numbers = body.va_numbers
+            ref.va_number = body.va_numbers[0]?.va_number
+            ref.bank = body.va_numbers[0]?.bank
+          }
+          if (body.permata_va_number) {
+            ref.permata_va_number = body.permata_va_number
+            if (!ref.va_number) {
+              ref.va_number = body.permata_va_number
+              ref.bank = 'permata'
+            }
+          }
+          if (body.payment_code) ref.payment_code = body.payment_code
+          if (body.bill_key) ref.bill_key = body.bill_key
+          if (body.biller_code) ref.biller_code = body.biller_code
+          if (payment_type) ref.payment_type = payment_type
+          // Only update paymentReference if we have useful data
+          if (ref.va_number || ref.payment_code || ref.bill_key) {
+            paymentReference = JSON.stringify(ref)
+          }
+        }
         break
 
       case 'deny':
@@ -223,6 +248,7 @@ export async function POST(request: NextRequest) {
       if (cancelledAt) orderUpdateData.cancelledAt = cancelledAt
       if (cancelReason) orderUpdateData.cancelReason = cancelReason
       if (payment_type) orderUpdateData.paymentMethod = payment_type
+      if (paymentReference) orderUpdateData.paymentReference = paymentReference
 
       await tx.order.update({
         where: { id: order.id },

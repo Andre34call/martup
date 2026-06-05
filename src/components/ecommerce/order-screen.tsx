@@ -11,11 +11,60 @@ import {
   ArrowLeft, Package, CreditCard, Truck, CheckCircle2, Star,
   ChevronRight, MapPin, Clock, ShoppingBag, RotateCcw, Copy,
   Phone, MessageCircle, Store, Wallet, Receipt, Landmark, Upload, ImagePlus, CheckCircle,
-  Image as ImageIcon, Timer
+  Image as ImageIcon, Timer, Landmark as BankIcon, QrCode
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { apiClient } from "@/lib/api-client"
+
+// ==================== PAYMENT REFERENCE PARSER ====================
+// Parses paymentReference JSON from order and returns structured data
+interface PaymentRefData {
+  va_numbers?: Array<{ bank: string; va_number: string }>
+  va_number?: string
+  bank?: string
+  permata_va_number?: string
+  payment_code?: string
+  bill_key?: string
+  biller_code?: string
+  qr_url?: string
+  actions?: Array<{ name: string; url: string; method?: string }>
+  payment_type?: string
+}
+
+function parsePaymentReference(ref: string | undefined): PaymentRefData | null {
+  if (!ref) return null
+  try {
+    const parsed = JSON.parse(ref)
+    if (parsed && (parsed.va_number || parsed.payment_code || parsed.bill_key || parsed.qr_url || parsed.actions)) {
+      return parsed as PaymentRefData
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+// Display name for Midtrans payment type
+function getPaymentTypeLabel(type: string | undefined): string {
+  if (!type) return 'Transfer / E-Wallet'
+  const map: Record<string, string> = {
+    bank_transfer: 'Transfer Bank',
+    gopay: 'GoPay',
+    shopeepay: 'ShopeePay',
+    qris: 'QRIS',
+    cstore: 'Gerai (Indomaret/Alfamart)',
+    danamon_online: 'Danamon Online',
+    bca_klikpay: 'BCA KlikPay',
+    bca_klikbca: 'KlikBCA',
+    mandiri_clickpay: 'Mandiri ClickPay',
+    bri_epay: 'BRI Epay',
+    cimb_clicks: 'CIMB Clicks',
+    card: 'Kartu Kredit/Debit',
+    echannel: 'Mandiri Bill',
+  }
+  return map[type] || type
+}
 
 const ORDER_TABS = [
   { key: "all", label: "Semua" },
@@ -386,6 +435,20 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
   const { addItem } = useCartStore()
   const activeStep = getActiveStep(order)
   const isEscrowOrder = order.paymentMethod?.toLowerCase().includes('escrow')
+  const isMidtransPayment = (order.paymentMethod?.toLowerCase().includes('midtrans') ||
+    order.paymentMethod?.toLowerCase().includes('transfer') ||
+    order.paymentMethod?.toLowerCase().includes('ewallet') ||
+    order.paymentMethod?.toLowerCase().includes('e-wallet') ||
+    order.paymentMethod?.toLowerCase().includes('gopay') ||
+    order.paymentMethod?.toLowerCase().includes('shopeepay') ||
+    order.paymentMethod?.toLowerCase().includes('qris') ||
+    order.paymentMethod?.toLowerCase().includes('kartu') ||
+    order.paymentMethod?.toLowerCase().includes('card')) &&
+    !isEscrowOrder
+  const paymentRef = parsePaymentReference(order.paymentReference)
+  const showPaymentRef = isMidtransPayment &&
+    (order.paymentStatus === 'unpaid' || order.paymentStatus === 'pending') &&
+    paymentRef
 
   // Fetch service proof data for service orders
   useEffect(() => {
@@ -851,6 +914,223 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
             </div>
           </div>
         </div>
+
+        {/* Cara Pembayaran — show for Midtrans pending/unpaid orders with payment reference */}
+        {showPaymentRef && (
+          <div className="px-4 pb-4">
+            <div className="bg-blue-50 dark:bg-blue-950/30 rounded-xl border border-blue-200 dark:border-blue-800/50 p-4">
+              <h3 className="text-sm font-bold text-foreground mb-3 flex items-center gap-2">
+                <CreditCard className="w-4 h-4 text-blue-600" />
+                Cara Pembayaran
+              </h3>
+              <p className="text-xs text-muted-foreground mb-3">
+                Selesaikan pembayaran menggunakan informasi berikut:
+              </p>
+
+              {/* Payment type label */}
+              {paymentRef.payment_type && (
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-muted-foreground">Metode</span>
+                  <span className="text-xs font-medium text-foreground">{getPaymentTypeLabel(paymentRef.payment_type)}</span>
+                </div>
+              )}
+
+              {/* VA Number display */}
+              {paymentRef.va_number && (
+                <div className="bg-white dark:bg-card rounded-lg p-3 mb-2 border border-blue-100 dark:border-blue-900/50">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
+                    {paymentRef.bank ? `Virtual Account ${paymentRef.bank.toUpperCase()}` : 'Nomor Virtual Account'}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-lg font-mono font-bold text-foreground tracking-wider">{paymentRef.va_number}</p>
+                    <button
+                      onClick={() => { navigator.clipboard?.writeText(paymentRef.va_number!); showToast('Nomor VA disalin!', 'success') }}
+                      className="p-1.5 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+                    >
+                      <Copy className="w-4 h-4 text-blue-600" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Multiple VA numbers if available */}
+              {paymentRef.va_numbers && paymentRef.va_numbers.length > 1 && paymentRef.va_numbers.map((va, idx) => (
+                <div key={idx} className="bg-white dark:bg-card rounded-lg p-3 mb-2 border border-blue-100 dark:border-blue-900/50">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
+                    Virtual Account {va.bank.toUpperCase()}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-lg font-mono font-bold text-foreground tracking-wider">{va.va_number}</p>
+                    <button
+                      onClick={() => { navigator.clipboard?.writeText(va.va_number); showToast('Nomor VA disalin!', 'success') }}
+                      className="p-1.5 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+                    >
+                      <Copy className="w-4 h-4 text-blue-600" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              {/* Payment Code (cstore / Indomaret / Alfamart) */}
+              {paymentRef.payment_code && (
+                <div className="bg-white dark:bg-card rounded-lg p-3 mb-2 border border-blue-100 dark:border-blue-900/50">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">Kode Pembayaran</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-lg font-mono font-bold text-foreground tracking-wider">{paymentRef.payment_code}</p>
+                    <button
+                      onClick={() => { navigator.clipboard?.writeText(paymentRef.payment_code!); showToast('Kode pembayaran disalin!', 'success') }}
+                      className="p-1.5 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+                    >
+                      <Copy className="w-4 h-4 text-blue-600" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Mandiri Bill (bill_key + biller_code) */}
+              {paymentRef.bill_key && (
+                <div className="bg-white dark:bg-card rounded-lg p-3 mb-2 border border-blue-100 dark:border-blue-900/50">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">Mandiri Bill Payment</p>
+                  <div className="space-y-1">
+                    {paymentRef.biller_code && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-muted-foreground">Kode Perusahaan</span>
+                        <div className="flex items-center gap-1">
+                          <span className="text-sm font-mono font-bold text-foreground">{paymentRef.biller_code}</span>
+                          <button
+                            onClick={() => { navigator.clipboard?.writeText(paymentRef.biller_code!); showToast('Kode disalin!', 'success') }}
+                            className="p-1 rounded hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+                          >
+                            <Copy className="w-3 h-3 text-blue-600" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">No. Bill</span>
+                      <div className="flex items-center gap-1">
+                        <span className="text-sm font-mono font-bold text-foreground">{paymentRef.bill_key}</span>
+                        <button
+                          onClick={() => { navigator.clipboard?.writeText(paymentRef.bill_key!); showToast('No. Bill disalin!', 'success') }}
+                          className="p-1 rounded hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+                        >
+                          <Copy className="w-3 h-3 text-blue-600" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* QR Code URL */}
+              {paymentRef.qr_url && (
+                <div className="bg-white dark:bg-card rounded-lg p-3 mb-2 border border-blue-100 dark:border-blue-900/50 text-center">
+                  <QrCode className="w-8 h-8 text-blue-600 mx-auto mb-2" />
+                  <p className="text-xs text-muted-foreground mb-2">Scan QR code untuk membayar</p>
+                  <Button
+                    size="sm"
+                    className="bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-lg"
+                    onClick={() => window.open(paymentRef.qr_url, '_blank')}
+                  >
+                    Buka QR Code
+                  </Button>
+                </div>
+              )}
+
+              {/* E-Wallet deep link (from actions) */}
+              {paymentRef.actions && paymentRef.actions.length > 0 && paymentRef.actions.map((action, idx) => (
+                <div key={idx} className="bg-white dark:bg-card rounded-lg p-3 mb-2 border border-blue-100 dark:border-blue-900/50">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full text-xs rounded-lg border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                    onClick={() => window.open(action.url, '_blank')}
+                  >
+                    {action.name === 'deeplink-redirect' ? 'Buka Aplikasi E-Wallet' :
+                     action.name === 'qr-link' ? 'Lihat QR Code' :
+                     action.name}
+                  </Button>
+                </div>
+              ))}
+
+              {/* Payment instructions */}
+              <div className="mt-3 p-2.5 bg-blue-100/50 dark:bg-blue-900/20 rounded-lg">
+                <p className="text-[10px] text-muted-foreground space-y-0.5">
+                  {paymentRef.va_number && (
+                    <>
+                      <span className="block">1. Login ke mobile/internet banking</span>
+                      <span className="block">2. Pilih Transfer ke Virtual Account</span>
+                      <span className="block">3. Masukkan nomor VA di atas</span>
+                      <span className="block">4. Konfirmasi dan bayar {formatPrice(order.totalAmount)}</span>
+                    </>
+                  )}
+                  {paymentRef.payment_code && (
+                    <>
+                      <span className="block">1. Kunjungi gerai Indomaret/Alfamart terdekat</span>
+                      <span className="block">2. Tunjukkan kode pembayaran di atas</span>
+                      <span className="block">3. Bayar sesuai nominal {formatPrice(order.totalAmount)}</span>
+                    </>
+                  )}
+                  {paymentRef.bill_key && (
+                    <>
+                      <span className="block">1. Login ke Mandiri Online</span>
+                      <span className="block">2. Pilih Pembayaran &rarr; Multi Payment</span>
+                      <span className="block">3. Masukkan kode perusahaan dan no. bill</span>
+                      <span className="block">4. Konfirmasi dan bayar {formatPrice(order.totalAmount)}</span>
+                    </>
+                  )}
+                  {paymentRef.qr_url && (
+                    <>
+                      <span className="block">1. Buka aplikasi e-wallet Anda</span>
+                      <span className="block">2. Scan QR code atau klik link di atas</span>
+                      <span className="block">3. Konfirmasi pembayaran {formatPrice(order.totalAmount)}</span>
+                    </>
+                  )}
+                </p>
+              </div>
+
+              {/* Bayar Sekarang button — re-open Snap popup */}
+              <Button
+                className="w-full mt-3 h-10 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold"
+                onClick={async () => {
+                  const result = await payForOrder(order.id)
+                  if (result?.token) {
+                    try {
+                      const { openSnapPayment } = await import('@/lib/midtrans')
+                      const snapResult = await openSnapPayment(result.token)
+                      if (snapResult.status === 'success') {
+                        showToast('Pembayaran berhasil!', 'success')
+                      } else if (snapResult.status === 'pending') {
+                        showToast('Pembayaran tertunda. Selesaikan pembayaran Anda.', 'warning')
+                        // Save updated payment reference
+                        try {
+                          const ref = (await import('@/components/ecommerce/checkout-screen')).extractPaymentReference?.(snapResult.result as Record<string, unknown>)
+                          if (ref) {
+                            await apiClient.rawPost('/api/payment/save-reference', {
+                              orderId: order.id,
+                              paymentReference: JSON.stringify(ref),
+                            })
+                          }
+                        } catch { /* non-critical */ }
+                      } else if (snapResult.status === 'closed') {
+                        showToast('Pembayaran dibatalkan. Anda bisa membayar nanti.', 'warning')
+                      } else {
+                        showToast('Pembayaran gagal. Silakan coba lagi.', 'error')
+                      }
+                    } catch {
+                      showToast('Gagal membuka halaman pembayaran.', 'error')
+                    }
+                  } else if (result?.redirectUrl) {
+                    window.open(result.redirectUrl, '_blank')
+                  }
+                }}
+              >
+                <CreditCard className="w-4 h-4 mr-2" />
+                Bayar Sekarang
+              </Button>
+            </div>
+          </div>
+        )}
 
         {/* Escrow Payment Info — show for escrow orders */}
         {isEscrowOrder && order.paymentStatus !== 'paid' && (

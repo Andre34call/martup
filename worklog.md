@@ -2737,3 +2737,132 @@ Stage Summary:
 - Database value 'jasa' preserved — only displayed as "Tolong Mas" in UI text
 - Purple color scheme used consistently for Tolong Mas branding
 - 🤝 emoji used for Tolong Mas branding throughout
+
+---
+Task ID: 2a+2b
+Agent: full-stack-developer
+Task: Remove DEFAULT_SHIPPING_OPTIONS fallback and add RajaOngkir city autocomplete
+
+Work Log:
+
+1. **Removed DEFAULT_SHIPPING_OPTIONS fallback** (checkout-screen.tsx)
+   - Removed `import { DEFAULT_SHIPPING_OPTIONS } from "@/lib/constants"`
+   - Added `shippingError` state: `useState<Record<string, string>>({})`
+   - Updated `fetchShippingRates`: on failure/empty, sets `shippingError` instead of falling back to hardcoded rates
+   - Clears `shippingError` for a seller at the start of each fetch attempt
+   - Updated `getShippingOptions`: returns `[]` if no rates loaded (no hardcoded fallback)
+   - Updated `isReadyToPay`: added `hasNoShippingErrors` check — pay button disabled if any seller has a shipping error
+
+2. **Added error UI in ShippingSelector** (checkout-screen.tsx + checkout/shipping-step.tsx)
+   - Added `error` and `onRetry` props to `ShippingSelector`
+   - When `error` is set and not loading: shows red error card with message "Gagal menghitung ongkir ke alamat ini. Pastikan kota tujuan valid atau coba lagi." and "Hitung Ulang" retry button
+   - Changed empty-state message from "Tidak ada layanan pengiriman tersedia" to "Ongkir tidak tersedia untuk alamat ini. Silakan gunakan kota yang valid."
+   - Added `RefreshCw` icon import from lucide-react
+   - Applied same changes to `checkout/shipping-step.tsx` (subfolder version) for consistency
+
+3. **Updated checkout/checkout-screen.tsx** (subfolder version)
+   - Removed `DEFAULT_SHIPPING_OPTIONS` import
+   - Added `shippingError` state
+   - Updated `fetchShippingRates` to set errors instead of defaults
+   - Updated `getShippingOptions` to return `[]`
+   - Updated `isReadyToPay` to check `hasNoShippingErrors`
+
+4. **Removed DEFAULT_SHIPPING_OPTIONS from constants.ts**
+   - Deleted the `DEFAULT_SHIPPING_OPTIONS` constant (5 hardcoded shipping options: JNE REG 15K, JNE YES 30K, etc.)
+   - Kept `SHIPPING_OPTIONS` constant (used in product detail "Cek Ongkir" modal — display only, not checkout)
+
+5. **Added RajaOngkir city autocomplete** (address-screen.tsx)
+   - Created `CityAutocomplete` component with debounced search (300ms)
+   - Searches `/api/shipping/cities?q=searchTerm` endpoint
+   - Shows dropdown with city name + province for clarity
+   - On city select: auto-fills city name (formatted as "Kota/Kabupaten Name"), auto-fills province, auto-fills postal code if available
+   - Keyboard navigation (ArrowUp/Down, Enter, Escape)
+   - Click outside closes dropdown
+   - Falls back gracefully when RajaOngkir is not configured (user can still type manually)
+   - Province field remains editable after auto-fill
+   - Added hint text: "Ketik nama kota untuk mencari dari database RajaOngkir. Provinsi akan terisi otomatis saat kota dipilih."
+   - Added loading spinner (Loader2 icon) during search
+   - Added Search icon in input field
+
+6. **Verified /api/shipping/cities endpoint**
+   - Endpoint returns 503 when RAJAONGKIR_API_KEY is not configured (expected)
+   - Returns proper JSON: `{ success: false, error: "RajaOngkir not configured" }`
+   - When configured, returns `{ success: true, data: [...], total: N }` with city objects
+
+Lint result: 0 errors
+
+Stage Summary:
+- 4 files modified: checkout-screen.tsx, checkout/checkout-screen.tsx, checkout/shipping-step.tsx, screens/address-screen.tsx
+- 1 file modified: constants.ts (removed DEFAULT_SHIPPING_OPTIONS)
+- Removed dangerous hardcoded shipping fallback that could charge buyers incorrect rates
+- Added clear error states with retry buttons when shipping calculation fails
+- Added RajaOngkir city autocomplete to prevent invalid city names that break shipping calculation
+- Prisma schema NOT changed
+
+---
+Task ID: 1a+1b
+Agent: full-stack-developer
+Task: Fix Midtrans payment reference display — save and show VA numbers, payment codes in order detail
+
+Work Log:
+
+1. **Added paymentReference field to Order model** (prisma/schema.prisma)
+   - Added `paymentReference String?` field with comment `// JSON: { va_number, bank, payment_code, bill_key, biller_code, qr_url, etc. }`
+   - Ran `prisma db push` successfully — column added to PostgreSQL
+   - Also fixed `scripts/db-push.sh` to pass `SUPABASE_DIRECT_URL` as env var (was missing, causing P1012 errors)
+
+2. **Added paymentReference to types and mappers** (lib/types.ts + lib/mappers.ts)
+   - Added `paymentReference?: string` to the `Order` interface in types.ts
+   - Added `paymentReference?: string` to `RawOrder` interface in mappers.ts
+   - Added `paymentReference: raw.paymentReference || undefined` to `mapOrder` function output
+
+3. **Saved Midtrans payment result in checkout flow** (checkout-screen.tsx)
+   - Created `extractPaymentReference()` function that extracts VA numbers, payment codes, bill key/biller code, QR URL, and e-wallet actions from Snap result
+   - Exported the function for reuse in order-screen.tsx
+   - After Snap popup returns `pending`, the function is called and the result is saved via `/api/payment/save-reference` API
+   - Created new API endpoint `POST /api/payment/save-reference/route.ts` with auth + ownership verification
+
+4. **Saved payment reference from Midtrans webhook** (api/payment/notification/route.ts)
+   - In the `pending` case of the switch statement, added extraction of `va_numbers`, `permata_va_number`, `payment_code`, `bill_key`, `biller_code` from notification body
+   - Saved as JSON string to `paymentReference` field on the order
+   - Added `let paymentReference: string | null = null` before the switch and applied it in `orderUpdateData` inside the transaction
+
+5. **Displayed payment reference in order detail** (order-screen.tsx)
+   - Added `PaymentRefData` interface and `parsePaymentReference()` helper function
+   - Added `getPaymentTypeLabel()` function for human-readable Midtrans payment type names
+   - Added detection logic: `isMidtransPayment` and `showPaymentRef` flags
+   - Added comprehensive "Cara Pembayaran" section showing:
+     - Payment method label
+     - VA number with copy button (supports multiple VA numbers)
+     - Payment code (Indomaret/Alfamart) with copy button
+     - Mandiri Bill Payment (biller_code + bill_key) with copy buttons
+     - QR Code URL with open button
+     - E-Wallet deep links from `actions` array
+     - Step-by-step payment instructions based on payment type
+     - "Bayar Sekarang" button to re-open Snap popup
+   - Added `QrCode` and `BankIcon` icon imports from lucide-react
+
+6. **Fixed re-payment: reuse existing Snap token** (api/payment/create/route.ts)
+   - Moved `authString` declaration before the existing transaction check (was causing "used before declaration" error)
+   - Added Step 8.5: After finding an existing pending transaction within 2 hours, queries Midtrans transaction status API
+   - If the transaction is still `pending` and has a `token`, returns the existing token with `reused: true` flag
+   - Prevents creating duplicate VA numbers each time the user clicks "Bayar"
+   - Falls back gracefully to creating a new token if status check fails
+
+7. **Added notification_url to Snap payload** (api/payment/create/route.ts)
+   - Added `notification_url: ${getBaseUrl()}/api/payment/notification` to the `callbacks` object
+   - Ensures Midtrans sends payment notifications to the correct webhook endpoint even if dashboard is not configured
+
+8. **Verification**
+   - `bun run lint` — 0 errors
+   - `npx next build` — Compiled successfully, no TypeScript errors
+   - `prisma db push` — Database schema synced (paymentReference column added)
+   - Dev server running on port 3000
+
+Stage Summary:
+- 8 files modified: prisma/schema.prisma, scripts/db-push.sh, lib/types.ts, lib/mappers.ts, checkout-screen.tsx, order-screen.tsx, api/payment/create/route.ts, api/payment/notification/route.ts
+- 1 file created: api/payment/save-reference/route.ts
+- Buyer can now see VA numbers, payment codes, QR URLs, and step-by-step instructions in the order detail screen
+- Re-payment reuses existing Snap token (no duplicate VA numbers)
+- Webhook also saves payment reference for orders where frontend didn't capture it
+- notification_url ensures Midtrans always sends webhook callbacks
