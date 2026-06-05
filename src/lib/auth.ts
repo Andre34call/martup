@@ -119,28 +119,37 @@ export const authOptions: NextAuthOptions = {
         }
       }
 
-      // SECURITY: On every JWT refresh, check if tokenVersion has changed.
-      // If the user changed their password (incrementing tokenVersion),
-      // this session should be invalidated — return an empty token to force re-auth.
+      // SECURITY: On every JWT refresh, check tokenVersion and account status.
+      // IMPORTANT: We do NOT invalidate the session if the user doesn't exist in our DB yet.
+      // This happens when sync-user failed during signIn (e.g., serverless cold start timeout).
+      // The user was authenticated by Google — their JWT is valid. /api/auth/me will
+      // create the DB user as a fallback. Invalidating here breaks Google OAuth entirely.
       if (token.email) {
         try {
           const dbUser = await db.user.findUnique({
             where: { email: token.email as string },
             select: { tokenVersion: true, isActive: true },
           })
-          if (!dbUser || !dbUser.isActive) {
-            // User deactivated or deleted — force re-auth by clearing identifying fields
-            // Returning a stripped token (no email) causes the session callback to return null
+
+          // User not in DB yet — don't invalidate! sync-user may have failed.
+          // /api/auth/me will create the user as fallback.
+          // Just keep the token as-is and retry on next refresh.
+          if (!dbUser) {
+            logger.info({ component: 'auth', email: token.email }, 'JWT refresh: user not in DB yet — keeping session alive, /api/auth/me will create user')
+          } else if (!dbUser.isActive) {
+            // User explicitly deactivated — THIS is when we invalidate
+            logger.info({ component: 'auth', email: token.email }, 'NextAuth JWT invalidated — account deactivated')
             return { ...token, email: undefined, sub: undefined } as any
-          }
-          if (dbUser.tokenVersion !== (token.tokenVersion as number)) {
+          } else if (dbUser.tokenVersion !== (token.tokenVersion as number)) {
             // tokenVersion changed since last sign-in/refresh — password was changed
-            // Force re-auth by clearing identifying fields
             logger.info({ component: 'auth', email: token.email }, 'NextAuth JWT invalidated — tokenVersion mismatch')
             return { ...token, email: undefined, sub: undefined } as any
           }
+
           // Keep tokenVersion in sync (in case it was missing from older tokens)
-          token.tokenVersion = dbUser.tokenVersion
+          if (dbUser) {
+            token.tokenVersion = dbUser.tokenVersion
+          }
         } catch (error) {
           // DB unreachable — don't invalidate the session just because the DB is down
           // The tokenVersion check will be retried on the next JWT refresh
@@ -176,64 +185,66 @@ export const authOptions: NextAuthOptions = {
         return '/?error=google_oauth_not_configured'
       }
 
-      // Sync user to our database
+      // Sync user DIRECTLY to our database (no HTTP fetch — avoids serverless cold start issues)
+      // Previously used fetch('/api/auth/sync-user') which could fail due to cold start timeout
       try {
         const internalSecret = env.INTERNAL_API_SECRET
         if (!internalSecret) {
-          logger.error({ component: 'auth' }, 'INTERNAL_API_SECRET not set — cannot sync Google OAuth user')
-          return true // Still allow sign-in, /api/auth/me will handle user creation as fallback
-        }
-
-        // Build the sync-user URL — must be reachable from the server
-        // On Vercel, use VERCEL_URL for the internal fetch (same-server, avoids DNS)
-        // The redirect_uri for Google is determined by NEXTAUTH_URL, not this URL
-        let baseUrl: string
-        if (process.env.VERCEL_URL) {
-          baseUrl = `https://${process.env.VERCEL_URL}`
-        } else if (env.NEXTAUTH_URL && env.NEXTAUTH_URL !== 'http://localhost:3000') {
-          baseUrl = env.NEXTAUTH_URL
+          logger.error({ component: 'auth' }, 'INTERNAL_API_SECRET not set — skipping direct DB sync')
         } else {
-          baseUrl = 'http://localhost:3000'
-        }
+          const normalizedEmail = (user.email as string).toLowerCase()
+          const existingUser = await db.user.findUnique({
+            where: { email: normalizedEmail },
+            select: { id: true, isActive: true, tokenVersion: true },
+          })
 
-        const syncUrl = `${baseUrl}/api/auth/sync-user`
-        logger.info({ component: 'auth', syncUrl, email: user.email }, 'Syncing Google OAuth user')
+          if (!existingUser) {
+            // Create new user directly in DB
+            const newUser = await db.user.create({
+              data: {
+                email: normalizedEmail,
+                name: (user.name as string) || normalizedEmail.split('@')[0],
+                avatar: user.image || null,
+                role: 'buyer',
+                isVerified: true, // Google verified their email
+                wallet: {
+                  create: { balance: 0, holdBalance: 0 },
+                },
+              },
+              select: { id: true },
+            })
 
-        const response = await fetch(syncUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-internal-secret': internalSecret,
-          },
-          body: JSON.stringify({
-            email: user.email,
-            name: user.name,
-            avatar: user.image,
-            provider: account?.provider || 'google',
-            providerAccountId: account?.providerAccountId,
-          }),
-          signal: AbortSignal.timeout(10000), // 10-second timeout
-        })
+            // Welcome notification
+            await db.notification.create({
+              data: {
+                userId: newUser.id,
+                title: 'Selamat Datang di MartUp! 🎉',
+                content: 'Terima kasih telah bergabung. Mulai belanja atau jual produk sekarang!',
+                type: 'system',
+                isRead: false,
+              },
+            })
 
-        logger.info({ component: 'auth', status: response.status, email: user.email }, 'sync-user response received')
-
-        if (!response.ok) {
-          const errorText = await response.text().catch(() => 'failed to read body')
-          logger.warn({ component: 'auth', status: response.status, body: errorText.substring(0, 200), email: user.email }, 'sync-user returned non-OK status — fallback to /api/auth/me')
-        } else {
-          try {
-            const data = await response.json()
-            if (!data.success) {
-              logger.warn({ component: 'auth', error: data.error, email: user.email }, 'Failed to sync Google user — fallback to /api/auth/me')
-            } else {
-              logger.info({ component: 'auth', email: user.email, isNewUser: data.isNewUser, userId: data.user?.id }, 'Google OAuth user synced successfully')
+            logger.info({ component: 'auth', email: normalizedEmail, userId: newUser.id }, 'Google OAuth user created directly in DB (signIn callback)')
+          } else if (!existingUser.isActive) {
+            // User is blocked — deny login
+            logger.warn({ component: 'auth', email: normalizedEmail }, 'Google OAuth user is blocked — denying login')
+            return '/?error=AccessDenied'
+          } else {
+            // Update existing user info from Google
+            if (user.name && user.name !== (await db.user.findUnique({ where: { id: existingUser.id }, select: { name: true } }))?.name) {
+              await db.user.update({
+                where: { id: existingUser.id },
+                data: { name: user.name, avatar: user.image || undefined },
+              })
             }
-          } catch (parseError) {
-            logger.warn({ component: 'auth', err: parseError, email: user.email }, 'Failed to parse sync-user response — fallback to /api/auth/me')
+            logger.info({ component: 'auth', email: normalizedEmail }, 'Google OAuth user already exists in DB')
           }
         }
-      } catch (error) {
-        logger.warn({ component: 'auth', err: error, email: user.email }, 'Error syncing Google user — fallback to /api/auth/me')
+      } catch (dbError) {
+        // DB error during direct sync — don't block sign-in
+        // /api/auth/me will handle user creation as fallback
+        logger.warn({ component: 'auth', err: dbError, email: user.email }, 'Direct DB sync failed — fallback to /api/auth/me')
       }
 
       // Always allow sign-in — /api/auth/me handles fallback user creation
