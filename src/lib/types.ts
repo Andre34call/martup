@@ -76,6 +76,9 @@ export interface Product {
   minOrder: number
   weight: number
   condition: 'new' | 'used'
+  productType: 'product' | 'jasa'
+  serviceDuration?: string
+  serviceLocation?: string
   status: 'active' | 'draft' | 'blocked'
   rating: number
   reviewCount: number

@@ -109,6 +109,9 @@ export async function POST(request: NextRequest) {
       minOrder = 1,
       weight,
       condition = 'new',
+      productType = 'product',
+      serviceDuration,
+      serviceLocation,
       status = 'active',
       isFeatured = false,
       isFlashSale = false,
@@ -116,6 +119,8 @@ export async function POST(request: NextRequest) {
       tags,
       variants = [],
     } = body
+
+    const isJasa = productType === 'jasa'
 
     // SECURITY: Sanitize user-generated text fields
     const name = sanitizeInput(body.name || '')
@@ -165,9 +170,10 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-    if (weight === undefined || weight === null) {
+    // Weight is required for physical products, optional for jasa (service) products
+    if (!isJasa && (weight === undefined || weight === null)) {
       return NextResponse.json(
-        { success: false, error: 'weight is required' },
+        { success: false, error: 'Berat produk wajib diisi untuk produk barang' },
         { status: 400 }
       )
     }
@@ -205,10 +211,13 @@ export async function POST(request: NextRequest) {
         discountPrice: discountPrice != null && discountPrice !== '' ? discountPrice : null,
         images: imagesStr,
         videoUrl: safeVideoUrl || null,
-        stock: stock || 0,
+        stock: isJasa ? 1 : (stock || 0), // Jasa products have unlimited stock
         minOrder,
-        weight,
-        condition,
+        weight: isJasa ? null : (weight || 0),
+        condition: isJasa ? 'new' : condition,
+        productType,
+        serviceDuration: isJasa ? (serviceDuration || null) : null,
+        serviceLocation: isJasa ? (serviceLocation || null) : null,
         status,
         isFeatured,
         isFlashSale,
@@ -297,6 +306,9 @@ export async function PUT(request: NextRequest) {
       minOrder,
       weight,
       condition,
+      productType,
+      serviceDuration,
+      serviceLocation,
       status,
       isFeatured,
       isFlashSale,
@@ -345,6 +357,13 @@ export async function PUT(request: NextRequest) {
     if (weight !== undefined && weight !== null && weight < 0) {
       return NextResponse.json(
         { success: false, error: 'weight must be >= 0' },
+        { status: 400 }
+      )
+    }
+    // Validate productType if provided
+    if (productType !== undefined && !['product', 'jasa'].includes(productType)) {
+      return NextResponse.json(
+        { success: false, error: 'productType must be "product" or "jasa"' },
         { status: 400 }
       )
     }
@@ -416,6 +435,9 @@ export async function PUT(request: NextRequest) {
     if (minOrder !== undefined) updateData.minOrder = minOrder
     if (weight !== undefined) updateData.weight = weight
     if (condition !== undefined) updateData.condition = condition
+    if (productType !== undefined) updateData.productType = productType
+    if (serviceDuration !== undefined) updateData.serviceDuration = serviceDuration || null
+    if (serviceLocation !== undefined) updateData.serviceLocation = serviceLocation || null
     if (isFeatured !== undefined) updateData.isFeatured = isFeatured
     if (isFlashSale !== undefined) updateData.isFlashSale = isFlashSale
     if (flashSaleEnd !== undefined) updateData.flashSaleEnd = flashSaleEnd ? new Date(flashSaleEnd) : null

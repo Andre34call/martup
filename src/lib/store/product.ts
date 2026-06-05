@@ -58,6 +58,9 @@ interface RawProduct {
   minOrder?: number
   weight: number
   condition?: string
+  productType?: string
+  serviceDuration?: string
+  serviceLocation?: string
   status: string
   rating: number
   reviewCount: number
@@ -117,6 +120,9 @@ export const createProductSlice: StateCreator<AppStore, [], [], ProductSlice> = 
         minOrder: p.minOrder || 1,
         weight: p.weight,
         condition: (p.condition as 'new' | 'used') || 'new',
+        productType: (p.productType as 'product' | 'jasa') || 'product',
+        serviceDuration: p.serviceDuration || undefined,
+        serviceLocation: p.serviceLocation || undefined,
         status: p.status as 'active' | 'draft' | 'blocked',
         rating: p.rating,
         reviewCount: p.reviewCount,

@@ -73,6 +73,9 @@ export function SellerAddProductScreen() {
   const [minOrder, setMinOrder] = useState(editingProduct?.minOrder?.toString() || "1")
   const [weight, setWeight] = useState(editingProduct?.weight?.toString() || "")
   const [condition, setCondition] = useState<"new" | "used">(editingProduct?.condition || "new")
+  const [productType, setProductType] = useState<"product" | "jasa">(editingProduct?.productType || "product")
+  const [serviceDuration, setServiceDuration] = useState(editingProduct?.serviceDuration || "")
+  const [serviceLocation, setServiceLocation] = useState(editingProduct?.serviceLocation || "")
   const [variants, setVariants] = useState<VariantGroup[]>(editingProduct?.variants ? Object.entries(
     editingProduct.variants.reduce((acc, v) => {
       if (!acc[v.name]) acc[v.name] = []
@@ -390,11 +393,17 @@ export function SellerAddProductScreen() {
       return
     }
     if (!stock || parseInt(stock) <= 0) {
-      showToast("Stok harus diisi", "error")
+      if (productType === 'product') {
+        showToast("Stok harus diisi", "error")
+        return
+      }
+    }
+    if (productType === 'product' && (!weight || parseInt(weight) <= 0)) {
+      showToast("Berat produk harus diisi", "error")
       return
     }
-    if (!weight || parseInt(weight) <= 0) {
-      showToast("Berat produk harus diisi", "error")
+    if (productType === 'jasa' && !serviceDuration.trim()) {
+      showToast("Durasi jasa harus diisi", "error")
       return
     }
 
@@ -443,10 +452,13 @@ export function SellerAddProductScreen() {
             price: priceNumber,
             discountPrice: discountPriceNumber > 0 && discountPriceNumber < priceNumber ? discountPriceNumber : null,
             images: productImages2,
-            stock: parseInt(stock),
+            stock: productType === 'jasa' ? 1 : parseInt(stock),
             minOrder: parseInt(minOrder) || 1,
-            weight: parseInt(weight) || 100,
-            condition,
+            weight: productType === 'jasa' ? null : (parseInt(weight) || 100),
+            condition: productType === 'jasa' ? 'new' : condition,
+            productType,
+            serviceDuration: productType === 'jasa' ? serviceDuration.trim() : null,
+            serviceLocation: productType === 'jasa' ? serviceLocation.trim() : null,
             status: 'active',
             categoryId: category,
             tags: tags.length > 0 ? tags : null,
@@ -474,10 +486,13 @@ export function SellerAddProductScreen() {
           price: priceNumber,
           ...(discountPriceNumber > 0 && discountPriceNumber < priceNumber ? { discountPrice: discountPriceNumber } : {}),
           images: productImages2,
-          stock: parseInt(stock),
+          stock: productType === 'jasa' ? 1 : parseInt(stock),
           minOrder: parseInt(minOrder) || 1,
-          weight: parseInt(weight) || 100,
-          condition,
+          weight: productType === 'jasa' ? 0 : (parseInt(weight) || 100),
+          condition: productType === 'jasa' ? 'new' : condition,
+          productType,
+          serviceDuration: productType === 'jasa' ? serviceDuration.trim() : undefined,
+          serviceLocation: productType === 'jasa' ? serviceLocation.trim() : undefined,
           status: 'active',
           categoryId: category,
           variants: productVariants,
@@ -495,10 +510,13 @@ export function SellerAddProductScreen() {
             price: priceNumber,
             discountPrice: discountPriceNumber > 0 && discountPriceNumber < priceNumber ? discountPriceNumber : null,
             images: productImages2,
-            stock: parseInt(stock),
+            stock: productType === 'jasa' ? 1 : parseInt(stock),
             minOrder: parseInt(minOrder) || 1,
-            weight: parseInt(weight) || 100,
-            condition,
+            weight: productType === 'jasa' ? null : (parseInt(weight) || 100),
+            condition: productType === 'jasa' ? 'new' : condition,
+            productType,
+            serviceDuration: productType === 'jasa' ? serviceDuration.trim() : null,
+            serviceLocation: productType === 'jasa' ? serviceLocation.trim() : null,
             status: 'active',
             variants: apiVariants,
             tags: tags.length > 0 ? tags : null,
@@ -529,11 +547,14 @@ export function SellerAddProductScreen() {
           price: priceNumber,
           ...(discountPriceNumber > 0 && discountPriceNumber < priceNumber ? { discountPrice: discountPriceNumber } : {}),
           images: productImages2,
-          stock: parseInt(stock),
+          stock: productType === 'jasa' ? 1 : parseInt(stock),
           sold: 0,
           minOrder: parseInt(minOrder) || 1,
-          weight: parseInt(weight) || 100,
-          condition,
+          weight: productType === 'jasa' ? 0 : (parseInt(weight) || 100),
+          condition: productType === 'jasa' ? 'new' : condition,
+          productType,
+          serviceDuration: productType === 'jasa' ? serviceDuration.trim() : undefined,
+          serviceLocation: productType === 'jasa' ? serviceLocation.trim() : undefined,
           status: 'active',
           rating: 0,
           reviewCount: 0,
@@ -595,11 +616,14 @@ export function SellerAddProductScreen() {
       price: priceNumber || editingProduct?.price || 0,
       ...(discountPriceNumber > 0 && discountPriceNumber < priceNumber ? { discountPrice: discountPriceNumber } : {}),
       images: productImages2,
-      stock: parseInt(stock) || editingProduct?.stock || 0,
+      stock: productType === 'jasa' ? 1 : (parseInt(stock) || editingProduct?.stock || 0),
       sold: editingProduct?.sold || 0,
       minOrder: parseInt(minOrder) || 1,
-      weight: parseInt(weight) || 100,
-      condition,
+      weight: productType === 'jasa' ? 0 : (parseInt(weight) || 100),
+      condition: productType === 'jasa' ? 'new' : condition,
+      productType,
+      serviceDuration: productType === 'jasa' ? serviceDuration.trim() : undefined,
+      serviceLocation: productType === 'jasa' ? serviceLocation.trim() : undefined,
       status: 'draft',
       rating: editingProduct?.rating || 0,
       reviewCount: editingProduct?.reviewCount || 0,
@@ -886,6 +910,81 @@ export function SellerAddProductScreen() {
           </div>
         </motion.div>
 
+        {/* ============ Product Type ============ */}
+        <motion.div {...fadeIn}>
+          <div className="rounded-2xl border border-border/50 bg-card p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <Package className="w-4 h-4 text-emerald-500" />
+              <h3 className="text-sm font-semibold text-foreground">Tipe Produk</h3>
+            </div>
+            <p className="text-xs text-muted-foreground">Pilih "Jasa" jika kamu menjual layanan yang tidak memerlukan pengiriman fisik.</p>
+            <div className="flex gap-2">
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setProductType("product")}
+                className={`flex-1 py-3 rounded-xl text-sm font-medium transition-all border-2 ${
+                  productType === "product"
+                    ? "bg-emerald-500 text-white border-emerald-500 shadow-sm"
+                    : "bg-card text-foreground border-border hover:border-emerald-300"
+                }`}
+              >
+                📦 Barang
+              </motion.button>
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setProductType("jasa")}
+                className={`flex-1 py-3 rounded-xl text-sm font-medium transition-all border-2 ${
+                  productType === "jasa"
+                    ? "bg-purple-500 text-white border-purple-500 shadow-sm"
+                    : "bg-card text-foreground border-border hover:border-purple-300"
+                }`}
+              >
+                🛠️ Jasa
+              </motion.button>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* ============ Jasa Fields ============ */}
+        {productType === 'jasa' && (
+          <motion.div {...fadeIn}>
+            <div className="rounded-2xl border border-purple-200 bg-purple-50/50 dark:border-purple-900/30 dark:bg-purple-900/10 p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="text-sm">🛠️</span>
+                <h3 className="text-sm font-semibold text-purple-700 dark:text-purple-400">Detail Jasa</h3>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-muted-foreground">Durasi Jasa <span className="text-red-500">*</span></label>
+                <Input
+                  value={serviceDuration}
+                  onChange={(e) => setServiceDuration(e.target.value)}
+                  placeholder="Contoh: 1 jam, 1 hari, 1 minggu"
+                  className="rounded-xl h-10 focus:border-purple-500 focus:ring-purple-500/20"
+                />
+                <p className="text-[10px] text-muted-foreground">Berapa lama jasa dikerjakan</p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-muted-foreground">Lokasi Jasa</label>
+                <Input
+                  value={serviceLocation}
+                  onChange={(e) => setServiceLocation(e.target.value)}
+                  placeholder="Contoh: Online, Jakarta, Surabaya"
+                  className="rounded-xl h-10 focus:border-purple-500 focus:ring-purple-500/20"
+                />
+                <p className="text-[10px] text-muted-foreground">Apakah jasa dikerjakan online atau di lokasi tertentu</p>
+              </div>
+
+              <div className="rounded-xl bg-purple-100/50 dark:bg-purple-900/20 p-3">
+                <p className="text-[11px] text-purple-700 dark:text-purple-300 leading-relaxed">
+                  💡 <strong>Pesanan jasa</strong> tidak memerlukan pengiriman fisik. Pembayaran akan ditahan (escrow) sampai jasa selesai dan dikonfirmasi pembeli.
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
         {/* ============ Stock & Min Order ============ */}
         <motion.div {...fadeIn}>
           <div className="rounded-2xl border border-border/50 bg-card p-4 space-y-4">
@@ -896,7 +995,9 @@ export function SellerAddProductScreen() {
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <label className="text-xs font-medium text-muted-foreground">Stok <span className="text-red-500">*</span></label>
+                <label className="text-xs font-medium text-muted-foreground">
+                  Stok {productType === 'product' && <span className="text-red-500">*</span>}
+                </label>
                 <Input
                   type="number"
                   value={stock}
@@ -904,7 +1005,11 @@ export function SellerAddProductScreen() {
                   placeholder="0"
                   min="0"
                   className="rounded-xl h-10 focus:border-emerald-500 focus:ring-emerald-500/20"
+                  disabled={productType === 'jasa'}
                 />
+                {productType === 'jasa' && (
+                  <p className="text-[10px] text-purple-600 dark:text-purple-400">Stok otomatis untuk jasa</p>
+                )}
               </div>
               <div className="space-y-2">
                 <label className="text-xs font-medium text-muted-foreground">Min. Order</label>
@@ -918,22 +1023,25 @@ export function SellerAddProductScreen() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-muted-foreground">Berat (gram) <span className="text-red-500">*</span></label>
-              <Input
-                type="number"
-                value={weight}
-                onChange={(e) => setWeight(e.target.value)}
-                placeholder="0"
-                min="1"
-                className="rounded-xl h-10 focus:border-emerald-500 focus:ring-emerald-500/20"
-              />
-              <p className="text-[10px] text-muted-foreground">Berat termasuk packaging</p>
-            </div>
+            {productType === 'product' && (
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-muted-foreground">Berat (gram) <span className="text-red-500">*</span></label>
+                <Input
+                  type="number"
+                  value={weight}
+                  onChange={(e) => setWeight(e.target.value)}
+                  placeholder="0"
+                  min="1"
+                  className="rounded-xl h-10 focus:border-emerald-500 focus:ring-emerald-500/20"
+                />
+                <p className="text-[10px] text-muted-foreground">Berat termasuk packaging</p>
+              </div>
+            )}
           </div>
         </motion.div>
 
-        {/* ============ Condition ============ */}
+        {/* ============ Condition (only for products, not jasa) ============ */}
+        {productType === 'product' && (
         <motion.div {...fadeIn}>
           <div className="rounded-2xl border border-border/50 bg-card p-4 space-y-3">
             <label className="text-sm font-semibold text-foreground">Kondisi</label>
@@ -963,6 +1071,7 @@ export function SellerAddProductScreen() {
             </div>
           </div>
         </motion.div>
+        )}
 
         {/* ============ Variants Section ============ */}
         <motion.div {...fadeIn}>
