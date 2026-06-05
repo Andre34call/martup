@@ -348,6 +348,20 @@ function OrderCard({ order, onTap }: { order: Order; onTap: () => void }) {
               onClick={async (e) => {
                 e.stopPropagation()
                 if (order.status === "pending") {
+                  const paymentMethod = order.paymentMethod?.toLowerCase() || ''
+
+                  // COD: no payment needed
+                  if (paymentMethod === 'cod') {
+                    showToast("Pembayaran dilakukan saat barang diterima (COD).", "info")
+                    return
+                  }
+
+                  // Escrow: navigate to order detail for bank info & proof upload
+                  if (paymentMethod.includes('escrow')) {
+                    onTap()
+                    return
+                  }
+
                   const result = await payForOrder(order.id)
                   if (result?.token) {
                     // Midtrans payment — open Snap popup
@@ -369,9 +383,13 @@ function OrderCard({ order, onTap }: { order: Order; onTap: () => void }) {
                   } else if (result?.redirectUrl) {
                     // Fallback: redirect to Midtrans payment page
                     window.open(result.redirectUrl, '_blank')
-                  } else {
-                    // Wallet payment was processed
+                  } else if (paymentMethod === 'wallet') {
+                    // Wallet payment was actually processed
                     showToast("Pembayaran berhasil diproses!", "success")
+                  } else {
+                    // No token, no redirect, and not a wallet payment — open order detail
+                    // so the user can see payment instructions / take next steps
+                    onTap()
                   }
                 } else if (order.status === "shipped" && order.isServiceOrder) {
                   // Service order: confirm via API to release escrow

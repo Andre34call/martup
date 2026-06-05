@@ -324,7 +324,7 @@ export function AddressScreen() {
   }
 
   return (
-    <div className="pb-24">
+    <div className="flex flex-col min-h-screen">
       <PageHeader title="Alamat" rightAction={
         <PrimaryButton
           onClick={handleToggleAddForm}
@@ -334,9 +334,16 @@ export function AddressScreen() {
         </PrimaryButton>
       } />
 
-      <div className="px-4 space-y-4">
+      <div className="flex-1 px-4 space-y-4 pb-28 overflow-y-auto">
         {/* Address List */}
         <div className="space-y-3">
+          {addresses.length === 0 && !showAddForm && (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <MapPin className="w-12 h-12 text-muted-foreground/40 mb-3" />
+              <p className="text-sm font-medium text-muted-foreground">Belum ada alamat</p>
+              <p className="text-xs text-muted-foreground mt-1">Tambahkan alamat pertamamu</p>
+            </div>
+          )}
           {addresses.map((addr, i) => (
             <motion.div key={addr.id} custom={i} variants={stagger} initial="initial" animate="animate">
               <Card className="p-4">
@@ -379,7 +386,7 @@ export function AddressScreen() {
             <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}>
               <SectionHeader title={editingId ? "Edit Alamat" : "Tambah Alamat Baru"} icon={<Plus className="w-4 h-4" />} />
               <Card className="mt-3 p-4 space-y-3">
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-foreground">Label <span className="text-red-500">*</span></label>
                     <Input value={formLabel} onChange={(e) => setFormLabel(e.target.value)} placeholder="Rumah" className="rounded-xl h-9" />
@@ -399,7 +406,7 @@ export function AddressScreen() {
                 </div>
 
                 {/* City + Province + Postal Code with RajaOngkir autocomplete */}
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-foreground">Kota <span className="text-red-500">*</span></label>
                     <CityAutocomplete
@@ -436,6 +443,21 @@ export function AddressScreen() {
           )}
         </AnimatePresence>
       </div>
+
+      {/* Floating Action Button */}
+      {!showAddForm && (
+        <div className="fixed bottom-6 right-4 z-50 sm:hidden">
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={handleToggleAddForm}
+            className="w-14 h-14 rounded-full bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white shadow-lg shadow-emerald-500/30 flex items-center justify-center"
+          >
+            <Plus className="w-6 h-6" />
+          </motion.button>
+          <span className="block text-center text-[10px] font-medium text-muted-foreground mt-1">Tambah</span>
+        </div>
+      )}
     </div>
   )
 }
