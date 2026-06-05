@@ -61,6 +61,7 @@ export async function GET(request: NextRequest) {
     const minPrice = searchParams.get('minPrice')
     const maxPrice = searchParams.get('maxPrice')
     const condition = searchParams.get('condition')?.trim() || undefined
+    const productType = searchParams.get('productType')?.trim() || undefined
 
     const sortByParam = searchParams.get('sortBy')?.trim() || 'relevance'
     const sortBy: SortOption = SORT_OPTIONS.includes(sortByParam as SortOption)
@@ -122,6 +123,18 @@ export async function GET(request: NextRequest) {
       baseWhere.condition = condition
     }
 
+    // Product type filter (product = Barang, jasa = Tolong Mas)
+    const VALID_PRODUCT_TYPES = ['product', 'jasa'] as const
+    if (productType) {
+      if (!VALID_PRODUCT_TYPES.includes(productType as (typeof VALID_PRODUCT_TYPES)[number])) {
+        return NextResponse.json(
+          { success: false, error: 'Invalid productType filter. Must be "product" or "jasa"' },
+          { status: 400 }
+        )
+      }
+      baseWhere.productType = productType
+    }
+
     // Price range filter — apply on discountPrice if available, otherwise on price
     const priceConditions: Prisma.ProductWhereInput[] = []
     if (minPriceNum !== undefined || maxPriceNum !== undefined) {
@@ -143,7 +156,7 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // Combine: status=active + category + condition + price + (search OR)
+    // Combine: status=active + category + condition + productType + price + (search OR)
     const where: Prisma.ProductWhereInput = {
       ...baseWhere,
       ...categoryFilter,
@@ -165,6 +178,7 @@ export async function GET(request: NextRequest) {
         price: true,
         discountPrice: true,
         condition: true,
+        productType: true,
         createdAt: true,
         category: {
           select: {
@@ -182,6 +196,7 @@ export async function GET(request: NextRequest) {
     let facetMinPrice = Infinity
     let facetMaxPrice = -Infinity
     const conditionMap = new Map<string, number>()
+    const productTypeMap = new Map<string, number>()
 
     for (const p of allMatchingProducts) {
       // Category facet
@@ -203,6 +218,10 @@ export async function GET(request: NextRequest) {
       // Condition facet
       const condCount = conditionMap.get(p.condition) || 0
       conditionMap.set(p.condition, condCount + 1)
+
+      // Product type facet (Barang/Tolong Mas)
+      const ptCount = productTypeMap.get(p.productType) || 0
+      productTypeMap.set(p.productType, ptCount + 1)
     }
 
     const facets = {
@@ -213,6 +232,9 @@ export async function GET(request: NextRequest) {
       },
       conditions: Array.from(conditionMap.entries())
         .map(([value, count]) => ({ value, count }))
+        .sort((a, b) => b.count - a.count),
+      productTypes: Array.from(productTypeMap.entries())
+        .map(([value, count]) => ({ value, count, label: value === 'jasa' ? 'Tolong Mas' : 'Barang' }))
         .sort((a, b) => b.count - a.count),
     }
 

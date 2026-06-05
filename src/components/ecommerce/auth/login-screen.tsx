@@ -40,8 +40,10 @@ export function LoginScreen() {
         OAuthSignin: 'Gagal terhubung ke Google. Coba lagi.',
         OAuthCallback: 'Gagal memproses login Google. Coba lagi.',
         OAuthCreateAccount: 'Gagal membuat akun dari Google.',
+        OAuthAccountNotLinked: 'Email sudah terdaftar. Login dengan password, lalu hubungkan Google di pengaturan akun.',
         EmailCreateAccount: 'Gagal membuat akun dengan email ini.',
         Callback: 'Terjadi kesalahan saat login. Coba lagi.',
+        google_oauth_not_configured: 'Login Google belum dikonfigurasi. Hubungi admin.',
         Default: 'Login gagal. Coba lagi nanti.',
       }
       showToast(errorMessages[error] || `Login gagal: ${error}`, 'error')
@@ -157,25 +159,15 @@ export function LoginScreen() {
   const handleGoogleLogin = async () => {
     setIsLoading(true)
     try {
-      // Use redirect: false so we can handle errors ourselves
-      const result = await signIn('google', { callbackUrl: '/', redirect: false })
-      if (result?.error) {
-        const errorMessages: Record<string, string> = {
-          Configuration: 'Login Google belum dikonfigurasi. Hubungi admin.',
-          AccessDenied: 'Akses ditolak oleh Google.',
-          Verification: 'Verifikasi gagal. Coba lagi.',
-          OAuthSignin: 'Gagal terhubung ke Google. Coba lagi.',
-          OAuthCallback: 'Gagal memproses login Google. Coba lagi.',
-          OAuthCreateAccount: 'Gagal membuat akun dari Google.',
-          Default: 'Login gagal. Coba lagi nanti.',
-        }
-        showToast(errorMessages[result.error] || `Login gagal: ${result.error}`, 'error')
-        setIsLoading(false)
-      } else if (result?.ok) {
-        // Google login successful — NextAuth session is now active
-        // DataFetcher will detect the session and call /api/auth/me
-        showToast('Login Google berhasil!', 'success')
-      }
+      // For OAuth providers (Google), we MUST use redirect: true (default).
+      // With redirect: false, NextAuth returns the OAuth URL but doesn't navigate,
+      // so the user never reaches Google's consent screen.
+      // Errors are handled via URL ?error= param (see useEffect above).
+      await signIn('google', { callbackUrl: '/' })
+      // Note: After this call, the browser will redirect to Google.
+      // If Google auth fails, it redirects back with ?error= in the URL.
+      // If it succeeds, the user lands on the home page authenticated.
+      // We don't set isLoading=false here because the page will navigate away.
     } catch (err) {
       showToast('Gagal terhubung ke Google. Coba lagi.', 'error')
       setIsLoading(false)

@@ -22,6 +22,7 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search')
     const isFlashSale = searchParams.get('isFlashSale')
     const sellerId = searchParams.get('sellerId')
+    const productType = searchParams.get('productType')
     // SECURITY: Cap limit to prevent excessive queries (DoS prevention)
     const limit = Math.min(Math.max(parseInt(searchParams.get('limit') || '50', 10), 1), 100)
     const offset = Math.max(parseInt(searchParams.get('offset') || '0', 10), 0)
@@ -41,6 +42,10 @@ export async function GET(request: NextRequest) {
 
     if (isFlashSale === 'true') {
       where.isFlashSale = true
+    }
+
+    if (productType && ['product', 'jasa'].includes(productType)) {
+      where.productType = productType
     }
 
     if (search) {

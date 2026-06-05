@@ -127,8 +127,8 @@ async function _proxyInner(request: NextRequest) {
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' https://fonts.gstatic.com",
       "img-src 'self' data: blob: https://rzrfouzuxcxdbhadbppi.supabase.co https://images.unsplash.com https://vercel.live https://app.midtrans.com",
-      "connect-src 'self' https://rzrfouzuxcxdbhadbppi.supabase.co wss: https://va.vercel-scripts.com https://app.midtrans.com https://app.sandbox.midtrans.com",
-      "frame-src https://app.midtrans.com https://app.sandbox.midtrans.com",
+      "connect-src 'self' https://rzrfouzuxcxdbhadbppi.supabase.co wss: https://va.vercel-scripts.com https://app.midtrans.com https://app.sandbox.midtrans.com https://accounts.google.com https://oauth2.googleapis.com https://www.googleapis.com",
+      "frame-src https://app.midtrans.com https://app.sandbox.midtrans.com https://accounts.google.com",
       "frame-ancestors 'none'",
     ].join('; ')
   )

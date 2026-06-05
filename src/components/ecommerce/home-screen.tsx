@@ -58,6 +58,7 @@ export function HomeScreen() {
   const cartCount = getTotalItemCount()
   const [currentBanner, setCurrentBanner] = useState(0)
   const [showLoadingMore, setShowLoadingMore] = useState(false)
+  const [activeProductType, setActiveProductType] = useState<'all' | 'product' | 'jasa'>('all')
 
   // Handle quick action button clicks
   const handleQuickAction = useCallback((key: string) => {
@@ -114,6 +115,11 @@ export function HomeScreen() {
 
   // Filter products for flash sale
   const flashSaleProducts = products.filter((p) => p.isFlashSale)
+
+  // Filter products by product type (Barang / Tolong Mas)
+  const filteredProducts = activeProductType === 'all'
+    ? products
+    : products.filter((p) => p.productType === activeProductType)
 
   // Handle product click
   const handleProductClick = useCallback(
@@ -220,6 +226,35 @@ export function HomeScreen() {
               </motion.span>
             )}
           </motion.button>
+        </div>
+      </div>
+
+      {/* ===== PRODUCT TYPE TOGGLE (BARANG / TOLONG MAS) — TOP OF PAGE ===== */}
+      <div className="px-4 pt-3">
+        <div className="flex gap-2">
+          {[
+            { key: 'all' as const, label: 'Semua', icon: '🔥' },
+            { key: 'product' as const, label: '📦 Barang', icon: '📦' },
+            { key: 'jasa' as const, label: '🤝 Tolong Mas', icon: '🤝' },
+          ].map((type) => (
+            <motion.button
+              key={type.key}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setActiveProductType(type.key)}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+                activeProductType === type.key
+                  ? type.key === 'jasa'
+                    ? 'bg-purple-500 text-white shadow-md shadow-purple-500/25'
+                    : type.key === 'product'
+                    ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/25'
+                    : 'bg-gradient-to-r from-emerald-500 to-purple-500 text-white shadow-md'
+                  : 'bg-muted/60 text-muted-foreground hover:bg-muted'
+              }`}
+            >
+              <span>{type.icon}</span>
+              <span>{type.label}</span>
+            </motion.button>
+          ))}
         </div>
       </div>
 
@@ -447,15 +482,15 @@ export function HomeScreen() {
       {/* ===== PRODUCT FEED ===== */}
       <div className="pt-5 px-4" ref={feedRef}>
         <SectionHeader
-          title="Rekomendasi Untukmu"
-          subtitle="Berdasarkan preferensimu"
+          title={activeProductType === 'jasa' ? '🤝 Tolong Mas' : activeProductType === 'product' ? '📦 Barang' : 'Rekomendasi Untukmu'}
+          subtitle={activeProductType === 'jasa' ? 'Layanan dari seller terpercaya' : activeProductType === 'product' ? 'Produk fisik dikirim ke rumahmu' : 'Berdasarkan preferensimu'}
           onAction={() => navigate("search")}
           actionLabel="Lihat Semua"
         />
 
-        {products.length > 0 ? (
+        {filteredProducts.length > 0 ? (
           <div className="mt-3 grid grid-cols-2 gap-3">
-            {products.map((product, idx) => (
+            {filteredProducts.map((product, idx) => (
               <motion.div
                 key={product.id}
                 initial={{ opacity: 0, y: 20 }}
@@ -474,8 +509,8 @@ export function HomeScreen() {
         ) : (
           <EmptyState
             icon={<Package className="w-10 h-10 text-muted-foreground" />}
-            title="Belum Ada Produk"
-            subtitle="Produk akan muncul ketika seller mulai berjualan"
+            title={activeProductType === 'jasa' ? 'Belum Ada Layanan Tolong Mas' : 'Belum Ada Produk'}
+            subtitle={activeProductType === 'jasa' ? 'Layanan Tolong Mas akan muncul ketika seller mulai menawarkan jasa' : 'Produk akan muncul ketika seller mulai berjualan'}
             actionLabel="Jelajahi Kategori"
             onAction={() => navigate("category")}
           />

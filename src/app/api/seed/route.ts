@@ -69,11 +69,11 @@ export async function POST(request: NextRequest) {
             commissionRate: 0.05,
           },
         })
-        // Create wallet for seller
+        // Create wallet for seller (start with 0 balance — real data only)
         await db.wallet.upsert({
           where: { sellerId: seller.id },
           update: {},
-          create: { userId: existingUser.id, sellerId: seller.id, balance: 500000, holdBalance: 0 },
+          create: { userId: existingUser.id, sellerId: seller.id, balance: 0, holdBalance: 0 },
         })
         // Update user role
         await db.user.update({ where: { id: existingUser.id }, data: { role: 'seller', isVerified: sd.isVerified } })
@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
           name: sd.name,
           role: 'seller',
           isVerified: sd.isVerified,
-          wallet: { create: { balance: 500000, holdBalance: 0 } },
+          wallet: { create: { balance: 0, holdBalance: 0 } },
           seller: {
             create: {
               storeName: sd.storeName,

@@ -36,10 +36,17 @@ interface SearchFacetCondition {
   count: number
 }
 
+interface SearchFacetProductType {
+  value: string
+  count: number
+  label: string
+}
+
 interface SearchFacets {
   categories: SearchFacetCategory[]
   priceRange: { min: number; max: number }
   conditions: SearchFacetCondition[]
+  productTypes?: SearchFacetProductType[]
 }
 
 interface SearchPagination {
@@ -88,6 +95,7 @@ export function SearchScreen() {
   const [selectedCategorySlug, setSelectedCategorySlug] = useState<string | null>(null)
   const [sortBy, setSortBy] = useState<SortOption>('relevance')
   const [conditionFilter, setConditionFilter] = useState<string | null>(null)
+  const [productTypeFilter, setProductTypeFilter] = useState<string | null>(null)
   const [minPrice, setMinPrice] = useState<string>("")
   const [maxPrice, setMaxPrice] = useState<string>("")
   const [currentPage, setCurrentPage] = useState(1)
@@ -143,6 +151,7 @@ export function SearchScreen() {
     setError(null)
     setSelectedCategorySlug(null)
     setConditionFilter(null)
+    setProductTypeFilter(null)
     setMinPrice("")
     setMaxPrice("")
     setSortBy('relevance')
@@ -195,6 +204,7 @@ export function SearchScreen() {
           minPrice: minPrice || undefined,
           maxPrice: maxPrice || undefined,
           condition: conditionFilter || undefined,
+          productType: productTypeFilter || undefined,
           page: String(currentPage),
           limit: '20',
         }
@@ -225,12 +235,12 @@ export function SearchScreen() {
     return () => {
       cancelled = true
     }
-  }, [debouncedQuery, selectedCategorySlug, sortBy, minPrice, maxPrice, conditionFilter, currentPage])
+  }, [debouncedQuery, selectedCategorySlug, sortBy, minPrice, maxPrice, conditionFilter, productTypeFilter, currentPage])
 
   // Reset page when filters change (not page itself)
   useEffect(() => {
     setCurrentPage(1)
-  }, [selectedCategorySlug, sortBy, conditionFilter, minPrice, maxPrice])
+  }, [selectedCategorySlug, sortBy, conditionFilter, productTypeFilter, minPrice, maxPrice])
 
   const isSearching = debouncedQuery.trim().length >= 2
 
@@ -253,6 +263,7 @@ export function SearchScreen() {
       minOrder: Number(p.minOrder) || 1,
       weight: Number(p.weight) || 0,
       condition: (p.condition as 'new' | 'used') || 'new',
+      productType: (p.productType as 'product' | 'jasa') || 'product',
       status: (p.status as 'active' | 'draft' | 'blocked') || 'active',
       rating: Number(p.rating) || 0,
       reviewCount: Number(p.reviewCount) || 0,
@@ -374,6 +385,32 @@ export function SearchScreen() {
             >
               {/* Filter & Sort Bar */}
               <div className="flex items-center gap-2 px-4 py-2 border-b border-border/30 bg-background/80">
+                {/* Product Type Toggle — Barang / Tolong Mas */}
+                <div className="flex gap-1 mr-1">
+                  {[
+                    { value: null, label: 'Semua' },
+                    { value: 'product', label: '📦' },
+                    { value: 'jasa', label: '🤝' },
+                  ].map((type) => (
+                    <button
+                      key={type.label}
+                      onClick={() => setProductTypeFilter(type.value)}
+                      className={`px-2 py-1 rounded-lg text-xs font-medium transition-all ${
+                        productTypeFilter === type.value
+                          ? type.value === 'jasa'
+                            ? 'bg-purple-500 text-white'
+                            : type.value === 'product'
+                            ? 'bg-emerald-500 text-white'
+                            : 'bg-foreground text-background'
+                          : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                      }`}
+                      title={type.value === 'jasa' ? 'Tolong Mas' : type.value === 'product' ? 'Barang' : 'Semua'}
+                    >
+                      {type.label}
+                    </button>
+                  ))}
+                </div>
+
                 <Button
                   variant="outline"
                   size="sm"
@@ -419,7 +456,7 @@ export function SearchScreen() {
                   )}
                 </div>
 
-                {(selectedCategorySlug || conditionFilter || minPrice || maxPrice) && (
+                {(selectedCategorySlug || conditionFilter || minPrice || maxPrice || productTypeFilter) && (
                   <Button
                     variant="ghost"
                     size="sm"
@@ -427,6 +464,7 @@ export function SearchScreen() {
                     onClick={() => {
                       setSelectedCategorySlug(null)
                       setConditionFilter(null)
+                      setProductTypeFilter(null)
                       setMinPrice("")
                       setMaxPrice("")
                     }}
