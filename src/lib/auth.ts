@@ -6,16 +6,25 @@ import { db } from '@/lib/db'
 
 // ==================== NEXTAUTH_URL AUTO-FIX ====================
 // NextAuth v4 reads NEXTAUTH_URL from process.env for OAuth callbacks.
-// On Vercel, if NEXTAUTH_URL is not set (or set to localhost), 
-// we must override it with VERCEL_URL so callbacks work correctly.
-// This runs at module load time, before NextAuth initializes.
+// On Vercel, the VERCEL_URL env var is auto-set to the DEPLOYMENT-SPECIFIC URL
+// (e.g., martup-v05rcrto2-xxx.vercel.app), which changes with every deployment.
+// We MUST ensure NEXTAUTH_URL stays as the CANONICAL URL (e.g., https://martup-seven.vercel.app)
+// so the Google OAuth redirect URI matches what's configured in Google Cloud Console.
+//
+// IMPORTANT: Only override NEXTAUTH_URL if it's not set or is localhost.
+// Never replace a valid canonical URL with the deployment-specific VERCEL_URL.
 if (process.env.VERCEL) {
-  const correctUrl = `https://${process.env.VERCEL_URL}`
+  const deploymentUrl = `https://${process.env.VERCEL_URL}`
   const currentUrl = process.env.NEXTAUTH_URL
   
   if (!currentUrl || currentUrl.includes('localhost') || currentUrl.includes('127.0.0.1')) {
-    process.env.NEXTAUTH_URL = correctUrl
-    logger.info({ component: 'auth', from: currentUrl || '(not set)', to: correctUrl }, 'NEXTAUTH_URL auto-corrected')
+    // NEXTAUTH_URL not set or localhost → use deployment URL as fallback
+    process.env.NEXTAUTH_URL = deploymentUrl
+    logger.info({ component: 'auth', from: currentUrl || '(not set)', to: deploymentUrl }, 'NEXTAUTH_URL auto-corrected (fallback to VERCEL_URL)')
+  } else {
+    // NEXTAUTH_URL is already set to a valid URL → keep it!
+    // This is the canonical URL (e.g., https://martup-seven.vercel.app)
+    logger.info({ component: 'auth', nextauthUrl: currentUrl, vercelUrl: deploymentUrl }, 'NEXTAUTH_URL preserved (canonical URL takes priority over deployment URL)')
   }
 }
 
@@ -54,6 +63,13 @@ export const authOptions: NextAuthOptions = {
     GoogleProvider({
       clientId: googleClientId || '',
       clientSecret: googleClientSecret || '',
+      authorization: {
+        params: {
+          prompt: 'consent',
+          access_type: 'offline',
+          response_type: 'code',
+        },
+      },
     }),
   ],
   session: {

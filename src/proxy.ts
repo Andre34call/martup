@@ -206,7 +206,8 @@ async function _proxyInner(request: NextRequest) {
     pathname === '/api/auth/sync-user' ||
     pathname === '/api/auth/diagnostic' ||
     pathname === '/api/auth/login-diagnostic' ||
-    pathname.startsWith('/api/diagnostics/')
+    pathname.startsWith('/api/diagnostics/') ||
+    pathname === '/api/auth/google-diagnostic'
   let csrfResult: { valid: boolean; reason?: string } = { valid: true }
   if (!isInternalRequest && !isNextAuthRoute && !isCsrfExemptAuthRoute) {
     csrfResult = await validateCsrfRequest(request)
