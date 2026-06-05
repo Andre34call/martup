@@ -205,7 +205,8 @@ async function _proxyInner(request: NextRequest) {
     pathname === '/api/auth/otp/verify' ||
     pathname === '/api/auth/sync-user' ||
     pathname === '/api/auth/diagnostic' ||
-    pathname === '/api/auth/login-diagnostic'
+    pathname === '/api/auth/login-diagnostic' ||
+    pathname.startsWith('/api/diagnostics/')
   let csrfResult: { valid: boolean; reason?: string } = { valid: true }
   if (!isInternalRequest && !isNextAuthRoute && !isCsrfExemptAuthRoute) {
     csrfResult = await validateCsrfRequest(request)

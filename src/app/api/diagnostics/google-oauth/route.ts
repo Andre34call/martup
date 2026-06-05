@@ -4,7 +4,7 @@ import { logger } from '@/lib/logger'
 import { db } from '@/lib/db'
 
 /**
- * GET /api/auth/google-diagnostic
+ * GET /api/diagnostics/google-oauth
  * 
  * Diagnostic endpoint for Google OAuth configuration.
  * Helps identify why Google login might not work.
