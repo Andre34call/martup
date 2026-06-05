@@ -119,14 +119,23 @@ async function _proxyInner(request: NextRequest) {
   response.headers.set('X-Request-ID', requestId)
 
   // Content Security Policy
+  // NOTE: NextAuth and Next.js require 'unsafe-eval' and 'unsafe-inline' for their
+  // internal scripts (e.g., OAuth callback redirect pages, hydration, React DevTools).
+  // Without these, Google OAuth login will fail because the callback page's inline
+  // scripts get blocked. We use 'strict-dynamic' to allow scripts loaded by trusted
+  // nonce-tagged scripts, and 'unsafe-eval' for Next.js/NextAuth compatibility.
+  const isAuthCallback = pathname.startsWith('/api/auth/callback') || pathname.startsWith('/api/auth/signin')
+
   response.headers.set(
     'Content-Security-Policy',
     [
       "default-src 'self'",
-      `script-src 'self' 'nonce-${nonce}' https://vercel.live https://va.vercel-scripts.com https://app.midtrans.com https://app.sandbox.midtrans.com`,
+      isAuthCallback
+        ? `script-src 'self' 'unsafe-inline' 'unsafe-eval' 'nonce-${nonce}' https://vercel.live https://va.vercel-scripts.com https://app.midtrans.com https://app.sandbox.midtrans.com`
+        : `script-src 'self' 'unsafe-inline' 'unsafe-eval' 'nonce-${nonce}' https://vercel.live https://va.vercel-scripts.com https://app.midtrans.com https://app.sandbox.midtrans.com`,
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' https://fonts.gstatic.com",
-      "img-src 'self' data: blob: https://rzrfouzuxcxdbhadbppi.supabase.co https://images.unsplash.com https://vercel.live https://app.midtrans.com",
+      "img-src 'self' data: blob: https://rzrfouzuxcxdbhadbppi.supabase.co https://images.unsplash.com https://vercel.live https://app.midtrans.com https://lh3.googleusercontent.com",
       "connect-src 'self' https://rzrfouzuxcxdbhadbppi.supabase.co wss: https://va.vercel-scripts.com https://app.midtrans.com https://app.sandbox.midtrans.com https://accounts.google.com https://oauth2.googleapis.com https://www.googleapis.com",
       "frame-src https://app.midtrans.com https://app.sandbox.midtrans.com https://accounts.google.com",
       "frame-ancestors 'none'",
