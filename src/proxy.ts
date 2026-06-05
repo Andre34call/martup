@@ -121,18 +121,14 @@ async function _proxyInner(request: NextRequest) {
   // Content Security Policy
   // NOTE: NextAuth and Next.js require 'unsafe-eval' and 'unsafe-inline' for their
   // internal scripts (e.g., OAuth callback redirect pages, hydration, React DevTools).
-  // Without these, Google OAuth login will fail because the callback page's inline
-  // scripts get blocked. We use 'strict-dynamic' to allow scripts loaded by trusted
-  // nonce-tagged scripts, and 'unsafe-eval' for Next.js/NextAuth compatibility.
-  const isAuthCallback = pathname.startsWith('/api/auth/callback') || pathname.startsWith('/api/auth/signin')
-
+  // IMPORTANT: When nonce is present in script-src, browsers IGNORE 'unsafe-inline'
+  // per CSP spec. So we must NOT include nonce alongside 'unsafe-inline' — pick one.
+  // We use 'unsafe-inline' + 'unsafe-eval' for compatibility with NextAuth/Next.js.
   response.headers.set(
     'Content-Security-Policy',
     [
       "default-src 'self'",
-      isAuthCallback
-        ? `script-src 'self' 'unsafe-inline' 'unsafe-eval' 'nonce-${nonce}' https://vercel.live https://va.vercel-scripts.com https://app.midtrans.com https://app.sandbox.midtrans.com`
-        : `script-src 'self' 'unsafe-inline' 'unsafe-eval' 'nonce-${nonce}' https://vercel.live https://va.vercel-scripts.com https://app.midtrans.com https://app.sandbox.midtrans.com`,
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://vercel.live https://va.vercel-scripts.com https://app.midtrans.com https://app.sandbox.midtrans.com",
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' https://fonts.gstatic.com",
       "img-src 'self' data: blob: https://rzrfouzuxcxdbhadbppi.supabase.co https://images.unsplash.com https://vercel.live https://app.midtrans.com https://lh3.googleusercontent.com",
