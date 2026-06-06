@@ -1140,6 +1140,8 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
                     }
                   } else if (result?.redirectUrl) {
                     window.open(result.redirectUrl, '_blank')
+                  } else {
+                    showToast(result?.error || 'Gagal memproses pembayaran. Silakan coba lagi nanti.', 'error')
                   }
                 }}
               >
@@ -1150,13 +1152,13 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
           </div>
         )}
 
-        {/* Escrow Payment Info — show for escrow orders */}
+        {/* Pembayaran Transfer — show for bank_transfer orders */}
         {isEscrowOrder && order.paymentStatus !== 'paid' && (
           <div className="px-4 pb-4">
             <div className="bg-amber-50 dark:bg-amber-950/30 rounded-xl border border-amber-200 dark:border-amber-800/50 p-4">
               <h3 className="text-sm font-bold text-foreground mb-2 flex items-center gap-2">
                 <Landmark className="w-4 h-4 text-amber-600" />
-                Pembayaran Escrow
+                Pembayaran Transfer
               </h3>
               <p className="text-xs text-muted-foreground mb-3">
                 Transfer ke rekening MartUp. Dana akan ditahan sampai Anda konfirmasi barang diterima.
@@ -1291,7 +1293,7 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
                     window.open(result.redirectUrl, '_blank')
                   } else {
                     // No token and no redirect — payment method not supported or API error
-                    showToast("Gagal memproses pembayaran. Silakan coba lagi nanti.", "error")
+                    showToast(result?.error || "Gagal memproses pembayaran. Silakan coba lagi nanti.", "error")
                   }
                 }}
               >
@@ -1300,7 +1302,7 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
               </PrimaryButton>
             </>
           )}
-          {/* Escrow orders: cancel button only (payment via upload proof in escrow section above) */}
+          {/* Bank transfer orders: cancel button only (payment via upload proof in transfer section above) */}
           {order.status === "pending" && isEscrowOrder && (
             <Button
               variant="outline"

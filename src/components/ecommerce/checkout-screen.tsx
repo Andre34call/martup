@@ -142,7 +142,7 @@ const PAYMENT_METHODS = [
   { id: "wallet", name: "MartUp Pay", icon: Wallet, description: "Bayar cepat dari saldo", color: "emerald" },
   { id: "midtrans", name: "Transfer & E-Wallet", icon: Smartphone, description: "VA, GoPay, OVO, Dana, ShopeePay", color: "blue" },
   { id: "card", name: "Kartu Kredit/Debit", icon: CreditCard, description: "Visa, Mastercard, JCB", color: "purple" },
-  { id: "bank_transfer", name: "Transfer Bank (Escrow)", icon: Building2, description: "Transfer ke rekening MartUp (Escrow)", color: "teal" },
+  { id: "bank_transfer", name: "Transfer Bank", icon: Building2, description: "Transfer ke rekening MartUp — dana aman sampai barang diterima", color: "teal" },
   { id: "cod", name: "Bayar di Tempat (COD)", icon: Banknote, description: "Bayar saat barang diterima", color: "orange" },
 ]
 
@@ -815,7 +815,10 @@ export function CheckoutScreen() {
               } else {
                 // Snap token creation failed for this order
                 logger.warn({ component: 'checkout', orderId: createdOrders[i].id, err: paymentData.error }, 'Snap token creation failed')
+                // Show specific error from API (e.g., Midtrans not configured)
+                showToast(paymentData.error || 'Gagal membuat token pembayaran. Pesanan tersimpan sebagai "Belum Bayar".', 'error')
                 allSuccess = false
+                break // Stop processing remaining orders on failure
               }
             }
 
@@ -840,24 +843,24 @@ export function CheckoutScreen() {
         }
 
       } else if (selectedPayment === 'bank_transfer') {
-        // Escrow bank transfer: buyer transfers to MartUp bank account
+        // Bank transfer: buyer transfers to MartUp bank account
         // Order stays pending/unpaid — buyer uploads proof later from order detail
-        if (selectedVoucher) markVoucherUsed(selectedVoucher.id)
-
-        // Remove cart items (order is committed)
-        const checkedItemIds = checkedItems.map(i => i.id)
-        checkedItemIds.forEach(id => removeItem(id))
-
-        setIsProcessing(false)
-        // Navigate to order detail where bank accounts are shown + upload proof button
         if (createdOrders.length > 0) {
+          if (selectedVoucher) markVoucherUsed(selectedVoucher.id)
+
+          // Remove cart items only after orders are confirmed created
+          const checkedItemIds = checkedItems.map(i => i.id)
+          checkedItemIds.forEach(id => removeItem(id))
+
+          setIsProcessing(false)
           showToast('Pesanan dibuat! Silakan transfer ke rekening MartUp dan upload bukti pembayaran.', 'success')
           // Select the first order and go to order detail
           const { setSelectedOrder } = useAppStore.getState()
           setSelectedOrder(createdOrders[0].id)
           navigate('order-tracking')
         } else {
-          navigate('orders')
+          setIsProcessing(false)
+          showToast('Gagal membuat pesanan. Silakan coba lagi.', 'error')
         }
 
       } else if (selectedPayment === 'cod') {
@@ -1203,7 +1206,7 @@ export function CheckoutScreen() {
             })}
           </div>
 
-          {/* Escrow Bank Account Info — shown when bank_transfer is selected */}
+          {/* Bank Account Info — shown when bank_transfer is selected */}
           {selectedPayment === 'bank_transfer' && (
             <motion.div
               initial={{ opacity: 0, height: 0 }}
@@ -1213,7 +1216,7 @@ export function CheckoutScreen() {
             >
               <div className="flex items-center gap-2 mt-2">
                 <ShieldCheck className="w-4 h-4 text-amber-500" />
-                <h4 className="text-sm font-bold text-foreground">Rekening Escrow MartUp</h4>
+                <h4 className="text-sm font-bold text-foreground">Rekening MartUp</h4>
               </div>
 
               {isLoadingBankAccounts ? (

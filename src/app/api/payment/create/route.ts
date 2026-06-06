@@ -30,6 +30,15 @@ function getBaseUrl(): string {
 
 export async function POST(request: NextRequest) {
   try {
+    // Step 0: Check if Midtrans is configured
+    if (!MIDTRANS_SERVER_KEY) {
+      logger.error('MIDTRANS_SERVER_KEY not configured — cannot create payment')
+      return NextResponse.json(
+        { success: false, error: 'Pembayaran Midtrans belum dikonfigurasi. Silakan gunakan metode Transfer Bank atau hubungi admin.' },
+        { status: 503 }
+      )
+    }
+
     // Step 1: Verify authentication
     const authResult = await verifyAuth(request)
     if (!authResult.success) return authErrorResponse(authResult)

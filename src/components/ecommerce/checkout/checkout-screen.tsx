@@ -28,7 +28,7 @@ import { PAYMENT_METHODS, type EscrowBankAccount, type VoucherValidateResponse, 
 
 // ==================== MAIN COMPONENT ====================
 export function CheckoutScreen() {
-  const { navigate, addresses, selectedAddressId, selectedVoucher, addOrder, showToast, walletBalance, deductWallet, useVoucher: markVoucherUsed, currentUser, selectVoucher, platformSettings } = useAppStore()
+  const { navigate, addresses, selectedAddressId, selectedVoucher, addOrder, showToast, walletBalance, deductWallet, useVoucher: markVoucherUsed, currentUser, selectVoucher, platformSettings, setSelectedOrder } = useAppStore()
   const { items, getCheckedItems, getCheckedTotal, getCheckedCount, clearCart, removeItem } = useCartStore()
 
   const [selectedPayment, setSelectedPayment] = useState<string | null>(null)
@@ -440,15 +440,24 @@ export function CheckoutScreen() {
       } else if (selectedPayment === 'escrow') {
         // Escrow payment: buyer transfers to MartUp bank account
         // Order stays pending/unpaid — buyer uploads proof later from order detail
-        if (selectedVoucher) markVoucherUsed(selectedVoucher.id)
 
-        // Remove cart items (order is committed)
-        const checkedItemIds = checkedItems.map(i => i.id)
-        checkedItemIds.forEach(id => removeItem(id))
+        if (createdOrders.length > 0) {
+          if (selectedVoucher) markVoucherUsed(selectedVoucher.id)
 
-        setIsProcessing(false)
-        showToast('Pesanan dibuat! Silakan transfer ke rekening MartUp dan upload bukti pembayaran.', 'success')
-        navigate('orders')
+          // Remove cart items AFTER orders are confirmed created
+          const checkedItemIds = checkedItems.map(i => i.id)
+          checkedItemIds.forEach(id => removeItem(id))
+
+          setIsProcessing(false)
+          showToast('Pesanan dibuat! Silakan transfer ke rekening MartUp dan upload bukti pembayaran.', 'success')
+          // Navigate to order-tracking (order detail) page
+          setSelectedOrder(createdOrders[0].id)
+          navigate('order-tracking')
+        } else {
+          // No orders were created — show error
+          setIsProcessing(false)
+          showToast('Gagal membuat pesanan. Silakan coba lagi.', 'error')
+        }
 
       } else if (selectedPayment === 'midtrans' || selectedPayment === 'card') {
         // Midtrans / Card payment: open Snap popup for each seller order
@@ -496,8 +505,17 @@ export function CheckoutScreen() {
                 }
               } else {
                 // Snap token creation failed for this order
+                // Show the API error message to the user (e.g. "Pembayaran Midtrans belum dikonfigurasi...")
                 logger.warn({ component: 'checkout', orderId: createdOrders[i].id, err: paymentData.error }, 'Snap token creation failed')
                 allSuccess = false
+                // Display the specific error from the API as a toast
+                if (paymentData.error) {
+                  showToast(paymentData.error, 'error')
+                  // If it's a configuration error, stop processing remaining orders
+                  if (paymentData.error.includes('belum dikonfigurasi')) {
+                    break
+                  }
+                }
               }
             }
 

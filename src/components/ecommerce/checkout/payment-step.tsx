@@ -100,7 +100,7 @@ export function PaymentMethodSelector({
         })}
       </div>
 
-      {/* Escrow Bank Account Info */}
+      {/* Bank Account Info */}
       {selectedPayment === 'escrow' && (
         <EscrowBankAccounts
           bankAccounts={escrowBankAccounts}
@@ -113,7 +113,7 @@ export function PaymentMethodSelector({
   )
 }
 
-// ==================== ESCROW BANK ACCOUNTS ====================
+// ==================== BANK ACCOUNTS ====================
 function EscrowBankAccounts({
   bankAccounts,
   isLoading,
@@ -134,7 +134,7 @@ function EscrowBankAccounts({
     >
       <div className="flex items-center gap-2 mt-2">
         <ShieldCheck className="w-4 h-4 text-amber-500" />
-        <h4 className="text-sm font-bold text-foreground">Rekening Escrow MartUp</h4>
+        <h4 className="text-sm font-bold text-foreground">Rekening MartUp</h4>
       </div>
 
       {isLoading ? (

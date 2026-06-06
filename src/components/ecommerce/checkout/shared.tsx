@@ -25,9 +25,9 @@ export const PAYMENT_METHODS = [
   { id: "wallet", name: "MartUp Pay", icon: Wallet, description: "Bayar cepat dari saldo", color: "emerald" },
   { id: "midtrans", name: "Transfer & E-Wallet", icon: Smartphone, description: "VA, GoPay, OVO, Dana, ShopeePay", color: "blue" },
   { id: "card", name: "Kartu Kredit/Debit", icon: CreditCard, description: "Visa, Mastercard, JCB", color: "purple" },
-  { id: "escrow", name: "Transfer Bank (Escrow)", icon: Landmark, description: "Transfer ke rekening MartUp — dana aman sampai barang diterima", color: "amber" },
+  { id: "escrow", name: "Transfer Bank", icon: Landmark, description: "Transfer ke rekening MartUp — dana aman sampai barang diterima", color: "amber" },
   { id: "cod", name: "Bayar di Tempat (COD)", icon: Banknote, description: "Bayar saat barang diterima", color: "orange" },
 ] as const
 
-// ==================== ESCROW BANK ACCOUNT TYPE ====================
+// ==================== BANK ACCOUNT TYPE ====================
 export type EscrowBankAccount = { bankName: string; accountNumber: string; accountHolder: string }

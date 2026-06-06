@@ -220,7 +220,7 @@ export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set
       if (!res.ok || !data.success) {
         // Rollback optimistic update — payment wasn't actually completed yet
         set(restoreOrders(preSnapshot))
-        return { token: undefined, redirectUrl: undefined }
+        return { token: undefined, redirectUrl: undefined, error: data.error || 'Gagal memproses pembayaran' }
       }
 
       // For Midtrans payments, the order stays 'pending' until webhook confirms
@@ -235,7 +235,7 @@ export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set
     } catch {
       // Rollback on network error
       set(restoreOrders(preSnapshot))
-      return { token: undefined, redirectUrl: undefined }
+      return { token: undefined, redirectUrl: undefined, error: 'Kesalahan jaringan. Silakan coba lagi.' }
     }
   },
 
