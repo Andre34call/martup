@@ -1292,9 +1292,9 @@ export function CheckoutScreen() {
       </motion.div>
 
       {/* Sticky Bottom CTA */}
-      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 z-40 w-full max-w-[430px] md:max-w-[480px]">
+      <div className="fixed bottom-0 left-0 right-0 z-40">
           <div className="glass border-t border-border/50 pb-safe">
-            <div className="flex items-center justify-between px-4 py-3">
+            <div className="flex items-center justify-between px-4 py-3 max-w-lg mx-auto">
               <div>
                 <p className="text-xs text-muted-foreground">Total Pembayaran</p>
                 <p className="text-lg font-bold text-emerald-600">{formatPrice(Math.max(0, totalAmount))}</p>

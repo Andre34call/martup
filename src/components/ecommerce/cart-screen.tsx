@@ -445,7 +445,7 @@ export function CartScreen() {
       </motion.div>
 
       {/* FIXED BOTTOM BAR - positioned above BottomNav (h-16 = 64px) */}
-      <div className="fixed bottom-16 left-1/2 -translate-x-1/2 z-40 w-full max-w-[430px] md:max-w-[480px]">
+      <div className="fixed bottom-16 left-0 right-0 z-40">
           {/* Select all bar */}
           <div className="bg-card border-t border-border/50 px-4 py-2.5 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
