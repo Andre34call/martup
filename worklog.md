@@ -272,3 +272,28 @@ Stage Summary:
 - No sensitive information exposed without authentication
 - Diagnostic endpoints return 404 in production
 - Bank account endpoints require login
+---
+Task ID: 5
+Agent: Main Agent
+Task: Fix COD payment bugs — unauthorized error on Bayar Sekarang & missing info
+
+Work Log:
+- Investigated COD flow: checkout → order creation → order detail → payment
+- Found root cause: checkout stored paymentMethod as display name "Bayar di Tempat (COD)" instead of ID "cod"
+- COD detection in OrderCard used `paymentMethod === 'cod'` which never matched
+- OrderDetail showed "Bayar Sekarang" for ALL pending orders, including COD
+- Clicking "Bayar Sekarang" on COD order called /api/payment/create → unauthorized error
+- Fixed checkout-screen.tsx: Send payment method ID (cod/wallet/midtrans/card) to server
+- Fixed order-screen.tsx: Added isCodOrder() helper for robust COD detection
+- Fixed order-screen.tsx: Replaced "Bayar Sekarang" button with COD info banner for COD orders
+- Fixed order-screen.tsx: Added getPaymentMethodLabel() for proper display names
+- Fixed order-screen.tsx: Updated isMidtransPayment check to exclude COD & wallet
+- Fixed order-store: Reject payForOrder() for COD orders with clear error message
+- Lint: Passed with no errors
+- Deployed to production (commit 4cd256b)
+
+Stage Summary:
+- COD orders now show "Bayar di Tempat (COD)" info banner instead of "Bayar Sekarang"
+- No more unauthorized error when viewing COD orders
+- Payment method stored as ID in database for consistent detection
+- Display names resolved client-side via getPaymentMethodLabel()
