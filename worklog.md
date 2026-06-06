@@ -242,3 +242,58 @@ Stage Summary:
 - Checkout item deletion works correctly: minus decreases quantity, trash removes item when qty=1
 - Stale closure bug fixed: rapid +/- clicks now read latest state from store
 - Deployed to production via git push to origin/main
+
+---
+Task ID: 5
+Agent: Main Agent
+Task: Fix Midtrans "Bad Request" error when paying with e-wallet after setting MIDTRANS_IS_PRODUCTION=true
+
+Work Log:
+- Investigated full Midtrans payment flow: checkout-screen → api/payment/create → Midtrans Snap API → client Snap.js
+- Read midtrans-config.ts auto-detection logic (sandbox/production key prefix matching)
+- Read payment/create/route.ts payload construction
+- Read deposit/midtrans/create/route.ts for similar patterns
+- Read midtrans.ts client-side Snap.js integration
+- Read payment/config/route.ts for client config
+
+Root Causes Identified:
+1. gross_amount computed from order.totalAmount (Decimal→Number) doesn't match item_details sum
+   - Midtrans STRICTLY validates: gross_amount MUST equal sum(item.price × item.quantity)
+   - Decimal-to-Number conversion can cause rounding discrepancies
+2. Prices not rounded to integers — IDR doesn't use decimals, Midtrans requires integers
+3. Midtrans error messages were generic — user couldn't understand why payment failed
+4. No diagnostic endpoint to verify Midtrans configuration (key match, environment detection)
+
+Fixes Applied:
+
+1. payment/create/route.ts (major rewrite of payload construction):
+   - Compute gross_amount FROM item_details sum (not order.totalAmount) to guarantee exact match
+   - Add Math.round() to all prices for IDR integer compliance
+   - Cross-check computed gross_amount vs order.totalAmount, log discrepancy
+   - Validate gross_amount > 0 before sending to Midtrans
+   - Add comprehensive error logging: status code, key prefix, gross amount, item count, snap URL
+   - Add user-friendly error translations:
+     * "access denied" → key mismatch explanation
+     * "order_id already taken" → retry suggestion
+     * "gross_amount/item_details" → contact admin
+     * "merchant not found" → activation needed
+   - Add customer_details name/email length limits (Midtrans max 50 chars)
+   - Log Midtrans payload summary for debugging
+
+2. payment/config/route.ts (new diagnostic mode):
+   - GET /api/payment/config — basic client config (no auth required)
+   - GET /api/payment/config?diagnostic=true — full diagnostic (admin/seller auth required)
+   - Shows: detected environment, key prefixes, key environment match, ENV flag values
+   - Detects and reports issues: key mismatch, unknown prefixes, missing keys
+   - Shows API URLs being used (snap, api, snap.js)
+
+3. deposit/midtrans/create/route.ts:
+   - Add detailed Midtrans error logging (status code, key prefix, amount, method)
+   - Add validation_messages to error extraction
+   - Add user-friendly error translations for Midtrans errors
+
+Stage Summary:
+- Committed: "fix: Midtrans Bad Request error - compute gross_amount from item_details sum"
+- Pushed to origin/main → triggers Vercel deployment
+- Key fix: gross_amount now guaranteed to match item_details sum exactly
+- Diagnostic endpoint available at /api/payment/config?diagnostic=true for admin debugging
