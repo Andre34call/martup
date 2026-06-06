@@ -334,9 +334,9 @@ export function AddressScreen() {
         </PrimaryButton>
       } />
 
-      <div className="flex-1 px-4 space-y-4 pb-28 overflow-y-auto">
+      <div className="flex-1 px-4 space-y-4 overflow-y-auto">
         {/* Address List */}
-        <div className="space-y-3">
+        <div className="space-y-3 pb-6">
           {addresses.length === 0 && !showAddForm && (
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <MapPin className="w-12 h-12 text-muted-foreground/40 mb-3" />
@@ -435,10 +435,23 @@ export function AddressScreen() {
                   Ketik nama kota untuk mencari dari database RajaOngkir. Provinsi akan terisi otomatis saat kota dipilih.
                 </p>
 
-                <PrimaryButton onClick={handleSaveAddress} className="w-full rounded-xl h-10">
-                  {isSaving ? 'Menyimpan...' : 'Simpan Alamat'}
-                </PrimaryButton>
               </Card>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Sticky Save Button - shown when form is open */}
+        <AnimatePresence>
+          {showAddForm && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 20 }}
+              className="sticky bottom-0 left-0 right-0 bg-background/95 backdrop-blur-sm border-t border-border/50 p-4 -mx-4 mt-4"
+            >
+              <PrimaryButton onClick={handleSaveAddress} className="w-full rounded-xl h-11">
+                {isSaving ? 'Menyimpan...' : 'Simpan Alamat'}
+              </PrimaryButton>
             </motion.div>
           )}
         </AnimatePresence>
