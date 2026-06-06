@@ -1,16 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { env } from '@/lib/env'
+import { verifySuperAdmin, authErrorResponse } from '@/lib/auth-middleware'
 import { logger } from '@/lib/logger'
 import { db } from '@/lib/db'
 
 /**
  * GET /api/diagnostics/google-oauth
- * 
+ *
  * Diagnostic endpoint for Google OAuth configuration.
- * Helps identify why Google login might not work.
- * Only returns non-sensitive info (presence/absence of config, not actual values).
+ * SECURITY: Only accessible in development by super admins.
+ * Returns 404 in production.
  */
-export async function GET(_request: NextRequest) {
+export async function GET(request: NextRequest) {
+  // Block in production
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 })
+  }
+
+  // Require super admin
+  const authResult = await verifySuperAdmin(request)
+  if (!authResult.success) return authErrorResponse(authResult)
+
   const startTime = Date.now()
 
   // Check DB reachability

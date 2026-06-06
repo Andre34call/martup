@@ -1,18 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { verifySuperAdmin, authErrorResponse } from '@/lib/auth-middleware'
 import { logger } from '@/lib/logger'
 
 /**
  * GET /api/diagnostics/google - Google OAuth health check
  *
- * This endpoint checks if Google OAuth is properly configured and provides
- * actionable recommendations for fixing common issues.
- *
- * SECURITY: Only shows masked values (prefixes/p✓) — never full secrets.
- * Does NOT require authentication — this is intentional so it can be used
- * to debug login failures before auth is working.
+ * SECURITY: Only accessible in development by super admins.
+ * Returns 404 in production.
  */
 export async function GET(request: NextRequest) {
+  // Block in production
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 })
+  }
+
+  // Require super admin
+  const authResult = await verifySuperAdmin(request)
+  if (!authResult.success) return authErrorResponse(authResult)
+
   const startTime = Date.now()
 
   try {
@@ -20,20 +26,8 @@ export async function GET(request: NextRequest) {
     const nextauthUrl = process.env.NEXTAUTH_URL || ''
     const vercelUrl = process.env.VERCEL_URL || ''
     const isVercel = !!process.env.VERCEL
-    const isProduction = process.env.NODE_ENV === 'production'
 
-    // Determine the EFFECTIVE URL that NextAuth will actually use:
-    // 1. NEXTAUTH_URL env var (if set and not localhost) — CANONICAL URL
-    // 2. VERCEL_URL on Vercel (deployment-specific URL)
-    // 3. localhost fallback
-    //
-    // CRITICAL: The redirect URI sent to Google MUST match what's in
-    // Google Cloud Console → Credentials → Authorized redirect URIs.
-    // If NEXTAUTH_URL is set to the canonical URL (e.g., https://martup-seven.vercel.app),
-    // NextAuth will use that for the redirect URI — which is what should be in Google Cloud Console.
-    //
-    // On Vercel, NextAuth may also use AUTH_TRUST_HOST to read the request's host header.
-    // When a user visits via the canonical URL, the host header matches NEXTAUTH_URL.
+    // Determine the EFFECTIVE URL that NextAuth will actually use
     const effectiveUrl = nextauthUrl && !nextauthUrl.includes('localhost')
       ? nextauthUrl
       : vercelUrl
@@ -48,13 +42,13 @@ export async function GET(request: NextRequest) {
     const deploymentUrl = vercelUrl
     const urlMismatch = canonicalUrl !== deploymentUrl && isVercel
 
-    // ==================== ENV VAR CHECKS ====================
+    // ==================== ENV VAR CHECKS (masked) ====================
     const envChecks = {
       nextauthUrl: nextauthUrl ? `(set: ${nextauthUrl})` : '(not set)',
       vercelUrl: vercelUrl ? `(set: ${vercelUrl})` : '(not set)',
       nextauthUrlEffective: effectiveUrl,
       nextauthSecret: process.env.NEXTAUTH_SECRET ? '(set ✓)' : '(NOT SET ✗)',
-      googleClientId: process.env.GOOGLE_CLIENT_ID ? `(set ✓ prefix: ${process.env.GOOGLE_CLIENT_ID.substring(0, 8)}...)` : '(NOT SET ✗)',
+      googleClientId: process.env.GOOGLE_CLIENT_ID ? '(set ✓)' : '(NOT SET ✗)',
       googleClientSecret: process.env.GOOGLE_CLIENT_SECRET ? '(set ✓)' : '(NOT SET ✗)',
       internalApiSecret: process.env.INTERNAL_API_SECRET || process.env.NEXTAUTH_SECRET ? '(set ✓)' : '(NOT SET ✗)',
       supabaseDatabaseUrl: process.env.SUPABASE_DATABASE_URL ? '(set ✓)' : '(NOT SET ✗)',
@@ -84,8 +78,6 @@ export async function GET(request: NextRequest) {
     }
 
     // ==================== REDIRECT URI ====================
-    // This is the MOST IMPORTANT check — the redirect URI must be registered
-    // in Google Cloud Console → Credentials → Authorized redirect URIs.
     const redirectUriCheck = {
       uri: redirectUri,
       basedOn: urlMismatch ? 'NEXTAUTH_URL (canonical)' : effectiveUrl === nextauthUrl ? 'NEXTAUTH_URL (canonical)' : 'VERCEL_URL (deployment-specific)',
@@ -136,7 +128,7 @@ export async function GET(request: NextRequest) {
     // ==================== RESPONSE ====================
     return NextResponse.json({
       timestamp: new Date().toISOString(),
-      environment: isProduction ? 'production' : 'development',
+      environment: process.env.NODE_ENV,
       isVercel,
       ...envChecks,
       database: dbCheck,

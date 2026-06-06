@@ -1,11 +1,16 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
 import { logger } from '@/lib/logger'
 
-// GET /api/bank-accounts — Public: list active platform bank accounts for buyer-facing display
-// No auth required. Only returns accounts where isActive=true, sorted by sortOrder.
-export async function GET() {
+// GET /api/bank-accounts — List active platform bank accounts (authenticated only)
+// Previously public for escrow payments; now requires authentication since escrow is removed.
+export async function GET(request: NextRequest) {
   try {
+    // Require authentication
+    const authResult = await verifyAuth(request)
+    if (!authResult.success) return authErrorResponse(authResult)
+
     const bankAccounts = await db.platformBankAccount.findMany({
       where: { isActive: true },
       select: {

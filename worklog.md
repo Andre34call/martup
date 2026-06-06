@@ -248,3 +248,27 @@ Stage Summary:
 - Deployed to production (commit 6f72e4b)
 - Escrow was already removed by previous deployment
 - "Batalkan Pesanan" button was already working from previous deployment
+---
+Task ID: 4
+Agent: Main Agent
+Task: Security fixes — secure unauthenticated endpoints
+
+Work Log:
+- Deep audit identified 6 unauthenticated endpoints exposing sensitive info
+- Added verifyAuth to /api/bank-accounts (previously public, now requires login)
+- Added verifyAuth to /api/settings/bank-accounts (previously public, now requires login)
+- Added production block + verifySuperAdmin to /api/diagnostics/google-oauth
+- Added production block + verifySuperAdmin to /api/diagnostics/google
+- Added production block + verifySuperAdmin to /api/diagnostics/session
+- Added production block + verifySuperAdmin to /api/db-status (also removed hostname leak)
+- Added verifyAuth to /api/setup/storage GET handler
+- Removed Google Client ID prefix leakage from /api/diagnostics/google (now just shows "set ✓")
+- All fixes follow the same pattern as /api/auth/diagnostic (404 in production, super admin in dev)
+- Lint: Passed with no errors
+- Dev server: Running correctly
+
+Stage Summary:
+- 6 previously unauthenticated endpoints now secured
+- No sensitive information exposed without authentication
+- Diagnostic endpoints return 404 in production
+- Bank account endpoints require login

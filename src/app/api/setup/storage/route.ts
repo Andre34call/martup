@@ -154,6 +154,12 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
+    // Require authentication
+    const authResult = await verifyAuth(request)
+    if (!authResult.success) {
+      return authErrorResponse(authResult)
+    }
+
     // Validate Supabase configuration
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
       return NextResponse.json({

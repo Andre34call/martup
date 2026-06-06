@@ -1,22 +1,25 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { verifySuperAdmin, authErrorResponse } from '@/lib/auth-middleware'
 import { db } from '@/lib/db'
 import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
 /**
- * GET /api/db-status - Public database connectivity check.
- * This endpoint is intentionally UNAUTHENTICATED so that anyone can verify
- * whether the database is accessible. It only reveals connectivity status,
- * NOT any data, credentials, or internal details.
+ * GET /api/db-status - Database connectivity check.
+ *
+ * SECURITY: Only accessible in development by super admins.
+ * Returns 404 in production.
  */
-export async function GET() {
-  // Diagnostic: show which URL pattern is being used (without revealing secrets)
-  const dbUrl = process.env.DATABASE_URL || ''
-  const supabaseUrl = process.env.SUPABASE_DATABASE_URL || ''
-  const dbUrlProtocol = dbUrl.startsWith('postgresql://') ? 'postgresql' : dbUrl.startsWith('postgres://') ? 'postgres' : dbUrl.startsWith('file:') ? 'file' : 'unknown'
-  const dbUrlHost = dbUrl.startsWith('postgresql://') || dbUrl.startsWith('postgres://') ? new URL(dbUrl).hostname : 'n/a'
-  const supabaseHost = supabaseUrl.startsWith('postgresql://') || supabaseUrl.startsWith('postgres://') ? new URL(supabaseUrl).hostname : 'n/a'
+export async function GET(request: NextRequest) {
+  // Block in production
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 })
+  }
+
+  // Require super admin
+  const authResult = await verifySuperAdmin(request)
+  if (!authResult.success) return authErrorResponse(authResult)
 
   try {
     const start = Date.now()
@@ -55,18 +58,6 @@ export async function GET() {
       status: 'error',
       database: 'disconnected',
       detail,
-      // Diagnostic info (safe to show — no passwords)
-      diag: {
-        DATABASE_URL_protocol: dbUrlProtocol,
-        DATABASE_URL_host: dbUrlHost,
-        SUPABASE_DATABASE_URL_host: supabaseHost,
-        effectiveHost: dbUrlProtocol === 'postgresql' || dbUrlProtocol === 'postgres' ? dbUrlHost : supabaseHost || 'none',
-      },
-      hint: isAuthFailed
-        ? 'Database password is incorrect. Update DATABASE_URL in Vercel Dashboard → Settings → Environment Variables.'
-        : isUnreachable
-          ? 'Database server is unreachable. Check if the Supabase project is paused or the URL is correct.'
-          : 'Check Vercel logs for details.',
       timestamp: new Date().toISOString(),
     }, { status: 503 })
   }

@@ -1,13 +1,18 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
 import { logger } from '@/lib/logger'
 
 const SETTINGS_KEY = 'platform_settings'
 
-// GET /api/settings/bank-accounts - Public endpoint for MartUp escrow bank accounts
-// Buyers need this info to know where to transfer for escrow payments
-export async function GET() {
+// GET /api/settings/bank-accounts - Authenticated endpoint for MartUp bank accounts
+// Previously public for escrow payments; now requires authentication since escrow is removed.
+export async function GET(request: NextRequest) {
   try {
+    // Require authentication
+    const authResult = await verifyAuth(request)
+    if (!authResult.success) return authErrorResponse(authResult)
+
     const row = await db.platformSetting.findUnique({ where: { key: SETTINGS_KEY } })
     if (!row) {
       return NextResponse.json({ success: true, data: [] })

@@ -1,18 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { verifySuperAdmin, authErrorResponse } from '@/lib/auth-middleware'
 import { logger } from '@/lib/logger'
 
 /**
  * GET /api/diagnostics/session
  *
- * Checks if a NextAuth session exists. This helps diagnose whether
- * Google OAuth is creating a session successfully (even if the frontend
- * isn't recognizing it).
+ * Checks if a NextAuth session exists.
  *
- * Returns the session data if available, or null if not authenticated.
+ * SECURITY: Only accessible in development by super admins.
+ * Returns 404 in production.
  */
 export async function GET(request: NextRequest) {
+  // Block in production
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 })
+  }
+
+  // Require super admin
+  const authResult = await verifySuperAdmin(request)
+  if (!authResult.success) return authErrorResponse(authResult)
+
   try {
     const session = await getServerSession(authOptions)
 
