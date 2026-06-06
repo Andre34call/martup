@@ -55,6 +55,43 @@ function getItemPrice(item: CartItem): number {
   return item.variant?.price ?? item.product.discountPrice ?? item.product.price
 }
 
+// ==================== MODULE-LEVEL INFRASTRUCTURE ====================
+
+/**
+ * Mutation queue: ensures API calls execute sequentially to prevent race conditions.
+ * Each enqueued function returns a Promise; the chain resolves them one at a time.
+ */
+let mutationQueue: Promise<void> = Promise.resolve()
+
+function enqueueMutation(fn: () => Promise<void>): void {
+  mutationQueue = mutationQueue.then(fn).catch((err) => {
+    logger.warn({ component: 'cart', err }, 'Mutation queue error')
+  })
+}
+
+/**
+ * Debounce map for quantity updates.
+ * Key = cartItemId, Value = timeout handle.
+ * When a quantity update comes in, we clear the previous pending call and set a new one.
+ */
+const quantityDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>()
+const DEBOUNCE_DELAY_MS = 500
+
+/** Re-sync cart from server and replace local state. Used as the error recovery path. */
+async function resyncFromServer(set: (partial: Partial<CartState> | ((state: CartState) => Partial<CartState>)) => void): Promise<void> {
+  try {
+    const data = await apiClient.get<CartSyncResponse>('/api/cart')
+    if (data.success && Array.isArray(data.data)) {
+      const serverItems = data.data.map((raw: Record<string, unknown>) => mapServerCartItem(raw))
+      set({ items: serverItems, isSyncing: false })
+    } else {
+      set({ isSyncing: false })
+    }
+  } catch {
+    set({ isSyncing: false })
+  }
+}
+
 // ==================== STORE ====================
 
 export const useCartStore = create<CartState>()(
@@ -67,43 +104,42 @@ export const useCartStore = create<CartState>()(
       addItem: (product, variant, quantity = 1) => {
         const variantId = variant?.id
 
-        // Capture previous items BEFORE optimistic update for rollback
-        const previousItems = get().items
+        // Optimistic update using functional state (no stale capture)
+        set((state) => {
+          const existing = state.items.find(
+            (i) => i.productId === product.id && i.variantId === variantId
+          )
 
-        const existing = previousItems.find(
-          (i) => i.productId === product.id && i.variantId === variantId
-        )
-
-        // Build the optimistic local update
-        const optimisticUpdate = existing
-          ? {
-              items: previousItems.map((i) =>
+          if (existing) {
+            return {
+              items: state.items.map((i) =>
                 i.id === existing.id ? { ...i, quantity: i.quantity + quantity } : i
               ),
             }
-          : {
-              items: [
-                ...previousItems,
-                {
-                  id: `cart-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-                  productId: product.id,
-                  variantId: variantId || undefined,
-                  quantity,
-                  isChecked: true,
-                  product,
-                  variant: variant || undefined,
-                },
-              ],
-            }
+          }
 
-        // Apply optimistic update
-        set(optimisticUpdate)
+          return {
+            items: [
+              ...state.items,
+              {
+                id: `cart-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+                productId: product.id,
+                variantId: variantId || undefined,
+                quantity,
+                isChecked: true,
+                product,
+                variant: variant || undefined,
+              },
+            ],
+          }
+        })
 
-        // If authenticated, sync with server
+        // If authenticated, queue the API call
         if (isUserAuthenticated()) {
-          apiClient.rawPost('/api/cart', { productId: product.id, variantId: variantId || null, quantity })
-            .then((res) => res.json())
-            .then((data) => {
+          enqueueMutation(async () => {
+            try {
+              const res = await apiClient.rawPost('/api/cart', { productId: product.id, variantId: variantId || null, quantity })
+              const data = await res.json()
               if (data.success && data.data) {
                 // Server responded with the upserted item — replace optimistic item
                 const serverItem = mapServerCartItem(data.data)
@@ -115,142 +151,163 @@ export const useCartStore = create<CartState>()(
                   ),
                 }))
               } else {
-                // API returned error — revert
-                set({ items: previousItems })
-                logger.warn({ component: 'cart', error: data.error }, 'Cart add failed')
+                // API error — re-sync from server instead of stale rollback
+                logger.warn({ component: 'cart', error: data.error }, 'Cart add failed, re-syncing')
+                await resyncFromServer(set)
               }
-            })
-            .catch(() => {
-              // Network error — revert
-              set({ items: previousItems })
-              logger.warn({ component: 'cart' }, 'Cart add: network error, reverted optimistic update')
-            })
+            } catch {
+              // Network error — re-sync from server instead of stale rollback
+              logger.warn({ component: 'cart' }, 'Cart add: network error, re-syncing from server')
+              await resyncFromServer(set)
+            }
+          })
         }
       },
 
       // ==================== REMOVE ITEM ====================
       removeItem: (id) => {
-        const previousItems = get().items
-        const removedItem = previousItems.find((i) => i.id === id)
+        // Optimistic: remove locally using functional update
+        set((state) => ({
+          items: state.items.filter((i) => i.id !== id),
+        }))
 
-        // Optimistic: remove locally
-        set({ items: previousItems.filter((i) => i.id !== id) })
-
-        // If authenticated, sync with server
-        if (isUserAuthenticated() && removedItem) {
-          apiClient.rawDelete('/api/cart', { cartItemId: id })
-            .then((res) => res.json())
-            .then((data) => {
+        // If authenticated, queue the API call using /api/cart/[id] (BUG 5 fix)
+        if (isUserAuthenticated()) {
+          enqueueMutation(async () => {
+            try {
+              const res = await apiClient.rawDelete(`/api/cart/${encodeURIComponent(id)}`)
+              const data = await res.json()
               if (!data.success) {
-                // Revert on failure
-                set({ items: previousItems })
-                logger.warn({ component: 'cart', error: data.error }, 'Cart remove failed')
+                // Re-sync from server on failure
+                logger.warn({ component: 'cart', error: data.error }, 'Cart remove failed, re-syncing')
+                await resyncFromServer(set)
               }
-            })
-            .catch(() => {
-              // Revert on network error
-              set({ items: previousItems })
-              logger.warn({ component: 'cart' }, 'Cart remove: network error, reverted optimistic update')
-            })
+            } catch {
+              // Re-sync from server on network error
+              logger.warn({ component: 'cart' }, 'Cart remove: network error, re-syncing from server')
+              await resyncFromServer(set)
+            }
+          })
         }
       },
 
       // ==================== UPDATE QUANTITY ====================
       updateQuantity: (id, quantity) => {
-        const previousItems = get().items
-        const targetItem = previousItems.find((i) => i.id === id)
-
-        // Optimistic: update locally
-        set({
-          items: previousItems.map((i) =>
+        // Optimistic: update locally using functional update
+        set((state) => ({
+          items: state.items.map((i) =>
             i.id === id ? { ...i, quantity } : i
           ),
-        })
+        }))
 
-        // If authenticated, sync with server
-        if (isUserAuthenticated() && targetItem) {
-          apiClient.rawPut('/api/cart', { cartItemId: id, quantity })
-            .then((res) => res.json())
-            .then((data) => {
-              if (data.success && data.data) {
-                // Update with server response (may have adjusted quantity)
-                const serverItem = mapServerCartItem(data.data)
-                set((state) => ({
-                  items: state.items.map((i) =>
-                    i.id === id ? serverItem : i
-                  ),
-                }))
-              } else {
-                // Revert on failure
-                set({ items: previousItems })
-                logger.warn({ component: 'cart', error: data.error }, 'Cart quantity update failed')
+        // If authenticated, debounce the server sync (BUG 2 fix)
+        if (isUserAuthenticated()) {
+          // Clear any existing pending debounce for this item
+          const existingTimer = quantityDebounceTimers.get(id)
+          if (existingTimer) {
+            clearTimeout(existingTimer)
+          }
+
+          // Set a new debounced call
+          const timer = setTimeout(() => {
+            quantityDebounceTimers.delete(id)
+            enqueueMutation(async () => {
+              try {
+                const res = await apiClient.rawPut(`/api/cart/${encodeURIComponent(id)}`, { quantity })
+                const data = await res.json()
+                if (data.success && data.data) {
+                  // Update with server response (may have adjusted quantity due to stock limits)
+                  const serverItem = mapServerCartItem(data.data)
+                  set((state) => ({
+                    items: state.items.map((i) =>
+                      i.id === id ? serverItem : i
+                    ),
+                  }))
+                } else {
+                  // Re-sync from server on failure
+                  logger.warn({ component: 'cart', error: data.error }, 'Cart quantity update failed, re-syncing')
+                  await resyncFromServer(set)
+                }
+              } catch {
+                // Re-sync from server on network error
+                logger.warn({ component: 'cart' }, 'Cart quantity update: network error, re-syncing from server')
+                await resyncFromServer(set)
               }
             })
-            .catch(() => {
-              // Revert on network error
-              set({ items: previousItems })
-              logger.warn({ component: 'cart' }, 'Cart quantity update: network error, reverted optimistic update')
-            })
+          }, DEBOUNCE_DELAY_MS)
+
+          quantityDebounceTimers.set(id, timer)
         }
       },
 
       // ==================== TOGGLE CHECK ====================
       toggleCheck: (id) => {
-        const previousItems = get().items
-        const targetItem = previousItems.find((i) => i.id === id)
-
-        // Optimistic: toggle locally
-        set({
-          items: previousItems.map((i) =>
+        // Optimistic: toggle locally using functional update
+        set((state) => ({
+          items: state.items.map((i) =>
             i.id === id ? { ...i, isChecked: !i.isChecked } : i
           ),
-        })
+        }))
 
-        // If authenticated, sync with server
-        if (isUserAuthenticated() && targetItem) {
-          const newChecked = !targetItem.isChecked
-          apiClient.rawPut('/api/cart', { cartItemId: id, isChecked: newChecked })
-            .then((res) => res.json())
-            .then((data) => {
+        // If authenticated, queue the API call
+        if (isUserAuthenticated()) {
+          // Read the new checked value from current state
+          const currentItem = get().items.find((i) => i.id === id)
+          if (!currentItem) return
+          const newChecked = currentItem.isChecked
+
+          enqueueMutation(async () => {
+            try {
+              const res = await apiClient.rawPut(`/api/cart/${encodeURIComponent(id)}`, { isChecked: newChecked })
+              const data = await res.json()
               if (!data.success) {
-                // Revert on failure
-                set({ items: previousItems })
-                logger.warn({ component: 'cart', error: data.error }, 'Cart toggle check failed')
+                // Re-sync from server on failure
+                logger.warn({ component: 'cart', error: data.error }, 'Cart toggle check failed, re-syncing')
+                await resyncFromServer(set)
               }
-            })
-            .catch(() => {
-              // Revert on network error
-              set({ items: previousItems })
-              logger.warn({ component: 'cart' }, 'Cart toggle check: network error, reverted optimistic update')
-            })
+            } catch {
+              // Re-sync from server on network error
+              logger.warn({ component: 'cart' }, 'Cart toggle check: network error, re-syncing from server')
+              await resyncFromServer(set)
+            }
+          })
         }
       },
 
       // ==================== CHECK ALL ====================
       checkAll: (checked) => {
-        const previousItems = get().items
+        // Optimistic: update all locally using functional update
+        set((state) => ({
+          items: state.items.map((i) => ({ ...i, isChecked: checked })),
+        }))
 
-        // Optimistic: update all locally
-        set({
-          items: previousItems.map((i) => ({ ...i, isChecked: checked })),
-        })
-
-        // If authenticated, sync all items with server
+        // If authenticated, use bulk endpoint (BUG 4 fix)
         if (isUserAuthenticated()) {
-          const updates = previousItems.map((item) =>
-            apiClient.rawPut('/api/cart', { cartItemId: item.id, isChecked: checked })
-              .then((res) => res.json())
-              .then((data) => ({ itemId: item.id, success: data.success }))
-              .catch(() => ({ itemId: item.id, success: false }))
-          )
+          const currentItems = get().items
+          if (currentItems.length === 0) return
 
-          Promise.all(updates).then((results) => {
-            const failures = results.filter((r) => !r.success)
-            if (failures.length > 0) {
-              // Re-sync from server on partial failure to ensure consistency
-              logger.warn({ component: 'cart' }, 'Cart checkAll: some updates failed, re-syncing from server')
-              // Revert locally since some updates failed
-              set({ items: previousItems })
+          const bulkItems = currentItems.map((item) => ({
+            cartItemId: item.id,
+            isChecked: checked,
+          }))
+
+          enqueueMutation(async () => {
+            try {
+              const res = await apiClient.rawPut('/api/cart/bulk', { items: bulkItems })
+              const data = await res.json()
+              if (data.success && Array.isArray(data.data)) {
+                // Replace with server-confirmed items
+                const serverItems = data.data.map((raw: Record<string, unknown>) => mapServerCartItem(raw))
+                set({ items: serverItems })
+              } else {
+                // Re-sync from server on failure
+                logger.warn({ component: 'cart', error: data.error }, 'Cart checkAll bulk failed, re-syncing')
+                await resyncFromServer(set)
+              }
+            } catch {
+              // Re-sync from server on network error
+              logger.warn({ component: 'cart' }, 'Cart checkAll: network error, re-syncing from server')
+              await resyncFromServer(set)
             }
           })
         }
@@ -258,27 +315,28 @@ export const useCartStore = create<CartState>()(
 
       // ==================== CLEAR CART ====================
       clearCart: () => {
-        const previousItems = get().items
-
-        // Optimistic: clear locally
-        set({ items: [] })
+        // Optimistic: clear locally using functional update
+        set((state) => ({
+          items: state.items.length > 0 ? [] : state.items,
+        }))
 
         // If authenticated, clear on server
         if (isUserAuthenticated()) {
-          apiClient.rawPost('/api/cart?clear=true', undefined)
-            .then((res) => res.json())
-            .then((data) => {
+          enqueueMutation(async () => {
+            try {
+              const res = await apiClient.rawPost('/api/cart?clear=true', undefined)
+              const data = await res.json()
               if (!data.success) {
-                // Revert on failure
-                set({ items: previousItems })
-                logger.warn({ component: 'cart', error: data.error }, 'Cart clear failed')
+                // Re-sync from server on failure
+                logger.warn({ component: 'cart', error: data.error }, 'Cart clear failed, re-syncing')
+                await resyncFromServer(set)
               }
-            })
-            .catch(() => {
-              // Revert on network error
-              set({ items: previousItems })
-              logger.warn({ component: 'cart' }, 'Cart clear: network error, reverted optimistic update')
-            })
+            } catch {
+              // Re-sync from server on network error
+              logger.warn({ component: 'cart' }, 'Cart clear: network error, re-syncing from server')
+              await resyncFromServer(set)
+            }
+          })
         }
       },
 
@@ -336,7 +394,6 @@ export const useCartStore = create<CartState>()(
         set({ isSyncing: true })
         try {
           // First, fetch the server cart to identify which items already exist
-          // This prevents the double-counting bug where already-synced items get their quantities added again
           const serverRes = await apiClient.get<CartSyncResponse>('/api/cart', { userId })
 
           if (serverRes.success && Array.isArray(serverRes.data)) {
@@ -359,8 +416,16 @@ export const useCartStore = create<CartState>()(
               await apiClient.rawPost('/api/cart?merge=true', { items: mergeItems })
             }
 
-            // Replace local state with server state (authoritative)
-            set({ items: serverItems, isSyncing: false })
+            // BUG 3 fix: Re-fetch from server AFTER the merge to get the complete post-merge state
+            // (The previous serverItems was fetched BEFORE the merge, so it doesn't include merged items)
+            const postMergeRes = await apiClient.get<CartSyncResponse>('/api/cart', { userId })
+            if (postMergeRes.success && Array.isArray(postMergeRes.data)) {
+              const postMergeItems = postMergeRes.data.map((raw: Record<string, unknown>) => mapServerCartItem(raw))
+              set({ items: postMergeItems, isSyncing: false })
+            } else {
+              // Fallback to pre-merge server items if re-fetch fails
+              set({ items: serverItems, isSyncing: false })
+            }
           } else {
             // Fallback: no server data, just sync from server
             await get().syncFromServer(userId)

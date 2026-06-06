@@ -1,0 +1,22 @@
+{
+  "home_status": 200,
+  "home_title": "MartUp - Belanja Online Terpercaya | Promo & Diskon Terbaik",
+  "home_has_content": true,
+  "home_has_martup": false,
+  "home_has_react_root": false,
+  "product_page_loaded": false,
+  "product_no_cards": true,
+  "cart_page_has_content": true,
+  "cart_page_loaded": true,
+  "cart_has_cart_text": false,
+  "total_console_messages": 18,
+  "error_count": 10,
+  "js_error_count": 0,
+  "network_error_count": 0,
+  "cart_related_console": 0,
+  "hydration_errors": 2,
+  "zustand_errors": 0,
+  "cart_api_status": 401,
+  "products_api_status": 500,
+  "health_api_status": 401
+}

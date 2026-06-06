@@ -352,6 +352,8 @@ export function CheckoutScreen() {
   const [orderNumber, setOrderNumber] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
   const isPayingRef = useRef(false) // Double-submit prevention lock
+  const prevCityRef = useRef<string | null>(null) // Track previous city to detect actual city changes
+  const fetchingSellerRef = useRef<Set<string>>(new Set()) // Track in-flight shipping fetches
   const [shippingRatesBySeller, setShippingRatesBySeller] = useState<Record<string, ShippingOption[]>>({})
   const [isLoadingRates, setIsLoadingRates] = useState<Record<string, boolean>>({})
   const [shippingError, setShippingError] = useState<Record<string, string>>({})
@@ -404,8 +406,12 @@ export function CheckoutScreen() {
     return group.items.every(item => (item.product as any).productType === 'jasa')
   }, [groupedBySeller])
 
-  // Fetch shipping rates from API when address is selected
+  // Fetch shipping rates from API — with in-flight deduplication to prevent concurrent duplicate fetches
   const fetchShippingRates = useCallback(async (sellerId: string, destinationCity: string, weightGrams: number, originCity?: string) => {
+    // Skip if already fetching for this seller (prevents concurrent duplicate requests)
+    if (fetchingSellerRef.current.has(sellerId)) return
+    fetchingSellerRef.current.add(sellerId)
+
     setIsLoadingRates(prev => ({ ...prev, [sellerId]: true }))
     setShippingError(prev => { const next = { ...prev }; delete next[sellerId]; return next })
     try {
@@ -429,44 +435,64 @@ export function CheckoutScreen() {
       setShippingError(prev => ({ ...prev, [sellerId]: 'Gagal menghitung ongkir. Periksa alamat pengiriman Anda.' }))
     } finally {
       setIsLoadingRates(prev => ({ ...prev, [sellerId]: false }))
+      fetchingSellerRef.current.delete(sellerId)
     }
   }, [])
 
-  // Auto-fetch shipping rates when address changes and items are in cart
+  // Auto-fetch shipping rates when address or items change
+  // Merged from two competing useEffects that caused double-fetching and
+  // unnecessary clearing of jasa-only shipping selections.
+  // - Only clears non-jasa shipping selections when the city actually changes
+  // - Uses prevCityRef to detect actual city changes vs same-city address switches
+  // - fetchingSellerRef prevents concurrent duplicate fetches for the same seller
   useEffect(() => {
     if (!defaultAddress || groupedBySeller.length === 0) return
 
+    const currentCity = defaultAddress.city
+    const cityChanged = prevCityRef.current !== null && prevCityRef.current !== currentCity
+    prevCityRef.current = currentCity
+
+    // When city changes, clear only non-jasa shipping selections (jasa selections are safe to keep)
+    if (cityChanged) {
+      setShippingBySeller(prev => {
+        const next: Record<string, ShippingOption> = {}
+        for (const [sellerId, option] of Object.entries(prev)) {
+          if (option.provider === 'jasa') {
+            next[sellerId] = option
+          }
+        }
+        return next
+      })
+    }
+
     groupedBySeller.forEach(group => {
       const sellerId = group.seller.id
-      // Skip shipping for jasa-only sellers
+      // Skip shipping for jasa-only sellers — set free shipping
       if (isJasaOnlySeller(sellerId)) {
-        // Set zero-cost shipping for jasa-only sellers
         setShippingBySeller(prev => ({ ...prev, [sellerId]: { provider: 'jasa', service: 'free', name: 'Tanpa Pengiriman (Tolong Mas)', price: 0, estimatedDays: '-', logo: '📦' } }))
         return
       }
+
+      // Skip if already fetching for this seller
+      if (fetchingSellerRef.current.has(sellerId)) return
+
       const weight = weightBySeller[sellerId] || 1000
-      // Only fetch if we don't have rates yet for this seller or if address changed
-      const currentRates = shippingRatesBySeller[sellerId]
-      if (!currentRates || currentRates.length === 0) {
-        fetchShippingRates(sellerId, defaultAddress.city, weight, group.seller.storeCity)
+
+      if (cityChanged) {
+        // City changed — always re-fetch (old rates are for wrong destination)
+        fetchShippingRates(sellerId, currentCity, weight, group.seller.storeCity)
+      } else {
+        // No city change — only fetch if we don't have rates yet
+        // NOTE: shippingRatesBySeller may be stale here (not in deps to avoid infinite loops),
+        // but this is safe: on initial load it's empty so we fetch; after fetch, this effect
+        // doesn't re-run (deps unchanged), so stale data showing existing rates is fine.
+        const currentRates = shippingRatesBySeller[sellerId]
+        if (!currentRates || currentRates.length === 0) {
+          fetchShippingRates(sellerId, currentCity, weight, group.seller.storeCity)
+        }
       }
     })
-  }, [defaultAddress?.id, groupedBySeller.length])
-
-  // Re-fetch rates when address changes (different city)
-  useEffect(() => {
-    if (!defaultAddress || groupedBySeller.length === 0) return
-
-    // Clear previous shipping selections when address changes
-    setShippingBySeller({})
-
-    groupedBySeller.forEach(group => {
-      const sellerId = group.seller.id
-      if (isJasaOnlySeller(sellerId)) return // Skip jasa-only sellers
-      const weight = weightBySeller[sellerId] || 1000
-      fetchShippingRates(sellerId, defaultAddress.city, weight, group.seller.storeCity)
-    })
-  }, [defaultAddress?.city])
+  }, [defaultAddress?.id, defaultAddress?.city, groupedBySeller.length])
 
   // Fetch MartUp bank accounts when escrow is selected
   useEffect(() => {
