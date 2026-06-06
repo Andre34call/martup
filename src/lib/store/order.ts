@@ -48,7 +48,7 @@ export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set
       const updatedVariants = p.variants.map(v => {
         const variantItem = order.items.find(item => item.variantId === v.id)
         if (!variantItem) return v
-        return { ...v, stock: v.stock - variantItem.quantity }
+        return { ...v, stock: Math.max(0, v.stock - variantItem.quantity) }
       })
 
       return { ...p, stock: Math.max(0, newStock), variants: updatedVariants }

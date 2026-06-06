@@ -335,22 +335,35 @@ export const useCartStore = create<CartState>()(
 
         set({ isSyncing: true })
         try {
-          // Prepare merge payload — only send productId, variantId, quantity
-          const mergeItems = localItems.map((item) => ({
-            productId: item.productId,
-            variantId: item.variantId || null,
-            quantity: item.quantity,
-          }))
+          // First, fetch the server cart to identify which items already exist
+          // This prevents the double-counting bug where already-synced items get their quantities added again
+          const serverRes = await apiClient.get<CartSyncResponse>('/api/cart', { userId })
 
-          const res = await apiClient.rawPost('/api/cart?merge=true', { items: mergeItems })
-          const data = await res.json()
+          if (serverRes.success && Array.isArray(serverRes.data)) {
+            const serverItems = serverRes.data.map((raw: Record<string, unknown>) => mapServerCartItem(raw))
 
-          if (data.success) {
-            // Merge succeeded — re-fetch from server to get the authoritative state
-            await get().syncFromServer(userId)
+            // Only merge items that DON'T exist on the server (genuinely new local additions)
+            const newItems = localItems.filter(localItem =>
+              !serverItems.some(serverItem =>
+                serverItem.productId === localItem.productId &&
+                serverItem.variantId === (localItem.variantId || null)
+              )
+            )
+
+            if (newItems.length > 0) {
+              const mergeItems = newItems.map((item) => ({
+                productId: item.productId,
+                variantId: item.variantId || null,
+                quantity: item.quantity,
+              }))
+              await apiClient.rawPost('/api/cart?merge=true', { items: mergeItems })
+            }
+
+            // Replace local state with server state (authoritative)
+            set({ items: serverItems, isSyncing: false })
           } else {
-            logger.warn({ component: 'cart', error: data.error }, 'Cart merge failed')
-            set({ isSyncing: false })
+            // Fallback: no server data, just sync from server
+            await get().syncFromServer(userId)
           }
         } catch (error) {
           logger.warn({ component: 'cart', err: error }, 'Cart merge: network error')

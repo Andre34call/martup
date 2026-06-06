@@ -18,7 +18,7 @@ import {
 } from "./shared"
 import type { CartItem, ShippingOption, Address } from "@/lib/types"
 import { logger } from '@/lib/logger'
-import { useState, useMemo, useEffect, useCallback } from "react"
+import { useState, useMemo, useEffect, useCallback, useRef } from "react"
 import { openSnapPayment } from '@/lib/midtrans'
 import { apiClient } from '@/lib/api-client'
 
@@ -351,6 +351,7 @@ export function CheckoutScreen() {
   const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [orderNumber, setOrderNumber] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
+  const isPayingRef = useRef(false) // Double-submit prevention lock
   const [shippingRatesBySeller, setShippingRatesBySeller] = useState<Record<string, ShippingOption[]>>({})
   const [isLoadingRates, setIsLoadingRates] = useState<Record<string, boolean>>({})
   const [shippingError, setShippingError] = useState<Record<string, string>>({})
@@ -363,7 +364,7 @@ export function CheckoutScreen() {
   const checkedCount = getCheckedCount()
 
   // Find default address
-  const defaultAddress = addresses.find(a => a.id === (selectedAddressId || 'a1')) || addresses[0] || null
+  const defaultAddress = addresses.find(a => a.id === selectedAddressId) || addresses[0] || null
 
   // Group items by seller
   const groupedBySeller = useMemo(() => {
@@ -455,6 +456,9 @@ export function CheckoutScreen() {
   // Re-fetch rates when address changes (different city)
   useEffect(() => {
     if (!defaultAddress || groupedBySeller.length === 0) return
+
+    // Clear previous shipping selections when address changes
+    setShippingBySeller({})
 
     groupedBySeller.forEach(group => {
       const sellerId = group.seller.id
@@ -594,10 +598,14 @@ export function CheckoutScreen() {
       }
     }
 
+    // Double-submit prevention: use ref as synchronous lock
+    if (isPayingRef.current) return
+    isPayingRef.current = true
+
     setIsProcessing(true)
 
-    const newOrderNumber = `ORD-${Date.now()}`
-    setOrderNumber(newOrderNumber)
+    // Capture item IDs to remove at the start (prevents stale closure issues)
+    const itemIdsToRemove = checkedItems.map(i => i.id)
 
     try {
       // ==================== Create orders via API ====================
@@ -625,6 +633,7 @@ export function CheckoutScreen() {
           platformFee,
           totalAmount: groupTotal,
           paymentMethod: PAYMENT_METHODS.find(m => m.id === selectedPayment)?.name || selectedPayment,
+          voucherCode: selectedVoucher?.code || undefined,
           items: group.items.map((item) => ({
             productId: item.productId,
             variantId: item.variant?.id || null,
@@ -701,6 +710,11 @@ export function CheckoutScreen() {
           }
         } catch (error) {
           logger.warn({ component: 'checkout', err: error }, 'Order creation failed')
+          // Stop processing — don't silently continue with partial orders
+          showToast('Gagal membuat pesanan. Silakan coba lagi.', 'error')
+          setIsProcessing(false)
+          isPayingRef.current = false
+          return
         }
       }
 
@@ -736,14 +750,15 @@ export function CheckoutScreen() {
         }
 
         // Update local wallet balance — ONLY if wallet payment succeeded
+        // Use sum of per-order totals (matches what server actually debited)
         if (walletPaymentSuccess) {
-          deductWallet(Math.max(0, totalAmount), 'Pembayaran pesanan via MartUp Pay')
+          const actualDebited = createdOrders.reduce((sum, o) => sum + o.totalAmount, 0)
+          deductWallet(Math.max(0, actualDebited), 'Pembayaran pesanan via MartUp Pay')
         }
 
-        // BUG 10 FIX: Remove cart items only after wallet payment succeeds
+        // Remove cart items only after wallet payment succeeds
         if (walletPaymentSuccess) {
-          const checkedItemIds = checkedItems.map(i => i.id)
-          checkedItemIds.forEach(id => removeItem(id))
+          itemIdsToRemove.forEach(id => removeItem(id))
         }
 
         setIsProcessing(false)
@@ -762,17 +777,11 @@ export function CheckoutScreen() {
         // Midtrans / Card payment: open Snap popup for each seller order
         if (selectedVoucher) markVoucherUsed(selectedVoucher.id)
 
-        // BUG 10 FIX: Remove cart items after Midtrans payment creation succeeds
-        // (user is redirected to pay, so order is committed)
-        if (createdOrders.length > 0) {
-          const checkedItemIds = checkedItems.map(i => i.id)
-          checkedItemIds.forEach(id => removeItem(id))
-        }
-
         if (createdOrders.length > 0) {
           try {
             let allSuccess = true
             let anyPending = false
+            let cartRemoved = false
 
             // Process each order's payment sequentially
             // (Each seller gets their own Midtrans transaction)
@@ -790,10 +799,19 @@ export function CheckoutScreen() {
                 const snapResult = await openSnapPayment(paymentData.data.token)
 
                 if (snapResult.status === 'success') {
-                  // Continue to next order
+                  // Remove cart items after first successful payment
+                  if (!cartRemoved) {
+                    itemIdsToRemove.forEach(id => removeItem(id))
+                    cartRemoved = true
+                  }
                 } else if (snapResult.status === 'pending') {
                   anyPending = true
                   allSuccess = false
+                  // Remove cart items after pending payment (order committed, user will pay later)
+                  if (!cartRemoved) {
+                    itemIdsToRemove.forEach(id => removeItem(id))
+                    cartRemoved = true
+                  }
                   // Save payment reference from Snap result so buyer can see VA number / payment code later
                   try {
                     const ref = extractPaymentReference(snapResult.result)
@@ -807,6 +825,7 @@ export function CheckoutScreen() {
                 } else if (snapResult.status === 'closed') {
                   allSuccess = false
                   // User closed popup — stop processing remaining orders
+                  // Don't remove cart — user may want to retry
                   showToast('Pembayaran dibatalkan. Anda bisa membayar nanti dari halaman pesanan.', 'warning')
                   break
                 } else {
@@ -849,8 +868,7 @@ export function CheckoutScreen() {
           if (selectedVoucher) markVoucherUsed(selectedVoucher.id)
 
           // Remove cart items only after orders are confirmed created
-          const checkedItemIds = checkedItems.map(i => i.id)
-          checkedItemIds.forEach(id => removeItem(id))
+          itemIdsToRemove.forEach(id => removeItem(id))
 
           setIsProcessing(false)
           showToast('Pesanan dibuat! Silakan transfer ke rekening MartUp dan upload bukti pembayaran.', 'success')
@@ -868,8 +886,7 @@ export function CheckoutScreen() {
         if (selectedVoucher) markVoucherUsed(selectedVoucher.id)
 
         // Remove cart items for COD (no payment step needed)
-        const checkedItemIds = checkedItems.map(i => i.id)
-        checkedItemIds.forEach(id => removeItem(id))
+        itemIdsToRemove.forEach(id => removeItem(id))
 
         setIsProcessing(false)
         setShowSuccessModal(true)
@@ -882,6 +899,8 @@ export function CheckoutScreen() {
       logger.warn({ component: 'checkout', err: error }, 'Checkout error')
       showToast('Terjadi kesalahan saat checkout. Silakan coba lagi.', 'error')
       setIsProcessing(false)
+    } finally {
+      isPayingRef.current = false
     }
   }
 
