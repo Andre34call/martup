@@ -1,5 +1,55 @@
 ---
 Task ID: 1
+Agent: Checkout Cleanup Agent
+Task: Remove bank_transfer/escrow payment method, fix UI bugs, and update API error message
+
+Work Log:
+- Read all target files (checkout-screen.tsx, cart-screen.tsx, order-screen.tsx, payment/create/route.ts)
+- Identified all bank_transfer/escrow-related code across the codebase
+- Systematically removed escrow features while keeping wallet escrow logic intact
+
+Fixes Applied:
+
+1. checkout-screen.tsx:
+   - Removed bank_transfer from PAYMENT_METHODS array
+   - Removed state variables: escrowBankAccounts, isLoadingBankAccounts, copiedAccountId
+   - Removed useEffect for fetching bank accounts from /api/settings/bank-accounts
+   - Removed handleCopyAccountNumber function
+   - Removed bank_transfer branch in handlePay (entire else-if block)
+   - Removed Bank Account Info JSX section (selectedPayment === 'bank_transfer' block)
+   - Removed teal color mapping from payment method icon rendering
+   - Removed 'escrow' text from jasa service notice ("ditahan (escrow)" → "ditahan")
+   - Fixed bottom CTA bar width: changed from left-0 right-0 to left-1/2 -translate-x-1/2 w-full max-w-[430px]
+   - Removed inner mx-auto max-w wrapper div
+   - Fixed auto-incrementing quantity bug: changed whileTap={{ scale: 0.9 }} to whileHover={{ scale: 1.05 }} on +/- buttons
+   - Cleaned up unused imports: Building2, Landmark, Copy, CheckCircle
+
+2. cart-screen.tsx:
+   - Fixed bottom bar width: changed from left-0 right-0 to left-1/2 -translate-x-1/2 w-full max-w-[430px]
+   - Removed inner mx-auto max-w wrapper div, moved children up
+
+3. order-screen.tsx:
+   - Removed escrowBankAccounts state
+   - Removed isUploadingProof state
+   - Removed isEscrowOrder logic
+   - Removed fetchBankAccounts callback and its useEffect
+   - Removed handleUploadPaymentProof function
+   - Removed escrow/bank_transfer check in OrderCard "Bayar" button handler
+   - Removed bank account display section in OrderDetail
+   - Removed proof image display section for escrow orders
+   - Merged isEscrowOrder-conditional action buttons into single conditions
+   - Cleaned up unused imports: Landmark, Upload, ImagePlus, CheckCircle, Landmark as BankIcon
+
+4. payment/create/route.ts:
+   - Changed error message from "Silakan gunakan metode Transfer Bank atau hubungi admin." to "Silakan hubungi admin."
+
+Verification:
+- bun run lint: passes with no errors
+- Dev server: running correctly on port 3000
+
+---
+
+Task ID: 1
 Agent: Main Agent
 Task: Fix checkout payment flow bugs - user can't see bank account info, false "Selesai Dibayar" message
 
@@ -126,3 +176,46 @@ Infrastructure additions:
 
 Lint: Passed with no errors
 Dev server: Running correctly
+
+---
+Task ID: 3
+Agent: Main Agent
+Task: Remove manual escrow/bank_transfer payment, fix bottom CTA bar width, fix auto-incrementing quantity
+
+Work Log:
+- Analyzed screenshot showing bottom buttons wider than header
+- Read all checkout-related files (checkout-screen, cart-screen, order-screen, payment/create API)
+- Identified escrow/bank_transfer as manual payment method not through Midtrans
+- Delegated comprehensive fix to full-stack developer agent
+
+Changes Applied:
+
+1. checkout-screen.tsx:
+   - Removed bank_transfer from PAYMENT_METHODS (4 methods remain: wallet, midtrans, card, cod)
+   - Removed escrow state variables, useEffect, handleCopyAccountNumber
+   - Removed bank_transfer branch in handlePay
+   - Removed Bank Account Info JSX section
+   - Removed teal color mapping
+   - Removed "(escrow)" text from jasa service notice
+   - Fixed bottom CTA bar: left-0 right-0 → left-1/2 -translate-x-1/2 w-full max-w-[430px] md:max-w-[480px]
+   - Fixed auto-incrementing quantity: whileTap → whileHover on +/- buttons
+   - Cleaned up unused imports (Building2, Landmark, Copy, CheckCircle)
+
+2. cart-screen.tsx:
+   - Fixed bottom bar width (same centering pattern as checkout)
+
+3. order-screen.tsx:
+   - Removed escrowBankAccounts state, isUploadingProof, isEscrowOrder
+   - Removed fetchBankAccounts, handleUploadPaymentProof
+   - Removed escrow/bank_transfer check in Bayar button handler
+   - Removed bank account display in OrderDetail
+   - Cleaned up unused imports
+
+4. payment/create/route.ts:
+   - Removed "Transfer Bank" from error message
+
+Stage Summary:
+- All payments now through Midtrans (wallet, transfer VA/e-wallet, card) or COD
+- Bottom CTA bars are symmetric with header on all screen sizes
+- Auto-incrementing quantity bug fixed (whileTap → whileHover)
+- Lint passes, dev server running, browser verification successful

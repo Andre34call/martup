@@ -10,8 +10,8 @@ import { useState, useMemo, useCallback, useEffect } from "react"
 import {
   ArrowLeft, Package, CreditCard, Truck, CheckCircle2, Star,
   ChevronRight, MapPin, Clock, ShoppingBag, RotateCcw, Copy,
-  Phone, MessageCircle, Store, Wallet, Receipt, Landmark, Upload, ImagePlus, CheckCircle,
-  Image as ImageIcon, Timer, Landmark as BankIcon, QrCode
+  Phone, MessageCircle, Store, Wallet, Receipt,
+  Image as ImageIcon, Timer, QrCode
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -356,12 +356,6 @@ function OrderCard({ order, onTap }: { order: Order; onTap: () => void }) {
                     return
                   }
 
-                  // Escrow / bank_transfer: navigate to order detail for bank info & proof upload
-                  if (paymentMethod.includes('escrow') || paymentMethod.includes('bank_transfer')) {
-                    onTap()
-                    return
-                  }
-
                   const result = await payForOrder(order.id)
                   if (result?.token) {
                     // Midtrans payment — open Snap popup
@@ -445,14 +439,11 @@ function OrderCard({ order, onTap }: { order: Order; onTap: () => void }) {
 function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
   const { showToast, updateOrderStatus, setSelectedOrder, navigate, setSelectedChatRoom, chatRooms, payForOrder, cancelOrder, products, fetchOrders } = useAppStore()
   const [showCancelDialog, setShowCancelDialog] = useState(false)
-  const [escrowBankAccounts, setEscrowBankAccounts] = useState<{ bankName: string; accountNumber: string; accountHolder: string }[]>([])
-  const [isUploadingProof, setIsUploadingProof] = useState(false)
   const [isConfirmingService, setIsConfirmingService] = useState(false)
   const [serviceProofData, setServiceProofData] = useState<ServiceProofData | null>(null)
   const [isLoadingServiceProof, setIsLoadingServiceProof] = useState(false)
   const { addItem } = useCartStore()
   const activeStep = getActiveStep(order)
-  const isEscrowOrder = order.paymentMethod?.toLowerCase().includes('escrow') || order.paymentMethod?.toLowerCase().includes('bank_transfer')
   const isMidtransPayment = (order.paymentMethod?.toLowerCase().includes('midtrans') ||
     order.paymentMethod?.toLowerCase().includes('transfer') ||
     order.paymentMethod?.toLowerCase().includes('ewallet') ||
@@ -461,8 +452,7 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
     order.paymentMethod?.toLowerCase().includes('shopeepay') ||
     order.paymentMethod?.toLowerCase().includes('qris') ||
     order.paymentMethod?.toLowerCase().includes('kartu') ||
-    order.paymentMethod?.toLowerCase().includes('card')) &&
-    !isEscrowOrder
+    order.paymentMethod?.toLowerCase().includes('card'))
   const paymentRef = parsePaymentReference(order.paymentReference)
   const showPaymentRef = isMidtransPayment &&
     (order.paymentStatus === 'unpaid' || order.paymentStatus === 'pending') &&
@@ -488,79 +478,6 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
   // The proof images to display — prefer API data, fall back to order data
   const proofImages = serviceProofData?.proofImages || order.serviceProofImages || []
   const autoConfirmAt = serviceProofData?.autoConfirmAt || order.autoConfirmAt
-
-  // Fetch MartUp bank accounts for escrow orders
-  const fetchBankAccounts = useCallback(async () => {
-    try {
-      const data = await apiClient.get<{ success: boolean; data: { bankName: string; accountNumber: string; accountHolder: string }[] }>('/api/settings/bank-accounts')
-      if (data.success && data.data) {
-        setEscrowBankAccounts(data.data)
-      }
-    } catch {
-      // silently fail
-    }
-  }, [])
-
-  // Fetch bank accounts when escrow order needs payment
-  useEffect(() => {
-    if (isEscrowOrder && (order.paymentStatus === 'unpaid' || order.paymentStatus === 'pending_verification')) {
-      fetchBankAccounts()
-    }
-  }, [isEscrowOrder, order.paymentStatus])
-
-  // Upload payment proof for escrow orders
-  const handleUploadPaymentProof = useCallback(async () => {
-    const input = document.createElement('input')
-    input.type = 'file'
-    input.accept = 'image/*'
-    input.onchange = async (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0]
-      if (!file) return
-      if (file.size > 5 * 1024 * 1024) {
-        showToast('Ukuran file maksimal 5MB', 'error')
-        return
-      }
-
-      setIsUploadingProof(true)
-      try {
-        // Upload image
-        const formData = new FormData()
-        formData.append('file', file)
-        formData.append('bucket', 'reviews')
-        formData.append('folder', 'images')
-        const uploadData = await apiClient.upload<{ success: boolean; data?: { url: string }; error?: string }>('/api/upload', formData)
-        if (!uploadData.success || !uploadData.data?.url) {
-          showToast(uploadData.error || 'Gagal upload bukti pembayaran', 'error')
-          return
-        }
-
-        // Prompt for bank name
-        const bankName = prompt('Masukkan nama bank pengirim (contoh: BCA, Mandiri):')
-        if (!bankName?.trim()) {
-          showToast('Nama bank wajib diisi', 'error')
-          return
-        }
-
-        // Submit payment proof
-        const confirmData = await apiClient.post<{ success: boolean; error?: string }>(`/api/orders/${order.id}/confirm-payment`, {
-          proofUrl: uploadData.data.url,
-          bankName: bankName.trim(),
-        })
-        if (confirmData.success) {
-          showToast('Bukti pembayaran berhasil diupload! Menunggu verifikasi admin.', 'success')
-          // Update local order
-          updateOrderStatus(order.id, order.status)
-        } else {
-          showToast(confirmData.error || 'Gagal mengirim bukti pembayaran', 'error')
-        }
-      } catch (err) {
-        showToast('Terjadi kesalahan saat upload bukti', 'error')
-      } finally {
-        setIsUploadingProof(false)
-      }
-    }
-    input.click()
-  }, [order.id, order.status, showToast, updateOrderStatus])
 
   // Confirm service completion via API
   const handleConfirmService = useCallback(async () => {
@@ -1152,85 +1069,6 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
           </div>
         )}
 
-        {/* Pembayaran Transfer — show for bank_transfer orders */}
-        {isEscrowOrder && order.paymentStatus !== 'paid' && (
-          <div className="px-4 pb-4">
-            <div className="bg-amber-50 dark:bg-amber-950/30 rounded-xl border border-amber-200 dark:border-amber-800/50 p-4">
-              <h3 className="text-sm font-bold text-foreground mb-2 flex items-center gap-2">
-                <Landmark className="w-4 h-4 text-amber-600" />
-                Pembayaran Transfer
-              </h3>
-              <p className="text-xs text-muted-foreground mb-3">
-                Transfer ke rekening MartUp. Dana akan ditahan sampai Anda konfirmasi barang diterima.
-              </p>
-
-              {order.paymentStatus === 'unpaid' && (
-                <>
-                  <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-2">Rekening Tujuan:</p>
-                  {escrowBankAccounts.length > 0 ? escrowBankAccounts.map((acc, idx) => (
-                    <div key={idx} className="bg-white dark:bg-card rounded-lg p-3 mb-2 border border-amber-100 dark:border-amber-900/50">
-                      <p className="text-sm font-bold text-foreground">{acc.bankName}</p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <p className="text-lg font-mono font-bold text-foreground">{acc.accountNumber}</p>
-                        <button
-                          onClick={() => { navigator.clipboard?.writeText(acc.accountNumber); showToast('Nomor rekening disalin!', 'success') }}
-                          className="p-1 rounded hover:bg-muted transition-colors"
-                        >
-                          <Copy className="w-3.5 h-3.5 text-muted-foreground" />
-                        </button>
-                      </div>
-                      <p className="text-xs text-muted-foreground">a.n. {acc.accountHolder}</p>
-                    </div>
-                  )) : (
-                    <p className="text-xs text-muted-foreground">Belum ada rekening MartUp. Hubungi admin.</p>
-                  )}
-                  <div className="mt-3 p-2 bg-amber-100/50 dark:bg-amber-900/20 rounded-lg">
-                    <p className="text-xs font-bold text-amber-800 dark:text-amber-300">Total Transfer: {formatPrice(order.totalAmount)}</p>
-                  </div>
-                  <Button
-                    className="w-full mt-3 h-10 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold"
-                    onClick={handleUploadPaymentProof}
-                    disabled={isUploadingProof}
-                  >
-                    {isUploadingProof ? (
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                    ) : (
-                      <Upload className="w-4 h-4 mr-2" />
-                    )}
-                    {isUploadingProof ? 'Mengupload...' : 'Upload Bukti Transfer'}
-                  </Button>
-                </>
-              )}
-
-              {order.paymentStatus === 'pending_verification' && (
-                <div className="flex items-center gap-2 p-3 bg-amber-100/50 dark:bg-amber-900/20 rounded-lg">
-                  <Clock className="w-5 h-5 text-amber-600 flex-shrink-0" />
-                  <div>
-                    <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">Menunggu Verifikasi</p>
-                    <p className="text-[10px] text-muted-foreground">Bukti transfer Anda sedang diverifikasi admin MartUp.</p>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Show proof image if already uploaded */}
-        {isEscrowOrder && order.paymentProof && (
-          <div className="px-4 pb-4">
-            <div className="bg-card rounded-xl border border-border/50 p-4">
-              <h3 className="text-sm font-bold text-foreground mb-2 flex items-center gap-2">
-                <CheckCircle className="w-4 h-4 text-emerald-500" />
-                Bukti Pembayaran
-              </h3>
-              <img src={order.paymentProof} alt="Bukti transfer" className="w-full rounded-lg border border-border/30 max-h-48 object-cover" />
-              {order.paymentBankName && (
-                <p className="text-xs text-muted-foreground mt-2">Bank pengirim: {order.paymentBankName}</p>
-              )}
-            </div>
-          </div>
-        )}
-
         {/* Order Info */}
         <div className="px-4 pb-4">
           <div className="bg-card rounded-xl border border-border/50 p-4">
@@ -1267,7 +1105,7 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
 
         {/* Action Button */}
         <div className="px-4 pb-4 space-y-3">
-          {order.status === "pending" && !isEscrowOrder && (
+          {order.status === "pending" && (
             <>
               <PrimaryButton
                 className="w-full h-12 rounded-xl text-sm font-semibold"
@@ -1302,18 +1140,8 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
               </PrimaryButton>
             </>
           )}
-          {/* Bank transfer orders: cancel button only (payment via upload proof in transfer section above) */}
-          {order.status === "pending" && isEscrowOrder && (
-            <Button
-              variant="outline"
-              className="w-full h-12 rounded-xl text-red-500 border-red-200 dark:border-red-900/50 hover:bg-red-50 dark:hover:bg-red-900/20 text-sm font-semibold"
-              onClick={() => setShowCancelDialog(true)}
-            >
-              Batalkan Pesanan
-            </Button>
-          )}
-          {/* Non-escrow pending orders: cancel button */}
-          {order.status === "pending" && !isEscrowOrder && (
+          {/* Pending orders: cancel button */}
+          {order.status === "pending" && (
             <Button
               variant="outline"
               className="w-full h-12 rounded-xl text-red-500 border-red-200 dark:border-red-900/50 hover:bg-red-50 dark:hover:bg-red-900/20 text-sm font-semibold"

@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
     if (!MIDTRANS_SERVER_KEY) {
       logger.error('MIDTRANS_SERVER_KEY not configured — cannot create payment')
       return NextResponse.json(
-        { success: false, error: 'Pembayaran Midtrans belum dikonfigurasi. Silakan gunakan metode Transfer Bank atau hubungi admin.' },
+        { success: false, error: 'Pembayaran Midtrans belum dikonfigurasi. Silakan hubungi admin.' },
         { status: 503 }
       )
     }

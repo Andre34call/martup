@@ -4,8 +4,8 @@ import { motion, AnimatePresence } from "framer-motion"
 import {
   MapPin, ChevronRight, Truck, Ticket, CreditCard, Wallet,
   Check, ShoppingBag, Clock, BadgeCheck, ArrowRight,
-  ShieldCheck, Info, Banknote, Smartphone, AlertTriangle, Building2, RefreshCw,
-  Plus, Minus, Trash2, Landmark, Copy, CheckCircle
+  ShieldCheck, Info, Banknote, Smartphone, AlertTriangle, RefreshCw,
+  Plus, Minus, Trash2
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -29,7 +29,7 @@ export function extractPaymentReference(result: Record<string, unknown> | undefi
   if (!result) return null
   const ref: Record<string, unknown> = {}
 
-  // VA numbers (bank_transfer)
+  // VA numbers
   const vaNumbers = result.va_numbers as Array<{ bank: string; va_number: string }> | undefined
   if (vaNumbers && vaNumbers.length > 0) {
     ref.va_numbers = vaNumbers
@@ -142,7 +142,6 @@ const PAYMENT_METHODS = [
   { id: "wallet", name: "MartUp Pay", icon: Wallet, description: "Bayar cepat dari saldo", color: "emerald" },
   { id: "midtrans", name: "Transfer & E-Wallet", icon: Smartphone, description: "VA, GoPay, OVO, Dana, ShopeePay", color: "blue" },
   { id: "card", name: "Kartu Kredit/Debit", icon: CreditCard, description: "Visa, Mastercard, JCB", color: "purple" },
-  { id: "bank_transfer", name: "Transfer Bank", icon: Building2, description: "Transfer ke rekening MartUp — dana aman sampai barang diterima", color: "teal" },
   { id: "cod", name: "Bayar di Tempat (COD)", icon: Banknote, description: "Bayar saat barang diterima", color: "orange" },
 ]
 
@@ -357,10 +356,6 @@ export function CheckoutScreen() {
   const [shippingRatesBySeller, setShippingRatesBySeller] = useState<Record<string, ShippingOption[]>>({})
   const [isLoadingRates, setIsLoadingRates] = useState<Record<string, boolean>>({})
   const [shippingError, setShippingError] = useState<Record<string, string>>({})
-  const [escrowBankAccounts, setEscrowBankAccounts] = useState<{ bankName: string; accountNumber: string; accountHolder: string }[]>([])
-  const [isLoadingBankAccounts, setIsLoadingBankAccounts] = useState(false)
-  const [copiedAccountId, setCopiedAccountId] = useState<string | null>(null)
-
   const checkedItems = getCheckedItems()
   const checkedTotal = getCheckedTotal()
   const checkedCount = getCheckedCount()
@@ -493,30 +488,6 @@ export function CheckoutScreen() {
       }
     })
   }, [defaultAddress?.id, defaultAddress?.city, groupedBySeller.length])
-
-  // Fetch MartUp bank accounts when escrow is selected
-  useEffect(() => {
-    if (selectedPayment === 'bank_transfer' && escrowBankAccounts.length === 0) {
-      setIsLoadingBankAccounts(true)
-      apiClient.get<{ success: boolean; data: { bankName: string; accountNumber: string; accountHolder: string }[] }>('/api/settings/bank-accounts')
-        .then((res) => {
-          if (res.data && Array.isArray(res.data)) {
-            setEscrowBankAccounts(res.data)
-          }
-        })
-        .catch((err) => {
-          logger.warn({ component: 'checkout', err }, 'Failed to fetch bank accounts')
-        })
-        .finally(() => setIsLoadingBankAccounts(false))
-    }
-  }, [selectedPayment, escrowBankAccounts.length])
-
-  const handleCopyAccountNumber = (accountNumber: string, accountId: string) => {
-    navigator.clipboard?.writeText(accountNumber)
-    setCopiedAccountId(accountId)
-    showToast('Nomor rekening disalin!', 'success')
-    setTimeout(() => setCopiedAccountId(null), 2000)
-  }
 
   // Get shipping options for a seller — returns empty array if no rates loaded (no hardcoded fallback)
   const getShippingOptions = useCallback((sellerId: string): ShippingOption[] => {
@@ -887,26 +858,6 @@ export function CheckoutScreen() {
           setIsProcessing(false)
         }
 
-      } else if (selectedPayment === 'bank_transfer') {
-        // Bank transfer: buyer transfers to MartUp bank account
-        // Order stays pending/unpaid — buyer uploads proof later from order detail
-        if (createdOrders.length > 0) {
-          if (selectedVoucher) markVoucherUsed(selectedVoucher.id)
-
-          // Remove cart items only after orders are confirmed created
-          itemIdsToRemove.forEach(id => removeItem(id))
-
-          setIsProcessing(false)
-          showToast('Pesanan dibuat! Silakan transfer ke rekening MartUp dan upload bukti pembayaran.', 'success')
-          // Select the first order and go to order detail
-          const { setSelectedOrder } = useAppStore.getState()
-          setSelectedOrder(createdOrders[0].id)
-          navigate('order-tracking')
-        } else {
-          setIsProcessing(false)
-          showToast('Gagal membuat pesanan. Silakan coba lagi.', 'error')
-        }
-
       } else if (selectedPayment === 'cod') {
         // COD — order stays pending, no payment needed upfront
         if (selectedVoucher) markVoucherUsed(selectedVoucher.id)
@@ -984,7 +935,7 @@ export function CheckoutScreen() {
               <span className="text-sm font-semibold">Tolong Mas (Tanpa Pengiriman)</span>
             </div>
             <p className="text-xs text-emerald-600/70 dark:text-emerald-400/70 mt-1 ml-7">
-              Pesanan Tolong Mas tidak memerlukan alamat pengiriman. Pembayaran akan ditahan (escrow) sampai layanan selesai dan dikonfirmasi.
+              Pesanan Tolong Mas tidak memerlukan alamat pengiriman. Pembayaran akan ditahan sampai layanan selesai dan dikonfirmasi.
             </p>
           </motion.div>
         )}
@@ -1079,7 +1030,7 @@ export function CheckoutScreen() {
                         <div className="flex items-center gap-2 mt-2">
                           <div className="flex items-center bg-muted/50 rounded-lg border border-border/50">
                             <motion.button
-                              whileTap={{ scale: 0.9 }}
+                              whileHover={{ scale: 1.05 }}
                               onClick={() => {
                                 if (item.quantity <= 1) {
                                   removeItem(item.id)
@@ -1098,7 +1049,7 @@ export function CheckoutScreen() {
                             </motion.button>
                             <span className="w-8 text-center text-xs font-bold text-foreground">{item.quantity}</span>
                             <motion.button
-                              whileTap={{ scale: 0.9 }}
+                              whileHover={{ scale: 1.05 }}
                               onClick={() => {
                                 if (!isJasa && item.quantity >= maxStock) {
                                   showToast(`Stok tersedia: ${maxStock}`, "warning")
@@ -1223,14 +1174,12 @@ export function CheckoutScreen() {
                     method.color === 'emerald' ? 'bg-emerald-100 dark:bg-emerald-900/30' :
                     method.color === 'blue' ? 'bg-blue-100 dark:bg-blue-900/30' :
                     method.color === 'purple' ? 'bg-purple-100 dark:bg-purple-900/30' :
-                    method.color === 'teal' ? 'bg-teal-100 dark:bg-teal-900/30' :
                     'bg-orange-100 dark:bg-orange-900/30'
                   }`}>
                     <Icon className={`w-5 h-5 ${
                       method.color === 'emerald' ? 'text-emerald-600' :
                       method.color === 'blue' ? 'text-blue-600' :
                       method.color === 'purple' ? 'text-purple-600' :
-                      method.color === 'teal' ? 'text-teal-600' :
                       'text-orange-600'
                     }`} />
                   </div>
@@ -1251,65 +1200,6 @@ export function CheckoutScreen() {
             })}
           </div>
 
-          {/* Bank Account Info — shown when bank_transfer is selected */}
-          {selectedPayment === 'bank_transfer' && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              className="space-y-3"
-            >
-              <div className="flex items-center gap-2 mt-2">
-                <ShieldCheck className="w-4 h-4 text-amber-500" />
-                <h4 className="text-sm font-bold text-foreground">Rekening MartUp</h4>
-              </div>
-
-              {isLoadingBankAccounts ? (
-                <div className="flex items-center justify-center gap-2 p-4">
-                  <motion.div
-                    animate={{ rotate: 360 }}
-                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                    className="w-5 h-5 border-2 border-amber-500/30 border-t-amber-500 rounded-full"
-                  />
-                  <span className="text-xs text-muted-foreground">Memuat rekening...</span>
-                </div>
-              ) : escrowBankAccounts.length === 0 ? (
-                <div className="p-3 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
-                  <p className="text-xs text-amber-700 dark:text-amber-400">Rekening MartUp belum tersedia. Silakan hubungi admin.</p>
-                </div>
-              ) : (
-                escrowBankAccounts.map((acc, idx) => (
-                  <div key={idx} className="p-3 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <Landmark className="w-4 h-4 text-amber-600" />
-                      <span className="text-sm font-semibold text-foreground">{acc.bankName}</span>
-                    </div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-base font-mono font-bold text-foreground tracking-wider">{acc.accountNumber}</span>
-                      <button
-                        onClick={() => handleCopyAccountNumber(acc.accountNumber, `${idx}`)}
-                        className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors"
-                      >
-                        {copiedAccountId === `${idx}` ? (
-                          <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
-                        ) : (
-                          <Copy className="w-3.5 h-3.5 text-amber-600" />
-                        )}
-                      </button>
-                    </div>
-                    <p className="text-xs text-muted-foreground">a/n <span className="font-medium text-foreground">{acc.accountHolder}</span></p>
-                  </div>
-                ))
-              )}
-
-              <div className="flex items-start gap-2 p-2.5 bg-muted/50 rounded-lg">
-                <Info className="w-3.5 h-3.5 text-amber-500 mt-0.5 flex-shrink-0" />
-                <p className="text-[10px] text-muted-foreground leading-relaxed">
-                  Transfer sesuai total pesanan. Dana akan ditahan MartUp sampai Anda konfirmasi barang diterima.
-                </p>
-              </div>
-            </motion.div>
-          )}
         </motion.div>
 
         {/* Price Summary */}
@@ -1398,8 +1288,7 @@ export function CheckoutScreen() {
       </motion.div>
 
       {/* Sticky Bottom CTA */}
-      <div className="fixed bottom-0 left-0 right-0 z-40">
-        <div className="mx-auto max-w-[430px] md:max-w-[480px]">
+      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 z-40 w-full max-w-[430px] md:max-w-[480px]">
           <div className="glass border-t border-border/50 pb-safe">
             <div className="flex items-center justify-between px-4 py-3">
               <div>
@@ -1429,7 +1318,6 @@ export function CheckoutScreen() {
               </Button>
             </div>
           </div>
-        </div>
       </div>
 
       {/* Success Modal */}
