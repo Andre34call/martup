@@ -1032,11 +1032,13 @@ export function CheckoutScreen() {
                             <motion.button
                               whileHover={{ scale: 1.05 }}
                               onClick={() => {
-                                if (item.quantity <= 1) {
+                                // Read latest quantity from store to avoid stale closure on rapid clicks
+                                const currentQty = useCartStore.getState().items.find(i => i.id === item.id)?.quantity ?? 1
+                                if (currentQty <= 1) {
                                   removeItem(item.id)
                                   showToast("Produk dihapus dari keranjang", "info")
                                 } else {
-                                  updateQuantity(item.id, item.quantity - 1)
+                                  updateQuantity(item.id, currentQty - 1)
                                 }
                               }}
                               className="w-7 h-7 flex items-center justify-center rounded-l-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
@@ -1051,11 +1053,13 @@ export function CheckoutScreen() {
                             <motion.button
                               whileHover={{ scale: 1.05 }}
                               onClick={() => {
-                                if (!isJasa && item.quantity >= maxStock) {
+                                // Read latest quantity from store to avoid stale closure on rapid clicks
+                                const currentQty = useCartStore.getState().items.find(i => i.id === item.id)?.quantity ?? 1
+                                if (!isJasa && currentQty >= maxStock) {
                                   showToast(`Stok tersedia: ${maxStock}`, "warning")
                                   return
                                 }
-                                updateQuantity(item.id, item.quantity + 1)
+                                updateQuantity(item.id, currentQty + 1)
                               }}
                               disabled={!isJasa && item.quantity >= maxStock}
                               className="w-7 h-7 flex items-center justify-center rounded-r-lg hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
