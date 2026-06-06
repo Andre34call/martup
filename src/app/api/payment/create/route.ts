@@ -261,58 +261,100 @@ export async function POST(request: NextRequest) {
     }
 
     // Step 10: Build Midtrans Snap payload
+    // CRITICAL: Midtrans strictly validates that gross_amount equals the sum of
+    // all item_details (price × quantity). We compute gross_amount FROM the
+    // item_details sum to guarantee they match, rather than using order.totalAmount
+    // which might differ due to Decimal→Number conversion rounding.
+
+    const itemDetails = [
+      ...order.items.map((item) => ({
+        id: item.productId,
+        price: Math.round(Number(item.price)), // Ensure integer for IDR
+        quantity: item.quantity,
+        name: item.productName.substring(0, 50),
+      })),
+      {
+        id: 'shipping',
+        price: Math.round(Number(order.shippingCost)),
+        quantity: 1,
+        name: 'Ongkos Kirim',
+      },
+      ...(Number(order.discountAmount) > 0
+        ? [
+            {
+              id: 'discount',
+              price: -Math.round(Number(order.discountAmount)), // Negative for discount
+              quantity: 1,
+              name: 'Diskon',
+            },
+          ]
+        : []),
+      ...(Number(order.taxAmount) > 0
+        ? [
+            {
+              id: 'tax',
+              price: Math.round(Number(order.taxAmount)),
+              quantity: 1,
+              name: 'Pajak',
+            },
+          ]
+        : []),
+      ...(Number(order.platformFee) > 0
+        ? [
+            {
+              id: 'platform-fee',
+              price: Math.round(Number(order.platformFee)),
+              quantity: 1,
+              name: 'Biaya Platform',
+            },
+          ]
+        : []),
+    ]
+
+    // Compute gross_amount FROM item_details to guarantee exact match
+    // This prevents Midtrans "Bad Request" errors from total mismatch
+    const computedGrossAmount = itemDetails.reduce(
+      (sum, item) => sum + (item.price * item.quantity),
+      0
+    )
+
+    // Cross-check with order.totalAmount — log if there's a discrepancy
+    const orderTotalAmount = Math.round(Number(order.totalAmount))
+    if (computedGrossAmount !== orderTotalAmount) {
+      logger.warn(
+        {
+          orderId: order.id,
+          orderNumber: order.orderNumber,
+          computedGrossAmount,
+          orderTotalAmount,
+          difference: computedGrossAmount - orderTotalAmount,
+          itemDetailsBreakdown: itemDetails.map(i => `${i.id}: ${i.price} × ${i.quantity} = ${i.price * i.quantity}`),
+        },
+        'Midtrans gross_amount mismatch: computed sum differs from order.totalAmount. Using computed sum to avoid Midtrans rejection.'
+      )
+    }
+
+    // Validate gross_amount is positive (Midtrans requirement)
+    if (computedGrossAmount <= 0) {
+      logger.error(
+        { orderId: order.id, computedGrossAmount, orderTotalAmount },
+        'Midtrans gross_amount is 0 or negative — cannot create transaction'
+      )
+      return NextResponse.json(
+        { success: false, error: 'Total pembayaran tidak valid (Rp 0 atau negatif). Hubungi admin.' },
+        { status: 400 }
+      )
+    }
+
     const midtransPayload = {
       transaction_details: {
         order_id: order.orderNumber,
-        gross_amount: Number(order.totalAmount),
+        gross_amount: computedGrossAmount,
       },
-      item_details: [
-        ...order.items.map((item) => ({
-          id: item.productId,
-          price: Number(item.price),
-          quantity: item.quantity,
-          name: item.productName.substring(0, 50),
-        })),
-        {
-          id: 'shipping',
-          price: Number(order.shippingCost),
-          quantity: 1,
-          name: 'Ongkos Kirim',
-        },
-        ...(Number(order.discountAmount) > 0
-          ? [
-              {
-                id: 'discount',
-                price: -Number(order.discountAmount),
-                quantity: 1,
-                name: 'Diskon',
-              },
-            ]
-          : []),
-        ...(Number(order.taxAmount) > 0
-          ? [
-              {
-                id: 'tax',
-                price: Number(order.taxAmount),
-                quantity: 1,
-                name: 'Pajak',
-              },
-            ]
-          : []),
-        ...(Number(order.platformFee) > 0
-          ? [
-              {
-                id: 'platform-fee',
-                price: Number(order.platformFee),
-                quantity: 1,
-                name: 'Biaya Platform',
-              },
-            ]
-          : []),
-      ],
+      item_details: itemDetails,
       customer_details: {
-        first_name: order.user.name,
-        email: order.user.email,
+        first_name: (order.user.name || 'Customer').substring(0, 50),
+        email: order.user.email || undefined,
         phone: order.user.phone || undefined,
       },
       callbacks: {
@@ -323,6 +365,20 @@ export async function POST(request: NextRequest) {
         notification_url: `${getBaseUrl()}/api/payment/notification`,
       },
     }
+
+    // Log the payload for debugging (mask sensitive data)
+    logger.info(
+      {
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        isProduction: MIDTRANS_IS_PRODUCTION,
+        keyPrefix: MIDTRANS_SERVER_KEY.substring(0, 12) + '...',
+        grossAmount: computedGrossAmount,
+        itemCount: itemDetails.length,
+        snapUrl: SNAP_URL,
+      },
+      'Creating Midtrans Snap transaction'
+    )
 
     const snapResponse = await fetch(SNAP_URL, {
       method: 'POST',
@@ -337,11 +393,49 @@ export async function POST(request: NextRequest) {
     const snapData = await snapResponse.json()
 
     if (!snapResponse.ok) {
-      logger.error({ err: snapData }, 'Midtrans Snap API error')
+      // Detailed error logging for debugging Midtrans issues
+      logger.error(
+        {
+          err: snapData,
+          statusCode: snapResponse.status,
+          statusText: snapResponse.statusText,
+          orderId: order.id,
+          orderNumber: order.orderNumber,
+          isProduction: MIDTRANS_IS_PRODUCTION,
+          keyPrefix: MIDTRANS_SERVER_KEY.substring(0, 12) + '...',
+          grossAmount: computedGrossAmount,
+          itemDetailsCount: itemDetails.length,
+          payload: {
+            order_id: midtransPayload.transaction_details.order_id,
+            gross_amount: midtransPayload.transaction_details.gross_amount,
+            item_count: midtransPayload.item_details.length,
+          },
+        },
+        'Midtrans Snap API error'
+      )
+
+      // Return specific Midtrans error message to help user debug
+      const midtransError = snapData.error_messages?.[0] || snapData.validation_messages?.[0] || ''
+
+      // Common error translations for user-friendly messages
+      let userError = midtransError || 'Gagal membuat transaksi pembayaran via Midtrans.'
+
+      if (midtransError.includes('access denied') || midtransError.includes('unauthorized')) {
+        userError = 'Kunci API Midtrans tidak valid. Pastikan Server Key dan Client Key berasal dari environment yang sama (sandbox/production). Hubungi admin.'
+      } else if (midtransError.includes('order_id') && midtransError.includes('already been taken')) {
+        userError = 'Nomor pesanan sudah digunakan. Coba lagi atau hubungi admin.'
+      } else if (midtransError.includes('gross_amount') || midtransError.includes('item_details')) {
+        userError = 'Detail pembayaran tidak valid. Hubungi admin jika masalah berlanjut.'
+      } else if (midtransError.includes('merchant') && midtransError.includes('not found')) {
+        userError = 'Akun merchant Midtrans belum aktif. Hubungi admin untuk aktivasi.'
+      }
+
       return NextResponse.json(
         {
           success: false,
-          error: snapData.error_messages?.[0] || 'Failed to create payment transaction with Midtrans',
+          error: userError,
+          // Include original error for debugging (admin/support can see server logs)
+          debug: process.env.NODE_ENV === 'development' ? midtransError : undefined,
         },
         { status: 502 }
       )

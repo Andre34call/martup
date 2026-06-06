@@ -195,13 +195,23 @@ export async function POST(request: NextRequest) {
       const snapData = await snapResponse.json()
 
       if (!snapResponse.ok) {
-        logger.error({ err: snapData, midtransOrderId }, 'Midtrans Snap API error for deposit')
+        // Detailed error logging for debugging
+        logger.error({
+          err: snapData,
+          midtransOrderId,
+          statusCode: snapResponse.status,
+          isProduction: MIDTRANS_IS_PRODUCTION,
+          keyPrefix: MIDTRANS_SERVER_KEY.substring(0, 12) + '...',
+          amount,
+          method,
+        }, 'Midtrans Snap API error for deposit')
         // Update deposit status to failed
         await tx.deposit.update({
           where: { id: deposit.id },
           data: { status: 'failed' },
         })
-        throw new Error(snapData.error_messages?.[0] || 'Failed to create Midtrans transaction')
+        const midtransError = snapData.error_messages?.[0] || snapData.validation_messages?.[0] || ''
+        throw new Error(midtransError || 'Failed to create Midtrans transaction')
       }
 
       const { token, redirect_url } = snapData
@@ -257,11 +267,27 @@ export async function POST(request: NextRequest) {
       },
     }), { status: 201 })
   } catch (error: unknown) {
-    if (error instanceof Error && error.message.includes('Failed to create Midtrans')) {
-      return NextResponse.json(
-        { success: false, error: 'Gagal membuat transaksi Midtrans. Coba lagi nanti.' },
-        { status: 502 }
-      )
+    if (error instanceof Error) {
+      const msg = error.message
+      // Midtrans API errors — provide user-friendly translations
+      if (msg.includes('access denied') || msg.includes('unauthorized')) {
+        return NextResponse.json(
+          { success: false, error: 'Kunci API Midtrans tidak valid. Pastikan Server Key dan Client Key dari environment yang sama. Hubungi admin.' },
+          { status: 502 }
+        )
+      }
+      if (msg.includes('already been taken') || msg.includes('order_id')) {
+        return NextResponse.json(
+          { success: false, error: 'ID transaksi sudah digunakan. Coba lagi.' },
+          { status: 502 }
+        )
+      }
+      if (msg.includes('Failed to create Midtrans') || msg.includes('gross_amount') || msg.includes('item_details')) {
+        return NextResponse.json(
+          { success: false, error: 'Gagal membuat transaksi Midtrans. Coba lagi nanti.' },
+          { status: 502 }
+        )
+      }
     }
     logger.error({ err: error }, 'Midtrans Deposit Create POST error')
     return NextResponse.json(
