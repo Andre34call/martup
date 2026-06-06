@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (order.paymentStatus !== 'unpaid' && order.paymentStatus !== 'pending') {
+    if (order.paymentStatus !== 'unpaid' && order.paymentStatus !== 'pending' && order.paymentStatus !== 'cod') {
       return NextResponse.json(
         { success: false, error: `Status pembayaran sudah: ${order.paymentStatus}` },
         { status: 400 }

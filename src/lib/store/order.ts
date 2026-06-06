@@ -142,105 +142,121 @@ export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set
 
     // COD orders don't need payment — reject the call
     const pm = order.paymentMethod?.toLowerCase() || ''
-    if (pm === 'cod' || pm.includes('bayar di tempat')) {
+    const ps = order.paymentStatus?.toLowerCase() || ''
+    if (pm === 'cod' || pm.includes('bayar di tempat') || ps === 'cod') {
       return { token: undefined, redirectUrl: undefined, error: 'Pesanan COD tidak memerlukan pembayaran online. Bayar saat barang diterima.' }
     }
-
-    // Optimistic update: mark as paid locally
-    set((state) => {
-      const currentOrder = state.orders.find(o => o.id === orderId)
-      if (!currentOrder || currentOrder.status !== 'pending') return state
-
-      const sellerCredit = currentOrder.subtotal * (1 - get().commissionRate)
-      let newWalletBalance = state.walletBalance
-      let newWalletMutations = [...state.walletMutations]
-
-      if (currentOrder.paymentMethod?.toLowerCase() === 'wallet') {
-        if (currentOrder.totalAmount > state.walletBalance) return state
-        newWalletBalance = state.walletBalance - currentOrder.totalAmount
-        newWalletMutations = [{
-          id: `wm${Date.now()}`, type: 'debit' as const, amount: currentOrder.totalAmount, balance: newWalletBalance,
-          description: `Pembayaran Order #${currentOrder.orderNumber}`, refType: 'order', createdAt: new Date().toISOString()
-        }, ...state.walletMutations]
-      }
-
-      const newSellerBalance = {
-        ...state.sellerBalance,
-        pendingBalance: state.sellerBalance.pendingBalance + sellerCredit,
-        totalBalance: state.sellerBalance.availableBalance + state.sellerBalance.pendingBalance + sellerCredit + state.sellerBalance.holdBalance,
-      }
-
-      return {
-        orders: state.orders.map(o => o.id === orderId ? {
-          ...o, status: 'paid' as OrderStatus, paymentStatus: 'paid', paidAt: new Date().toISOString(),
-        } : o),
-        walletBalance: newWalletBalance,
-        walletMutations: newWalletMutations,
-        sellerBalance: newSellerBalance,
-      }
-    })
 
     // API call: different flow based on payment method
     try {
       const paymentMethod = order.paymentMethod?.toLowerCase()
 
       if (paymentMethod === 'wallet') {
-        // Wallet payment: deduct via wallet API, then mark order as paid
+        // Wallet payment: use the wallet debit API, then update order status
+        // Optimistic update for wallet payments (immediate confirmation expected)
+        set((state) => {
+          const currentOrder = state.orders.find(o => o.id === orderId)
+          if (!currentOrder || currentOrder.status !== 'pending') return state
+          if (currentOrder.totalAmount > state.walletBalance) return state
+
+          const sellerCredit = currentOrder.subtotal * (1 - get().commissionRate)
+          const newWalletBalance = state.walletBalance - currentOrder.totalAmount
+          const newWalletMutations = [{
+            id: `wm${Date.now()}`, type: 'debit' as const, amount: currentOrder.totalAmount, balance: newWalletBalance,
+            description: `Pembayaran Order #${currentOrder.orderNumber}`, refType: 'order', createdAt: new Date().toISOString()
+          }, ...state.walletMutations]
+          const newSellerBalance = {
+            ...state.sellerBalance,
+            pendingBalance: state.sellerBalance.pendingBalance + sellerCredit,
+            totalBalance: state.sellerBalance.availableBalance + state.sellerBalance.pendingBalance + sellerCredit + state.sellerBalance.holdBalance,
+          }
+
+          return {
+            orders: state.orders.map(o => o.id === orderId ? {
+              ...o, status: 'paid' as OrderStatus, paymentStatus: 'paid', paidAt: new Date().toISOString(),
+            } : o),
+            walletBalance: newWalletBalance,
+            walletMutations: newWalletMutations,
+            sellerBalance: newSellerBalance,
+          }
+        })
+
         try {
-          await apiClient.rawPost('/api/wallet', {
-            userId: order.userId,
-            amount: -Math.max(0, order.totalAmount),
-            type: 'debit',
-            description: `Pembayaran Order #${order.orderNumber}`,
+          // Use the proper wallet debit endpoint
+          const debitRes = await apiClient.rawPost('/api/wallet/debit', {
+            orderId: order.id,
+            amount: order.totalAmount,
+            description: `Pembayaran pesanan via MartUp Pay`,
           })
+          const debitData = await debitRes.json()
+
+          if (!debitRes.ok || !debitData.success) {
+            // Wallet debit failed — rollback optimistic update
+            set(restoreOrders(preSnapshot))
+            return { token: undefined, redirectUrl: undefined, error: debitData.error || 'Saldo tidak mencukupi atau gagal memproses pembayaran wallet.' }
+          }
         } catch {
-          // Wallet deduction API may be deprecated; continue to status update
+          // Wallet debit API failed — rollback
+          set(restoreOrders(preSnapshot))
+          return { token: undefined, redirectUrl: undefined, error: 'Gagal memproses pembayaran wallet. Silakan coba lagi.' }
         }
 
         // Update order status to paid via the status API
-        const statusRes = await apiClient.rawPut(`/api/orders/${orderId}/status`, { status: 'paid' })
-
-        if (!statusRes.ok) {
-          // If marking as paid fails (e.g., non-admin), rollback
-          // Note: wallet payments during checkout are handled separately in checkout-screen
-          // This path is for re-payment attempts
-          set(restoreOrders(preSnapshot))
-          return
+        // Note: Only admin can set status to 'paid', but wallet debit endpoint
+        // should already handle order status update internally.
+        // Try updating status as a fallback.
+        try {
+          const statusRes = await apiClient.rawPut(`/api/orders/${orderId}/status`, { status: 'paid' })
+          if (statusRes.ok) {
+            const statusData = await statusRes.json()
+            if (statusData.success && statusData.data) {
+              const serverOrder = mapOrder(statusData.data as unknown as Parameters<typeof mapOrder>[0])
+              set((state) => ({
+                orders: state.orders.map(o => o.id === orderId ? serverOrder : o),
+              }))
+            }
+          } else {
+            // Status update failed (likely non-admin) — wallet debit may have already handled it
+            // Re-fetch orders to get current server state
+            const userId = get().currentUser?.id
+            if (userId) {
+              try {
+                const data = await apiClient.get<OrdersResponse>('/api/orders', { userId })
+                if (data.success && Array.isArray(data.data)) {
+                  const serverOrders = data.data.map((raw: Record<string, unknown>) => mapOrder(raw as unknown as Parameters<typeof mapOrder>[0]))
+                  set({ orders: serverOrders })
+                }
+              } catch { /* non-critical */ }
+            }
+          }
+        } catch {
+          // Non-critical — wallet debit already processed
         }
 
-        const statusData = await statusRes.json()
-        if (statusData.success && statusData.data) {
-          const serverOrder = mapOrder(statusData.data as unknown as Parameters<typeof mapOrder>[0])
-          set((state) => ({
-            orders: state.orders.map(o => o.id === orderId ? serverOrder : o),
-          }))
-        }
-
-        return
+        return { token: undefined, redirectUrl: undefined }
       }
 
       // Midtrans / card / other payment: create payment token
+      // NO optimistic update for Midtrans — payment is not confirmed until webhook
       const res = await apiClient.rawPost('/api/payment/create', { orderId })
       const data = await res.json()
 
       if (!res.ok || !data.success) {
-        // Rollback optimistic update — payment wasn't actually completed yet
-        set(restoreOrders(preSnapshot))
+        // Payment creation failed — no rollback needed since we didn't do optimistic update
         return { token: undefined, redirectUrl: undefined, error: data.error || 'Gagal memproses pembayaran' }
       }
 
-      // For Midtrans payments, the order stays 'pending' until webhook confirms
-      // Rollback the optimistic "paid" status since payment is not yet confirmed
-      set(restoreOrders(preSnapshot))
-
       // Return the payment token for the UI to use (open Midtrans Snap popup)
+      // The order stays 'pending' until Midtrans webhook confirms payment
       return {
         token: data.data?.token,
         redirectUrl: data.data?.redirectUrl,
       }
     } catch {
-      // Rollback on network error
-      set(restoreOrders(preSnapshot))
+      // Rollback on network error (only if we did optimistic update for wallet)
+      if (pm === 'wallet') {
+        set(restoreOrders(preSnapshot))
+      }
       return { token: undefined, redirectUrl: undefined, error: 'Kesalahan jaringan. Silakan coba lagi.' }
     }
   },

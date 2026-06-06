@@ -652,7 +652,7 @@ export function CheckoutScreen() {
         }
 
         const orderStatus = isImmediatePayment ? 'paid' as const : 'pending' as const
-        const orderPaymentStatus = isImmediatePayment ? 'paid' : 'unpaid'
+        const orderPaymentStatus = isImmediatePayment ? 'paid' : (selectedPayment === 'cod' ? 'cod' : 'unpaid')
 
         try {
           const res = await apiClient.rawPost('/api/orders', orderPayload)

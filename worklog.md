@@ -297,3 +297,57 @@ Stage Summary:
 - No more unauthorized error when viewing COD orders
 - Payment method stored as ID in database for consistent detection
 - Display names resolved client-side via getPaymentMethodLabel()
+
+---
+Task ID: 6
+Agent: Main Agent
+Task: Comprehensive checkout/payment audit - Fix all payment method flows (COD, Midtrans, Wallet, Card)
+
+Work Log:
+- Deep audit of entire checkout/payment system: checkout-screen.tsx, order-screen.tsx, payment/create/route.ts, orders/route.ts, store/order.ts, order-status.ts, wallet/debit/route.ts, payment/notification/route.ts
+- Found critical issues in COD, Midtrans, and Wallet payment flows
+- Found "not authorized" error root cause: multiple detection gaps for COD orders
+
+Fixes Applied:
+
+1. **payment/create/route.ts** - Added explicit COD rejection:
+   - Added Step 6.5: Reject COD orders with clear error message before attempting Midtrans payment
+   - Added 'cod' to allowed paymentStatus list for edge cases
+   - This prevents COD orders from accidentally going through Midtrans API
+
+2. **orders/route.ts** - Set paymentStatus='cod' for COD orders:
+   - Changed `paymentStatus: 'unpaid'` to `paymentStatus: (paymentMethod || '').toLowerCase() === 'cod' ? 'cod' : 'unpaid'`
+   - This clearly distinguishes COD orders from unpaid Midtrans orders in the database
+
+3. **order-screen.tsx** - Multiple fixes:
+   - Enhanced `isCodOrder()`: Now also checks `paymentStatus === 'cod'` for robust detection
+   - Fixed `getActionButton()`: Returns null for COD pending orders (no "Bayar" button)
+   - Added COD badge in OrderCard actions: Shows "Bayar di Tempat" badge instead of "Bayar" button
+   - Added `!isCodOrder(order)` guard to `showPaymentRef` to prevent "Bayar Sekarang" inside payment reference section
+
+4. **checkout-screen.tsx** - Fixed COD local order creation:
+   - Changed `orderPaymentStatus` from always 'unpaid' to 'cod' when `selectedPayment === 'cod'`
+   - Local order state now matches server-side paymentStatus
+
+5. **store/order.ts** - Rewrote payForOrder function:
+   - Enhanced COD detection: Also checks `paymentStatus === 'cod'`
+   - Removed optimistic update for Midtrans payments (was incorrectly marking as 'paid' before webhook confirmation)
+   - Fixed wallet payment flow: Uses correct `/api/wallet/debit` endpoint instead of deprecated `/api/wallet`
+   - Added proper error handling with rollback for wallet payments
+   - Added fallback: re-fetches orders from server if status update fails
+
+6. **order-status.ts** - Allow sellers to mark COD orders as paid:
+   - COD sellers can now mark orders as 'paid' (they receive cash on delivery)
+   - Previously only admin could mark orders as paid, blocking the COD flow
+
+7. **wallet/debit/route.ts** - Accept COD paymentStatus:
+   - Added 'cod' to allowed paymentStatus values
+   - Allows switching from COD to wallet payment if user changes mind
+
+Stage Summary:
+- COD flow: Orders created with paymentStatus='cod', no "Bayar"/"Bayar Sekarang" buttons, info banner shown instead
+- Midtrans flow: No more false optimistic 'paid' status, proper Snap token flow
+- Wallet flow: Fixed to use correct debit API, proper rollback on failure
+- Card flow: Handled same as Midtrans through payment/create endpoint
+- All payment methods have proper end-to-end flow with security
+- Lint: Passed

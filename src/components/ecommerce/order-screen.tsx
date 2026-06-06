@@ -22,7 +22,8 @@ import { apiClient } from "@/lib/api-client"
 /** Check if an order uses Cash on Delivery (COD) */
 function isCodOrder(order: Order): boolean {
   const pm = order.paymentMethod?.toLowerCase() || ''
-  return pm === 'cod' || pm.includes('bayar di tempat') || pm.includes('cod')
+  const ps = order.paymentStatus?.toLowerCase() || ''
+  return pm === 'cod' || pm.includes('bayar di tempat') || ps === 'cod'
 }
 
 /** Get a human-readable label for the payment method */
@@ -152,6 +153,10 @@ function getActiveStep(order: Order): number {
 function getActionButton(order: Order): { label: string; variant: "default" | "outline"; icon?: React.ReactNode } | null {
   switch (order.status) {
     case "pending":
+      // COD orders don't need online payment — show different action
+      if (isCodOrder(order)) {
+        return null // No primary action for COD pending — info banner is shown instead
+      }
       return { label: "Bayar", variant: "default", icon: <CreditCard className="w-3.5 h-3.5" /> }
     case "shipped":
       if (order.isServiceOrder) {
@@ -327,6 +332,13 @@ function OrderCard({ order, onTap }: { order: Order; onTap: () => void }) {
       {/* Actions */}
       {(primaryBtn || secondaryBtn || order.status === "pending") && (
         <div className="px-4 py-3 border-t border-border/30 flex items-center justify-end gap-2">
+          {/* COD pending: show info badge instead of Bayar button */}
+          {order.status === "pending" && isCodOrder(order) && (
+            <span className="text-[10px] font-medium px-2 py-1 rounded-md bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 flex items-center gap-1">
+              <Banknote className="w-3 h-3" />
+              Bayar di Tempat
+            </span>
+          )}
           {order.status === "pending" && (
             <Button
               size="sm"
@@ -483,7 +495,8 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
   const paymentRef = parsePaymentReference(order.paymentReference)
   const showPaymentRef = isMidtransPayment &&
     (order.paymentStatus === 'unpaid' || order.paymentStatus === 'pending') &&
-    paymentRef
+    paymentRef &&
+    !isCodOrder(order)
 
   // Fetch service proof data for service orders
   useEffect(() => {

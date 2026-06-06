@@ -114,10 +114,20 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Step 6.5: Reject COD orders — they don't go through Midtrans
+    const orderPaymentMethod = (order.paymentMethod || '').toLowerCase()
+    if (orderPaymentMethod === 'cod' || orderPaymentMethod.includes('bayar di tempat')) {
+      return NextResponse.json(
+        { success: false, error: 'Pesanan COD tidak memerlukan pembayaran online. Pembayaran dilakukan saat barang diterima.' },
+        { status: 400 }
+      )
+    }
+
     // Allow both 'unpaid' and 'pending' — Midtrans may send a 'pending' notification
     // when a Snap transaction is created, changing paymentStatus from 'unpaid' to 'pending'.
     // The user should still be able to re-attempt payment in this state.
-    if (order.paymentStatus !== 'unpaid' && order.paymentStatus !== 'pending') {
+    // Also allow 'cod' status for COD orders that were mistakenly sent here.
+    if (order.paymentStatus !== 'unpaid' && order.paymentStatus !== 'pending' && order.paymentStatus !== 'cod') {
       return NextResponse.json(
         { success: false, error: `Order payment status is already: ${order.paymentStatus}` },
         { status: 400 }

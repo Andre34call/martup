@@ -161,8 +161,10 @@ export async function updateOrderStatus(params: {
       }
     }
   } else if (status === 'paid') {
-    if (!isAdmin) {
-      return { success: false, error: 'Hanya admin yang dapat menandai pesanan sebagai dibayar', status: 403 }
+    // For COD orders, sellers can also mark as paid (they receive cash on delivery)
+    const isCodPayment = (order.paymentMethod || '').toLowerCase() === 'cod' || (order.paymentStatus || '').toLowerCase() === 'cod'
+    if (!isAdmin && !(isSeller && isCodPayment)) {
+      return { success: false, error: 'Hanya admin yang dapat menandai pesanan sebagai dibayar' + (isCodPayment ? ', atau penjual untuk pesanan COD' : ''), status: 403 }
     }
   } else if (status === 'processing') {
     if (!isSeller) {

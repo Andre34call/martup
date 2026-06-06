@@ -672,7 +672,7 @@ export async function POST(request: NextRequest) {
           platformFee: serverPlatformFee,
           totalAmount: serverTotalAmount,
           paymentMethod: paymentMethod || null,
-          paymentStatus: 'unpaid',
+          paymentStatus: (paymentMethod || '').toLowerCase() === 'cod' ? 'cod' : 'unpaid',
           note: note || null,
           items: {
             create: serverItems.map((item) => ({
