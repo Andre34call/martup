@@ -5,7 +5,7 @@ import {
   MapPin, ChevronRight, Truck, Ticket, CreditCard, Wallet,
   Check, ShoppingBag, Clock, BadgeCheck, ArrowRight,
   ShieldCheck, Info, Banknote, Smartphone, AlertTriangle, Building2, RefreshCw,
-  Plus, Minus, Trash2
+  Plus, Minus, Trash2, Landmark, Copy, CheckCircle
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -354,6 +354,9 @@ export function CheckoutScreen() {
   const [shippingRatesBySeller, setShippingRatesBySeller] = useState<Record<string, ShippingOption[]>>({})
   const [isLoadingRates, setIsLoadingRates] = useState<Record<string, boolean>>({})
   const [shippingError, setShippingError] = useState<Record<string, string>>({})
+  const [escrowBankAccounts, setEscrowBankAccounts] = useState<{ bankName: string; accountNumber: string; accountHolder: string }[]>([])
+  const [isLoadingBankAccounts, setIsLoadingBankAccounts] = useState(false)
+  const [copiedAccountId, setCopiedAccountId] = useState<string | null>(null)
 
   const checkedItems = getCheckedItems()
   const checkedTotal = getCheckedTotal()
@@ -460,6 +463,30 @@ export function CheckoutScreen() {
       fetchShippingRates(sellerId, defaultAddress.city, weight, group.seller.storeCity)
     })
   }, [defaultAddress?.city])
+
+  // Fetch MartUp bank accounts when escrow is selected
+  useEffect(() => {
+    if (selectedPayment === 'bank_transfer' && escrowBankAccounts.length === 0) {
+      setIsLoadingBankAccounts(true)
+      apiClient.get<{ success: boolean; data: { bankName: string; accountNumber: string; accountHolder: string }[] }>('/api/settings/bank-accounts')
+        .then((res) => {
+          if (res.data && Array.isArray(res.data)) {
+            setEscrowBankAccounts(res.data)
+          }
+        })
+        .catch((err) => {
+          logger.warn({ component: 'checkout', err }, 'Failed to fetch bank accounts')
+        })
+        .finally(() => setIsLoadingBankAccounts(false))
+    }
+  }, [selectedPayment, escrowBankAccounts.length])
+
+  const handleCopyAccountNumber = (accountNumber: string, accountId: string) => {
+    navigator.clipboard?.writeText(accountNumber)
+    setCopiedAccountId(accountId)
+    showToast('Nomor rekening disalin!', 'success')
+    setTimeout(() => setCopiedAccountId(null), 2000)
+  }
 
   // Get shipping options for a seller — returns empty array if no rates loaded (no hardcoded fallback)
   const getShippingOptions = useCallback((sellerId: string): ShippingOption[] => {
@@ -812,11 +839,32 @@ export function CheckoutScreen() {
           setIsProcessing(false)
         }
 
-      } else if (selectedPayment === 'cod' || selectedPayment === 'bank_transfer') {
-        // COD or bank_transfer — order stays pending
+      } else if (selectedPayment === 'bank_transfer') {
+        // Escrow bank transfer: buyer transfers to MartUp bank account
+        // Order stays pending/unpaid — buyer uploads proof later from order detail
         if (selectedVoucher) markVoucherUsed(selectedVoucher.id)
 
-        // BUG 10 FIX: Remove cart items for COD (no payment step needed)
+        // Remove cart items (order is committed)
+        const checkedItemIds = checkedItems.map(i => i.id)
+        checkedItemIds.forEach(id => removeItem(id))
+
+        setIsProcessing(false)
+        // Navigate to order detail where bank accounts are shown + upload proof button
+        if (createdOrders.length > 0) {
+          showToast('Pesanan dibuat! Silakan transfer ke rekening MartUp dan upload bukti pembayaran.', 'success')
+          // Select the first order and go to order detail
+          const { setSelectedOrder } = useAppStore.getState()
+          setSelectedOrder(createdOrders[0].id)
+          navigate('order-tracking')
+        } else {
+          navigate('orders')
+        }
+
+      } else if (selectedPayment === 'cod') {
+        // COD — order stays pending, no payment needed upfront
+        if (selectedVoucher) markVoucherUsed(selectedVoucher.id)
+
+        // Remove cart items for COD (no payment step needed)
         const checkedItemIds = checkedItems.map(i => i.id)
         checkedItemIds.forEach(id => removeItem(id))
 
@@ -834,8 +882,8 @@ export function CheckoutScreen() {
     }
   }
 
-  // Empty state
-  if (checkedItems.length === 0) {
+  // Empty state — only show when NOT processing (cart items removed during payment)
+  if (checkedItems.length === 0 && !isProcessing) {
     return (
       <div className="min-h-screen bg-background">
         <PageHeader title="Checkout" />
@@ -1154,6 +1202,66 @@ export function CheckoutScreen() {
               )
             })}
           </div>
+
+          {/* Escrow Bank Account Info — shown when bank_transfer is selected */}
+          {selectedPayment === 'bank_transfer' && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="space-y-3"
+            >
+              <div className="flex items-center gap-2 mt-2">
+                <ShieldCheck className="w-4 h-4 text-amber-500" />
+                <h4 className="text-sm font-bold text-foreground">Rekening Escrow MartUp</h4>
+              </div>
+
+              {isLoadingBankAccounts ? (
+                <div className="flex items-center justify-center gap-2 p-4">
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                    className="w-5 h-5 border-2 border-amber-500/30 border-t-amber-500 rounded-full"
+                  />
+                  <span className="text-xs text-muted-foreground">Memuat rekening...</span>
+                </div>
+              ) : escrowBankAccounts.length === 0 ? (
+                <div className="p-3 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                  <p className="text-xs text-amber-700 dark:text-amber-400">Rekening MartUp belum tersedia. Silakan hubungi admin.</p>
+                </div>
+              ) : (
+                escrowBankAccounts.map((acc, idx) => (
+                  <div key={idx} className="p-3 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <Landmark className="w-4 h-4 text-amber-600" />
+                      <span className="text-sm font-semibold text-foreground">{acc.bankName}</span>
+                    </div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-base font-mono font-bold text-foreground tracking-wider">{acc.accountNumber}</span>
+                      <button
+                        onClick={() => handleCopyAccountNumber(acc.accountNumber, `${idx}`)}
+                        className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors"
+                      >
+                        {copiedAccountId === `${idx}` ? (
+                          <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+                        ) : (
+                          <Copy className="w-3.5 h-3.5 text-amber-600" />
+                        )}
+                      </button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">a/n <span className="font-medium text-foreground">{acc.accountHolder}</span></p>
+                  </div>
+                ))
+              )}
+
+              <div className="flex items-start gap-2 p-2.5 bg-muted/50 rounded-lg">
+                <Info className="w-3.5 h-3.5 text-amber-500 mt-0.5 flex-shrink-0" />
+                <p className="text-[10px] text-muted-foreground leading-relaxed">
+                  Transfer sesuai total pesanan. Dana akan ditahan MartUp sampai Anda konfirmasi barang diterima.
+                </p>
+              </div>
+            </motion.div>
+          )}
         </motion.div>
 
         {/* Price Summary */}

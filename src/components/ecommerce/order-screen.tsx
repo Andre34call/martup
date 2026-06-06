@@ -356,8 +356,8 @@ function OrderCard({ order, onTap }: { order: Order; onTap: () => void }) {
                     return
                   }
 
-                  // Escrow: navigate to order detail for bank info & proof upload
-                  if (paymentMethod.includes('escrow')) {
+                  // Escrow / bank_transfer: navigate to order detail for bank info & proof upload
+                  if (paymentMethod.includes('escrow') || paymentMethod.includes('bank_transfer')) {
                     onTap()
                     return
                   }
@@ -452,7 +452,7 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
   const [isLoadingServiceProof, setIsLoadingServiceProof] = useState(false)
   const { addItem } = useCartStore()
   const activeStep = getActiveStep(order)
-  const isEscrowOrder = order.paymentMethod?.toLowerCase().includes('escrow')
+  const isEscrowOrder = order.paymentMethod?.toLowerCase().includes('escrow') || order.paymentMethod?.toLowerCase().includes('bank_transfer')
   const isMidtransPayment = (order.paymentMethod?.toLowerCase().includes('midtrans') ||
     order.paymentMethod?.toLowerCase().includes('transfer') ||
     order.paymentMethod?.toLowerCase().includes('ewallet') ||
@@ -502,11 +502,11 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
   }, [])
 
   // Fetch bank accounts when escrow order needs payment
-  useState(() => {
+  useEffect(() => {
     if (isEscrowOrder && (order.paymentStatus === 'unpaid' || order.paymentStatus === 'pending_verification')) {
       fetchBankAccounts()
     }
-  })
+  }, [isEscrowOrder, order.paymentStatus])
 
   // Upload payment proof for escrow orders
   const handleUploadPaymentProof = useCallback(async () => {
@@ -1265,7 +1265,7 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
 
         {/* Action Button */}
         <div className="px-4 pb-4 space-y-3">
-          {order.status === "pending" && (
+          {order.status === "pending" && !isEscrowOrder && (
             <>
               <PrimaryButton
                 className="w-full h-12 rounded-xl text-sm font-semibold"
@@ -1290,21 +1290,35 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
                   } else if (result?.redirectUrl) {
                     window.open(result.redirectUrl, '_blank')
                   } else {
-                    showToast("Pembayaran berhasil diproses!", "success")
+                    // No token and no redirect — payment method not supported or API error
+                    showToast("Gagal memproses pembayaran. Silakan coba lagi nanti.", "error")
                   }
                 }}
               >
                 <CreditCard className="w-4 h-4 mr-2" />
                 Bayar Sekarang
               </PrimaryButton>
-              <Button
-                variant="outline"
-                className="w-full h-12 rounded-xl text-red-500 border-red-200 dark:border-red-900/50 hover:bg-red-50 dark:hover:bg-red-900/20 text-sm font-semibold"
-                onClick={() => setShowCancelDialog(true)}
-              >
-                Batalkan Pesanan
-              </Button>
             </>
+          )}
+          {/* Escrow orders: cancel button only (payment via upload proof in escrow section above) */}
+          {order.status === "pending" && isEscrowOrder && (
+            <Button
+              variant="outline"
+              className="w-full h-12 rounded-xl text-red-500 border-red-200 dark:border-red-900/50 hover:bg-red-50 dark:hover:bg-red-900/20 text-sm font-semibold"
+              onClick={() => setShowCancelDialog(true)}
+            >
+              Batalkan Pesanan
+            </Button>
+          )}
+          {/* Non-escrow pending orders: cancel button */}
+          {order.status === "pending" && !isEscrowOrder && (
+            <Button
+              variant="outline"
+              className="w-full h-12 rounded-xl text-red-500 border-red-200 dark:border-red-900/50 hover:bg-red-50 dark:hover:bg-red-900/20 text-sm font-semibold"
+              onClick={() => setShowCancelDialog(true)}
+            >
+              Batalkan Pesanan
+            </Button>
           )}
           {/* Service order: shipped status — confirm service completion */}
           {order.isServiceOrder && order.status === "shipped" && (
