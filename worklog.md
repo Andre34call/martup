@@ -219,3 +219,26 @@ Stage Summary:
 - Bottom CTA bars are symmetric with header on all screen sizes
 - Auto-incrementing quantity bug fixed (whileTap → whileHover)
 - Lint passes, dev server running, browser verification successful
+
+---
+Task ID: 4
+Agent: Main Agent
+Task: Verify checkout item deletion and deploy to production
+
+Work Log:
+- Read checkout-screen.tsx, cart-screen.tsx, cart store, cart API routes
+- Verified checkout deletion logic: minus button decreases qty, trash icon (when qty=1) removes item
+- Verified cart API DELETE endpoint: authentication + ownership check + delete
+- Verified quantity API: rejects qty < 1 (so reducing to 0 triggers delete instead)
+- Launched browser agent to test checkout deletion flow end-to-end
+- Found stale closure bug on +/- buttons: rapid clicks read same stale quantity value
+- Fixed by reading latest quantity from Zustand store via useCartStore.getState() instead of render cycle value
+- Applied same fix to both minus and plus button click handlers
+- Ran lint: passes with no errors
+- Committed fix: "fix: stale closure bug on checkout +/- quantity buttons"
+- Pushed to origin/main → triggers Vercel deployment
+
+Stage Summary:
+- Checkout item deletion works correctly: minus decreases quantity, trash removes item when qty=1
+- Stale closure bug fixed: rapid +/- clicks now read latest state from store
+- Deployed to production via git push to origin/main
