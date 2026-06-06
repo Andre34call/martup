@@ -11,7 +11,6 @@ import { useAppStore } from "@/lib/store"
 import { apiClient, ApiClientError } from '@/lib/api-client'
 import { fadeIn } from '@/lib/animations'
 import { PageHeader, SectionHeader } from "../shared"
-import { type AuthMeResponse } from "./shared"
 import { useState } from "react"
 
 export function SellerSettings() {
@@ -59,15 +58,17 @@ export function SellerSettings() {
 
   const handleDeleteAccount = async () => {
     try {
-      const data = await apiClient.get<AuthMeResponse>('/api/auth/me')
-      if (data?.user?.id) {
-        await apiClient.rawDelete('/api/admin/users', { userId: data.user.id })
+      const res = await apiClient.rawDelete('/api/user/delete')
+      const data = await res.json()
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Gagal menghapus akun')
       }
-    } catch {
-      // Best effort server-side cleanup
+      deleteAccount()
+      showToast("Akun berhasil dihapus", "success")
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Gagal menghapus akun. Silakan hubungi admin.'
+      showToast(message, "error")
     }
-    deleteAccount()
-    showToast("Akun berhasil dihapus", "success")
   }
 
   return (

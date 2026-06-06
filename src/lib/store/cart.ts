@@ -403,7 +403,7 @@ export const useCartStore = create<CartState>()(
             const newItems = localItems.filter(localItem =>
               !serverItems.some(serverItem =>
                 serverItem.productId === localItem.productId &&
-                serverItem.variantId === (localItem.variantId || null)
+                (serverItem.variantId ?? null) === (localItem.variantId ?? null)
               )
             )
 

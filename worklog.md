@@ -351,3 +351,109 @@ Stage Summary:
 - Card flow: Handled same as Midtrans through payment/create endpoint
 - All payment methods have proper end-to-end flow with security
 - Lint: Passed
+
+---
+Task ID: 7-a
+Agent: Backend Bug Fix Agent
+Task: Fix 4 critical backend bugs (stock restoration, isServiceOrder fallback, API response format, dashboard revenue)
+
+Work Log:
+- Read worklog from prior tasks for context
+- Read all 4 target files: payment/notification/route.ts, order-status.ts, seller/orders/route.ts, seller/dashboard/route.ts
+- Identified root causes for each bug and applied targeted fixes
+
+Fixes Applied:
+
+1. **BUG 1: Midtrans cancel/expire/deny doesn't restore stock**
+   - File: `src/app/api/payment/notification/route.ts`
+   - Problem: When Midtrans sends cancel/expire/deny, order status was updated but stock was NOT restored (unlike order-status.ts which properly restores stock on cancellation)
+   - Fix: Inside the `$transaction` block, after the existing cancellation notification block (Step 6), added:
+     - Stock restoration: iterate through `order.items`, increment `product.stock` by `item.quantity`
+     - Sold count decrement: use `$executeRaw` with `GREATEST(sold - quantity, 0)` to prevent negative
+     - Variant stock restoration: if `item.variantId` exists, increment `productVariant.stock`
+     - Seller pendingBalance reversal: if `order.paymentStatus === 'paid'`, find seller wallet, compute `subtotal - commissionAmount`, decrement from `pendingBalance` using `Math.min` to avoid negative
+     - Record wallet mutation for seller (debit = escrow reversal)
+
+2. **BUG 2: isServiceOrder param never passed in status API**
+   - File: `src/lib/order-status.ts`
+   - Problem: Line 92 checked `if (status === 'shipped' && !isServiceOrder)` but `isServiceOrder` was never passed by callers (e.g., `/api/orders/[id]/status/route.ts`), so service orders always required a tracking number
+   - Fix: Changed the check to `if (status === 'shipped' && !(isServiceOrder ?? order.isServiceOrder))` — uses the passed parameter if available, falls back to the order's `isServiceOrder` field from the database
+   - Also moved the trackingNumber validation block AFTER the order is fetched (since `order.isServiceOrder` needs the order data)
+   - Added comment explaining the parameter is optional with fallback
+
+3. **BUG 3: Seller orders API response format inconsistent**
+   - File: `src/app/api/seller/orders/route.ts`
+   - Problem: Response returned `{ items, total, page, limit, totalPages }` without a `success` field, inconsistent with all other APIs returning `{ success: true, data: ... }`
+   - Fix: Changed response format to `{ success: true, data: parsedOrders, total, page, limit, totalPages }`
+
+4. **BUG 4: Seller dashboard unsafe JSON.parse + wrong revenue metric**
+   - File: `src/app/api/seller/dashboard/route.ts`
+   - Problem 1: Line 157 used `JSON.parse(i.product.images)` without try-catch, could crash on malformed data
+   - Fix: Replaced with `parseJsonField(i.product.images)` from `@/lib/api-utils` (already used in other files)
+   - Problem 2: Revenue aggregate used `_sum: { totalAmount: true }` which includes shipping + platform fee - discount; revenue should use `subtotal` instead
+   - Fix: Changed to `_sum: { subtotal: true }` and updated `totalRevenue = revenueResult._sum.subtotal || 0`
+   - Problem 3: Error responses missing `success: false` field
+   - Fix: Added `success: false` to 404 response and 500 response
+   - Problem 4: Success response missing `success: true` field
+   - Fix: Added `success: true` to the success response
+
+Verification:
+- `bun run lint`: passes with no errors
+- All 4 bugs fixed with targeted, minimal changes
+
+---
+Task ID: 7-b
+Agent: Bug Fix Agent
+Task: Fix 7 critical frontend bugs in MartUp marketplace app
+
+Work Log:
+- Read worklog from previous tasks for context
+- Identified and fixed all 7 bugs across 4 files
+
+Fixes Applied:
+
+1. **BUG 1 — Incomplete rollback in order store** (`src/lib/store/order.ts`):
+   - Replaced `snapshotOrders()` with `snapshotState()` that captures orders, walletBalance, walletMutations, and sellerBalance
+   - Replaced `restoreOrders()` with `restoreState()` that restores all captured state
+   - Updated ALL functions (updateOrderStatus, payForOrder, cancelOrder, updateOrderTracking) to use the new snapshot/restore mechanism
+   - Previously, API failures would only restore the orders array, leaving wallet and seller balance corrupted
+
+2. **BUG 2 — Platform fee overcharge per seller group** (`src/components/ecommerce/checkout-screen.tsx`):
+   - Changed `for...of` loop to indexed `for` loop to track group index
+   - Added `groupPlatformFee = groupIdx === 0 ? platformFee : 0` — platform fee only charged to first seller group
+   - Updated `groupTotal` calculation to use `groupPlatformFee` instead of `platformFee`
+   - Updated order payload `platformFee` field to use `groupPlatformFee`
+   - Previously, 3 seller groups = 3× platform fee charged silently
+
+3. **BUG 3 — Cart merge variantId comparison bug** (`src/lib/store/cart.ts`):
+   - Changed `serverItem.variantId === (localItem.variantId || null)` to `(serverItem.variantId ?? null) === (localItem.variantId ?? null)`
+   - Previously, `undefined === null` was `false`, causing all variant-less products to be re-added as duplicates
+
+4. **BUG 4 — COD cancel incorrectly reverses seller credit** (`src/lib/store/order.ts`):
+   - Added `isCodOrder()` helper function at top of file (same logic as order-screen.tsx)
+   - Changed `wasPaid` check to `!isCodOrder(order) && (order.paymentStatus === 'paid' || ...)`
+   - Previously, COD orders in processing/shipped status would incorrectly deduct seller credit that was never added
+
+5. **BUG 5 — Wallet payment checkout state mismatch** (`src/components/ecommerce/checkout-screen.tsx`):
+   - Changed `orderStatus` from `isImmediatePayment ? 'paid' : 'pending'` to always `'pending'`
+   - Changed `orderPaymentStatus` from `isImmediatePayment ? 'paid' : ...` to `selectedPayment === 'cod' ? 'cod' : 'unpaid'`
+   - Changed `escrowStatus` from `isImmediatePayment ? 'held' : 'none'` to `'none'`
+   - Changed `paidAt` from `isImmediatePayment ? new Date().toISOString() : undefined` to `undefined`
+   - Previously, `addOrder()` with status 'paid' would add seller credit locally, but if wallet debit later failed, state was corrupted
+
+6. **BUG 6 — Seller delete account calls admin API** (`src/components/ecommerce/seller/seller-settings.tsx`):
+   - Changed from `apiClient.get('/api/auth/me')` + `apiClient.rawDelete('/api/admin/users')` to `apiClient.rawDelete('/api/user/delete')`
+   - Now properly checks response status and shows error toast on failure
+   - Removed unused `AuthMeResponse` import
+   - Previously, admin-only endpoint returned 403 for sellers, but catch block swallowed the error and showed false success toast
+
+7. **BUG 7 — Premature toast messages in order screen** (`src/components/ecommerce/order-screen.tsx`):
+   - OrderCard "Terima" button: changed `onClick` to `async`, added `await` before `updateOrderStatus()`
+   - OrderCard cancel button: changed `onClick` to `async`, added `await` before `cancelOrder()`
+   - OrderDetail "Konfirmasi Diterima" button: changed `onClick` to `async`, added `await` before `updateOrderStatus()`
+   - OrderDetail cancel button: changed `onClick` to `async`, added `await` before `cancelOrder()`
+   - Previously, success toasts fired before API confirmed the action, giving false feedback on failures
+
+Verification:
+- `bun run lint`: passes with no errors
+- Dev server: running correctly on port 3000

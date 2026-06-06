@@ -94,7 +94,8 @@ export async function GET(request: NextRequest) {
     }))
 
     return NextResponse.json({
-      items: parsedOrders,
+      success: true,
+      data: parsedOrders,
       total,
       page,
       limit,

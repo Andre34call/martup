@@ -379,8 +379,61 @@ export async function POST(request: NextRequest) {
         })
       }
 
-      // Step 6: On cancellation/expiry, create notification
+      // Step 6: On cancellation/expiry, restore stock and create notification
       if (newOrderStatus === 'cancelled') {
+        // Restore product stock for all order items
+        for (const item of order.items) {
+          await tx.product.update({
+            where: { id: item.productId },
+            data: { stock: { increment: item.quantity } },
+          })
+
+          // Decrement sold count safely (prevent going negative)
+          await tx.$executeRaw`UPDATE "Product" SET sold = GREATEST(sold - ${item.quantity}, 0) WHERE id = ${item.productId}`
+
+          // Restore variant stock if applicable
+          if (item.variantId) {
+            await tx.productVariant.update({
+              where: { id: item.variantId },
+              data: { stock: { increment: item.quantity } },
+            })
+          }
+        }
+
+        // If order was previously paid (had seller payout), reverse the seller's pendingBalance
+        if (order.paymentStatus === 'paid') {
+          const sellerWallet = await tx.wallet.findUnique({
+            where: { userId: order.seller.userId },
+          })
+
+          if (sellerWallet) {
+            const subtotal = Number(order.subtotal)
+            const commissionRate = Number(order.seller.commissionRate)
+            const commissionAmount = Math.round(subtotal * commissionRate)
+            const sellerHoldAmount = subtotal - commissionAmount
+
+            // Deduct from pendingBalance safely (don't go negative)
+            const deductAmount = Math.min(sellerHoldAmount, Number(sellerWallet.pendingBalance))
+            await tx.wallet.update({
+              where: { id: sellerWallet.id },
+              data: { pendingBalance: { decrement: deductAmount } },
+            })
+
+            // Record wallet mutation for seller (debit = escrow reversal)
+            await tx.walletMutation.create({
+              data: {
+                walletId: sellerWallet.id,
+                type: 'debit',
+                amount: deductAmount,
+                balance: Number(sellerWallet.balance),
+                description: `Pembatalan dana pesanan ${order.orderNumber}`,
+                refType: 'refund',
+                refId: order.id,
+              },
+            })
+          }
+        }
+
         await tx.notification.create({
           data: {
             userId: order.userId,

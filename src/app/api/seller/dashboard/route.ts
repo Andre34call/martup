@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
 
+import { parseJsonField } from '@/lib/api-utils'
 import { logger } from '@/lib/logger'
 export async function GET(request: NextRequest) {
   try {
@@ -49,7 +50,7 @@ export async function GET(request: NextRequest) {
 
     if (!seller) {
       return NextResponse.json(
-        { error: 'Seller tidak ditemukan' },
+        { success: false, error: 'Seller tidak ditemukan' },
         { status: 404 }
       )
     }
@@ -60,11 +61,11 @@ export async function GET(request: NextRequest) {
         sellerId,
         status: { in: ['paid', 'processing', 'shipped', 'delivered'] },
       },
-      _sum: { totalAmount: true },
+      _sum: { subtotal: true },
       _count: true,
     })
 
-    const totalRevenue = revenueResult._sum.totalAmount || 0
+    const totalRevenue = revenueResult._sum.subtotal || 0
     const totalOrders = revenueResult._count
 
     // Get pending orders
@@ -154,12 +155,13 @@ export async function GET(request: NextRequest) {
         ...i,
         product: {
           ...i.product,
-          images: i.product.images ? JSON.parse(i.product.images) : [],
+          images: parseJsonField(i.product.images),
         },
       })),
     }))
 
     return NextResponse.json({
+      success: true,
       stats: {
         totalRevenue,
         totalOrders,
@@ -173,7 +175,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     logger.error({ err: error }, 'Get seller dashboard error')
     return NextResponse.json(
-      { error: 'Terjadi kesalahan server' },
+      { success: false, error: 'Terjadi kesalahan server' },
       { status: 500 }
     )
   }

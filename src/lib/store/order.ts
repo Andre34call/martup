@@ -8,17 +8,38 @@ import { mapOrder } from '../mappers'
 type OrdersResponse = { success: boolean; data?: any[]; error?: string }
 
 /**
- * Helper: take a snapshot of the current orders array for rollback.
+ * Helper: take a full snapshot of relevant state for rollback.
+ * Captures orders, wallet balance, wallet mutations, and seller balance
+ * so that optimistic updates to any of these can be fully rolled back on failure.
  */
-function snapshotOrders(state: AppStore): Order[] {
-  return [...state.orders]
+function snapshotState(state: AppStore): { orders: Order[]; walletBalance: number; walletMutations: any[]; sellerBalance: any } {
+  return {
+    orders: [...state.orders],
+    walletBalance: state.walletBalance,
+    walletMutations: [...state.walletMutations],
+    sellerBalance: { ...state.sellerBalance },
+  }
 }
 
 /**
- * Helper: restore orders from a snapshot.
+ * Helper: restore all captured state from a snapshot.
  */
-function restoreOrders(orders: Order[]) {
-  return { orders }
+function restoreState(snapshot: ReturnType<typeof snapshotState>) {
+  return {
+    orders: snapshot.orders,
+    walletBalance: snapshot.walletBalance,
+    walletMutations: snapshot.walletMutations,
+    sellerBalance: snapshot.sellerBalance,
+  }
+}
+
+/**
+ * Check if an order is a Cash on Delivery (COD) order.
+ */
+function isCodOrder(order: Order): boolean {
+  const pm = order.paymentMethod?.toLowerCase() || ''
+  const ps = order.paymentStatus?.toLowerCase() || ''
+  return pm === 'cod' || pm.includes('bayar di tempat') || ps === 'cod'
 }
 
 export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set, get) => ({
@@ -64,7 +85,7 @@ export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set
   // ==================== updateOrderStatus ====================
   // Optimistic update + API sync with rollback
   updateOrderStatus: async (orderId, status, options) => {
-    const preSnapshot = snapshotOrders(get())
+    const preSnapshot = snapshotState(get())
 
     // Optimistic update
     set((state) => {
@@ -116,7 +137,7 @@ export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set
 
       if (!res.ok || !data.success) {
         // Rollback on failure
-        set(restoreOrders(preSnapshot))
+        set(restoreState(preSnapshot))
         return
       }
 
@@ -129,14 +150,14 @@ export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set
       }
     } catch {
       // Rollback on network error
-      set(restoreOrders(preSnapshot))
+      set(restoreState(preSnapshot))
     }
   },
 
   // ==================== payForOrder ====================
   // Calls Midtrans for payment token or wallet deduction for wallet payments
   payForOrder: async (orderId) => {
-    const preSnapshot = snapshotOrders(get())
+    const preSnapshot = snapshotState(get())
     const order = get().orders.find(o => o.id === orderId)
     if (!order || order.status !== 'pending') return
 
@@ -192,12 +213,12 @@ export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set
 
           if (!debitRes.ok || !debitData.success) {
             // Wallet debit failed — rollback optimistic update
-            set(restoreOrders(preSnapshot))
+            set(restoreState(preSnapshot))
             return { token: undefined, redirectUrl: undefined, error: debitData.error || 'Saldo tidak mencukupi atau gagal memproses pembayaran wallet.' }
           }
         } catch {
           // Wallet debit API failed — rollback
-          set(restoreOrders(preSnapshot))
+          set(restoreState(preSnapshot))
           return { token: undefined, redirectUrl: undefined, error: 'Gagal memproses pembayaran wallet. Silakan coba lagi.' }
         }
 
@@ -255,7 +276,7 @@ export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set
     } catch {
       // Rollback on network error (only if we did optimistic update for wallet)
       if (pm === 'wallet') {
-        set(restoreOrders(preSnapshot))
+        set(restoreState(preSnapshot))
       }
       return { token: undefined, redirectUrl: undefined, error: 'Kesalahan jaringan. Silakan coba lagi.' }
     }
@@ -264,14 +285,14 @@ export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set
   // ==================== cancelOrder ====================
   // Optimistic update + API call with rollback
   cancelOrder: async (orderId) => {
-    const preSnapshot = snapshotOrders(get())
+    const preSnapshot = snapshotState(get())
 
     // Optimistic update
     set((state) => {
       const order = state.orders.find(o => o.id === orderId)
       if (!order) return state
 
-      const wasPaid = order.paymentStatus === 'paid' || order.status === 'paid' || order.status === 'processing' || order.status === 'shipped'
+      const wasPaid = !isCodOrder(order) && (order.paymentStatus === 'paid' || order.status === 'paid' || order.status === 'processing' || order.status === 'shipped')
       const sellerCredit = order.subtotal * (1 - get().commissionRate)
 
       let newSellerBalance = { ...state.sellerBalance }
@@ -312,7 +333,7 @@ export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set
 
       if (!res.ok || !data.success) {
         // Rollback on failure
-        set(restoreOrders(preSnapshot))
+        set(restoreState(preSnapshot))
         return
       }
 
@@ -325,14 +346,14 @@ export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set
       }
     } catch {
       // Rollback on network error
-      set(restoreOrders(preSnapshot))
+      set(restoreState(preSnapshot))
     }
   },
 
   // ==================== updateOrderTracking ====================
   // Optimistic update + API call with rollback
   updateOrderTracking: async (orderId, trackingNumber) => {
-    const preSnapshot = snapshotOrders(get())
+    const preSnapshot = snapshotState(get())
 
     // Optimistic update
     set((state) => ({
@@ -352,7 +373,7 @@ export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set
 
       if (!res.ok || !data.success) {
         // Rollback on failure
-        set(restoreOrders(preSnapshot))
+        set(restoreState(preSnapshot))
         return
       }
 
@@ -365,7 +386,7 @@ export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set
       }
     } catch {
       // Rollback on network error
-      set(restoreOrders(preSnapshot))
+      set(restoreState(preSnapshot))
     }
   },
 

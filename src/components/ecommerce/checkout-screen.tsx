@@ -611,12 +611,15 @@ export function CheckoutScreen() {
       const isImmediatePayment = selectedPayment === 'wallet'
       const createdOrders: { id: string; totalAmount: number }[] = []
 
-      for (const group of groupedBySeller) {
+      for (let groupIdx = 0; groupIdx < groupedBySeller.length; groupIdx++) {
+        const group = groupedBySeller[groupIdx]
         const sellerShipping = shippingBySeller[group.seller.id]
         const groupSubtotal = group.items.reduce((sum, i) => sum + ((i.product.discountPrice || i.product.price) * i.quantity), 0)
         const groupShipping = sellerShipping?.price || 0
         const groupDiscount = subtotal > 0 ? Math.round(validatedVoucherDiscount * (groupSubtotal / subtotal)) : 0
-        const groupTotal = groupSubtotal + groupShipping - groupDiscount + platformFee
+        // Only charge platform fee for the first seller group — avoids N× overcharge
+        const groupPlatformFee = groupIdx === 0 ? platformFee : 0
+        const groupTotal = groupSubtotal + groupShipping - groupDiscount + groupPlatformFee
 
         const isSellerJasaOnly = isJasaOnlySeller(group.seller.id)
         const orderPayload = {
@@ -627,7 +630,7 @@ export function CheckoutScreen() {
           shippingCost: isSellerJasaOnly ? 0 : groupShipping,
           discountAmount: groupDiscount,
           taxAmount: 0,
-          platformFee,
+          platformFee: groupPlatformFee,
           totalAmount: groupTotal,
           paymentMethod: selectedPayment, // Send the ID (e.g., "cod", "wallet", "midtrans") — server stores this
           voucherCode: selectedVoucher?.code || undefined,
@@ -651,8 +654,9 @@ export function CheckoutScreen() {
           }),
         }
 
-        const orderStatus = isImmediatePayment ? 'paid' as const : 'pending' as const
-        const orderPaymentStatus = isImmediatePayment ? 'paid' : (selectedPayment === 'cod' ? 'cod' : 'unpaid')
+        // Don't optimistically set wallet orders to 'paid' — wait for wallet debit confirmation
+        const orderStatus = 'pending' as const
+        const orderPaymentStatus = selectedPayment === 'cod' ? 'cod' : 'unpaid'
 
         try {
           const res = await apiClient.rawPost('/api/orders', orderPayload)
@@ -671,11 +675,11 @@ export function CheckoutScreen() {
               shippingCost: isSellerJasaOnly ? 0 : groupShipping,
               discountAmount: groupDiscount,
               taxAmount: 0,
-              platformFee,
+              platformFee: groupPlatformFee,
               totalAmount: groupTotal,
               paymentMethod: selectedPayment, // Use the ID (e.g., "cod", "wallet", "midtrans")
               paymentStatus: orderPaymentStatus,
-              escrowStatus: isImmediatePayment ? 'held' : 'none',
+              escrowStatus: 'none' as const,
               isServiceOrder: isSellerJasaOnly,
               items: group.items.map((item) => ({
                 id: `oi${Date.now()}-${item.id}`,
@@ -701,7 +705,7 @@ export function CheckoutScreen() {
               address: isSellerJasaOnly ? undefined : defaultAddress,
               seller: group.seller,
               createdAt: new Date().toISOString(),
-              paidAt: isImmediatePayment ? new Date().toISOString() : undefined
+              paidAt: undefined
             }
             addOrder(localOrder)
           }

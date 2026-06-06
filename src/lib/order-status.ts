@@ -65,6 +65,7 @@ export async function updateOrderStatus(params: {
   authUserId: string
   authUserRole: string
 }): Promise<{ success: boolean; data?: any; error?: string; status?: number }> {
+  // isServiceOrder is optional — if not passed by the caller, the fallback on line 92 uses order.isServiceOrder from the database
   const { orderId, status, cancelReason, trackingNumber, isServiceOrder, authUserId, authUserRole } = params
 
   // ---- Input validation ----
@@ -84,17 +85,6 @@ export async function updateOrderStatus(params: {
     }
     if (cancelReason.length > 500) {
       return { success: false, error: 'Alasan pembatalan maksimal 500 karakter', status: 400 }
-    }
-  }
-
-  // Validate trackingNumber when status is 'shipped' — but NOT for service orders
-  // Service orders use proof images via the service-proof API instead of tracking numbers
-  if (status === 'shipped' && !isServiceOrder) {
-    if (!trackingNumber || typeof trackingNumber !== 'string' || trackingNumber.trim().length === 0) {
-      return { success: false, error: 'Nomor resi wajib diisi saat mengubah status ke dikirim', status: 400 }
-    }
-    if (trackingNumber.length > 100) {
-      return { success: false, error: 'Nomor resi maksimal 100 karakter', status: 400 }
     }
   }
 
@@ -119,6 +109,18 @@ export async function updateOrderStatus(params: {
 
   if (!order) {
     return { success: false, error: 'Pesanan tidak ditemukan', status: 404 }
+  }
+
+  // Validate trackingNumber when status is 'shipped' — but NOT for service orders
+  // Service orders use proof images via the service-proof API instead of tracking numbers
+  // isServiceOrder param is optional; falls back to order.isServiceOrder from the database
+  if (status === 'shipped' && !(isServiceOrder ?? order.isServiceOrder)) {
+    if (!trackingNumber || typeof trackingNumber !== 'string' || trackingNumber.trim().length === 0) {
+      return { success: false, error: 'Nomor resi wajib diisi saat mengubah status ke dikirim', status: 400 }
+    }
+    if (trackingNumber.length > 100) {
+      return { success: false, error: 'Nomor resi maksimal 100 karakter', status: 400 }
+    }
   }
 
   // ---- Validate state transition ----

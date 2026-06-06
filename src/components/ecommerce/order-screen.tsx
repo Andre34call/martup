@@ -357,10 +357,10 @@ function OrderCard({ order, onTap }: { order: Order; onTap: () => void }) {
               size="sm"
               variant="outline"
               className="h-8 text-xs rounded-lg"
-              onClick={(e) => {
+              onClick={async (e) => {
                 e.stopPropagation()
                 if (order.status === "shipped") {
-                  updateOrderStatus(order.id, "delivered")
+                  await updateOrderStatus(order.id, "delivered")
                   showToast("Pesanan dikonfirmasi diterima!", "success")
                 } else if (order.status === "delivered") {
                   const product = products.find(p => p.id === order.items[0]?.productId)
@@ -455,8 +455,8 @@ function OrderCard({ order, onTap }: { order: Order; onTap: () => void }) {
               Tidak
             </Button>
             <Button
-              onClick={() => {
-                cancelOrder(order.id)
+              onClick={async () => {
+                await cancelOrder(order.id)
                 showToast("Pesanan berhasil dibatalkan", "success")
                 setShowCancelDialog(false)
               }}
@@ -1227,8 +1227,8 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
           {!order.isServiceOrder && order.status === "shipped" && (
             <PrimaryButton
               className="w-full h-12 rounded-xl text-sm font-semibold"
-              onClick={() => {
-                updateOrderStatus(order.id, "delivered")
+              onClick={async () => {
+                await updateOrderStatus(order.id, "delivered")
                 showToast("Pesanan dikonfirmasi diterima!", "success")
               }}
             >
@@ -1276,8 +1276,8 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
               Tidak
             </Button>
             <Button
-              onClick={() => {
-                cancelOrder(order.id)
+              onClick={async () => {
+                await cancelOrder(order.id)
                 showToast("Pesanan berhasil dibatalkan", "success")
                 setShowCancelDialog(false)
               }}
