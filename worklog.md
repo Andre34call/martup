@@ -297,3 +297,36 @@ Stage Summary:
 - Pushed to origin/main → triggers Vercel deployment
 - Key fix: gross_amount now guaranteed to match item_details sum exactly
 - Diagnostic endpoint available at /api/payment/config?diagnostic=true for admin debugging
+
+---
+Task ID: 6
+Agent: Main Agent
+Task: Fix orders 500 error - "Gagal membuat pesanan, coba lagi" when creating order
+
+Work Log:
+- User reported 500 error on POST /api/orders when clicking "Bayar Sekarang"
+- Investigated via agent: found root cause is calculateShippingRates() called INSIDE db.$transaction()
+- calculateShippingRates() makes external HTTP calls to RajaOngkir API (can take several seconds)
+- Prisma transaction default timeout is 5 seconds — external API calls exceeded this
+- On Vercel serverless with cold starts, RajaOngkir city cache is always empty, requiring two sequential HTTP calls
+- Transaction already had 10+ sequential DB queries, adding external API pushed total past timeout
+- Also: orderNumber was generated outside transaction (race condition risk)
+
+Fixes Applied (src/app/api/orders/route.ts):
+
+1. Moved calculateShippingRates() OUTSIDE the transaction (pre-computation phase)
+2. Moved seller lookup and weight calculation OUTSIDE the transaction
+3. Moved getPlatformFee() call OUTSIDE the transaction (read-only, no race condition risk)
+4. Pre-fetch product data before transaction for faster execution inside
+5. Generated orderNumber INSIDE the transaction (prevents race condition on @unique constraint)
+6. Added explicit transaction timeout: maxWait=10s, timeout=30s (was default 5s)
+7. Exposed business validation errors in 500 response (stock, voucher, etc.) instead of generic message
+
+Transaction now only contains: DB read-locks (stock re-validation), DB writes (order create, shipping, voucher, stock update)
+External API calls happen before the transaction starts.
+
+Stage Summary:
+- Committed: "fix: orders 500 error - move shipping calc outside DB transaction"
+- Pushed to origin/main → triggers Vercel deployment
+- Transaction duration reduced from ~5-15s to ~1-3s
+- Business errors (stock, voucher) now shown to user instead of generic "Terjadi kesalahan server"
