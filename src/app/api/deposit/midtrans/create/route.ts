@@ -6,16 +6,15 @@ import { serializeDecimal } from '@/lib/decimal-utils'
 import { logger, logBusinessEvent } from '@/lib/logger'
 import { validateCsrfRequest } from '@/lib/csrf'
 
+import { MIDTRANS_SERVER_KEY, MIDTRANS_SERVER_IS_PRODUCTION, SNAP_API_URL, MIDTRANS_AUTH_HEADER } from '@/lib/midtrans-config'
+
 // ==================== MIDTRANS DEPOSIT CREATE ====================
 // Creates a deposit with Midtrans Snap token for automatic payment verification.
 // Supports VA (BCA, Mandiri, BNI, BRI, Permata) and e-wallets (GoPay, ShopeePay, QRIS).
 // Payment is verified automatically via Midtrans webhook — no admin verification needed.
 
-const MIDTRANS_SERVER_KEY = process.env.MIDTRANS_SERVER_KEY || ''
-const MIDTRANS_IS_PRODUCTION = process.env.MIDTRANS_IS_PRODUCTION === 'true'
-const SNAP_URL = MIDTRANS_IS_PRODUCTION
-  ? 'https://app.midtrans.com/snap/v1/transactions'
-  : 'https://app.sandbox.midtrans.com/snap/v1/transactions'
+const MIDTRANS_IS_PRODUCTION = MIDTRANS_SERVER_IS_PRODUCTION
+const SNAP_URL = SNAP_API_URL
 
 // Amount limits
 const MIN_AMOUNT = 10_000
@@ -181,7 +180,7 @@ export async function POST(request: NextRequest) {
       }
 
       // Step 4: Call Midtrans Snap API
-      const authString = Buffer.from(MIDTRANS_SERVER_KEY + ':').toString('base64')
+      const authString = MIDTRANS_AUTH_HEADER
 
       const snapResponse = await fetch(SNAP_URL, {
         method: 'POST',

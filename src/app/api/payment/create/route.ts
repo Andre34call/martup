@@ -7,13 +7,14 @@ import { validateBody, paymentCreateSchema } from '@/lib/validations'
 import { validateCsrfRequest } from '@/lib/csrf'
 
 import { logger } from '@/lib/logger'
-// ==================== Midtrans Configuration ====================
+import { MIDTRANS_SERVER_KEY, MIDTRANS_SERVER_IS_PRODUCTION, SNAP_API_URL, MIDTRANS_API_URL, MIDTRANS_AUTH_HEADER } from '@/lib/midtrans-config'
 
-const MIDTRANS_SERVER_KEY = process.env.MIDTRANS_SERVER_KEY || ''
-const MIDTRANS_IS_PRODUCTION = process.env.MIDTRANS_IS_PRODUCTION === 'true'
-const SNAP_URL = MIDTRANS_IS_PRODUCTION
-  ? 'https://app.midtrans.com/snap/v1/transactions'
-  : 'https://app.sandbox.midtrans.com/snap/v1/transactions'
+// ==================== Midtrans Configuration ====================
+// Now uses shared auto-detecting config from midtrans-config.ts
+// This prevents sandbox/production mismatch that causes "access denied" errors
+
+const MIDTRANS_IS_PRODUCTION = MIDTRANS_SERVER_IS_PRODUCTION
+const SNAP_URL = SNAP_API_URL
 
 // Orders expire after 24 hours if unpaid
 const ORDER_EXPIRY_HOURS = 24
@@ -196,7 +197,7 @@ export async function POST(request: NextRequest) {
 
     // Step 9: Call Midtrans Snap API to create a transaction token
     // Note: authString is defined early so it can also be used in Step 8.5 for token reuse check
-    const authString = Buffer.from(MIDTRANS_SERVER_KEY + ':').toString('base64')
+    const authString = MIDTRANS_AUTH_HEADER
 
     // Step 8: Check if a pending transaction already exists for this order
     const existingTransaction = await db.transaction.findFirst({
@@ -217,9 +218,7 @@ export async function POST(request: NextRequest) {
       if (tokenAge < maxSnapTokenAge) {
         // Try to get the existing Snap token from Midtrans
         // Use the Midtrans transaction status API to check if token is still valid
-        const statusUrl = MIDTRANS_IS_PRODUCTION
-          ? `https://api.midtrans.com/v2/${order.orderNumber}/status`
-          : `https://api.sandbox.midtrans.com/v2/${order.orderNumber}/status`
+        const statusUrl = `${MIDTRANS_API_URL}/v2/${order.orderNumber}/status`
 
         try {
           const statusResponse = await fetch(statusUrl, {

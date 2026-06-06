@@ -1,11 +1,5 @@
 import { logger } from '@/lib/logger'
-
-const MIDTRANS_SERVER_KEY = process.env.MIDTRANS_SERVER_KEY || ''
-const MIDTRANS_IS_PRODUCTION = process.env.MIDTRANS_IS_PRODUCTION === 'true'
-
-const BASE_URL = MIDTRANS_IS_PRODUCTION
-  ? 'https://api.midtrans.com'
-  : 'https://api.sandbox.midtrans.com'
+import { MIDTRANS_SERVER_KEY, MIDTRANS_SERVER_IS_PRODUCTION, MIDTRANS_API_URL, MIDTRANS_AUTH_HEADER } from '@/lib/midtrans-config'
 
 /**
  * Request a refund from Midtrans for a given order.
@@ -22,7 +16,7 @@ export async function requestMidtransRefund(
   }
 
   try {
-    const url = `${BASE_URL}/v2/${orderId}/refund`
+    const url = `${MIDTRANS_API_URL}/v2/${orderId}/refund`
     const body: Record<string, unknown> = {}
     if (amount) body.amount = amount
     if (reason) body.reason = reason
@@ -31,7 +25,7 @@ export async function requestMidtransRefund(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Basic ${Buffer.from(MIDTRANS_SERVER_KEY + ':').toString('base64')}`,
+        'Authorization': MIDTRANS_AUTH_HEADER,
         'Accept': 'application/json',
       },
       body: JSON.stringify(body),
