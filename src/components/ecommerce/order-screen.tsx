@@ -10,12 +10,36 @@ import { useState, useMemo, useCallback, useEffect } from "react"
 import {
   ArrowLeft, Package, CreditCard, Truck, CheckCircle2, Star,
   ChevronRight, MapPin, Clock, ShoppingBag, RotateCcw, Copy,
-  Phone, MessageCircle, Store, Wallet, Receipt,
+  Phone, MessageCircle, Store, Wallet, Receipt, Banknote,
   Image as ImageIcon, Timer, QrCode
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { apiClient } from "@/lib/api-client"
+
+// ==================== PAYMENT METHOD HELPERS ====================
+
+/** Check if an order uses Cash on Delivery (COD) */
+function isCodOrder(order: Order): boolean {
+  const pm = order.paymentMethod?.toLowerCase() || ''
+  return pm === 'cod' || pm.includes('bayar di tempat') || pm.includes('cod')
+}
+
+/** Get a human-readable label for the payment method */
+function getPaymentMethodLabel(paymentMethod: string | undefined): string {
+  if (!paymentMethod) return 'COD'
+  const pm = paymentMethod.toLowerCase()
+  if (pm === 'cod' || pm.includes('bayar di tempat')) return 'Bayar di Tempat (COD)'
+  if (pm === 'wallet' || pm.includes('martup pay')) return 'MartUp Pay'
+  if (pm === 'midtrans' || pm.includes('transfer') || pm.includes('e-wallet') || pm.includes('ewallet')) return 'Transfer & E-Wallet'
+  if (pm === 'card' || pm.includes('kartu')) return 'Kartu Kredit/Debit'
+  if (pm.includes('gopay')) return 'GoPay'
+  if (pm.includes('shopeepay')) return 'ShopeePay'
+  if (pm.includes('qris')) return 'QRIS'
+  if (pm.includes('bank_transfer') || pm.includes('va')) return 'Transfer Bank (VA)'
+  // Fallback: capitalize first letter
+  return paymentMethod.charAt(0).toUpperCase() + paymentMethod.slice(1)
+}
 
 // ==================== PAYMENT REFERENCE PARSER ====================
 // Parses paymentReference JSON from order and returns structured data
@@ -350,9 +374,9 @@ function OrderCard({ order, onTap }: { order: Order; onTap: () => void }) {
                 if (order.status === "pending") {
                   const paymentMethod = order.paymentMethod?.toLowerCase() || ''
 
-                  // COD: no payment needed
-                  if (paymentMethod === 'cod') {
-                    showToast("Pembayaran dilakukan saat barang diterima (COD).", "info")
+                  // COD: no payment needed — show info
+                  if (isCodOrder(order)) {
+                    showToast("Pembayaran dilakukan saat barang diterima (COD). Pesanan sedang menunggu diproses penjual.", "info")
                     return
                   }
 
@@ -444,7 +468,8 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
   const [isLoadingServiceProof, setIsLoadingServiceProof] = useState(false)
   const { addItem } = useCartStore()
   const activeStep = getActiveStep(order)
-  const isMidtransPayment = (order.paymentMethod?.toLowerCase().includes('midtrans') ||
+  const isMidtransPayment = !isCodOrder(order) && order.paymentMethod?.toLowerCase() !== 'wallet' && (
+    order.paymentMethod?.toLowerCase().includes('midtrans') ||
     order.paymentMethod?.toLowerCase().includes('transfer') ||
     order.paymentMethod?.toLowerCase().includes('ewallet') ||
     order.paymentMethod?.toLowerCase().includes('e-wallet') ||
@@ -452,7 +477,9 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
     order.paymentMethod?.toLowerCase().includes('shopeepay') ||
     order.paymentMethod?.toLowerCase().includes('qris') ||
     order.paymentMethod?.toLowerCase().includes('kartu') ||
-    order.paymentMethod?.toLowerCase().includes('card'))
+    order.paymentMethod?.toLowerCase().includes('card') ||
+    order.paymentMethod?.toLowerCase().includes('bank_transfer') ||
+    order.paymentMethod?.toLowerCase().includes('va'))
   const paymentRef = parsePaymentReference(order.paymentReference)
   const showPaymentRef = isMidtransPayment &&
     (order.paymentStatus === 'unpaid' || order.paymentStatus === 'pending') &&
@@ -819,7 +846,7 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs text-muted-foreground">Metode Pembayaran</span>
-                <span className="text-xs font-medium text-foreground">{order.paymentMethod || "COD"}</span>
+                <span className="text-xs font-medium text-foreground">{getPaymentMethodLabel(order.paymentMethod)}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-xs text-muted-foreground">Subtotal Produk</span>
@@ -1105,7 +1132,25 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
 
         {/* Action Button */}
         <div className="px-4 pb-4 space-y-3">
-          {order.status === "pending" && (
+          {/* COD: Show info banner instead of payment button */}
+          {order.status === "pending" && isCodOrder(order) && (
+            <div className="bg-orange-50 dark:bg-orange-950/20 rounded-xl border border-orange-200 dark:border-orange-800/50 p-4">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-full bg-orange-500 flex items-center justify-center flex-shrink-0">
+                  <Banknote className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-orange-800 dark:text-orange-300">
+                    Bayar di Tempat (COD)
+                  </h4>
+                  <p className="text-xs text-orange-600 dark:text-orange-400 mt-1">
+                    Pembayaran dilakukan saat barang diterima. Pesanan Anda sedang menunggu diproses penjual.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+          {order.status === "pending" && !isCodOrder(order) && (
             <>
               <PrimaryButton
                 className="w-full h-12 rounded-xl text-sm font-semibold"

@@ -140,6 +140,12 @@ export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set
     const order = get().orders.find(o => o.id === orderId)
     if (!order || order.status !== 'pending') return
 
+    // COD orders don't need payment — reject the call
+    const pm = order.paymentMethod?.toLowerCase() || ''
+    if (pm === 'cod' || pm.includes('bayar di tempat')) {
+      return { token: undefined, redirectUrl: undefined, error: 'Pesanan COD tidak memerlukan pembayaran online. Bayar saat barang diterima.' }
+    }
+
     // Optimistic update: mark as paid locally
     set((state) => {
       const currentOrder = state.orders.find(o => o.id === orderId)

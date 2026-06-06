@@ -629,7 +629,7 @@ export function CheckoutScreen() {
           taxAmount: 0,
           platformFee,
           totalAmount: groupTotal,
-          paymentMethod: PAYMENT_METHODS.find(m => m.id === selectedPayment)?.name || selectedPayment,
+          paymentMethod: selectedPayment, // Send the ID (e.g., "cod", "wallet", "midtrans") — server stores this
           voucherCode: selectedVoucher?.code || undefined,
           items: group.items.map((item) => ({
             productId: item.productId,
@@ -673,7 +673,7 @@ export function CheckoutScreen() {
               taxAmount: 0,
               platformFee,
               totalAmount: groupTotal,
-              paymentMethod: PAYMENT_METHODS.find(m => m.id === selectedPayment)?.name || selectedPayment,
+              paymentMethod: selectedPayment, // Use the ID (e.g., "cod", "wallet", "midtrans")
               paymentStatus: orderPaymentStatus,
               escrowStatus: isImmediatePayment ? 'held' : 'none',
               isServiceOrder: isSellerJasaOnly,
