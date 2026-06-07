@@ -276,7 +276,7 @@ export function SellerAddProductScreen() {
         const result = await uploadFile(file, 'products', 'images')
         setProductImages(prev => prev.map(img =>
           img.id === placeholderId
-            ? { ...img, url: result.url, file: undefined, isUploading: false }
+            ? { ...img, url: result.url ?? img.url, file: undefined, isUploading: false }
             : img
         ))
       } catch (error) {
@@ -312,7 +312,7 @@ export function SellerAddProductScreen() {
     setIsVideoUploading(true)
     try {
       const result = await uploadFile(file, 'products', 'videos')
-      setProductVideo({ file, url: result.url })
+      setProductVideo({ file, url: result.url ?? URL.createObjectURL(file) })
       setVideoDeleted(false)
       showToast('Video berhasil diupload', 'success')
     } catch (error) {
