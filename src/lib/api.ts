@@ -1,3 +1,9 @@
+/**
+ * @deprecated This module is a legacy API client that is no longer used.
+ * Use `apiClient` from `@/lib/api-client` instead.
+ * This file is kept for reference but should not be imported in new code.
+ */
+
 // API Client for MartUp - handles all communication with the backend
 
 import type { User, Seller, Product, Category, CartItem, Order, ChatRoom, ChatMessage, Notification, Voucher, Address, WalletMutation, SellerStats } from './types'

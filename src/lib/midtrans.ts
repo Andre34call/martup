@@ -123,6 +123,8 @@ export function loadSnapScript(): Promise<void> {
       }
       script.onerror = () => {
         snapLoading = null
+        // Clean up the failed script element from DOM
+        if (script.parentNode) script.parentNode.removeChild(script)
         reject(new Error('Failed to load Midtrans Snap.js'))
       }
       document.head.appendChild(script)
@@ -146,17 +148,26 @@ export async function openSnapPayment(
   }
 
   return new Promise((resolve) => {
+    // Safety timeout — if Snap popup doesn't resolve within 10 minutes, treat as closed
+    const timeoutId = setTimeout(() => {
+      resolve({ status: 'closed' })
+    }, 10 * 60 * 1000) // 10 minutes
+
     window.snap!.pay(snapToken, {
       onSuccess: (result) => {
+        clearTimeout(timeoutId)
         resolve({ status: 'success', result })
       },
       onPending: (result) => {
+        clearTimeout(timeoutId)
         resolve({ status: 'pending', result })
       },
       onError: (result) => {
+        clearTimeout(timeoutId)
         resolve({ status: 'error', result })
       },
       onClose: () => {
+        clearTimeout(timeoutId)
         resolve({ status: 'closed' })
       },
     })

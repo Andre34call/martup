@@ -3,6 +3,7 @@ import type { OrderSlice, AppStore } from './types'
 import type { Order, OrderStatus } from '../types'
 import { apiClient } from '@/lib/api-client'
 import { mapOrder } from '../mappers'
+import { isCodOrder } from '@/lib/payment-utils'
 
 // Type alias for API response (avoids TSX generic parsing issues)
 type OrdersResponse = { success: boolean; data?: any[]; error?: string }
@@ -31,15 +32,6 @@ function restoreState(snapshot: ReturnType<typeof snapshotState>) {
     walletMutations: snapshot.walletMutations,
     sellerBalance: snapshot.sellerBalance,
   }
-}
-
-/**
- * Check if an order is a Cash on Delivery (COD) order.
- */
-function isCodOrder(order: Order): boolean {
-  const pm = order.paymentMethod?.toLowerCase() || ''
-  const ps = order.paymentStatus?.toLowerCase() || ''
-  return pm === 'cod' || pm.includes('bayar di tempat') || ps === 'cod'
 }
 
 export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set, get) => ({
@@ -162,11 +154,10 @@ export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set
     if (!order || order.status !== 'pending') return
 
     // COD orders don't need payment — reject the call
-    const pm = order.paymentMethod?.toLowerCase() || ''
-    const ps = order.paymentStatus?.toLowerCase() || ''
-    if (pm === 'cod' || pm.includes('bayar di tempat') || ps === 'cod') {
+    if (isCodOrder(order)) {
       return { token: undefined, redirectUrl: undefined, error: 'Pesanan COD tidak memerlukan pembayaran online. Bayar saat barang diterima.' }
     }
+    const pm = order.paymentMethod?.toLowerCase() || ''
 
     // API call: different flow based on payment method
     try {

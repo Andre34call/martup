@@ -3,7 +3,8 @@ import { db } from '@/lib/db'
 import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
 import { createRateLimiter } from '@/lib/rate-limit'
 import { serializeDecimal } from '@/lib/decimal-utils'
-import { parseJsonField } from '@/lib/api-utils'
+import { cartItemInclude } from '@/lib/db-includes'
+import { parseCartItemFields } from '@/lib/json-utils'
 
 import { logger } from '@/lib/logger'
 // Rate limiter: 30 cart add operations per minute
@@ -130,27 +131,6 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    const cartItemInclude = {
-      product: {
-        include: {
-          seller: {
-            select: {
-              id: true,
-              storeName: true,
-              storeSlug: true,
-              storeAvatar: true,
-              isVerified: true,
-              isPremium: true,
-              rating: true,
-              totalSales: true,
-            },
-          },
-          variants: true,
-        },
-      },
-      variant: true,
-    }
-
     if (existingItem) {
       // Increase quantity, capped at MAX_QUANTITY
       const newQty = Math.min(existingItem.quantity + qty, MAX_QUANTITY)
@@ -160,16 +140,7 @@ export async function POST(request: NextRequest) {
         include: cartItemInclude,
       })
 
-      // Parse JSON fields safely
-      const responseItem = {
-        ...updatedItem,
-        product: updatedItem.product
-          ? {
-              ...updatedItem.product,
-              images: parseJsonField(updatedItem.product.images as unknown as string),
-            }
-          : null,
-      }
+      const responseItem = parseCartItemFields(updatedItem)
 
       return NextResponse.json(serializeDecimal({
         success: true,
@@ -190,15 +161,7 @@ export async function POST(request: NextRequest) {
       include: cartItemInclude,
     })
 
-    const responseItem2 = {
-      ...cartItem,
-      product: cartItem.product
-        ? {
-            ...cartItem.product,
-            images: parseJsonField(cartItem.product.images as unknown as string),
-          }
-        : null,
-    }
+    const responseItem2 = parseCartItemFields(cartItem)
 
     return NextResponse.json(serializeDecimal({
       success: true,

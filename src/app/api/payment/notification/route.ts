@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import crypto from 'crypto'
 
 import { logger } from '@/lib/logger'
+import { MIDTRANS_SERVER_KEY } from '@/lib/midtrans-config'
 
 /** Timing-safe string comparison to prevent timing attacks */
 function safeCompare(a: string, b: string): boolean {
@@ -14,8 +15,8 @@ function safeCompare(a: string, b: string): boolean {
   }
 }
 // ==================== Midtrans Configuration ====================
-
-const MIDTRANS_SERVER_KEY = process.env.MIDTRANS_SERVER_KEY || ''
+// Uses shared auto-detecting config from midtrans-config.ts
+// This ensures webhook signature verification uses the same key as payment creation
 
 // ==================== POST /api/payment/notification ====================
 // Midtrans webhook callback — called by Midtrans servers when payment status changes.
@@ -159,6 +160,10 @@ export async function POST(request: NextRequest) {
           newOrderStatus = 'paid'
           newPaymentStatus = 'paid'
           paidAt = new Date()
+          // Save payment type info for display
+          if (payment_type) {
+            paymentReference = JSON.stringify({ payment_type })
+          }
         } else if (fraud_status === 'challenge') {
           newPaymentStatus = 'challenged'
         } else {
@@ -173,6 +178,10 @@ export async function POST(request: NextRequest) {
         newOrderStatus = 'paid'
         newPaymentStatus = 'paid'
         paidAt = new Date()
+        // Save payment type info for display
+        if (payment_type) {
+          paymentReference = JSON.stringify({ payment_type })
+        }
         break
 
       case 'pending':
@@ -246,7 +255,22 @@ export async function POST(request: NextRequest) {
       if (paidAt) orderUpdateData.paidAt = paidAt
       if (cancelledAt) orderUpdateData.cancelledAt = cancelledAt
       if (cancelReason) orderUpdateData.cancelReason = cancelReason
-      if (payment_type) orderUpdateData.paymentMethod = payment_type
+      // Don't overwrite paymentMethod — it's used by the frontend to determine
+      // if this is a COD/Midtrans/Wallet order. Instead, save the specific
+      // payment type from Midtrans into paymentReference for display purposes.
+      // The paymentMethod should stay as "midtrans", "card", "wallet", or "cod".
+
+      // Merge payment_type into paymentReference if we have one but it's not already there
+      if (payment_type && paymentReference) {
+        // Already building a reference — ensure payment_type is included
+        const refObj = JSON.parse(paymentReference)
+        refObj.payment_type = payment_type
+        paymentReference = JSON.stringify(refObj)
+      } else if (payment_type && !paymentReference) {
+        // No reference data yet but we have payment_type — save it
+        paymentReference = JSON.stringify({ payment_type })
+      }
+
       if (paymentReference) orderUpdateData.paymentReference = paymentReference
 
       await tx.order.update({

@@ -4,49 +4,11 @@ import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
 import { createRateLimiter } from '@/lib/rate-limit'
 import { serializeDecimal } from '@/lib/decimal-utils'
 import { logger } from '@/lib/logger'
-import { parseProductJsonFields } from '@/lib/json-utils'
+import { cartItemInclude } from '@/lib/db-includes'
+import { parseCartItemFields } from '@/lib/json-utils'
 
 // Rate limiter: 10 cart bulk operations per minute
 const cartBulkLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 10, keyPrefix: 'rl:cart:bulk:' })
-
-// Shared include for cart item product details
-const cartItemInclude = {
-  product: {
-    include: {
-      seller: {
-        select: {
-          id: true,
-          storeName: true,
-          storeSlug: true,
-          storeAvatar: true,
-          isVerified: true,
-          isPremium: true,
-          rating: true,
-          totalSales: true,
-        },
-      },
-      category: {
-        select: {
-          id: true,
-          name: true,
-          slug: true,
-        },
-      },
-      variants: true,
-    },
-  },
-  variant: true,
-} as const
-
-// Helper to parse cart item JSON fields for response
-function parseCartItemFields<T extends { product: Record<string, unknown> | null }>(item: T) {
-  return {
-    ...item,
-    product: item.product
-      ? (parseProductJsonFields(item.product as unknown as Record<string, unknown>) as unknown as T['product'])
-      : item.product,
-  }
-}
 
 // PUT /api/cart/bulk - Bulk update cart items (isChecked) in a single transaction
 export async function PUT(request: NextRequest) {

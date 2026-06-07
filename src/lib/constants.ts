@@ -91,3 +91,21 @@ export const DEFAULT_PAGE_SIZE = 20
 
 /** Maximum page size for list endpoints */
 export const MAX_PAGE_SIZE = 50
+
+// ==================== CART ====================
+
+/** Maximum quantity per cart item */
+export const MAX_CART_QUANTITY = 99
+
+// ==================== ORDER ====================
+
+/** Hours before an unpaid order is auto-cancelled */
+export const ORDER_EXPIRY_HOURS = 24
+
+/** Default platform fee (Rp) — can be overridden in PlatformSetting */
+export const DEFAULT_PLATFORM_FEE = 1000
+
+// ==================== PAYMENT ====================
+
+/** Maximum time (ms) to wait for Midtrans Snap popup to complete */
+export const SNAP_POPUP_TIMEOUT_MS = 10 * 60 * 1000 // 10 minutes

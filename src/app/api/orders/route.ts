@@ -336,7 +336,12 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         )
       }
-      preFetchedProducts.set(item.productId, product)
+      preFetchedProducts.set(item.productId, {
+        ...product,
+        price: Number(product.price),
+        discountPrice: product.discountPrice != null ? Number(product.discountPrice) : null,
+        weight: product.weight ?? 0,
+      })
       if (product.productType !== 'jasa') {
         isServiceOrderPreCheck = false
       }
@@ -360,7 +365,7 @@ export async function POST(request: NextRequest) {
           )
         }
         if (variant) {
-          preFetchedVariants.set(item.variantId, { stock: variant.stock, price: variant.price, name: variant.name })
+          preFetchedVariants.set(item.variantId, { stock: variant.stock, price: variant.price != null ? Number(variant.price) : null, name: variant.name })
         }
       }
     }

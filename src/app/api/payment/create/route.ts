@@ -139,6 +139,26 @@ export async function POST(request: NextRequest) {
     const orderAge = Date.now() - order.createdAt.getTime()
     const expiryMs = ORDER_EXPIRY_HOURS * 60 * 60 * 1000
     if (orderAge > expiryMs) {
+      // SAFETY: Check if another payment attempt is currently in progress
+      // (prevents race condition where two tabs try to pay/cancel simultaneously)
+      const recentPendingPayment = await db.transaction.findFirst({
+        where: {
+          userId: authResult.user.id,
+          type: 'payment',
+          refId: order.orderNumber,
+          status: 'pending',
+          createdAt: { gte: new Date(Date.now() - 5 * 60 * 1000) }, // Last 5 minutes
+        },
+      })
+
+      if (recentPendingPayment) {
+        // Another payment is being processed — don't auto-cancel
+        return NextResponse.json(
+          { success: false, error: 'Pembayaran sedang diproses. Tunggu beberapa menit atau refresh halaman.' },
+          { status: 409 }
+        )
+      }
+
       // Auto-cancel the expired order and restore stock
       await db.$transaction(async (tx) => {
         // Update order status

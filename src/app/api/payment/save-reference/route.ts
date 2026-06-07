@@ -45,6 +45,30 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Step 3.5: Verify order is in a state where saving payment reference makes sense
+    // Only allow saving reference for orders that are pending/unpaid/pending payment
+    const allowedStatuses = ['pending']
+    const allowedPaymentStatuses = ['unpaid', 'pending']
+    if (!allowedStatuses.includes(order.status) || !allowedPaymentStatuses.includes(order.paymentStatus)) {
+      return NextResponse.json(
+        { success: false, error: 'Tidak dapat menyimpan referensi pembayaran untuk pesanan dengan status ini' },
+        { status: 400 }
+      )
+    }
+
+    // Validate that paymentReference is valid JSON
+    try {
+      const parsed = JSON.parse(paymentReference)
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+        throw new Error('Invalid format')
+      }
+    } catch {
+      return NextResponse.json(
+        { success: false, error: 'Format referensi pembayaran tidak valid' },
+        { status: 400 }
+      )
+    }
+
     // Step 4: Save the payment reference
     await db.order.update({
       where: { id: orderId },

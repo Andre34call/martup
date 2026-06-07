@@ -42,3 +42,18 @@ export function parseProductJsonFields(product: Record<string, unknown>) {
     tags: parseJsonField(product.tags as string | null | undefined),
   }
 }
+
+/**
+ * Parse cart item JSON fields for API response.
+ *
+ * Applies `parseProductJsonFields` to the nested `product` field so that
+ * JSON string columns (images, tags) are returned as proper arrays.
+ */
+export function parseCartItemFields<T extends { product: Record<string, unknown> | null }>(item: T) {
+  return {
+    ...item,
+    product: item.product
+      ? (parseProductJsonFields(item.product as unknown as Record<string, unknown>) as unknown as T['product'])
+      : item.product,
+  }
+}

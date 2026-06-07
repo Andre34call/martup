@@ -3,23 +3,14 @@ import { db } from '@/lib/db'
 import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
 import { createRateLimiter } from '@/lib/rate-limit'
 import { serializeDecimal } from '@/lib/decimal-utils'
-import { parseJsonField } from '@/lib/api-utils'
+import { cartItemInclude } from '@/lib/db-includes'
+import { parseCartItemFields } from '@/lib/json-utils'
 
 import { logger } from '@/lib/logger'
 // Rate limiter: 30 cart update operations per minute
 const cartPutLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 30, keyPrefix: 'rl:cart:put:' })
 
 const MAX_QUANTITY = 99
-
-const cartItemInclude = {
-  product: {
-    include: {
-      seller: { select: { id: true, storeName: true, storeSlug: true, storeAvatar: true, isVerified: true, isPremium: true, rating: true, totalSales: true } },
-      variants: true,
-    },
-  },
-  variant: true,
-}
 
 // PUT /api/cart/[id] - Update a cart item (SECURED with verifyAuth + ownership check)
 export async function PUT(
@@ -112,15 +103,7 @@ export async function PUT(
       include: cartItemInclude,
     })
 
-    const responseItem = {
-      ...updated,
-      product: updated.product
-        ? {
-            ...updated.product,
-            images: parseJsonField(updated.product.images as unknown as string),
-          }
-        : null,
-    }
+    const responseItem = parseCartItemFields(updated)
 
     return NextResponse.json(serializeDecimal({
       success: true,

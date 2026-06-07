@@ -2,60 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
 import { createRateLimiter } from '@/lib/rate-limit'
-import { parseJsonField } from '@/lib/api-utils'
 import { serializeDecimal } from '@/lib/decimal-utils'
+import { cartItemInclude } from '@/lib/db-includes'
+import { parseCartItemFields } from '@/lib/json-utils'
 
 import { logger } from '@/lib/logger'
 // Rate limiter: 30 cart operations per minute
 const cartLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 30, keyPrefix: 'rl:cart:main:' })
-
-// Helper to parse product JSON fields (images, tags stored as JSON strings)
-function parseProductJsonFields(product: Record<string, unknown>) {
-  return {
-    ...product,
-    images: parseJsonField(product.images as string | null | undefined),
-    tags: parseJsonField(product.tags as string | null | undefined),
-  }
-}
-
-// Shared include for cart item product details
-const cartItemInclude = {
-  product: {
-    include: {
-      seller: {
-        select: {
-          id: true,
-          storeName: true,
-          storeSlug: true,
-          storeAvatar: true,
-          isVerified: true,
-          isPremium: true,
-          rating: true,
-          totalSales: true,
-        },
-      },
-      category: {
-        select: {
-          id: true,
-          name: true,
-          slug: true,
-        },
-      },
-      variants: true,
-    },
-  },
-  variant: true,
-} as const
-
-// Helper to parse cart item JSON fields for response
-function parseCartItemFields<T extends { product: Record<string, unknown> | null }>(item: T) {
-  return {
-    ...item,
-    product: item.product
-      ? (parseProductJsonFields(item.product as unknown as Record<string, unknown>) as unknown as T['product'])
-      : item.product,
-  }
-}
 
 const MAX_QUANTITY = 99
 

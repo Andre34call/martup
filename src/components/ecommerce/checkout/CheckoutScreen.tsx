@@ -1,77 +1,29 @@
 "use client"
 
-import { motion, AnimatePresence } from "framer-motion"
+import { motion } from "framer-motion"
 import {
-  MapPin, ChevronRight, Truck, Ticket, CreditCard, Wallet,
-  Check, ShoppingBag, Clock, BadgeCheck, ArrowRight,
-  ShieldCheck, Info, Banknote, Smartphone, AlertTriangle, RefreshCw,
-  Plus, Minus, Trash2
+  ChevronRight, Ticket, ShoppingBag, BadgeCheck, ArrowRight,
+  Info, Plus, Minus, Trash2
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { useAppStore, useCartStore } from "@/lib/store"
 import { formatPrice } from "@/lib/utils"
-// DEFAULT_SHIPPING_OPTIONS removed — no more silent fallback to hardcoded rates
 import {
   PageHeader, EmptyState
-} from "./shared"
-import type { CartItem, ShippingOption, Address } from "@/lib/types"
+} from "../shared"
+import type { CartItem, ShippingOption } from "@/lib/types"
 import { logger } from '@/lib/logger'
 import { useState, useMemo, useEffect, useCallback, useRef } from "react"
 import { openSnapPayment } from '@/lib/midtrans'
 import { apiClient } from '@/lib/api-client'
-
-// ==================== PAYMENT REFERENCE EXTRACTOR ====================
-// Extracts payment reference data (VA number, payment code, etc.) from Midtrans Snap result
-// Exported for reuse in order-screen.tsx
-export function extractPaymentReference(result: Record<string, unknown> | undefined): Record<string, unknown> | null {
-  if (!result) return null
-  const ref: Record<string, unknown> = {}
-
-  // VA numbers
-  const vaNumbers = result.va_numbers as Array<{ bank: string; va_number: string }> | undefined
-  if (vaNumbers && vaNumbers.length > 0) {
-    ref.va_numbers = vaNumbers
-    ref.va_number = vaNumbers[0].va_number
-    ref.bank = vaNumbers[0].bank
-  }
-
-  // Permata VA number (single field)
-  if (result.permata_va_number) {
-    ref.permata_va_number = result.permata_va_number
-    if (!ref.va_number) {
-      ref.va_number = result.permata_va_number as string
-      ref.bank = 'permata'
-    }
-  }
-
-  // Payment code (for cstore / indomaret / alfamart)
-  if (result.payment_code) {
-    ref.payment_code = result.payment_code
-  }
-
-  // Bill key / biller code (for mandiri bill payment)
-  if (result.bill_key) ref.bill_key = result.bill_key
-  if (result.biller_code) ref.biller_code = result.biller_code
-
-  // QR URL (for QRIS / gopay)
-  if (result.qr_url) ref.qr_url = result.qr_url
-
-  // Actions (may contain payment URL for e-wallets)
-  if (result.actions && Array.isArray(result.actions)) {
-    ref.actions = result.actions
-  }
-
-  // Payment type for display
-  if (result.payment_type) ref.payment_type = result.payment_type
-
-  // Only return if we have at least one reference field
-  if (ref.va_number || ref.payment_code || ref.bill_key || ref.qr_url || ref.actions) {
-    return ref
-  }
-  return null
-}
+import { extractPaymentReference } from '@/lib/payment-utils'
+import { CheckoutStepIndicator } from './CheckoutStepIndicator'
+import { AddressCard } from './AddressCard'
+import { ShippingSelector } from './ShippingSelector'
+import { PaymentMethodSelector } from './PaymentMethodSelector'
+import { CheckoutSummary } from './CheckoutSummary'
+import { OrderSuccessModal } from './OrderSuccessModal'
 
 // ==================== API RESPONSE TYPES ====================
 type ShippingResponse = { success: boolean; data?: { rates?: ShippingOption[] }; error?: string }
@@ -79,266 +31,6 @@ type VoucherValidateResponse = { success: boolean; data?: { valid: boolean; mess
 type OrderCreateResponse = { success: boolean; data?: { id: string; orderNumber: string }; error?: string }
 type WalletDebitResponse = { success: boolean; error?: string }
 type PaymentCreateResponse = { success: boolean; data?: { token: string }; error?: string }
-
-// ==================== CHECKOUT STEP INDICATOR ====================
-const CHECKOUT_STEPS = [
-  { key: 'address', label: 'Alamat', icon: MapPin },
-  { key: 'shipping', label: 'Pengiriman', icon: Truck },
-  { key: 'payment', label: 'Pembayaran', icon: CreditCard },
-]
-
-function CheckoutStepIndicator({ currentStep }: { currentStep: number }) {
-  return (
-    <div className="px-4 py-3">
-      <div className="flex items-center justify-between">
-        {CHECKOUT_STEPS.map((step, idx) => {
-          const Icon = step.icon
-          const isCompleted = idx < currentStep
-          const isCurrent = idx === currentStep
-
-          return (
-            <div key={step.key} className="flex items-center flex-1">
-              <div className="flex flex-col items-center gap-1">
-                <motion.div
-                  animate={{
-                    scale: isCurrent ? 1.1 : 1,
-                    backgroundColor: isCompleted ? '#10b981' : isCurrent ? '#10b981' : '#e5e7eb'
-                  }}
-                  className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                    isCompleted || isCurrent
-                      ? 'bg-emerald-500 text-white'
-                      : 'bg-gray-200 dark:bg-gray-700 text-gray-400'
-                  }`}
-                >
-                  {isCompleted ? (
-                    <Check className="w-4 h-4" strokeWidth={3} />
-                  ) : (
-                    <Icon className="w-4 h-4" />
-                  )}
-                </motion.div>
-                <span className={`text-[10px] font-medium ${
-                  isCurrent ? 'text-emerald-600' : isCompleted ? 'text-emerald-500' : 'text-muted-foreground'
-                }`}>
-                  {step.label}
-                </span>
-              </div>
-              {idx < CHECKOUT_STEPS.length - 1 && (
-                <div className="flex-1 mx-2 mt-[-12px]">
-                  <div className={`h-0.5 rounded-full ${
-                    idx < currentStep ? 'bg-emerald-500' : 'bg-gray-200 dark:bg-gray-700'
-                  }`} />
-                </div>
-              )}
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-// ==================== PAYMENT METHODS ====================
-const PAYMENT_METHODS = [
-  { id: "wallet", name: "MartUp Pay", icon: Wallet, description: "Bayar cepat dari saldo", color: "emerald" },
-  { id: "midtrans", name: "Transfer & E-Wallet", icon: Smartphone, description: "VA, GoPay, OVO, Dana, ShopeePay", color: "blue" },
-  { id: "card", name: "Kartu Kredit/Debit", icon: CreditCard, description: "Visa, Mastercard, JCB", color: "purple" },
-  { id: "cod", name: "Bayar di Tempat (COD)", icon: Banknote, description: "Bayar saat barang diterima", color: "orange" },
-]
-
-// ==================== ADDRESS CARD ====================
-function AddressCard({ address, onChange }: { address: Address | null; onChange: () => void }) {
-  if (!address) {
-    return (
-      <motion.button
-        whileTap={{ scale: 0.98 }}
-        onClick={onChange}
-        className="w-full p-4 bg-card rounded-xl border border-dashed border-emerald-500 flex items-center justify-center gap-2 text-emerald-600"
-      >
-        <MapPin className="w-5 h-5" />
-        <span className="text-sm font-medium">Tambah Alamat Pengiriman</span>
-      </motion.button>
-    )
-  }
-
-  return (
-    <div className="p-4 bg-card rounded-xl border border-border/50">
-      <div className="flex items-start justify-between">
-        <div className="flex items-start gap-3 flex-1 min-w-0">
-          <div className="w-10 h-10 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 flex items-center justify-center flex-shrink-0 mt-0.5">
-            <MapPin className="w-5 h-5 text-emerald-500" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-sm font-bold text-foreground">{address.recipient}</span>
-              <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 text-[9px] px-1.5 py-0.5">
-                {address.label}
-              </Badge>
-            </div>
-            <div className="space-y-0.5">
-              <p className="text-xs text-muted-foreground">{address.phone}</p>
-              {address.phone && !address.phone.startsWith('0') && !address.phone.startsWith('+') && (
-                <div className="flex items-center gap-1 text-amber-500">
-                  <AlertTriangle className="w-3 h-3 flex-shrink-0" />
-                  <span className="text-[10px]">Nomor telepon harus diawali dengan "0" atau "+"</span>
-                </div>
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
-              {address.address}, {address.city}, {address.province} {address.postalCode}
-            </p>
-          </div>
-        </div>
-        <button
-          onClick={onChange}
-          className="text-xs text-emerald-600 font-medium flex-shrink-0 ml-2"
-        >
-          Ubah
-        </button>
-      </div>
-    </div>
-  )
-}
-
-// ==================== SHIPPING SELECTOR ====================
-function ShippingSelector({
-  selectedShipping,
-  onSelect,
-  options,
-  isLoading,
-  error,
-  onRetry
-}: {
-  selectedShipping: ShippingOption | null
-  onSelect: (option: ShippingOption) => void
-  options: ShippingOption[]
-  isLoading?: boolean
-  error?: string
-  onRetry?: () => void
-}) {
-  const [isExpanded, setIsExpanded] = useState(false)
-
-  // Show error state instead of shipping options
-  if (error && !isLoading) {
-    return (
-      <div className="space-y-2">
-        <div className="flex items-center gap-2">
-          <Truck className="w-4 h-4 text-red-500" />
-          <span className="text-sm font-medium text-red-600">Gagal Menghitung Ongkir</span>
-        </div>
-        <div className="p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800/50 rounded-xl">
-          <p className="text-xs text-red-600 dark:text-red-400">
-            Gagal menghitung ongkir ke alamat ini. Pastikan kota tujuan valid atau coba lagi.
-          </p>
-          {onRetry && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onRetry}
-              className="mt-2 h-7 text-[11px] rounded-lg border-red-300 text-red-600 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-950/30"
-            >
-              <RefreshCw className="w-3 h-3 mr-1" />
-              Hitung Ulang
-            </Button>
-          )}
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="space-y-2">
-      <button
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full flex items-center justify-between"
-      >
-        <div className="flex items-center gap-2">
-          <Truck className="w-4 h-4 text-emerald-500" />
-          <span className="text-sm font-medium">
-            {isLoading ? 'Menghitung ongkir...' : selectedShipping ? selectedShipping.name : 'Pilih Pengiriman'}
-          </span>
-        </div>
-        <motion.div animate={{ rotate: isExpanded ? 180 : 0 }} transition={{ duration: 0.2 }}>
-          <ChevronRight className="w-4 h-4 text-muted-foreground rotate-90" />
-        </motion.div>
-      </button>
-
-      <AnimatePresence>
-        {isExpanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="overflow-hidden"
-          >
-            <div className="space-y-2 pt-1">
-              {isLoading ? (
-                <div className="flex items-center justify-center gap-2 p-4">
-                  <motion.div
-                    animate={{ rotate: 360 }}
-                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                    className="w-5 h-5 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full"
-                  />
-                  <span className="text-xs text-muted-foreground">Menghitung ongkos kirim...</span>
-                </div>
-              ) : options.length === 0 ? (
-                <div className="p-3 text-center">
-                  <p className="text-xs text-muted-foreground">Ongkir tidak tersedia untuk alamat ini. Silakan gunakan kota yang valid.</p>
-                </div>
-              ) : (
-                options.map((option) => {
-                  const isSelected = selectedShipping?.service === option.service && selectedShipping?.provider === option.provider
-
-                  return (
-                    <motion.button
-                      key={`${option.provider}-${option.service}`}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => {
-                        onSelect(option)
-                        setIsExpanded(false)
-                      }}
-                      className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all ${
-                        isSelected
-                          ? "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-500"
-                          : "bg-card border-border/50 hover:border-emerald-300"
-                      }`}
-                    >
-                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
-                        isSelected ? "border-emerald-500 bg-emerald-500" : "border-gray-300 dark:border-gray-600"
-                      }`}>
-                        {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
-                      </div>
-
-                      <span className="text-lg flex-shrink-0">{option.logo}</span>
-
-                      <div className="flex-1 text-left min-w-0">
-                        <p className="text-sm font-medium">{option.name}</p>
-                        <p className="text-[10px] text-muted-foreground">Estimasi {option.estimatedDays}</p>
-                      </div>
-
-                      <span className="text-sm font-bold text-foreground flex-shrink-0">
-                        {option.price === 0 ? 'Gratis' : formatPrice(option.price)}
-                      </span>
-                    </motion.button>
-                  )
-                })
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {selectedShipping && !isExpanded && (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground pl-6">
-          <Clock className="w-3 h-3" />
-          <span>Estimasi tiba {selectedShipping.estimatedDays}</span>
-          <span>·</span>
-          <span className="font-medium text-foreground">{formatPrice(selectedShipping.price)}</span>
-        </div>
-      )}
-    </div>
-  )
-}
 
 // ==================== MAIN COMPONENT ====================
 export function CheckoutScreen() {
@@ -386,7 +78,7 @@ export function CheckoutScreen() {
       const sellerId = group.seller.id
       weights[sellerId] = group.items.reduce((sum, item) => {
         // Jasa products have no physical weight — skip them from shipping calculation
-        if ((item.product as any).productType === 'jasa') return sum
+        if (item.product.productType === 'jasa') return sum
         const itemWeight = (item.product.weight || 500) * item.quantity // default 500g if not set
         return sum + itemWeight
       }, 0)
@@ -398,7 +90,7 @@ export function CheckoutScreen() {
   const isJasaOnlySeller = useCallback((sellerId: string): boolean => {
     const group = groupedBySeller.find(g => g.seller.id === sellerId)
     if (!group) return false
-    return group.items.every(item => (item.product as any).productType === 'jasa')
+    return group.items.every(item => item.product.productType === 'jasa')
   }, [groupedBySeller])
 
   // Fetch shipping rates from API — with in-flight deduplication to prevent concurrent duplicate fetches
@@ -515,7 +207,7 @@ export function CheckoutScreen() {
 
   // Check if ALL items in the checkout are jasa (service) products — no address needed
   const isAllJasa = useMemo(() => {
-    return checkedItems.length > 0 && checkedItems.every(item => (item.product as any).productType === 'jasa')
+    return checkedItems.length > 0 && checkedItems.every(item => item.product.productType === 'jasa')
   }, [checkedItems])
 
   // Calculate current checkout step
@@ -561,7 +253,7 @@ export function CheckoutScreen() {
 
     // Stock validation (skip jasa products — unlimited stock)
     const outOfStockItem = checkedItems.find(item => {
-      if ((item.product as any).productType === 'jasa') return false // unlimited stock for services
+      if (item.product.productType === 'jasa') return false // unlimited stock for services
       const maxStock = item.variant ? item.variant.stock : item.product.stock
       return item.quantity > maxStock
     })
@@ -616,7 +308,7 @@ export function CheckoutScreen() {
         const sellerShipping = shippingBySeller[group.seller.id]
         const groupSubtotal = group.items.reduce((sum, i) => sum + ((i.product.discountPrice || i.product.price) * i.quantity), 0)
         const groupShipping = sellerShipping?.price || 0
-        const groupDiscount = subtotal > 0 ? Math.round(validatedVoucherDiscount * (groupSubtotal / subtotal)) : 0
+        const groupDiscount = subtotal > 0 ? Math.floor(validatedVoucherDiscount * (groupSubtotal / subtotal)) : 0
         // Only charge platform fee for the first seller group — avoids N× overcharge
         const groupPlatformFee = groupIdx === 0 ? platformFee : 0
         const groupTotal = groupSubtotal + groupShipping - groupDiscount + groupPlatformFee
@@ -728,10 +420,11 @@ export function CheckoutScreen() {
 
       if (selectedPayment === 'wallet') {
         // Wallet payment: pay each order via /api/wallet/debit
-        // IMPORTANT: Use per-order amount (not combined total) to match order totalAmount
         if (selectedVoucher) markVoucherUsed(selectedVoucher.id)
 
-        let walletPaymentSuccess = true
+        const walletResults: { orderId: string; success: boolean; error?: string }[] = []
+        let allWalletSuccess = true
+
         for (const order of createdOrders) {
           try {
             const walletRes = await apiClient.rawPost('/api/wallet/debit', {
@@ -740,37 +433,52 @@ export function CheckoutScreen() {
               description: `Pembayaran pesanan via MartUp Pay`,
             })
             const walletData: WalletDebitResponse = await walletRes.json()
-            if (!walletData.success) {
-              walletPaymentSuccess = false
-              showToast(walletData.error || 'Pembayaran wallet gagal', 'error')
+            if (walletData.success) {
+              walletResults.push({ orderId: order.id, success: true })
+            } else {
+              walletResults.push({ orderId: order.id, success: false, error: walletData.error })
+              allWalletSuccess = false
             }
           } catch (error) {
-            walletPaymentSuccess = false
+            walletResults.push({ orderId: order.id, success: false })
+            allWalletSuccess = false
             logger.warn({ component: 'checkout', err: error }, 'Wallet payment API failed')
           }
         }
 
-        // Update local wallet balance — ONLY if wallet payment succeeded
-        // Use sum of per-order totals (matches what server actually debited)
-        if (walletPaymentSuccess) {
-          const actualDebited = createdOrders.reduce((sum, o) => sum + o.totalAmount, 0)
-          deductWallet(Math.max(0, actualDebited), 'Pembayaran pesanan via MartUp Pay')
+        // Calculate total debited amount from SUCCESSFUL payments only
+        const successfulOrderIds = new Set(walletResults.filter(r => r.success).map(r => r.orderId))
+        const totalDebited = createdOrders
+          .filter(o => successfulOrderIds.has(o.id))
+          .reduce((sum, o) => sum + o.totalAmount, 0)
+
+        // Update local wallet balance — only for successfully debited orders
+        if (totalDebited > 0) {
+          deductWallet(Math.max(0, totalDebited), 'Pembayaran pesanan via MartUp Pay')
         }
 
-        // Remove cart items only after wallet payment succeeds
-        if (walletPaymentSuccess) {
+        // Remove cart items if ANY wallet payment succeeded
+        // (Orders are committed — even partial payments mean items are ordered)
+        if (successfulOrderIds.size > 0) {
           itemIdsToRemove.forEach(id => removeItem(id))
         }
 
         setIsProcessing(false)
-        if (walletPaymentSuccess) {
+
+        if (allWalletSuccess) {
           setShowSuccessModal(true)
           setTimeout(() => {
             setShowSuccessModal(false)
             navigate('orders')
           }, 2500)
         } else {
-          showToast('Pembayaran wallet gagal. Pesanan tersimpan sebagai "Belum Bayar".', 'error')
+          // Partial payment — some orders paid, some not
+          const failedCount = walletResults.filter(r => !r.success).length
+          if (successfulOrderIds.size > 0) {
+            showToast(`${successfulOrderIds.size} pesanan berhasil dibayar. ${failedCount} pesanan gagal — bisa dibayar nanti dari halaman pesanan.`, 'warning')
+          } else {
+            showToast('Pembayaran wallet gagal. Pesanan tersimpan sebagai "Belum Bayar".', 'error')
+          }
           navigate('orders')
         }
 
@@ -825,8 +533,12 @@ export function CheckoutScreen() {
                   } catch { /* non-critical — best effort */ }
                 } else if (snapResult.status === 'closed') {
                   allSuccess = false
-                  // User closed popup — stop processing remaining orders
-                  // Don't remove cart — user may want to retry
+                  // User closed popup — orders are already created in DB, so remove cart items
+                  // User can pay for unpaid orders from the order screen later
+                  if (!cartRemoved) {
+                    itemIdsToRemove.forEach(id => removeItem(id))
+                    cartRemoved = true
+                  }
                   showToast('Pembayaran dibatalkan. Anda bisa membayar nanti dari halaman pesanan.', 'warning')
                   break
                 } else {
@@ -972,7 +684,7 @@ export function CheckoutScreen() {
                   const itemPrice = item.product.discountPrice || item.product.price
                   const itemTotal = itemPrice * item.quantity
                   const maxStock = item.variant ? item.variant.stock : item.product.stock
-                  const isJasa = (item.product as any).productType === 'jasa'
+                  const isJasa = item.product.productType === 'jasa'
                   const colors = [
                     "bg-emerald-100 dark:bg-emerald-900/30",
                     "bg-orange-100 dark:bg-orange-900/30",
@@ -1140,74 +852,14 @@ export function CheckoutScreen() {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="bg-card rounded-xl border border-border/50 p-4 space-y-3"
         >
-          <div className="flex items-center gap-2">
-            <CreditCard className="w-4 h-4 text-emerald-500" />
-            <h3 className="text-sm font-bold">Metode Pembayaran</h3>
-          </div>
-
-          <div className="space-y-2">
-            {PAYMENT_METHODS.map((method) => {
-              const isSelected = selectedPayment === method.id
-              const Icon = method.icon
-              const isWalletInsufficient = method.id === 'wallet' && walletBalance < totalAmount
-
-              return (
-                <motion.button
-                  key={method.id}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => {
-                    if (isWalletInsufficient) {
-                      showToast("Saldo tidak mencukupi. Silakan top up terlebih dahulu.", "error")
-                      return
-                    }
-                    setSelectedPayment(method.id)
-                  }}
-                  className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all ${
-                    isSelected
-                      ? "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-500"
-                      : isWalletInsufficient
-                        ? "bg-muted/30 border-border/30 opacity-60"
-                        : "bg-background border-border/50 hover:border-emerald-300"
-                  }`}
-                >
-                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
-                    isSelected ? "border-emerald-500 bg-emerald-500" : "border-gray-300 dark:border-gray-600"
-                  }`}>
-                    {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
-                  </div>
-
-                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                    method.color === 'emerald' ? 'bg-emerald-100 dark:bg-emerald-900/30' :
-                    method.color === 'blue' ? 'bg-blue-100 dark:bg-blue-900/30' :
-                    method.color === 'purple' ? 'bg-purple-100 dark:bg-purple-900/30' :
-                    'bg-orange-100 dark:bg-orange-900/30'
-                  }`}>
-                    <Icon className={`w-5 h-5 ${
-                      method.color === 'emerald' ? 'text-emerald-600' :
-                      method.color === 'blue' ? 'text-blue-600' :
-                      method.color === 'purple' ? 'text-purple-600' :
-                      'text-orange-600'
-                    }`} />
-                  </div>
-
-                  <div className="flex-1 text-left min-w-0">
-                    <p className={`text-sm font-medium ${isSelected ? 'text-emerald-700 dark:text-emerald-400' : ''}`}>
-                      {method.name}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground">
-                      {method.id === 'wallet'
-                        ? `Saldo: ${formatPrice(walletBalance)}${isWalletInsufficient ? ' (tidak cukup)' : ''}`
-                        : method.description
-                      }
-                    </p>
-                  </div>
-                </motion.button>
-              )
-            })}
-          </div>
-
+          <PaymentMethodSelector
+            selectedPayment={selectedPayment}
+            onSelectPayment={setSelectedPayment}
+            walletBalance={walletBalance}
+            totalAmount={totalAmount}
+            showToast={showToast}
+          />
         </motion.div>
 
         {/* Price Summary */}
@@ -1215,61 +867,19 @@ export function CheckoutScreen() {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.25 }}
-          className="bg-card rounded-xl border border-border/50 p-4 space-y-2.5"
         >
-          <h3 className="text-sm font-bold">Ringkasan Pembayaran</h3>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">Subtotal ({checkedCount} produk)</span>
-              <span className="text-sm font-medium">{formatPrice(subtotal)}</span>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">Ongkos Kirim</span>
-              <span className="text-sm font-medium">
-                {shippingCost > 0 ? formatPrice(shippingCost) : 'Pilih pengiriman'}
-              </span>
-            </div>
-
-            {voucherDiscount > 0 && (
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-emerald-600">Diskon Voucher</span>
-                <span className="text-sm font-medium text-emerald-600">-{formatPrice(voucherDiscount)}</span>
-              </div>
-            )}
-
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">Biaya Platform</span>
-              <span className="text-sm font-medium">{formatPrice(platformFee)}</span>
-            </div>
-          </div>
-
-          <Separator />
-
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-bold">Total Pembayaran</span>
-            <span className="text-lg font-bold text-emerald-600">{formatPrice(Math.max(0, totalAmount))}</span>
-          </div>
-
-          {/* Security badge */}
-          <div className="flex items-center gap-1.5 pt-1">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-            <span className="text-[10px] text-muted-foreground">Transaksi aman & terenkripsi</span>
-          </div>
-
-          {/* Cancel order link */}
-          <div className="flex justify-center pt-2">
-            <button
-              onClick={() => {
-                setSelectedPayment(null)
-                navigate('cart')
-              }}
-              className="text-xs text-muted-foreground hover:text-red-500 transition-colors underline underline-offset-2"
-            >
-              Batalkan Pesanan
-            </button>
-          </div>
+          <CheckoutSummary
+            checkedCount={checkedCount}
+            subtotal={subtotal}
+            shippingCost={shippingCost}
+            voucherDiscount={voucherDiscount}
+            platformFee={platformFee}
+            totalAmount={totalAmount}
+            onCancel={() => {
+              setSelectedPayment(null)
+              navigate('cart')
+            }}
+          />
         </motion.div>
 
         {/* Missing step hints */}
@@ -1329,66 +939,12 @@ export function CheckoutScreen() {
       </div>
 
       {/* Success Modal */}
-      <AnimatePresence>
-        {showSuccessModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-6"
-          >
-            <motion.div
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.8, opacity: 0 }}
-              transition={{ type: "spring", stiffness: 300, damping: 25 }}
-              className="bg-card rounded-2xl p-8 w-full max-w-sm text-center space-y-4 shadow-xl"
-            >
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ delay: 0.2, type: "spring", stiffness: 300, damping: 20 }}
-                className="w-20 h-20 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mx-auto"
-              >
-                <motion.div
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  transition={{ delay: 0.4, type: "spring" }}
-                >
-                  <Check className="w-10 h-10 text-emerald-500" strokeWidth={3} />
-                </motion.div>
-              </motion.div>
-
-              <div className="space-y-1">
-                <h3 className="text-lg font-bold text-foreground">
-                  {selectedPayment === 'wallet' ? 'Pembayaran Berhasil!' : 'Pesanan Dibuat!'}
-                </h3>
-                <p className="text-sm text-muted-foreground">
-                  {selectedPayment === 'wallet'
-                    ? 'Terima kasih atas pesananmu. Pesanan sedang diproses oleh penjual.'
-                    : selectedPayment === 'cod'
-                      ? 'Pesanan berhasil dibuat. Pembayaran akan dilakukan saat barang diterima.'
-                      : 'Pesanan berhasil dibuat. Silakan selesaikan pembayaran sebelum batas waktu.'
-                  }
-                </p>
-              </div>
-
-              <div className="bg-muted/30 rounded-xl p-3 space-y-1">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">No. Pesanan</span>
-                  <span className="font-medium">{orderNumber}</span>
-                </div>
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">Total</span>
-                  <span className="font-bold text-emerald-600">{formatPrice(Math.max(0, totalAmount))}</span>
-                </div>
-              </div>
-
-              <p className="text-xs text-muted-foreground">Mengalihkan ke halaman pesanan...</p>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <OrderSuccessModal
+        show={showSuccessModal}
+        selectedPayment={selectedPayment}
+        orderNumber={orderNumber}
+        totalAmount={totalAmount}
+      />
     </div>
   )
 }
