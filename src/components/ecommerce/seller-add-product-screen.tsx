@@ -15,7 +15,7 @@ import { UPLOAD_LIMITS } from '@/lib/upload-limits'
 import type { Product } from "@/lib/types"
 import { logger } from '@/lib/logger'
 import { mapSeller } from '@/lib/mappers'
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 
 // ==================== CONSTANTS ====================
 const MAX_PRODUCT_IMAGES = UPLOAD_LIMITS.MAX_PRODUCT_IMAGES
@@ -90,8 +90,9 @@ export function SellerAddProductScreen() {
   const [tagInput, setTagInput] = useState("")
   const [tags, setTags] = useState<string[]>(editingProduct?.tags || [])
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false)
+  const categoryDropdownRef = useRef<HTMLDivElement>(null)
   const [variantInputValues, setVariantInputValues] = useState<Record<string, { name: string; value: string }>>({})
-  const [productImages, setProductImages] = useState<{ id: string; url: string; file?: File }[]>(() => {
+  const [productImages, setProductImages] = useState<{ id: string; url: string; file?: File; isUploading?: boolean }[]>(() => {
     if (!editingProduct?.images) return []
     const imgs = Array.isArray(editingProduct.images)
       ? editingProduct.images
@@ -106,10 +107,32 @@ export function SellerAddProductScreen() {
   const [productVideo, setProductVideo] = useState<{ file?: File; url: string } | null>(
     editingProduct?.videoUrl ? { url: editingProduct.videoUrl } : null
   )
-  const [isUploading, setIsUploading] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [videoDeleted, setVideoDeleted] = useState(false)
   const videoInputRef = useRef<HTMLInputElement>(null)
+  const [isVideoUploading, setIsVideoUploading] = useState(false)
+
+  // Fix 2 (Task 15): Close category dropdown on outside click or scroll
+  useEffect(() => {
+    if (!showCategoryDropdown) return
+    const handleClickOutside = (e: MouseEvent) => {
+      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(e.target as Node)) {
+        setShowCategoryDropdown(false)
+      }
+    }
+    const handleScroll = () => {
+      setShowCategoryDropdown(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    window.addEventListener('scroll', handleScroll, true) // capture phase to catch all scrolls
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      window.removeEventListener('scroll', handleScroll, true)
+    }
+  }, [showCategoryDropdown])
+
+  // Check if any images are still uploading (for inline indicator)
+  const hasUploadingImages = productImages.some(img => img.isUploading)
 
   // Derived
   const selectedCategory = categories.find(c => c.id === category)
@@ -213,7 +236,7 @@ export function SellerAddProductScreen() {
     }
   }
 
-  // Image upload handlers
+  // Image upload handlers — Fix 3 (Task 16): inline loading indicators instead of full-screen overlay
   const handleProductImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
     if (!files.length) return
@@ -225,8 +248,9 @@ export function SellerAddProductScreen() {
       showToast(`Maksimal ${MAX_PRODUCT_IMAGES} foto per produk`, "error")
     }
 
-    setIsUploading(true)
-    const newImages: { id: string; url: string; file?: File }[] = []
+    // Add placeholder entries with isUploading=true so the user sees inline spinners
+    const placeholderEntries: { id: string; url: string; file?: File; isUploading: boolean }[] = []
+    const validFiles: { file: File; placeholderId: string }[] = []
 
     for (const file of filesToAdd) {
       if (file.size > MAX_PRODUCT_IMAGE_SIZE_MB * 1024 * 1024) {
@@ -237,26 +261,36 @@ export function SellerAddProductScreen() {
         showToast(`Format tidak didukung. Gunakan JPG, PNG, WebP, atau GIF.`, "error")
         continue
       }
+      const id = `pimg-${Date.now()}-${Math.random().toString(36).slice(2)}`
+      const blobUrl = URL.createObjectURL(file)
+      placeholderEntries.push({ id, url: blobUrl, file, isUploading: true })
+      validFiles.push({ file, placeholderId: id })
+    }
 
+    // Add all placeholders at once
+    setProductImages(prev => [...prev, ...placeholderEntries])
+
+    // Upload each file, updating its placeholder as it completes
+    for (const { file, placeholderId } of validFiles) {
       try {
         const result = await uploadFile(file, 'products', 'images')
-        newImages.push({
-          id: `pimg-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-          url: result.url,
-        })
+        setProductImages(prev => prev.map(img =>
+          img.id === placeholderId
+            ? { ...img, url: result.url, file: undefined, isUploading: false }
+            : img
+        ))
       } catch (error) {
         logger.warn({ component: 'seller-product', err: error }, 'Image upload failed')
-        newImages.push({
-          id: `pimg-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-          url: URL.createObjectURL(file),
-          file,
-        })
+        // Keep blob URL as fallback, mark as not uploading
+        setProductImages(prev => prev.map(img =>
+          img.id === placeholderId
+            ? { ...img, isUploading: false }
+            : img
+        ))
         showToast(`Gagal upload "${file.name}", menggunakan preview sementara`, "error")
       }
     }
 
-    setProductImages(prev => [...prev, ...newImages])
-    setIsUploading(false)
     e.target.value = ""
   }
 
@@ -275,7 +309,7 @@ export function SellerAddProductScreen() {
       return
     }
 
-    setIsUploading(true)
+    setIsVideoUploading(true)
     try {
       const result = await uploadFile(file, 'products', 'videos')
       setProductVideo({ file, url: result.url })
@@ -287,7 +321,7 @@ export function SellerAddProductScreen() {
       setVideoDeleted(false)
       showToast('Gagal upload video ke server, menggunakan preview sementara', 'error')
     }
-    setIsUploading(false)
+    setIsVideoUploading(false)
     e.target.value = ""
   }
 
@@ -385,8 +419,8 @@ export function SellerAddProductScreen() {
 
   // Submit handler
   const handleSubmit = async () => {
-    // Prevent double-submit
-    if (isSubmitting || isUploading) return
+    // Prevent double-submit or submit while images/video are still uploading
+    if (isSubmitting || hasUploadingImages || isVideoUploading) return
     setIsSubmitting(true)
 
     try {
@@ -463,8 +497,6 @@ export function SellerAddProductScreen() {
           stock: Math.floor(parseInt(stock) / (v.values.length || 1)),
         }))
       )
-
-      setIsUploading(true)
 
       if (editingProduct) {
         // Update existing product via API
@@ -609,12 +641,11 @@ export function SellerAddProductScreen() {
       logger.warn({ component: 'seller-product', err: error }, 'Product save failed')
       showToast("Terjadi kesalahan saat menyimpan produk", "error")
     } finally {
-      setIsUploading(false)
       setIsSubmitting(false)
     }
   }
 
-  const handleDraft = () => {
+  const handleDraft = async () => {
     if (!productName.trim()) {
       showToast("Nama produk harus diisi", "error")
       return
@@ -666,12 +697,145 @@ export function SellerAddProductScreen() {
       ),
     }
 
-    if (editingProduct) {
-      updateProduct(draftProduct)
-    } else {
-      addProduct(draftProduct)
+    // Fix 5 (Task 18): Draft persistence via API call
+    // Try to save to server first; fall back to local store on failure
+    try {
+      // Ensure seller is registered before saving
+      if (!seller?.id) {
+        const registered = await ensureSellerRegistered()
+        if (!registered) {
+          // Still save locally as fallback
+          if (editingProduct) {
+            updateProduct(draftProduct)
+          } else {
+            addProduct(draftProduct)
+          }
+          showToast("Draft disimpan lokal (gagal mendaftar akun seller)", "warning")
+          setTimeout(() => navigate("seller-products"), 1000)
+          return
+        }
+      }
+
+      const currentSellerId = useAppStore.getState().seller?.id || sellerId
+      const apiVariants = variants.flatMap(v =>
+        v.values.map(val => ({
+          name: v.name,
+          value: val,
+          stock: Math.floor(parseInt(stock || '0') / (v.values.length || 1)),
+        }))
+      )
+
+      if (editingProduct) {
+        // Update existing product as draft via PUT
+        const res = await apiClient.rawPut('/api/seller/products', {
+          productId: editingProduct.id,
+          name: productName.trim(),
+          slug: productName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+          description: description.trim(),
+          price: priceNumber || editingProduct.price,
+          discountPrice: discountPriceNumber > 0 && discountPriceNumber < priceNumber ? discountPriceNumber : null,
+          images: productImages2,
+          stock: productType === 'jasa' ? 1 : (parseInt(stock) || editingProduct.stock),
+          minOrder: parseInt(minOrder) || 1,
+          weight: productType === 'jasa' ? null : (parseInt(weight) || 100),
+          condition: productType === 'jasa' ? 'new' : condition,
+          productType,
+          serviceDuration: productType === 'jasa' ? serviceDuration.trim() : null,
+          serviceLocation: productType === 'jasa' ? serviceLocation.trim() : null,
+          status: 'draft',
+          categoryId: category || editingProduct.categoryId,
+          tags: tags.length > 0 ? tags : null,
+          videoUrl: (productVideo?.url && !productVideo.url.startsWith('blob:'))
+            ? productVideo.url
+            : (videoDeleted ? null : (editingProduct?.videoUrl || null)),
+          variants: apiVariants.length > 0 ? apiVariants : undefined,
+        })
+        const data = await res.json()
+        if (data.success && data.data) {
+          // Update local store with server response
+          const apiProduct = data.data
+          const serverVariants = (apiProduct.variants || []).map((v: any) => ({
+            id: v.id,
+            productId: apiProduct.id,
+            name: v.name,
+            value: v.value,
+            stock: v.stock || 0,
+          }))
+          updateProduct({
+            ...draftProduct,
+            id: apiProduct.id,
+            slug: apiProduct.slug,
+            images: Array.isArray(apiProduct.images) ? apiProduct.images : productImages2,
+            variants: serverVariants,
+            ...((apiProduct.videoUrl) ? { videoUrl: apiProduct.videoUrl } : {}),
+          })
+          showToast("Draft berhasil disimpan", "success")
+        } else {
+          // API returned error — save locally as fallback
+          updateProduct(draftProduct)
+          showToast(data.error || "Gagal menyimpan draft ke server, disimpan lokal", "error")
+        }
+      } else {
+        // Create new product as draft via POST
+        const res = await apiClient.rawPost('/api/seller/products', {
+          sellerId: currentSellerId,
+          categoryId: category || '',
+          name: productName.trim(),
+          slug: productName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+          description: description.trim(),
+          price: priceNumber || 0,
+          discountPrice: discountPriceNumber > 0 && discountPriceNumber < priceNumber ? discountPriceNumber : null,
+          images: productImages2,
+          stock: productType === 'jasa' ? 1 : (parseInt(stock) || 0),
+          minOrder: parseInt(minOrder) || 1,
+          weight: productType === 'jasa' ? null : (parseInt(weight) || 100),
+          condition: productType === 'jasa' ? 'new' : condition,
+          productType,
+          serviceDuration: productType === 'jasa' ? serviceDuration.trim() : null,
+          serviceLocation: productType === 'jasa' ? serviceLocation.trim() : null,
+          status: 'draft',
+          variants: apiVariants,
+          tags: tags.length > 0 ? tags : null,
+          videoUrl: (productVideo?.url && !productVideo.url.startsWith('blob:')) ? productVideo.url : null,
+        })
+        const data = await res.json()
+        if (data.success && data.data) {
+          // Add to local store from server response
+          const apiProduct = data.data
+          const serverVariants = (apiProduct.variants || []).map((v: any) => ({
+            id: v.id,
+            productId: apiProduct.id,
+            name: v.name,
+            value: v.value,
+            stock: v.stock || 0,
+          }))
+          const newProduct: Product = {
+            ...draftProduct,
+            id: apiProduct.id,
+            slug: apiProduct.slug,
+            images: Array.isArray(apiProduct.images) ? apiProduct.images : productImages2,
+            variants: serverVariants,
+            ...((apiProduct.videoUrl) ? { videoUrl: apiProduct.videoUrl } : {}),
+          }
+          addProduct(newProduct)
+          showToast("Draft berhasil disimpan", "success")
+        } else {
+          // API returned error — save locally as fallback
+          addProduct(draftProduct)
+          showToast(data.error || "Gagal menyimpan draft ke server, disimpan lokal", "error")
+        }
+      }
+    } catch (error) {
+      logger.warn({ component: 'seller-product', err: error }, 'Draft API save failed')
+      // Save locally as fallback
+      if (editingProduct) {
+        updateProduct(draftProduct)
+      } else {
+        addProduct(draftProduct)
+      }
+      showToast("Gagal menyimpan draft ke server, disimpan lokal", "error")
     }
-    showToast("Produk disimpan sebagai draft", "info")
+
     setTimeout(() => navigate("seller-products"), 1000)
   }
 
@@ -711,21 +875,29 @@ export function SellerAddProductScreen() {
                 >
                   <div
                     className="w-full h-full rounded-xl overflow-hidden border border-border/50 cursor-pointer"
-                    onClick={() => setPreviewImage(img.url)}
+                    onClick={() => !img.isUploading && setPreviewImage(img.url)}
                   >
-                    <img src={img.url} alt={`Product ${idx + 1}`} className="w-full h-full object-cover" />
+                    <img src={img.url} alt={`Product ${idx + 1}`} className={`w-full h-full object-cover ${img.isUploading ? 'opacity-40' : ''}`} />
+                    {/* Fix 3 (Task 16): Inline loading indicator on individual image slot */}
+                    {img.isUploading && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/20 rounded-xl">
+                        <div className="w-6 h-6 border-2 border-white/30 border-t-emerald-400 rounded-full animate-spin" />
+                      </div>
+                    )}
                   </div>
-                  {idx === 0 && (
+                  {idx === 0 && !img.isUploading && (
                     <div className="absolute top-0.5 left-0.5 bg-emerald-500 text-white text-[7px] font-bold px-1 py-0.5 rounded-md">
                       UTAMA
                     </div>
                   )}
-                  <button
-                    onClick={() => handleRemoveProductImage(img.id)}
-                    className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center shadow-sm sm:opacity-0 sm:group-hover:opacity-100 opacity-50 group-hover:opacity-100 transition-opacity"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
+                  {!img.isUploading && (
+                    <button
+                      onClick={() => handleRemoveProductImage(img.id)}
+                      className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center shadow-sm sm:opacity-0 sm:group-hover:opacity-100 opacity-50 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
                 </motion.div>
               ))}
 
@@ -781,7 +953,12 @@ export function SellerAddProductScreen() {
               onChange={handleVideoUpload}
             />
 
-            {productVideo ? (
+            {isVideoUploading ? (
+              <div className="w-full h-40 rounded-xl border-2 border-dashed border-purple-300 flex flex-col items-center justify-center gap-2 bg-purple-50/30">
+                <div className="w-8 h-8 border-2 border-purple-200 border-t-purple-500 rounded-full animate-spin" />
+                <span className="text-xs text-purple-600 dark:text-purple-400 font-medium">Mengupload video...</span>
+              </div>
+            ) : productVideo ? (
               <div className="relative group">
                 <div className="rounded-xl overflow-hidden border border-border/50">
                   <video
@@ -831,7 +1008,7 @@ export function SellerAddProductScreen() {
         <motion.div {...fadeIn}>
           <div className="rounded-2xl border border-border/50 bg-card p-4 space-y-2">
             <label className="text-sm font-semibold text-foreground">Kategori <span className="text-red-500">*</span></label>
-            <div className="relative">
+            <div className="relative" ref={categoryDropdownRef}>
               <button
                 onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
                 className="w-full h-10 rounded-xl border border-input bg-transparent px-3 text-sm text-left flex items-center justify-between hover:bg-muted/50 transition-colors"
@@ -1293,7 +1470,7 @@ export function SellerAddProductScreen() {
           )}
           <PrimaryButton
             onClick={handleSubmit}
-            disabled={isSubmitting || isUploading || isRegisteringSeller}
+            disabled={isSubmitting || hasUploadingImages || isVideoUploading || isRegisteringSeller}
             className="w-full h-12 rounded-xl text-sm font-bold shadow-lg shadow-emerald-500/25 disabled:cursor-not-allowed"
           >
             {isRegisteringSeller ? (
@@ -1301,7 +1478,7 @@ export function SellerAddProductScreen() {
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                 Mendaftar sebagai Seller...
               </>
-            ) : isSubmitting || isUploading ? (
+            ) : isSubmitting ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                 Menyimpan...
@@ -1318,33 +1495,12 @@ export function SellerAddProductScreen() {
             variant="outline"
             className="w-full h-10 rounded-xl text-sm"
             onClick={handleDraft}
-            disabled={isSubmitting || isUploading}
+            disabled={isSubmitting || hasUploadingImages || isVideoUploading}
           >
             Simpan sebagai Draft
           </Button>
         </motion.div>
       </div>
-
-      {/* Upload Loading Overlay */}
-      <AnimatePresence>
-        {isUploading && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[150] bg-black/40 flex items-center justify-center"
-          >
-            <div className="bg-card rounded-2xl p-6 flex flex-col items-center gap-3 shadow-xl">
-              <motion.div
-                animate={{ rotate: 360 }}
-                transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
-                className="w-8 h-8 border-2 border-muted border-t-emerald-500 rounded-full"
-              />
-              <p className="text-sm font-medium text-foreground">Mengupload...</p>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* Image Preview Modal */}
       <AnimatePresence>

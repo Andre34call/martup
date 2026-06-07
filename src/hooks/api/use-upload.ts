@@ -6,9 +6,10 @@ import { apiClient } from '@/lib/api-client'
 // ==================== Types ====================
 
 interface UploadResult {
-  url: string
+  url?: string  // Undefined for private buckets — use signed URL endpoint instead
   path: string
   type: 'image' | 'video'
+  isPrivate?: boolean  // True for private buckets (payments, deposits)
 }
 
 interface UploadResponse {

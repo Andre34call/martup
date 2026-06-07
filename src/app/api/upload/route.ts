@@ -4,6 +4,7 @@ import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
 import { createRateLimiter } from '@/lib/rate-limit'
 import { UPLOAD_LIMITS } from '@/lib/upload-limits'
 import { ensureBucket } from '@/lib/ensure-bucket'
+import { isPrivateBucket } from '@/lib/signed-url'
 import { logger } from '@/lib/logger'
 
 // ==================== CONFIG ====================
@@ -325,6 +326,7 @@ export async function POST(request: NextRequest) {
         logger.info({ bucket }, 'Bucket not found, attempting auto-creation via ensureBucket...')
 
         const bucketCreated = await ensureBucket(bucket, {
+          public: !isPrivateBucket(bucket),
           maxFileSizeMb: getBucketMaxFileSizeMb(bucket),
           allowedMimeTypes: getBucketMimeTypes(bucket),
         })
@@ -334,12 +336,20 @@ export async function POST(request: NextRequest) {
           const retryResult = await uploadToSupabase(bucket, filePath, arrayBuffer, file.type)
 
           if (retryResult.ok) {
+            const isPrivate = isPrivateBucket(bucket)
             const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${filePath}`
-            logger.info({ userId: authResult.user.id, bucket, filePath, autoCreated: true }, 'File uploaded after bucket auto-creation')
+            logger.info({ userId: authResult.user.id, bucket, filePath, autoCreated: true, isPrivate }, 'File uploaded after bucket auto-creation')
 
+            // For private buckets, return the path so the client can request a signed URL
+            // Public buckets return the direct public URL
             return NextResponse.json({
               success: true,
-              data: { url: publicUrl, path: filePath, type: fileType },
+              data: {
+                url: isPrivate ? undefined : publicUrl,
+                path: filePath,
+                type: fileType,
+                isPrivate,
+              },
             })
           }
 
@@ -366,14 +376,22 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 15. Construct public URL and return response
+    // 15. Construct URL and return response
+    // For private buckets (payments, deposits), the public URL won't work.
+    // Return the path instead so the client can request a signed URL when needed.
+    const isPrivate = isPrivateBucket(bucket)
     const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${filePath}`
 
-    logger.info({ userId: authResult.user.id, bucket, filePath, fileType, size: file.size }, 'File uploaded successfully')
+    logger.info({ userId: authResult.user.id, bucket, filePath, fileType, size: file.size, isPrivate }, 'File uploaded successfully')
 
     return NextResponse.json({
       success: true,
-      data: { url: publicUrl, path: filePath, type: fileType },
+      data: {
+        url: isPrivate ? undefined : publicUrl,
+        path: filePath,
+        type: fileType,
+        isPrivate,
+      },
     })
   } catch (error: unknown) {
     logger.error({ err: error }, 'Upload POST error')

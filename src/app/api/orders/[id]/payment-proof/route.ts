@@ -5,6 +5,7 @@ import { createRateLimiter } from '@/lib/rate-limit'
 import { serializeDecimal } from '@/lib/decimal-utils'
 import { logger } from '@/lib/logger'
 import { ensureBucket } from '@/lib/ensure-bucket'
+import { isPrivateBucket } from '@/lib/signed-url'
 
 // Rate limiter: 5 payment proof uploads per minute per user
 const paymentProofLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 5, keyPrefix: 'rl:order:payment-proof:' })
@@ -60,8 +61,9 @@ async function uploadToSupabase(
 ): Promise<string | null> {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return null
 
-  // Ensure bucket exists
+  // Ensure bucket exists (private bucket — no public access)
   await ensureBucket(PAYMENT_BUCKET, {
+    public: false, // payments bucket is private — requires signed URL for access
     maxFileSizeMb: 10,
     allowedMimeTypes: ALLOWED_IMAGE_TYPES,
   })
@@ -105,7 +107,7 @@ async function uploadToSupabase(
           body: JSON.stringify({
             id: PAYMENT_BUCKET,
             name: PAYMENT_BUCKET,
-            public: true,
+            public: false, // Private bucket — requires signed URL for access
             fileSizeLimit: 10 * 1024 * 1024,
             allowedMimeTypes: ALLOWED_IMAGE_TYPES,
           }),
@@ -484,7 +486,21 @@ export async function GET(
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
     })
 
-    // Step 5: Return payment info
+    // Step 5: Return payment info (with signed URL for private proof images)
+    let proofSignedUrl: string | null = null
+    if (order.paymentProofUrl && isPrivateBucket(PAYMENT_BUCKET)) {
+      try {
+        // Extract path from the reference URL
+        const proofPath = order.paymentProofUrl.split(`/storage/v1/object/public/${PAYMENT_BUCKET}/`)[1]
+        if (proofPath) {
+          const { generateSignedUrl } = await import('@/lib/signed-url')
+          proofSignedUrl = await generateSignedUrl(PAYMENT_BUCKET, proofPath)
+        }
+      } catch (err) {
+        logger.warn({ err, orderId }, 'Failed to generate signed URL for payment proof')
+      }
+    }
+
     return NextResponse.json(serializeDecimal({
       success: true,
       data: {
@@ -492,7 +508,8 @@ export async function GET(
         orderNumber: order.orderNumber,
         status: order.status,
         paymentStatus: order.paymentStatus,
-        paymentProofUrl: order.paymentProofUrl,
+        paymentProofUrl: proofSignedUrl || order.paymentProofUrl,
+        paymentProofIsPrivate: isPrivateBucket(PAYMENT_BUCKET),
         escrowStatus: order.escrowStatus,
         totalAmount: order.totalAmount,
         platformBankAccountId: order.platformBankAccountId,

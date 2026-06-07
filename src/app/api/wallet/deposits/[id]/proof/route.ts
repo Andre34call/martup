@@ -35,13 +35,48 @@ export async function POST(
 
     // Parse the request body first (before transaction)
     const body = await request.json()
-    const { proofUrl, senderName } = body as { proofUrl?: string; senderName?: string }
+    const { proofUrl, proofPath, senderName } = body as { proofUrl?: string; proofPath?: string; senderName?: string }
 
-    if (!proofUrl || typeof proofUrl !== 'string') {
+    // Accept either proofUrl (public bucket) or proofPath (private bucket)
+    if (!proofUrl && !proofPath) {
       return NextResponse.json(
-        { success: false, error: 'URL bukti pembayaran diperlukan' },
+        { success: false, error: 'URL atau path bukti pembayaran diperlukan' },
         { status: 400 }
       )
+    }
+
+    let finalProofUrl: string
+
+    if (proofPath) {
+      // Private bucket: construct a reference URL from the path
+      // This URL acts as a reference even though the bucket is not publicly accessible.
+      // Access to the actual file requires a signed URL.
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+      if (!supabaseUrl) {
+        logger.error('NEXT_PUBLIC_SUPABASE_URL not configured — cannot construct proof URL from path')
+        return NextResponse.json(
+          { success: false, error: 'Upload bukti pembayaran sedang tidak tersedia' },
+          { status: 503 }
+        )
+      }
+
+      // SECURITY: Sanitize proofPath — prevent path traversal
+      const sanitizedPath = proofPath
+        .split('/')
+        .filter(segment => segment !== '..' && segment !== '.')
+        .join('/')
+      if (!sanitizedPath || sanitizedPath !== proofPath) {
+        return NextResponse.json(
+          { success: false, error: 'Path bukti pembayaran tidak valid' },
+          { status: 400 }
+        )
+      }
+
+      // Construct reference URL (won't be publicly accessible, but serves as file identifier)
+      finalProofUrl = `${supabaseUrl}/storage/v1/object/public/deposits/${sanitizedPath}`
+    } else {
+      // Public bucket: validate URL as before
+      finalProofUrl = proofUrl!
     }
 
     // SECURITY: Validate URL is from our Supabase storage — fail closed if env var missing
@@ -54,13 +89,13 @@ export async function POST(
       )
     }
     // Also validate it's a proper URL format
-    try { new URL(proofUrl) } catch {
+    try { new URL(finalProofUrl) } catch {
       return NextResponse.json(
         { success: false, error: 'URL bukti pembayaran tidak valid' },
         { status: 400 }
       )
     }
-    if (!proofUrl.startsWith(supabaseUrl)) {
+    if (!finalProofUrl.startsWith(supabaseUrl)) {
       return NextResponse.json(
         { success: false, error: 'Bukti pembayaran harus diupload melalui sistem kami' },
         { status: 400 }
@@ -111,7 +146,7 @@ export async function POST(
       const updated = await tx.deposit.update({
         where: { id: depositId },
         data: {
-          proofUrl,
+          proofUrl: finalProofUrl,
           senderName: sanitizedSenderName,
           status: 'proof_uploaded',
         },

@@ -2,9 +2,10 @@ import { apiClient } from '@/lib/api-client'
 import { logger } from '@/lib/logger'
 
 export interface UploadResult {
-  url: string
+  url?: string  // Undefined for private buckets — use signed URL endpoint instead
   path: string
   type: 'image' | 'video'
+  isPrivate?: boolean  // True for private buckets (payments, deposits)
 }
 
 export async function uploadFile(

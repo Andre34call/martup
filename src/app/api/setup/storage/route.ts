@@ -14,8 +14,8 @@ const REQUIRED_BUCKETS = [
   { id: 'banners', name: 'banners', public: true, fileSizeLimit: 10 * 1024 * 1024 },
   { id: 'streams', name: 'streams', public: true, fileSizeLimit: 100 * 1024 * 1024 },
   { id: 'reviews', name: 'reviews', public: true, fileSizeLimit: 10 * 1024 * 1024 },
-  { id: 'deposits', name: 'deposits', public: true, fileSizeLimit: 5 * 1024 * 1024 },
-  { id: 'payments', name: 'payments', public: true, fileSizeLimit: 10 * 1024 * 1024 },
+  { id: 'deposits', name: 'deposits', public: false, fileSizeLimit: 5 * 1024 * 1024 },
+  { id: 'payments', name: 'payments', public: false, fileSizeLimit: 10 * 1024 * 1024 },
 ]
 
 // ==================== HELPER: Supabase Storage REST API ====================
@@ -122,7 +122,10 @@ export async function POST(request: NextRequest) {
 
       const result = await createBucket(bucket)
       if (result.success) {
-        await createPublicReadPolicy(bucket.id)
+        // Only create public read policy for public buckets (not for private ones like payments/deposits)
+        if (bucket.public) {
+          await createPublicReadPolicy(bucket.id)
+        }
         results.push({ bucket: bucket.id, status: 'created' })
         logger.info({ bucket: bucket.id }, 'Bucket created successfully')
       } else {

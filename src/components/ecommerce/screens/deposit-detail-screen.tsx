@@ -296,27 +296,39 @@ export function DepositDetailScreen() {
       const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData })
       const uploadData = await uploadRes.json()
 
-      if (!uploadRes.ok || !uploadData.data?.url) {
+      if (!uploadRes.ok || !uploadData.data?.path) {
         throw new Error(uploadData.error || 'Gagal mengupload gambar')
       }
 
-      // Step 2: Submit proof URL
+      // For private buckets (deposits), use proofPath instead of proofUrl
+      const isPrivate = uploadData.data.isPrivate === true
+      const proofPayload: Record<string, string> = {
+        senderName: senderNameInput.trim(),
+      }
+      if (isPrivate) {
+        proofPayload.proofPath = uploadData.data.path
+      } else {
+        proofPayload.proofUrl = uploadData.data.url || ''
+      }
+
+      // Step 2: Submit proof
       const proofRes = await apiClient.post<ProofUploadResponse>(
         `/api/wallet/deposits/${deposit.id}/proof`,
-        {
-          proofUrl: uploadData.data.url,
-          senderName: senderNameInput.trim(),
-        }
+        proofPayload
       )
 
       if (proofRes.success) {
         setUploadSuccess(true)
         showToast('Bukti pembayaran berhasil dikirim! Menunggu verifikasi admin.', 'success')
         // Update local deposit state
+        // Construct a reference URL from path for private buckets
+        const referenceUrl = isPrivate
+          ? `${process.env.NEXT_PUBLIC_SUPABASE_URL || ''}/storage/v1/object/public/deposits/${uploadData.data.path}`
+          : uploadData.data.url
         setDeposit(prev => prev ? {
           ...prev,
           status: 'proof_uploaded',
-          proofUrl: uploadData.data.url,
+          proofUrl: referenceUrl,
           senderName: senderNameInput.trim(),
         } : null)
       }

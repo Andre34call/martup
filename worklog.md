@@ -875,3 +875,208 @@ Fixes Applied:
 Verification:
 - `bun run lint` passes with no errors
 - Dev server compiling correctly
+
+---
+
+Task ID: 13
+Agent: rls-policy-fix
+Task: Fix Supabase RLS policies — replace permissive USING (true) with service_role-only policies
+
+Work Log:
+- Read worklog.md for previous context (Tasks 1-7, 2-a, 2-b, 3-a, 3-b, 15, 16)
+- Read all target files: supabase-init.sql, setup/storage/route.ts, supabase.ts, auth-middleware.ts, prisma/schema.prisma, db.ts
+- Searched codebase for Supabase client usage — confirmed it's ONLY imported in lib/supabase.ts and never used for database queries
+- Confirmed storage setup route only creates policies on storage.objects (not public schema tables) — no changes needed there
+- Confirmed Prisma connects directly to PostgreSQL as database owner, bypassing RLS entirely
+
+Root Cause:
+- supabase-init.sql creates 27 policies with `USING (true) WITH CHECK (true)` on all public schema tables
+- This means ANYONE with the Supabase anon key (exposed in frontend JS) can read/write ALL data via PostgREST
+- The anon key should only have access to Storage (file uploads), not database tables
+
+Fixes Applied:
+
+1. Created `/src/app/api/setup/rls/route.ts` (new file):
+   - POST /api/setup/rls — Admin-only endpoint that executes DDL statements directly via Prisma's $executeRawUnsafe to:
+     * Drop all permissive `USING (true)` policies on 39 public schema tables
+     * Create new policies with `USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role')`
+     * Only service_role (server-side key) can access tables; anon key is blocked
+     * Validates PostgreSQL database before execution; returns helpful error for non-PostgreSQL
+     * Idempotent — safe to call multiple times (uses DROP IF EXISTS)
+     * Returns detailed results per statement (succeeded/failed counts)
+   - GET /api/setup/rls — Admin-only endpoint that returns the SQL script for manual execution:
+     * Returns JSON with fullScript, sqlScript, diagnosticSql, tables, and instructions
+     * Accepts `?format=sql` or `Accept: text/plain` to download as .sql file
+     * Includes comments explaining purpose, safety, and how to run in Supabase SQL Editor
+     * Includes diagnostic SQL to verify policies after execution
+
+2. Updated `/supabase-init.sql`:
+   - Replaced all 27 permissive policies from `USING (true) WITH CHECK (true)` to `USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role')`
+   - Updated section comment from "Service Role Full Access" to "Service Role Only" with detailed security explanation
+   - Added reference to /api/setup/rls endpoint for fixing existing deployments
+
+Safety Analysis:
+- Prisma connects directly to PostgreSQL as database owner (bypasses RLS entirely) — all API routes unaffected
+- Supabase JS client (anon key) is never used for database queries (confirmed via codebase search)
+- Storage bucket policies are in `storage` schema, not `public` — untouched by this fix
+- The 12 additional tables in the endpoint (not in original init SQL) are covered: Division, WorkItem, PlatformBankAccount, PlatformSetting, UserSetting, StreamPost, StreamComment, StreamLike, StreamCommentLike, StreamPostReport, BuyerRating, FollowedStore
+
+Verification:
+- `bun run lint` passes with no errors
+- No TypeScript errors in the new route
+- Pre-existing TS errors in seller-add-product-screen.tsx are unrelated
+
+---
+
+Task ID: 12
+Agent: bucket-privacy-fix
+Task: Fix Supabase storage bucket security — make payments and deposits buckets private, add signed URL utility
+
+Work Log:
+- Read worklog.md for previous context (Tasks 1-7, seller-api-security-fix)
+- Read all 5 target files: setup/storage/route.ts, ensure-bucket.ts, image-utils.ts, user/avatar/route.ts, upload-limits.ts
+- Read supporting files: auth-middleware.ts, rate-limit.ts, supabase.ts, upload/route.ts, orders/[id]/payment-proof/route.ts, wallet/deposits/[id]/proof/route.ts
+- Applied all 5 fixes systematically
+
+Fixes Applied:
+
+1. Fix 1 — Make payments and deposits buckets private (src/app/api/setup/storage/route.ts):
+   - Changed `public: true` to `public: false` for deposits and payments buckets in REQUIRED_BUCKETS
+   - Updated POST handler: only create public read policy for public buckets (skipped for private buckets)
+
+2. Fix 2 — Update ensureBucket to support private buckets (src/lib/ensure-bucket.ts):
+   - Added `public` option parameter (default `true` for backward compatibility)
+   - Passes `public` flag when creating bucket via Supabase REST API
+   - Added `DEFAULT_ALLOWED_MIME_TYPES` constant with safe defaults (images + common videos, blocking HTML/SVG/exe)
+   - Applied `allowedMimeTypes: allowedMimeTypes || DEFAULT_ALLOWED_MIME_TYPES` — uses safe defaults when not provided
+   - Logs `public` flag on bucket creation for auditability
+
+3. Fix 3 — Create signed URL utility (src/lib/signed-url.ts — NEW FILE):
+   - `PRIVATE_BUCKETS` Set: ['payments', 'deposits'] — single source of truth
+   - `isPrivateBucket(bucket)`: Helper to check if a bucket is private
+   - `generateSignedUrl(bucket, path, expiresIn=3600)`: Generates a signed URL using Supabase REST API
+     - Uses service role key for server-side access
+     - Validates expiresIn range (1s to 24h)
+     - Handles relative URLs by prepending Supabase URL
+     - Graceful error handling with descriptive messages
+   - `generateSignedUrls(bucket, paths, expiresIn=3600)`: Batch signed URL generation
+     - More efficient than calling generateSignedUrl in a loop
+
+4. Fix 4 — Create signed URL API endpoint (src/app/api/storage/signed-url/route.ts — NEW FILE):
+   - POST endpoint accepting `{ bucket, path, expiresIn? }`
+   - Requires auth via `verifyAuth`
+   - Validates bucket is in PRIVATE_BUCKETS (rejects requests for public buckets)
+   - Sanitizes path (prevents path traversal with `..` and `.` segments)
+   - Validates expiresIn range (1 to 86400 seconds)
+   - Rate limited to 30 requests per minute per user
+   - Returns `{ success: true, data: { url, expiresAt } }`
+
+5. Fix 5 — Update upload route to handle private bucket uploads (src/app/api/upload/route.ts):
+   - Imported `isPrivateBucket` from `@/lib/signed-url`
+   - For private buckets (payments/deposits): returns `url: undefined` and `isPrivate: true`
+   - For public buckets: returns `url` (public URL) and `isPrivate: false`
+   - Always returns `path` regardless of bucket type
+   - Auto-create bucket flow passes `public: !isPrivateBucket(bucket)` to ensureBucket
+   - Updated UploadResult types in both hooks/api/use-upload.ts and lib/upload.ts:
+     - `url?: string` (optional — undefined for private buckets)
+     - `isPrivate?: boolean` flag
+
+Additional Changes (downstream of Fix 5):
+
+6. Deposit proof upload flow (src/components/ecommerce/screens/deposit-detail-screen.tsx):
+   - Updated `handleUploadProof` to check `uploadData.data.isPrivate`
+   - For private buckets: sends `proofPath` instead of `proofUrl` to the proof API
+   - Constructs reference URL from path for local state update
+
+7. Deposit proof API (src/app/api/wallet/deposits/[id]/proof/route.ts):
+   - Now accepts `proofPath` in addition to `proofUrl`
+   - When `proofPath` provided: sanitizes path (no `..`/`.`), constructs reference URL
+   - Reference URL format: `${supabaseUrl}/storage/v1/object/public/deposits/${path}`
+   - Reference URL acts as file identifier even though bucket is not publicly accessible
+   - Still validates that the final URL starts with the Supabase URL
+
+8. Payment proof upload (src/app/api/orders/[id]/payment-proof/route.ts):
+   - Changed `public: true` to `public: false` in ensureBucket call for payments bucket
+   - Changed `public: true` to `public: false` in auto-create bucket fallback code
+   - GET endpoint now generates signed URL for private proof images:
+     - Extracts path from stored reference URL
+     - Generates signed URL using `generateSignedUrl()` from signed-url.ts
+     - Returns signed URL in `paymentProofUrl` field
+     - Adds `paymentProofIsPrivate: true` flag to response
+   - Falls back to stored reference URL if signed URL generation fails
+
+Verification:
+- `bun run lint` passes with no errors
+- Dev server compiles successfully
+
+---
+
+Task ID: 14-18
+Agent: p2-ui-fix
+Task: Fix 5 P2 UI bugs in seller product management screens
+
+Work Log:
+- Read worklog.md for previous context
+- Read all target files: seller-add-product-screen.tsx, seller/seller-products.tsx, product.ts store, api-client.ts
+- Read seller/products API route to understand available endpoints
+- Applied all 5 fixes across 2 files
+
+Fixes Applied:
+
+1. Fix 1 (Task 14) - Seller product visibility toggle (seller/seller-products.tsx):
+   - Added Eye/EyeOff toggle button next to each product in the list
+   - Active products show EyeOff icon ("Set Draft" button)
+   - Draft products show Eye icon ("Set Active" button)
+   - Clicking calls PUT /api/seller/products with { productId, status: 'draft' } or { productId, status: 'active' }
+   - Tracks toggling state per product with `togglingId` to show spinner during API call
+   - Updates local list state optimistically after success
+   - Toast notification on success/error
+
+2. Fix 2 (Task 15) - Category dropdown close on outside click (seller-add-product-screen.tsx):
+   - Added `categoryDropdownRef` useRef attached to the category dropdown container div
+   - Added useEffect that adds mousedown listener when `showCategoryDropdown` is true
+   - Clicks outside the dropdown container close the dropdown
+   - Also closes on scroll events (using capture phase to catch all scrolls including inside containers)
+   - Properly cleans up listeners on unmount or when dropdown closes
+
+3. Fix 3 (Task 16) - Upload overlay → inline loading indicators (seller-add-product-screen.tsx):
+   - Removed the full-screen z-[150] upload overlay (AnimatePresence block)
+   - Added `isUploading` boolean to each `productImages` entry type for per-image upload tracking
+   - Changed `handleProductImageUpload` to:
+     - Add placeholder entries with `isUploading: true` immediately when files are selected
+     - Show blob: URL preview with opacity-40 while uploading
+     - Show spinning indicator overlay on each uploading image slot
+     - Update each entry to `isUploading: false` as uploads complete individually
+     - User can continue filling the form while images upload in background
+   - Added `isVideoUploading` state for inline video upload indicator
+   - Changed `handleVideoUpload` to use `isVideoUploading` instead of global `isUploading`
+   - Video upload now shows inline spinner with "Mengupload video..." text instead of full-screen overlay
+   - Removed `isUploading` state (no longer needed - replaced by per-image `isUploading` flags and `isVideoUploading`)
+   - Submit/draft buttons now check `hasUploadingImages` and `isVideoUploading` instead of `isUploading`
+   - Image slots hide remove button and preview click during upload
+   - UTAMA badge hidden during upload (shows after upload completes)
+
+4. Fix 4 (Task 17) - Products list use server data instead of local store (seller/seller-products.tsx):
+   - Replaced `useAppStore().products` filter with dedicated `GET /api/seller/products?sellerId={sellerId}` API call
+   - Added `useState<Product[]>` for `sellerProducts` with `isLoading` state
+   - Added `fetchSellerProducts` useCallback that calls the seller-specific endpoint
+   - Added useEffect to fetch on mount and when sellerId changes
+   - Added RefreshCw refresh button in header (with spin animation during loading)
+   - Shows loading spinner with "Memuat produk..." when loading and no products exist
+   - Fallback to local store products if API call fails
+   - Delete action also updates local `sellerProducts` state in addition to store
+
+5. Fix 5 (Task 18) - Draft persistence via API call (seller-add-product-screen.tsx):
+   - Changed `handleDraft` from synchronous local-only save to async with API call
+   - For new drafts: calls POST /api/seller/products with `status: 'draft'`
+   - For existing drafts: calls PUT /api/seller/products with `status: 'draft'`
+   - On API success: updates local store with server response (correct id, slug, images, variants)
+   - Toast: "Draft berhasil disimpan" on success
+   - On API error: falls back to local-only save with error toast
+   - On network exception: also falls back to local save with error toast
+   - Auto-registers seller if needed before API call (same as handleSubmit)
+   - If seller registration fails: saves locally with warning toast
+
+Verification:
+- bun run lint: passes with no errors
+- Dev server running correctly on port 3000

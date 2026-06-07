@@ -4,13 +4,33 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 
 /**
- * Ensure a Supabase Storage bucket exists and has public read access.
- * Creates the bucket if it doesn't exist and sets up RLS policies.
+ * Safe default MIME types that block dangerous types (e.g., HTML, SVG with JS, executables).
+ * Only common image and video formats are allowed by default.
+ */
+const DEFAULT_ALLOWED_MIME_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'video/mp4',
+  'video/webm',
+  'video/quicktime',
+]
+
+/**
+ * Ensure a Supabase Storage bucket exists.
+ * Creates the bucket if it doesn't exist.
  * Idempotent — safe to call multiple times.
+ *
+ * @param bucketName - Name/ID of the bucket
+ * @param options.public - Whether the bucket should be public (default: true for backward compatibility)
+ * @param options.maxFileSizeMb - Max file size in MB (default: 10)
+ * @param options.allowedMimeTypes - Allowed MIME types (default: safe list blocking dangerous types)
  */
 export async function ensureBucket(
   bucketName: string,
   options: {
+    public?: boolean
     maxFileSizeMb?: number
     allowedMimeTypes?: string[]
   } = {}
@@ -20,7 +40,7 @@ export async function ensureBucket(
     return false
   }
 
-  const { maxFileSizeMb = 10, allowedMimeTypes } = options
+  const { public: isPublic = true, maxFileSizeMb = 10, allowedMimeTypes } = options
 
   try {
     // Check if bucket exists by trying to get it
@@ -41,17 +61,15 @@ export async function ensureBucket(
     }
 
     // Bucket doesn't exist — create it
-    logger.info({ bucket: bucketName }, 'Creating storage bucket...')
+    logger.info({ bucket: bucketName, public: isPublic }, 'Creating storage bucket...')
 
     const createBody: Record<string, unknown> = {
       id: bucketName,
       name: bucketName,
-      public: true,
+      public: isPublic,
       fileSizeLimit: maxFileSizeMb * 1024 * 1024,
-    }
-
-    if (allowedMimeTypes) {
-      createBody.allowedMimeTypes = allowedMimeTypes
+      // Use provided allowedMimeTypes or fall back to safe defaults
+      allowedMimeTypes: allowedMimeTypes || DEFAULT_ALLOWED_MIME_TYPES,
     }
 
     const createRes = await fetch(`${SUPABASE_URL}/storage/v1/bucket`, {
@@ -70,7 +88,7 @@ export async function ensureBucket(
       return false
     }
 
-    logger.info({ bucket: bucketName }, 'Storage bucket created successfully')
+    logger.info({ bucket: bucketName, public: isPublic }, 'Storage bucket created successfully')
     return true
   } catch (error) {
     logger.error({ err: error, bucket: bucketName }, 'ensureBucket error')

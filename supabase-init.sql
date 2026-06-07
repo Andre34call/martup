@@ -629,37 +629,49 @@ ALTER TABLE "Banner" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "Complaint" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "Referral" ENABLE ROW LEVEL SECURITY;
 
--- ==================== RLS POLICIES (Service Role Full Access) ====================
--- Allow service role full access to all tables (used by API routes)
--- The anon key will be restricted, service role key used server-side only
+-- ==================== RLS POLICIES (Service Role Only) ====================
+-- SECURITY: Only service_role can access these tables via PostgREST.
+-- The anon key (used by the Supabase JS client on the frontend) is BLOCKED
+-- from reading or writing any database table data.
+--
+-- This is safe because:
+-- - Prisma connects directly to PostgreSQL as the database owner (bypasses RLS)
+-- - All API routes use Prisma, so they are unaffected by these policies
+-- - The Supabase JS client (anon key) is only used for Storage (file uploads),
+--   not for database queries
+-- - Storage bucket policies are in the 'storage' schema, not 'public'
+--
+-- To fix an existing deployment with permissive USING (true) policies, run:
+--   POST /api/setup/rls (admin-only, executes fix directly)
+--   GET  /api/setup/rls (admin-only, returns SQL script for manual execution)
 
-CREATE POLICY "Service role full access on User" ON "User" FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Service role full access on Seller" ON "Seller" FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Service role full access on Address" ON "Address" FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Service role full access on Wallet" ON "Wallet" FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Service role full access on WalletMutation" ON "WalletMutation" FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Service role full access on Deposit" ON "Deposit" FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Service role full access on Withdrawal" ON "Withdrawal" FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Service role full access on Transaction" ON "Transaction" FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Service role full access on Category" ON "Category" FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Service role full access on Product" ON "Product" FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Service role full access on ProductVariant" ON "ProductVariant" FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Service role full access on CartItem" ON "CartItem" FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Service role full access on Order" ON "Order" FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Service role full access on OrderItem" ON "OrderItem" FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Service role full access on Shipping" ON "Shipping" FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Service role full access on Review" ON "Review" FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Service role full access on Wishlist" ON "Wishlist" FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Service role full access on ChatRoom" ON "ChatRoom" FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Service role full access on ChatParticipant" ON "ChatParticipant" FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Service role full access on ChatMessage" ON "ChatMessage" FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Service role full access on Notification" ON "Notification" FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Service role full access on Voucher" ON "Voucher" FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Service role full access on VoucherUsage" ON "VoucherUsage" FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Service role full access on Campaign" ON "Campaign" FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Service role full access on Banner" ON "Banner" FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Service role full access on Complaint" ON "Complaint" FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Service role full access on Referral" ON "Referral" FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Service role full access on User" ON "User" FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+CREATE POLICY "Service role full access on Seller" ON "Seller" FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+CREATE POLICY "Service role full access on Address" ON "Address" FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+CREATE POLICY "Service role full access on Wallet" ON "Wallet" FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+CREATE POLICY "Service role full access on WalletMutation" ON "WalletMutation" FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+CREATE POLICY "Service role full access on Deposit" ON "Deposit" FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+CREATE POLICY "Service role full access on Withdrawal" ON "Withdrawal" FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+CREATE POLICY "Service role full access on Transaction" ON "Transaction" FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+CREATE POLICY "Service role full access on Category" ON "Category" FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+CREATE POLICY "Service role full access on Product" ON "Product" FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+CREATE POLICY "Service role full access on ProductVariant" ON "ProductVariant" FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+CREATE POLICY "Service role full access on CartItem" ON "CartItem" FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+CREATE POLICY "Service role full access on Order" ON "Order" FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+CREATE POLICY "Service role full access on OrderItem" ON "OrderItem" FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+CREATE POLICY "Service role full access on Shipping" ON "Shipping" FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+CREATE POLICY "Service role full access on Review" ON "Review" FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+CREATE POLICY "Service role full access on Wishlist" ON "Wishlist" FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+CREATE POLICY "Service role full access on ChatRoom" ON "ChatRoom" FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+CREATE POLICY "Service role full access on ChatParticipant" ON "ChatParticipant" FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+CREATE POLICY "Service role full access on ChatMessage" ON "ChatMessage" FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+CREATE POLICY "Service role full access on Notification" ON "Notification" FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+CREATE POLICY "Service role full access on Voucher" ON "Voucher" FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+CREATE POLICY "Service role full access on VoucherUsage" ON "VoucherUsage" FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+CREATE POLICY "Service role full access on Campaign" ON "Campaign" FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+CREATE POLICY "Service role full access on Banner" ON "Banner" FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+CREATE POLICY "Service role full access on Complaint" ON "Complaint" FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+CREATE POLICY "Service role full access on Referral" ON "Referral" FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
 
 -- ==================== ENABLE REALTIME FOR CHAT ====================
 -- Add tables to Supabase Realtime for live updates
