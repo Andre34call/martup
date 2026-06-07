@@ -1,47 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
-import { createRateLimiter } from '@/lib/rate-limit'
-import { parseJsonField } from '@/lib/api-utils'
+import { apiGuard } from '@/lib/api-guard'
+import { wishlistAddSchema, wishlistDeleteSchema } from '@/lib/validations'
+import { successResponse, errorResponse } from '@/lib/api-utils'
+import { parseProductJsonFields } from '@/lib/json-utils'
 import { serializeDecimal } from '@/lib/decimal-utils'
-
 import { logger } from '@/lib/logger'
-const wishlistLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 30, keyPrefix: 'rl:wishlist:' })
-
-// Helper to parse product JSON fields (images, tags stored as JSON strings)
-function parseProductJsonFields(product: Record<string, unknown>) {
-  return {
-    ...product,
-    images: parseJsonField(product.images as string | null | undefined),
-    tags: parseJsonField(product.tags as string | null | undefined),
-  }
-}
 
 // GET /api/wishlist - List user's wishlist items with product details
 export async function GET(request: NextRequest) {
   try {
-    // SECURITY: Require authentication
-    const authResult = await verifyAuth(request)
-    if (!authResult.success) {
-      return authErrorResponse(authResult)
-    }
+    const guard = await apiGuard(request, { auth: 'user', csrf: false })
+    if (guard instanceof NextResponse) return guard
 
     const { searchParams } = new URL(request.url)
     const userId = searchParams.get('userId')
 
     if (!userId) {
-      return NextResponse.json(
-        { success: false, error: 'userId is required' },
-        { status: 400 }
-      )
+      return errorResponse('userId is required', 400)
     }
 
     // SECURITY: Users can only access their own wishlist
-    if (userId !== authResult.user.id) {
-      return NextResponse.json(
-        { success: false, error: 'Forbidden - You can only access your own wishlist' },
-        { status: 403 }
-      )
+    if (userId !== guard.user!.id) {
+      return errorResponse('Forbidden - You can only access your own wishlist', 403)
     }
 
     const wishlistItems = await db.wishlist.findMany({
@@ -83,51 +64,25 @@ export async function GET(request: NextRequest) {
         : item.product,
     }))
 
-    return NextResponse.json(serializeDecimal({
-      success: true,
-      data: parsedWishlistItems,
-    }))
+    return successResponse(serializeDecimal(parsedWishlistItems))
   } catch (error: unknown) {
-    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'Wishlist GET error')
-    return NextResponse.json(
-      { success: false, error: 'Terjadi kesalahan server' },
-      { status: 500 }
-    )
+    return errorResponse('Terjadi kesalahan server', 500)
   }
 }
 
 // POST /api/wishlist - Add item to wishlist
 export async function POST(request: NextRequest) {
   try {
-    // SECURITY: Require authentication
-    const authResult = await verifyAuth(request)
-    if (!authResult.success) {
-      return authErrorResponse(authResult)
-    }
+    const guard = await apiGuard(request, {
+      auth: 'user',
+      rateLimit: { windowMs: 60_000, maxRequests: 30, keyPrefix: 'rl:wishlist:' },
+      schema: wishlistAddSchema,
+    })
+    if (guard instanceof NextResponse) return guard
 
-    // SECURITY: Rate limit wishlist operations
-    const clientIp = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
-    const rateLimit = await wishlistLimiter.check(`${clientIp}:${authResult.user.id}`)
-    if (!rateLimit.allowed) {
-      const retrySeconds = Math.ceil((rateLimit.resetAt - Date.now()) / 1000)
-      return NextResponse.json(
-        { success: false, error: `Terlalu banyak permintaan. Coba lagi dalam ${retrySeconds > 60 ? Math.ceil(retrySeconds / 60) + ' menit' : retrySeconds + ' detik'}.` },
-        { status: 429 }
-      )
-    }
-
-    const body = await request.json()
-    const { productId } = body
-
-    if (!productId) {
-      return NextResponse.json(
-        { success: false, error: 'productId is required' },
-        { status: 400 }
-      )
-    }
-
-    const userId = authResult.user.id
+    const { productId } = guard.body as { productId: string }
+    const userId = guard.user!.id
 
     // Validate productId exists
     const product = await db.product.findUnique({
@@ -136,10 +91,7 @@ export async function POST(request: NextRequest) {
     })
 
     if (!product) {
-      return NextResponse.json(
-        { success: false, error: 'Product not found' },
-        { status: 404 }
-      )
+      return errorResponse('Product not found', 404)
     }
 
     // Use upsert to handle @@unique([userId, productId]) constraint
@@ -195,55 +147,29 @@ export async function POST(request: NextRequest) {
     // Check if it was created (new) or already existed (idempotent)
     const alreadyExisted = wishlistItem.createdAt.getTime() < Date.now() - 1000
 
-    return NextResponse.json(
-      serializeDecimal({
-        success: true,
-        data: parsedWishlistItem,
-        message: alreadyExisted ? 'Product already in wishlist' : 'Product added to wishlist',
-      }),
-      { status: alreadyExisted ? 200 : 201 }
+    return successResponse(
+      serializeDecimal(parsedWishlistItem),
+      alreadyExisted ? 'Product already in wishlist' : 'Product added to wishlist',
+      alreadyExisted ? 200 : 201,
     )
   } catch (error: unknown) {
-    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'Wishlist POST error')
-    return NextResponse.json(
-      { success: false, error: 'Terjadi kesalahan server' },
-      { status: 500 }
-    )
+    return errorResponse('Terjadi kesalahan server', 500)
   }
 }
 
 // DELETE /api/wishlist - Remove item from wishlist
 export async function DELETE(request: NextRequest) {
   try {
-    // SECURITY: Require authentication
-    const authResult = await verifyAuth(request)
-    if (!authResult.success) {
-      return authErrorResponse(authResult)
-    }
+    const guard = await apiGuard(request, {
+      auth: 'user',
+      rateLimit: { windowMs: 60_000, maxRequests: 30, keyPrefix: 'rl:wishlist:' },
+      schema: wishlistDeleteSchema,
+    })
+    if (guard instanceof NextResponse) return guard
 
-    // SECURITY: Rate limit wishlist operations
-    const clientIp = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
-    const rateLimit = await wishlistLimiter.check(`${clientIp}:${authResult.user.id}`)
-    if (!rateLimit.allowed) {
-      const retrySeconds = Math.ceil((rateLimit.resetAt - Date.now()) / 1000)
-      return NextResponse.json(
-        { success: false, error: `Terlalu banyak permintaan. Coba lagi dalam ${retrySeconds > 60 ? Math.ceil(retrySeconds / 60) + ' menit' : retrySeconds + ' detik'}.` },
-        { status: 429 }
-      )
-    }
-
-    const body = await request.json()
-    const { productId, wishlistId } = body
-
-    if (!productId && !wishlistId) {
-      return NextResponse.json(
-        { success: false, error: 'productId or wishlistId is required' },
-        { status: 400 }
-      )
-    }
-
-    const userId = authResult.user.id
+    const { productId, wishlistId } = guard.body as { productId?: string; wishlistId?: string }
+    const userId = guard.user!.id
 
     if (wishlistId) {
       // Delete by wishlistId - must verify ownership first
@@ -252,18 +178,12 @@ export async function DELETE(request: NextRequest) {
       })
 
       if (!existingItem) {
-        return NextResponse.json(
-          { success: false, error: 'Wishlist item not found' },
-          { status: 404 }
-        )
+        return errorResponse('Wishlist item not found', 404)
       }
 
       // SECURITY: Verify the wishlist item belongs to the authenticated user
       if (existingItem.userId !== userId) {
-        return NextResponse.json(
-          { success: false, error: 'Forbidden - You can only remove items from your own wishlist' },
-          { status: 403 }
-        )
+        return errorResponse('Forbidden - You can only remove items from your own wishlist', 403)
       }
 
       await db.wishlist.delete({
@@ -275,38 +195,28 @@ export async function DELETE(request: NextRequest) {
         where: {
           userId_productId: {
             userId,
-            productId,
+            productId: productId!,
           },
         },
       })
 
       if (!existingItem) {
-        return NextResponse.json(
-          { success: false, error: 'Wishlist item not found' },
-          { status: 404 }
-        )
+        return errorResponse('Wishlist item not found', 404)
       }
 
       await db.wishlist.delete({
         where: {
           userId_productId: {
             userId,
-            productId,
+            productId: productId!,
           },
         },
       })
     }
 
-    return NextResponse.json({
-      success: true,
-      message: 'Item removed from wishlist',
-    })
+    return successResponse(null, 'Item removed from wishlist')
   } catch (error: unknown) {
-    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'Wishlist DELETE error')
-    return NextResponse.json(
-      { success: false, error: 'Terjadi kesalahan server' },
-      { status: 500 }
-    )
+    return errorResponse('Terjadi kesalahan server', 500)
   }
 }

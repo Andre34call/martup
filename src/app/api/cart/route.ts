@@ -1,42 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
-import { createRateLimiter } from '@/lib/rate-limit'
+import { apiGuard } from '@/lib/api-guard'
+import { cartAddSchema, cartMergeSchema, cartUpdateSchema, cartDeleteSchema, validateBody } from '@/lib/validations'
+import { successResponse, errorResponse, parseRequestBody } from '@/lib/api-utils'
 import { serializeDecimal } from '@/lib/decimal-utils'
 import { cartItemInclude } from '@/lib/db-includes'
 import { parseCartItemFields } from '@/lib/json-utils'
-
 import { logger } from '@/lib/logger'
-// Rate limiter: 30 cart operations per minute
-const cartLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 30, keyPrefix: 'rl:cart:main:' })
 
 const MAX_QUANTITY = 99
 
 // GET /api/cart - List user's cart items with product details
 export async function GET(request: NextRequest) {
   try {
-    // SECURITY: Require authentication
-    const authResult = await verifyAuth(request)
-    if (!authResult.success) {
-      return authErrorResponse(authResult)
-    }
+    const guard = await apiGuard(request, { auth: 'user', csrf: false })
+    if (guard instanceof NextResponse) return guard
 
     const { searchParams } = new URL(request.url)
     const userId = searchParams.get('userId')
 
     if (!userId) {
-      return NextResponse.json(
-        { success: false, error: 'userId is required' },
-        { status: 400 }
-      )
+      return errorResponse('userId is required', 400)
     }
 
     // SECURITY: Users can only access their own cart
-    if (userId !== authResult.user.id) {
-      return NextResponse.json(
-        { success: false, error: 'Forbidden - You can only access your own cart' },
-        { status: 403 }
-      )
+    if (userId !== guard.user!.id) {
+      return errorResponse('Forbidden - You can only access your own cart', 403)
     }
 
     const cartItems = await db.cartItem.findMany({
@@ -48,71 +37,49 @@ export async function GET(request: NextRequest) {
     // Parse JSON fields in products
     const parsedCartItems = cartItems.map((item) => parseCartItemFields(item))
 
-    return NextResponse.json(serializeDecimal({
-      success: true,
-      data: parsedCartItems,
-    }))
+    return successResponse(serializeDecimal(parsedCartItems))
   } catch (error: unknown) {
-    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'Cart GET error')
-    return NextResponse.json(
-      { success: false, error: 'Terjadi kesalahan server' },
-      { status: 500 }
-    )
+    return errorResponse('Terjadi kesalahan server', 500)
   }
 }
 
 // POST /api/cart - Add item to cart (or merge/clear via query params)
 export async function POST(request: NextRequest) {
   try {
-    // SECURITY: Require authentication
-    const authResult = await verifyAuth(request)
-    if (!authResult.success) {
-      return authErrorResponse(authResult)
-    }
+    // Use guard without schema — body validation depends on mode (add/merge/clear)
+    const guard = await apiGuard(request, {
+      auth: 'user',
+      rateLimit: { windowMs: 60_000, maxRequests: 30, keyPrefix: 'rl:cart:' },
+    })
+    if (guard instanceof NextResponse) return guard
 
     const { searchParams } = new URL(request.url)
     const merge = searchParams.get('merge') === 'true'
     const clear = searchParams.get('clear') === 'true'
 
+    const userId = guard.user!.id
+
     // POST /api/cart?clear=true - Clear all cart items for the user
     if (clear) {
-      const userId = authResult.user.id
-
       await db.cartItem.deleteMany({
         where: { userId },
       })
 
-      return NextResponse.json({
-        success: true,
-        message: 'Cart cleared successfully',
-      })
+      return successResponse(null, 'Cart cleared successfully')
     }
 
-    // SECURITY: Rate limit cart operations
-    const clientIp = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
-    const rateLimit = await cartLimiter.check(`${clientIp}:${authResult.user.id}`)
-    if (!rateLimit.allowed) {
-      const retrySeconds = Math.ceil((rateLimit.resetAt - Date.now()) / 1000)
-      return NextResponse.json(
-        { success: false, error: `Terlalu banyak permintaan. Coba lagi dalam ${retrySeconds > 60 ? Math.ceil(retrySeconds / 60) + ' menit' : retrySeconds + ' detik'}.` },
-        { status: 429 }
-      )
-    }
-
-    const body = await request.json()
-    const userId = authResult.user.id
+    // Parse body for merge and add modes
+    const body = await parseRequestBody(request)
+    if (body instanceof NextResponse) return body
 
     // POST /api/cart?merge=true - Merge localStorage cart into DB
     if (merge) {
-      const { items } = body as { items: Array<{ productId: string; variantId?: string | null; quantity: number }> }
-
-      if (!items || !Array.isArray(items) || items.length === 0) {
-        return NextResponse.json(
-          { success: false, error: 'items array is required for merge' },
-          { status: 400 }
-        )
+      const validation = validateBody(cartMergeSchema, body)
+      if (!validation.success) {
+        return errorResponse(validation.error, 422)
       }
+      const { items } = validation.data
 
       const mergedItems: Array<Record<string, unknown>> = []
 
@@ -174,36 +141,18 @@ export async function POST(request: NextRequest) {
         mergedItems.push(parseCartItemFields(cartItem))
       }
 
-      return NextResponse.json(serializeDecimal({
-        success: true,
-        data: mergedItems,
-        message: `Merged ${mergedItems.length} items into cart`,
-      }))
+      return successResponse(
+        serializeDecimal(mergedItems),
+        `Merged ${mergedItems.length} items into cart`,
+      )
     }
 
     // POST /api/cart - Add a single item to cart
-    const { productId, variantId, quantity = 1 } = body
-
-    if (!productId) {
-      return NextResponse.json(
-        { success: false, error: 'productId is required' },
-        { status: 400 }
-      )
+    const validation = validateBody(cartAddSchema, body)
+    if (!validation.success) {
+      return errorResponse(validation.error, 422)
     }
-
-    if (quantity < 1) {
-      return NextResponse.json(
-        { success: false, error: 'Quantity must be at least 1' },
-        { status: 400 }
-      )
-    }
-
-    if (quantity > MAX_QUANTITY) {
-      return NextResponse.json(
-        { success: false, error: `Maximum quantity per item is ${MAX_QUANTITY}` },
-        { status: 400 }
-      )
-    }
+    const { productId, variantId, quantity } = validation.data
 
     // Validate product exists and is active
     const product = await db.product.findUnique({
@@ -212,17 +161,11 @@ export async function POST(request: NextRequest) {
     })
 
     if (!product) {
-      return NextResponse.json(
-        { success: false, error: 'Product not found' },
-        { status: 404 }
-      )
+      return errorResponse('Product not found', 404)
     }
 
     if (product.status !== 'active') {
-      return NextResponse.json(
-        { success: false, error: 'Product is not available' },
-        { status: 400 }
-      )
+      return errorResponse('Product is not available', 400)
     }
 
     // Validate variant if provided
@@ -233,17 +176,11 @@ export async function POST(request: NextRequest) {
       })
 
       if (!variant) {
-        return NextResponse.json(
-          { success: false, error: 'Variant not found' },
-          { status: 404 }
-        )
+        return errorResponse('Variant not found', 404)
       }
 
       if (variant.productId !== productId) {
-        return NextResponse.json(
-          { success: false, error: 'Variant does not belong to this product' },
-          { status: 400 }
-        )
+        return errorResponse('Variant does not belong to this product', 400)
       }
 
       // Check variant stock availability
@@ -254,16 +191,16 @@ export async function POST(request: NextRequest) {
       const totalQty = currentQty + quantity
 
       if (totalQty > variant.stock) {
-        return NextResponse.json(
-          { success: false, error: `Insufficient stock for variant "${variant.name}". Available: ${variant.stock}, In cart: ${currentQty}, Requested additional: ${quantity}` },
-          { status: 400 }
+        return errorResponse(
+          `Insufficient stock for variant "${variant.name}". Available: ${variant.stock}, In cart: ${currentQty}, Requested additional: ${quantity}`,
+          400,
         )
       }
 
       if (totalQty > MAX_QUANTITY) {
-        return NextResponse.json(
-          { success: false, error: `Maximum quantity per item is ${MAX_QUANTITY}. Current in cart: ${currentQty}` },
-          { status: 400 }
+        return errorResponse(
+          `Maximum quantity per item is ${MAX_QUANTITY}. Current in cart: ${currentQty}`,
+          400,
         )
       }
     } else {
@@ -275,16 +212,16 @@ export async function POST(request: NextRequest) {
       const totalQty = currentQty + quantity
 
       if (totalQty > product.stock) {
-        return NextResponse.json(
-          { success: false, error: `Insufficient stock for "${product.name}". Available: ${product.stock}, In cart: ${currentQty}, Requested additional: ${quantity}` },
-          { status: 400 }
+        return errorResponse(
+          `Insufficient stock for "${product.name}". Available: ${product.stock}, In cart: ${currentQty}, Requested additional: ${quantity}`,
+          400,
         )
       }
 
       if (totalQty > MAX_QUANTITY) {
-        return NextResponse.json(
-          { success: false, error: `Maximum quantity per item is ${MAX_QUANTITY}. Current in cart: ${currentQty}` },
-          { status: 400 }
+        return errorResponse(
+          `Maximum quantity per item is ${MAX_QUANTITY}. Current in cart: ${currentQty}`,
+          400,
         )
       }
     }
@@ -320,51 +257,26 @@ export async function POST(request: NextRequest) {
 
     const parsedCartItem = parseCartItemFields(cartItem)
 
-    return NextResponse.json(
-      serializeDecimal({
-        success: true,
-        data: parsedCartItem,
-        message: existingItem ? 'Cart item quantity updated' : 'Item added to cart',
-      }),
-      { status: existingItem ? 200 : 201 }
+    return successResponse(
+      serializeDecimal(parsedCartItem),
+      existingItem ? 'Cart item quantity updated' : 'Item added to cart',
+      existingItem ? 200 : 201,
     )
   } catch (error: unknown) {
-    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'Cart POST error')
-    return NextResponse.json(
-      { success: false, error: 'Terjadi kesalahan server' },
-      { status: 500 }
-    )
+    return errorResponse('Terjadi kesalahan server', 500)
   }
 }
 
 // PUT /api/cart - Update cart item (quantity, isChecked)
 export async function PUT(request: NextRequest) {
   try {
-    // SECURITY: Require authentication
-    const authResult = await verifyAuth(request)
-    if (!authResult.success) {
-      return authErrorResponse(authResult)
-    }
+    const guard = await apiGuard(request, { auth: 'user', schema: cartUpdateSchema })
+    if (guard instanceof NextResponse) return guard
 
-    const body = await request.json()
-    const { cartItemId, quantity, isChecked } = body
+    const { cartItemId, quantity, isChecked } = guard.body!
 
-    if (!cartItemId) {
-      return NextResponse.json(
-        { success: false, error: 'cartItemId is required' },
-        { status: 400 }
-      )
-    }
-
-    if (quantity === undefined && isChecked === undefined) {
-      return NextResponse.json(
-        { success: false, error: 'At least one of quantity or isChecked must be provided' },
-        { status: 400 }
-      )
-    }
-
-    const userId = authResult.user.id
+    const userId = guard.user!.id
 
     // Find the existing cart item
     const existingItem = await db.cartItem.findUnique({
@@ -372,38 +284,18 @@ export async function PUT(request: NextRequest) {
     })
 
     if (!existingItem) {
-      return NextResponse.json(
-        { success: false, error: 'Cart item not found' },
-        { status: 404 }
-      )
+      return errorResponse('Cart item not found', 404)
     }
 
     // SECURITY: Verify the cart item belongs to the authenticated user
     if (existingItem.userId !== userId) {
-      return NextResponse.json(
-        { success: false, error: 'Forbidden - You can only update your own cart items' },
-        { status: 403 }
-      )
+      return errorResponse('Forbidden - You can only update your own cart items', 403)
     }
 
     // Build update data
     const updateData: { quantity?: number; isChecked?: boolean } = {}
 
     if (quantity !== undefined) {
-      if (quantity < 1) {
-        return NextResponse.json(
-          { success: false, error: 'Quantity must be at least 1' },
-          { status: 400 }
-        )
-      }
-
-      if (quantity > MAX_QUANTITY) {
-        return NextResponse.json(
-          { success: false, error: `Maximum quantity per item is ${MAX_QUANTITY}` },
-          { status: 400 }
-        )
-      }
-
       // Validate stock availability
       if (existingItem.variantId) {
         const variant = await db.productVariant.findUnique({
@@ -412,9 +304,9 @@ export async function PUT(request: NextRequest) {
         })
 
         if (variant && quantity > variant.stock) {
-          return NextResponse.json(
-            { success: false, error: `Insufficient stock for variant "${variant.name}". Available: ${variant.stock}` },
-            { status: 400 }
+          return errorResponse(
+            `Insufficient stock for variant "${variant.name}". Available: ${variant.stock}`,
+            400,
           )
         }
       } else {
@@ -424,9 +316,9 @@ export async function PUT(request: NextRequest) {
         })
 
         if (product && quantity > product.stock) {
-          return NextResponse.json(
-            { success: false, error: `Insufficient stock for "${product.name}". Available: ${product.stock}` },
-            { status: 400 }
+          return errorResponse(
+            `Insufficient stock for "${product.name}". Available: ${product.stock}`,
+            400,
           )
         }
       }
@@ -447,50 +339,25 @@ export async function PUT(request: NextRequest) {
 
     const parsedCartItem = parseCartItemFields(updatedItem)
 
-    return NextResponse.json(serializeDecimal({
-      success: true,
-      data: parsedCartItem,
-    }))
+    return successResponse(serializeDecimal(parsedCartItem))
   } catch (error: unknown) {
-    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'Cart PUT error')
-    return NextResponse.json(
-      { success: false, error: 'Terjadi kesalahan server' },
-      { status: 500 }
-    )
+    return errorResponse('Terjadi kesalahan server', 500)
   }
 }
 
 // DELETE /api/cart - Remove item(s) from cart
 export async function DELETE(request: NextRequest) {
   try {
-    // SECURITY: Require authentication
-    const authResult = await verifyAuth(request)
-    if (!authResult.success) {
-      return authErrorResponse(authResult)
-    }
+    const guard = await apiGuard(request, { auth: 'user', schema: cartDeleteSchema })
+    if (guard instanceof NextResponse) return guard
 
-    const body = await request.json()
-    const { cartItemId } = body
+    const { cartItemId } = guard.body!
 
-    if (!cartItemId) {
-      return NextResponse.json(
-        { success: false, error: 'cartItemId is required' },
-        { status: 400 }
-      )
-    }
-
-    const userId = authResult.user.id
+    const userId = guard.user!.id
 
     // Support both single delete and batch delete
     const cartItemIds: string[] = Array.isArray(cartItemId) ? cartItemId : [cartItemId]
-
-    if (cartItemIds.length === 0) {
-      return NextResponse.json(
-        { success: false, error: 'At least one cartItemId is required' },
-        { status: 400 }
-      )
-    }
 
     // SECURITY: Verify all cart items belong to the authenticated user
     const itemsToDelete = await db.cartItem.findMany({
@@ -503,20 +370,14 @@ export async function DELETE(request: NextRequest) {
     // Check for items not belonging to user
     const forbiddenItems = itemsToDelete.filter((item) => item.userId !== userId)
     if (forbiddenItems.length > 0) {
-      return NextResponse.json(
-        { success: false, error: 'Forbidden - You can only remove items from your own cart' },
-        { status: 403 }
-      )
+      return errorResponse('Forbidden - You can only remove items from your own cart', 403)
     }
 
     // Check for non-existent items
     const foundIds = new Set(itemsToDelete.map((item) => item.id))
     const notFoundIds = cartItemIds.filter((id) => !foundIds.has(id))
     if (notFoundIds.length > 0) {
-      return NextResponse.json(
-        { success: false, error: `Cart item(s) not found: ${notFoundIds.join(', ')}` },
-        { status: 404 }
-      )
+      return errorResponse(`Cart item(s) not found: ${notFoundIds.join(', ')}`, 404)
     }
 
     // Delete the items
@@ -531,17 +392,9 @@ export async function DELETE(request: NextRequest) {
       ? 'Item removed from cart'
       : `${result.count} items removed from cart`
 
-    return NextResponse.json({
-      success: true,
-      message,
-      data: { deletedCount: result.count },
-    })
+    return successResponse({ deletedCount: result.count }, message)
   } catch (error: unknown) {
-    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'Cart DELETE error')
-    return NextResponse.json(
-      { success: false, error: 'Terjadi kesalahan server' },
-      { status: 500 }
-    )
+    return errorResponse('Terjadi kesalahan server', 500)
   }
 }

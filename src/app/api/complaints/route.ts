@@ -146,6 +146,13 @@ export async function POST(request: NextRequest) {
 
     // SECURITY: Sanitize user-generated content
     const sanitizedReason = sanitizeInput(reason.trim())
+    // P2-8 FIX: Limit description length
+    if (description && typeof description === 'string' && description.trim().length > 5000) {
+      return NextResponse.json(
+        { success: false, error: 'Deskripsi maksimal 5000 karakter' },
+        { status: 400 }
+      )
+    }
     const sanitizedDescription = description ? sanitizeInput(description.trim()) : null
 
     // Check that the order belongs to the authenticated user

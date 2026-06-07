@@ -1376,3 +1376,293 @@ Fixes Applied:
 Verification:
 - `bun run lint` passes with no errors
 - Dev server running correctly on port 3000
+
+---
+Task ID: 2
+Agent: Validation Schema Agent
+Task: Add missing Zod validation schemas
+
+Work Log:
+- Read worklog.md for context from previous agents
+- Read existing src/lib/validations.ts (255 lines) — found Auth, User, Admin, Wallet, Payment, Orders, Addresses, Seller sections
+- Added 8 new schema sections before the validateBody helper function:
+  1. Cart: cartAddSchema, cartMergeSchema, cartUpdateSchema, cartDeleteSchema
+  2. Review: reviewCreateSchema, reviewUpdateSchema, reviewDeleteSchema
+  3. Wishlist: wishlistAddSchema, wishlistDeleteSchema
+  4. Notification: notificationMarkReadSchema
+  5. Product (Seller): productCreateSchema, productUpdateSchema
+  6. Chat: chatMessageSchema
+  7. Complaint/Refund: complaintCreateSchema
+  8. OTP: otpSendSchema, otpVerifySchema
+- All schemas include proper Zod validation with Indonesian error messages
+- Refinements applied: cartUpdateSchema (quantity or isChecked required), wishlistDeleteSchema (productId or wishlistId required), notificationMarkReadSchema (notificationId or markAll+userId required), productCreateSchema/productUpdateSchema (discountPrice < price), otpVerifySchema (phone or userId required)
+- Existing schemas left completely untouched
+- Ran bun run lint — passes with no errors
+
+Stage Summary:
+- Added 17 new Zod validation schemas across 8 domain sections to src/lib/validations.ts
+- File grew from 255 to 415 lines
+- All schemas use consistent Indonesian error messages matching existing patterns
+- Lint passes cleanly
+
+---
+
+Task ID: 1
+Agent: API Guard Agent
+Task: Create unified API guard module at src/lib/api-guard.ts
+
+Work Log:
+- Read worklog.md for previous context
+- Read all dependency modules to verify type compatibility:
+  - auth-middleware.ts (verifyAuth, verifyAdmin, verifyManager, verifySuperAdmin, verifyStaff, authErrorResponse, AuthResult, AuthError)
+  - rate-limit.ts (createRateLimiter, RateLimiterConfig, RateLimitResult)
+  - validations.ts (validateBody)
+  - csrf.ts (validateCsrfRequest)
+  - api-utils.ts (successResponse, errorResponse, parseRequestBody)
+  - logger.ts (logger)
+- Created src/lib/api-guard.ts with two exports: apiGuard() and createHandler()
+
+File Created:
+
+1. `/src/lib/api-guard.ts` (304 lines)
+
+Exported Types:
+- `AuthLevel` — union type: 'none' | 'user' | 'admin' | 'manager' | 'superadmin' | 'staff'
+- `RateLimiterInstance` — interface matching createRateLimiter return type (check + reset)
+- `GuardConfig` — configuration object with optional auth, rateLimit, schema, csrf, rateLimitKey
+- `GuardResult<T>` — success result with user, body, clientIp
+
+Exported Functions:
+- `apiGuard<T>(request, config?)` — main guard function; handles CSRF → auth → rate limit → body validation in order; returns GuardResult<T> | NextResponse
+- `createHandler<T>(config, handler)` — convenience wrapper that combines apiGuard + error handling; returns a NextRequest→NextResponse handler suitable for direct export
+
+Key Design Decisions:
+- CSRF checked first (cheap, fails fast) before DB-heavy auth verification
+- Rate limit identifier: custom key → user ID → client IP (from X-Forwarded-For / X-Real-IP)
+- Rate limit config accepts both RateLimiterConfig (creates new limiter) and pre-created instances (e.g. apiLimiter, paymentLimiter)
+- Distinguishes between config and instance via `'check' in rateLimit` duck-type check
+- X-Forwarded-For parsed for first IP in comma-separated list (original client behind proxy)
+- Rate limit retry message uses Indonesian: "Terlalu banyak permintaan. Coba lagi dalam X menit/detik."
+- Validation errors return 422, rate limit returns 429, CSRF returns 403, auth errors pass through authErrorResponse()
+- createHandler wraps the handler in try/catch with structured logging via Pino logger
+
+Verification:
+- `bun run lint` passes with no errors
+- Dev server running correctly on port 3000
+
+Task ID: 3-c
+Agent: API Guard Refactor Agent
+Task: Refactor wishlist and notifications API routes to use apiGuard + Zod schemas
+
+Work Log:
+- Read worklog.md for previous context
+- Read api-guard.ts, validations.ts, api-utils.ts, json-utils.ts, decimal-utils.ts to understand the guard API
+- Read current wishlist/route.ts and notifications/route.ts implementations
+- Refactored both files to use the unified `apiGuard` pattern
+
+Files Modified:
+
+1. `/src/app/api/wishlist/route.ts`:
+   - Removed imports: `verifyAuth`, `authErrorResponse` from `@/lib/auth-middleware`; `createRateLimiter` from `@/lib/rate-limit`; `parseJsonField` from `@/lib/api-utils`
+   - Added imports: `NextResponse` from `next/server`; `apiGuard` from `@/lib/api-guard`; `wishlistAddSchema`, `wishlistDeleteSchema` from `@/lib/validations`; `successResponse`, `errorResponse` from `@/lib/api-utils`; `parseProductJsonFields` from `@/lib/json-utils`
+   - Removed module-level `wishlistLimiter` and local `parseProductJsonFields` function
+   - GET: Uses `apiGuard(request, { auth: 'user', csrf: false })` — CSRF not needed for GET. Keeps ownership check (`userId !== guard.user!.id`)
+   - POST: Uses `apiGuard(request, { auth: 'user', rateLimit: { windowMs: 60_000, maxRequests: 30, keyPrefix: 'rl:wishlist:' }, schema: wishlistAddSchema })`. Keeps product existence check and upsert logic. Uses `successResponse`/`errorResponse` instead of manual `NextResponse.json`
+   - DELETE: Uses `apiGuard(request, { auth: 'user', rateLimit: { windowMs: 60_000, maxRequests: 30, keyPrefix: 'rl:wishlist:' }, schema: wishlistDeleteSchema })`. Keeps ownership check logic for both wishlistId and productId paths
+   - All responses now use `successResponse`/`errorResponse` helpers for consistent shape
+   - Kept `serializeDecimal` wrapping for Decimal field conversion
+   - Kept `parseProductJsonFields` (now imported from shared `@/lib/json-utils`)
+   - Kept Indonesian error messages ('Terjadi kesalahan server')
+
+2. `/src/app/api/notifications/route.ts`:
+   - Removed imports: `verifyAuth`, `authErrorResponse` from `@/lib/auth-middleware`
+   - Added imports: `NextResponse` from `next/server`; `apiGuard` from `@/lib/api-guard`; `notificationMarkReadSchema` from `@/lib/validations`; `successResponse`, `errorResponse` from `@/lib/api-utils`
+   - GET: Uses `apiGuard(request, { auth: 'user', csrf: false })`. Keeps ownership check (`userId !== guard.user!.id`)
+   - PUT: Uses `apiGuard(request, { auth: 'user', schema: notificationMarkReadSchema })`. Keeps ownership check for both markAll and single notification paths
+   - All responses now use `successResponse`/`errorResponse` helpers
+   - Kept Indonesian error messages
+
+Key Pattern Changes:
+- `verifyAuth(request)` + `authErrorResponse(authResult)` → `apiGuard(request, { auth: 'user' })` + `if (guard instanceof NextResponse) return guard`
+- `authResult.user.id` → `guard.user!.id` (non-null assertion safe since auth='user' guarantees user)
+- Manual `request.json()` + validation → `apiGuard` with `schema` option handles body parsing + Zod validation
+- Manual rate limiter setup + check → `apiGuard` with `rateLimit` config option
+- Manual `NextResponse.json({ success: true/false, ... })` → `successResponse()`/`errorResponse()` helpers
+- Local `parseProductJsonFields` → shared `parseProductJsonFields` from `@/lib/json-utils`
+
+Verification:
+- `bun run lint` passes with no errors
+- Dev server running correctly on port 3000
+
+---
+
+Task ID: 3-a
+Agent: Cart Route Refactor Agent
+Task: Refactor /api/cart route to use apiGuard, Zod schemas, and standardized response helpers
+
+Work Log:
+- Read worklog.md for previous context
+- Read current cart route (src/app/api/cart/route.ts), api-guard.ts, validations.ts, api-utils.ts, decimal-utils.ts
+- Identified all imports and patterns to refactor
+
+Refactoring Applied (src/app/api/cart/route.ts):
+
+1. Imports replaced:
+   - Removed: `verifyAuth, authErrorResponse` from `@/lib/auth-middleware`
+   - Removed: `createRateLimiter` from `@/lib/rate-limit`
+   - Removed: `cartLimiter` module-level constant
+   - Added: `apiGuard` from `@/lib/api-guard`
+   - Added: `cartAddSchema, cartMergeSchema, cartUpdateSchema, cartDeleteSchema, validateBody` from `@/lib/validations`
+   - Added: `successResponse, errorResponse, parseRequestBody` from `@/lib/api-utils`
+   - Kept: `db`, `serializeDecimal`, `cartItemInclude`, `parseCartItemFields`, `logger`
+
+2. GET handler:
+   - Changed: `verifyAuth` + `authErrorResponse` → `apiGuard(request, { auth: 'user', csrf: false })`
+   - Changed: `NextResponse.json(serializeDecimal({ success: true, data }))` → `successResponse(serializeDecimal(data))`
+   - Changed: `NextResponse.json({ success: false, error }, { status })` → `errorResponse(message, status)`
+   - Kept: userId query param check, ownership check, db queries, parseCartItemFields
+
+3. POST handler (3 modes: add, merge, clear):
+   - Changed: `verifyAuth` + `authErrorResponse` + `cartLimiter.check` → `apiGuard(request, { auth: 'user', rateLimit: { windowMs: 60_000, maxRequests: 30, keyPrefix: 'rl:cart:' } })`
+   - No schema at guard level — body validation depends on mode
+   - Clear mode: no body parsing needed (unchanged logic)
+   - Merge mode: manual body parsing with `parseRequestBody` + `validateBody(cartMergeSchema, body)` → 422 on validation error
+   - Add mode: manual body parsing + `validateBody(cartAddSchema, body)` → 422 on validation error
+   - Removed redundant manual checks now handled by Zod schemas:
+     * `!productId` → handled by cartAddSchema
+     * `quantity < 1` / `quantity > MAX_QUANTITY` → handled by cartAddSchema `.min(1).max(99)`
+     * `!items || !Array.isArray(items) || items.length === 0` → handled by cartMergeSchema
+   - Kept: product existence checks, variant validation, stock checks, upsert logic, ownership checks
+   - CSRF now automatically applied by the guard for POST (fixes security gap)
+
+4. PUT handler:
+   - Changed: `verifyAuth` + `authErrorResponse` → `apiGuard(request, { auth: 'user', schema: cartUpdateSchema })`
+   - Uses `guard.body` for validated `{ cartItemId, quantity?, isChecked? }`
+   - Removed redundant manual checks now handled by schema:
+     * `!cartItemId` → handled by schema
+     * `quantity === undefined && isChecked === undefined` → handled by schema `.refine()`
+     * `quantity < 1` / `quantity > MAX_QUANTITY` → handled by schema `.min(1).max(99)`
+   - Kept: ownership check, stock validation, update logic
+   - CSRF now automatically applied by the guard for PUT (fixes security gap)
+
+5. DELETE handler:
+   - Changed: `verifyAuth` + `authErrorResponse` → `apiGuard(request, { auth: 'user', schema: cartDeleteSchema })`
+   - Uses `guard.body` for validated `{ cartItemId: string | string[] }`
+   - Removed redundant manual checks now handled by schema:
+     * `!cartItemId` → handled by schema
+     * `cartItemIds.length === 0` → handled by schema `.min(1)`
+   - Kept: ownership checks, not-found checks, delete logic
+   - CSRF now automatically applied by the guard for DELETE (fixes security gap)
+
+Security Improvements:
+- CSRF protection now enforced automatically for POST/PUT/DELETE (previously missing)
+- Rate limiting unified through apiGuard config instead of separate cartLimiter
+- Zod validation catches malformed input before business logic runs
+
+Verification:
+- `bun run lint` passes with no errors
+- Dev server running correctly on port 3000
+
+---
+
+Task ID: 3-b
+Agent: Reviews Route Refactor Agent
+Task: Refactor src/app/api/reviews/route.ts to use apiGuard and Zod schemas
+
+Work Log:
+- Read worklog.md for previous context
+- Read current reviews route, api-guard.ts, validations.ts, api-utils.ts
+- Identified all imports and logic to change
+
+Refactoring Applied (src/app/api/reviews/route.ts):
+
+1. Imports Changed:
+   - REMOVED: `verifyAuth` from `@/lib/auth-middleware` (guard handles auth)
+   - REMOVED: `createRateLimiter` from `@/lib/rate-limit` (guard handles rate limiting)
+   - REMOVED: `reviewCreateLimiter` constant (guard creates limiter from config)
+   - ADDED: `z` from 'zod' (for type inference)
+   - ADDED: `apiGuard` from `@/lib/api-guard`
+   - ADDED: `reviewCreateSchema`, `reviewUpdateSchema`, `reviewDeleteSchema` from `@/lib/validations`
+   - ADDED: Type aliases: `ReviewCreateInput`, `ReviewUpdateInput`, `ReviewDeleteInput`
+   - KEPT: `errorResponse`, `parseJsonField` from `@/lib/api-utils`
+
+2. GET Handler (no guard — public endpoint):
+   - Replaced manual `NextResponse.json({ success: false, error: ... })` with `errorResponse(...)`
+   - No other changes to business logic
+
+3. POST Handler:
+   - Replaced `verifyAuth` + manual rate limit + manual body parsing + manual validation
+   - With: `apiGuard<ReviewCreateInput>(request, { auth: 'user', rateLimit: { windowMs: 60_000, maxRequests: 10, keyPrefix: 'rl:reviews:create:' }, schema: reviewCreateSchema })`
+   - Guard handles: auth, rate limiting, CSRF, body validation
+   - Removed: manual productId/orderItemId/rating/content length validations (Zod handles these)
+   - Kept: `sanitizeInput(body.content)` for XSS protection (Zod only validates length)
+   - Kept: product existence, orderItem ownership, order status validation, duplicate review check, rating recalculation
+
+4. PUT Handler:
+   - With: `apiGuard<ReviewUpdateInput>(request, { auth: 'user', schema: reviewUpdateSchema })`
+   - Removed: manual reviewId/rating/content validations (Zod handles these)
+   - Kept: ownership check, `sanitizeInput(content)`, rating recalculation
+
+5. DELETE Handler:
+   - With: `apiGuard<ReviewDeleteInput>(request, { auth: 'user', schema: reviewDeleteSchema })`
+   - Removed: manual reviewId validation (Zod handles this)
+   - Kept: ownership check, product ID check, rating recalculation
+
+Business Logic Preserved:
+- All ownership checks (user can only modify/delete their own reviews)
+- Product existence check on create
+- OrderItem ownership and order status ('delivered') validation
+- Duplicate review prevention (one review per orderItem)
+- Rating recalculation (product + seller) on create/update/delete
+- Indonesian error messages
+- `sanitizeInput` for XSS protection on content
+- `serializeDecimal` for Decimal field serialization
+- `parseJsonField` for images JSON parsing
+
+Verification:
+- `bun run lint` passes with no errors
+- Dev server running correctly on port 3000
+---
+Task ID: 1-3
+Agent: main
+Task: Create unified API guard + missing Zod schemas + refactor critical routes
+
+Work Log:
+- Created src/lib/api-guard.ts — unified guard handling CSRF + auth + rate limit + Zod validation in one call
+- Added 17 new Zod schemas to src/lib/validations.ts (cart, review, wishlist, notification, product, chat, complaint, OTP)
+- Refactored src/app/api/cart/route.ts to use apiGuard (now has CSRF protection)
+- Refactored src/app/api/reviews/route.ts to use apiGuard (now has CSRF protection)
+- Refactored src/app/api/wishlist/route.ts to use apiGuard (now has CSRF protection)
+- Refactored src/app/api/notifications/route.ts to use apiGuard (now has CSRF protection)
+- Lint passes cleanly, dev server running
+
+Stage Summary:
+- CSRF gap CLOSED on cart, reviews, wishlist, notifications (all write operations now CSRF-protected)
+- Zod validation replaces manual if-checks on 4 route files → consistent error messages
+- apiGuard pattern established: new routes can use one function instead of copy-pasting auth/rate-limit/validation boilerplate
+- All business logic preserved (ownership checks, stock validation, rating recalculation, etc.)
+---
+Task ID: 5
+Agent: main
+Task: Full app audit + fix all P1 and P2 issues
+
+Work Log:
+- Performed comprehensive audit of 21 key API routes across P0-P3 priorities
+- Fixed P1-1: Cancel route now deducts correct sellerEarnings (not totalAmount) from pendingBalance
+- Fixed P1-2: Cancel route uses GREATEST(sold - qty, 0) to prevent sold count going negative
+- Fixed P1-3: Products/[id] PUT now rejects price <= 0 (consistent with seller/products)
+- Fixed P1-4: Products/[id] PUT now validates discountPrice < price
+- Fixed P1-5: Products/[id] PUT now validates image URLs (Supabase only, HTTPS only, max 8, no blob/data)
+- Fixed P2-2: save-reference now limits paymentReference to 10,000 chars
+- Fixed P2-4: Products/[id] DELETE sets status to 'blocked' (consistent with seller/products)
+- Fixed P2-6: service-proof URLs now restricted to Supabase storage only (HTTPS + hostname check)
+- Fixed P2-7: service-proof note now sanitized with sanitizeInput() to prevent XSS
+- Fixed P2-8: complaints description now limited to 5,000 chars
+- Lint passes cleanly, dev server running
+
+Stage Summary:
+- All P1 financial integrity issues fixed (cancel route pendingBalance deduction, sold count)
+- All P1 validation consistency issues fixed (products/[id] matches seller/products validation)
+- P2 security hardening applied (URL restrictions, size limits, XSS sanitization)
+- CSRF is already enforced at middleware level (proxy.ts) for ALL mutating requests — no route-level gap exists
+- Remaining P3 issues are low-risk and can be addressed later

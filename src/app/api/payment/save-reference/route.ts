@@ -25,6 +25,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // P2-2 FIX: Limit paymentReference size to prevent abuse
+    if (paymentReference.length > 10000) {
+      return NextResponse.json(
+        { success: false, error: 'Referensi pembayaran terlalu panjang' },
+        { status: 400 }
+      )
+    }
+
     // Step 2: Find the order
     const order = await db.order.findUnique({
       where: { id: orderId },

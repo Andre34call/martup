@@ -1,14 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { db } from '@/lib/db'
-import { verifyAuth } from '@/lib/auth-middleware'
-import { createRateLimiter } from '@/lib/rate-limit'
-
-const reviewCreateLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 10, keyPrefix: 'rl:reviews:create:' })
-import { parseJsonField } from '@/lib/api-utils'
+import { apiGuard } from '@/lib/api-guard'
+import { reviewCreateSchema, reviewUpdateSchema, reviewDeleteSchema } from '@/lib/validations'
+import { errorResponse, parseJsonField } from '@/lib/api-utils'
 import { sanitizeInput } from '@/lib/sanitize'
 import { serializeDecimal } from '@/lib/decimal-utils'
-
 import { logger } from '@/lib/logger'
+
+type ReviewCreateInput = z.infer<typeof reviewCreateSchema>
+type ReviewUpdateInput = z.infer<typeof reviewUpdateSchema>
+type ReviewDeleteInput = z.infer<typeof reviewDeleteSchema>
 
 // Recalculate the product's average rating and review count
 async function recalculateProductRating(productId: string) {
@@ -47,17 +49,14 @@ async function recalculateSellerRating(sellerId: string) {
 }
 
 // ==================== GET /api/reviews ====================
-// Public endpoint - anyone can view reviews for a product
+// Public endpoint - anyone can view reviews for a product (no guard needed)
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const productId = searchParams.get('productId')
 
     if (!productId) {
-      return NextResponse.json(
-        { success: false, error: 'productId is required' },
-        { status: 400 }
-      )
+      return errorResponse('productId is required', 400)
     }
 
     const reviews = await db.review.findMany({
@@ -87,12 +86,8 @@ export async function GET(request: NextRequest) {
       data: parsedReviews,
     }))
   } catch (error: unknown) {
-    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'Reviews GET error')
-    return NextResponse.json(
-      { success: false, error: 'Terjadi kesalahan server' },
-      { status: 500 }
-    )
+    return errorResponse('Terjadi kesalahan server', 500)
   }
 }
 
@@ -100,73 +95,24 @@ export async function GET(request: NextRequest) {
 // Create a review - requires authentication
 export async function POST(request: NextRequest) {
   try {
-    // SECURITY: Require authentication
-    const authResult = await verifyAuth(request)
-    if (!authResult.success) {
-      return NextResponse.json(
-        { success: false, error: authResult.error },
-        { status: authResult.status }
-      )
-    }
+    // Guard handles: auth (user), rate limiting, CSRF, body validation via reviewCreateSchema
+    const guard = await apiGuard<ReviewCreateInput>(request, {
+      auth: 'user',
+      rateLimit: { windowMs: 60_000, maxRequests: 10, keyPrefix: 'rl:reviews:create:' },
+      schema: reviewCreateSchema,
+    })
+    if (guard instanceof NextResponse) return guard
 
-    // SECURITY: Rate limit review creation (max 10 per minute)
-    const clientIp =
-      request.headers.get('x-forwarded-for') ||
-      request.headers.get('x-real-ip') ||
-      'unknown'
-    const rateLimit = await reviewCreateLimiter.check(`${authResult.user.id}:${clientIp}`)
-    if (!rateLimit.allowed) {
-      const retrySeconds = Math.ceil((rateLimit.resetAt - Date.now()) / 1000)
-      return NextResponse.json(
-        { success: false, error: `Terlalu banyak permintaan. Coba lagi dalam ${retrySeconds > 60 ? Math.ceil(retrySeconds / 60) + ' menit' : retrySeconds + ' detik'}.` },
-        { status: 429 }
-      )
-    }
-
-    const body = await request.json()
+    const { user, body } = guard
     const { productId, orderItemId, rating, images } = body
 
-    // SECURITY: Sanitize user-generated content
-    const content = sanitizeInput(body.content || '')
-
-    // Validate required fields
-    if (!productId) {
-      return NextResponse.json(
-        { success: false, error: 'productId is required' },
-        { status: 400 }
-      )
-    }
-
-    // SECURITY: orderItemId is REQUIRED — only buyers with a successful transaction can review
-    if (!orderItemId) {
-      return NextResponse.json(
-        { success: false, error: 'Hanya pembeli yang telah melakukan transaksi berhasil dapat memberikan ulasan' },
-        { status: 400 }
-      )
-    }
-
-    if (!rating || typeof rating !== 'number' || rating < 1 || rating > 5) {
-      return NextResponse.json(
-        { success: false, error: 'rating is required and must be between 1 and 5' },
-        { status: 400 }
-      )
-    }
-
-    // Validate content length
-    if (content && typeof content === 'string' && content.length > 1000) {
-      return NextResponse.json(
-        { success: false, error: 'content must be at most 1000 characters' },
-        { status: 400 }
-      )
-    }
+    // SECURITY: Sanitize user-generated content (Zod validates length, sanitizeInput handles XSS)
+    const content = body.content ? sanitizeInput(body.content) : null
 
     // Verify the product exists
     const product = await db.product.findUnique({ where: { id: productId } })
     if (!product) {
-      return NextResponse.json(
-        { success: false, error: 'Product not found' },
-        { status: 404 }
-      )
+      return errorResponse('Product not found', 404)
     }
 
     // SECURITY: Verify orderItem belongs to the user, order is delivered, and product matches
@@ -176,34 +122,22 @@ export async function POST(request: NextRequest) {
     })
 
     if (!orderItem) {
-      return NextResponse.json(
-        { success: false, error: 'Order item not found' },
-        { status: 404 }
-      )
+      return errorResponse('Order item not found', 404)
     }
 
     // Verify the order belongs to the authenticated user
-    if (orderItem.order.userId !== authResult.user.id) {
-      return NextResponse.json(
-        { success: false, error: 'Forbidden - You can only review your own orders' },
-        { status: 403 }
-      )
+    if (orderItem.order.userId !== user!.id) {
+      return errorResponse('Forbidden - You can only review your own orders', 403)
     }
 
     // Verify the order item belongs to the specified product
     if (orderItem.productId !== productId) {
-      return NextResponse.json(
-        { success: false, error: 'Order item does not belong to the specified product' },
-        { status: 400 }
-      )
+      return errorResponse('Order item does not belong to the specified product', 400)
     }
 
     // SECURITY: Verify the order status is 'delivered' (successful transaction)
     if (orderItem.order.status !== 'delivered') {
-      return NextResponse.json(
-        { success: false, error: 'Hanya pesanan yang sudah diterima (delivered) yang dapat diulas' },
-        { status: 400 }
-      )
+      return errorResponse('Hanya pesanan yang sudah diterima (delivered) yang dapat diulas', 400)
     }
 
     // SECURITY: Check that no review already exists for this orderItem (one review per item)
@@ -212,14 +146,11 @@ export async function POST(request: NextRequest) {
     })
 
     if (existingReview) {
-      return NextResponse.json(
-        { success: false, error: 'A review already exists for this order item' },
-        { status: 409 }
-      )
+      return errorResponse('A review already exists for this order item', 409)
     }
 
     // Stringify images array if provided
-    const imagesData = images && Array.isArray(images) && images.length > 0
+    const imagesData = images && images.length > 0
       ? JSON.stringify(images)
       : null
 
@@ -227,7 +158,7 @@ export async function POST(request: NextRequest) {
     const review = await db.$transaction(async (tx) => {
       const newReview = await tx.review.create({
         data: {
-          userId: authResult.user.id,
+          userId: user!.id,
           productId,
           orderItemId,
           rating,
@@ -279,12 +210,8 @@ export async function POST(request: NextRequest) {
       data: parsedReview,
     }), { status: 201 })
   } catch (error: unknown) {
-    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'Reviews POST error')
-    return NextResponse.json(
-      { success: false, error: 'Terjadi kesalahan server' },
-      { status: 500 }
-    )
+    return errorResponse('Terjadi kesalahan server', 500)
   }
 }
 
@@ -292,43 +219,20 @@ export async function POST(request: NextRequest) {
 // Update a review - requires authentication, user can only update own reviews
 export async function PUT(request: NextRequest) {
   try {
-    // SECURITY: Require authentication
-    const authResult = await verifyAuth(request)
-    if (!authResult.success) {
-      return NextResponse.json(
-        { success: false, error: authResult.error },
-        { status: authResult.status }
-      )
-    }
+    // Guard handles: auth (user), CSRF, body validation via reviewUpdateSchema
+    const guard = await apiGuard<ReviewUpdateInput>(request, {
+      auth: 'user',
+      schema: reviewUpdateSchema,
+    })
+    if (guard instanceof NextResponse) return guard
 
-    const body = await request.json()
+    const { user, body } = guard
     const { reviewId, rating, images } = body
 
-    // SECURITY: Sanitize user-generated content
-    const content = body.content !== undefined ? sanitizeInput(body.content) : undefined
-
-    if (!reviewId) {
-      return NextResponse.json(
-        { success: false, error: 'reviewId is required' },
-        { status: 400 }
-      )
-    }
-
-    // Validate rating if provided
-    if (rating !== undefined && (typeof rating !== 'number' || rating < 1 || rating > 5)) {
-      return NextResponse.json(
-        { success: false, error: 'rating must be between 1 and 5' },
-        { status: 400 }
-      )
-    }
-
-    // Validate content length if provided
-    if (content && typeof content === 'string' && content.length > 1000) {
-      return NextResponse.json(
-        { success: false, error: 'content must be at most 1000 characters' },
-        { status: 400 }
-      )
-    }
+    // SECURITY: Sanitize user-generated content (Zod validates length, sanitizeInput handles XSS)
+    const content = body.content !== undefined
+      ? sanitizeInput(body.content)
+      : undefined
 
     // Find the existing review
     const existingReview = await db.review.findUnique({
@@ -336,18 +240,12 @@ export async function PUT(request: NextRequest) {
     })
 
     if (!existingReview) {
-      return NextResponse.json(
-        { success: false, error: 'Review not found' },
-        { status: 404 }
-      )
+      return errorResponse('Review not found', 404)
     }
 
     // SECURITY: Verify the review belongs to the authenticated user
-    if (existingReview.userId !== authResult.user.id) {
-      return NextResponse.json(
-        { success: false, error: 'Forbidden - You can only update your own reviews' },
-        { status: 403 }
-      )
+    if (existingReview.userId !== user!.id) {
+      return errorResponse('Forbidden - You can only update your own reviews', 403)
     }
 
     // Build update data (only include fields that are provided)
@@ -355,7 +253,7 @@ export async function PUT(request: NextRequest) {
     if (rating !== undefined) updateData.rating = rating
     if (content !== undefined) updateData.content = content || null
     if (images !== undefined) {
-      updateData.images = Array.isArray(images) && images.length > 0
+      updateData.images = images.length > 0
         ? JSON.stringify(images)
         : null
     }
@@ -410,12 +308,8 @@ export async function PUT(request: NextRequest) {
       data: parsedReview,
     }))
   } catch (error: unknown) {
-    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'Reviews PUT error')
-    return NextResponse.json(
-      { success: false, error: 'Terjadi kesalahan server' },
-      { status: 500 }
-    )
+    return errorResponse('Terjadi kesalahan server', 500)
   }
 }
 
@@ -423,24 +317,15 @@ export async function PUT(request: NextRequest) {
 // Delete a review - requires authentication, user can only delete own reviews
 export async function DELETE(request: NextRequest) {
   try {
-    // SECURITY: Require authentication
-    const authResult = await verifyAuth(request)
-    if (!authResult.success) {
-      return NextResponse.json(
-        { success: false, error: authResult.error },
-        { status: authResult.status }
-      )
-    }
+    // Guard handles: auth (user), CSRF, body validation via reviewDeleteSchema
+    const guard = await apiGuard<ReviewDeleteInput>(request, {
+      auth: 'user',
+      schema: reviewDeleteSchema,
+    })
+    if (guard instanceof NextResponse) return guard
 
-    const body = await request.json()
+    const { user, body } = guard
     const { reviewId } = body
-
-    if (!reviewId) {
-      return NextResponse.json(
-        { success: false, error: 'reviewId is required' },
-        { status: 400 }
-      )
-    }
 
     // Find the existing review
     const existingReview = await db.review.findUnique({
@@ -448,27 +333,18 @@ export async function DELETE(request: NextRequest) {
     })
 
     if (!existingReview) {
-      return NextResponse.json(
-        { success: false, error: 'Review not found' },
-        { status: 404 }
-      )
+      return errorResponse('Review not found', 404)
     }
 
     // SECURITY: Verify the review belongs to the authenticated user
-    if (existingReview.userId !== authResult.user.id) {
-      return NextResponse.json(
-        { success: false, error: 'Forbidden - You can only delete your own reviews' },
-        { status: 403 }
-      )
+    if (existingReview.userId !== user!.id) {
+      return errorResponse('Forbidden - You can only delete your own reviews', 403)
     }
 
     const productId = existingReview.productId
 
     if (!productId) {
-      return NextResponse.json(
-        { success: false, error: 'Review tidak terhubung ke produk' },
-        { status: 400 }
-      )
+      return errorResponse('Review tidak terhubung ke produk', 400)
     }
 
     // Delete review and recalculate product rating in a transaction
@@ -503,11 +379,7 @@ export async function DELETE(request: NextRequest) {
       data: { deleted: true, reviewId },
     })
   } catch (error: unknown) {
-    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'Reviews DELETE error')
-    return NextResponse.json(
-      { success: false, error: 'Terjadi kesalahan server' },
-      { status: 500 }
-    )
+    return errorResponse('Terjadi kesalahan server', 500)
   }
 }

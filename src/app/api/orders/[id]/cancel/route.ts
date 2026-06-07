@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAuth } from '@/lib/auth-middleware'
+import { getEffectiveCommissionRate } from '@/lib/commission'
 
 import { logger } from '@/lib/logger'
 // POST /api/orders/[id]/cancel — Cancel order
@@ -27,7 +28,7 @@ export async function POST(
       // both pass the status check before either updates the DB
       const order = await tx.order.findUnique({
         where: { id },
-        include: { items: true, seller: { select: { id: true, userId: true } } },
+        include: { items: true, seller: { select: { id: true, userId: true, commissionRate: true } } },
       })
 
       if (!order) {
@@ -78,9 +79,10 @@ export async function POST(
           where: { id: item.productId },
           data: {
             stock: { increment: item.quantity },
-            sold: { decrement: item.quantity },
           },
         })
+        // P1-2 FIX: Use GREATEST to prevent sold count from going negative
+        await tx.$executeRaw`UPDATE "Product" SET sold = GREATEST(sold - ${item.quantity}, 0) WHERE id = ${item.productId}`
       }
 
       // Decrement seller totalSales
@@ -90,17 +92,37 @@ export async function POST(
         data: { totalSales: { decrement: totalItemsCount } },
       })
 
-      // BUG 7 FIX: Decrement seller's pendingBalance when a paid order is cancelled
-      // Regardless of payment method, the seller's pendingBalance was credited during
-      // payment and must be reversed on cancellation
+      // P1-1 FIX: Decrement seller's pendingBalance by the CORRECT amount (sellerEarnings)
+      // NOT by order.totalAmount (which includes shipping + platform fee + tax).
+      // The seller's pendingBalance was credited with sellerEarnings (subtotal - commission)
+      // during payment, so we must deduct the same amount on cancellation.
       if (order.paymentStatus === 'paid') {
         const sellerWallet = await tx.wallet.findFirst({ where: { userId: order.seller.userId } })
         if (sellerWallet && Number(sellerWallet.pendingBalance) > 0) {
-          const decrementAmount = Math.min(Number(order.totalAmount), Number(sellerWallet.pendingBalance))
+          const commissionRate = await getEffectiveCommissionRate(order.seller.commissionRate)
+          const commissionAmount = Math.round(Number(order.subtotal) * commissionRate)
+          const sellerEarnings = Number(order.subtotal) - commissionAmount
+          const decrementAmount = Math.min(sellerEarnings, Number(sellerWallet.pendingBalance))
           await tx.wallet.update({
             where: { id: sellerWallet.id },
             data: { pendingBalance: { decrement: decrementAmount } },
           })
+
+          // Record wallet mutation for the reversal
+          const updatedWallet = await tx.wallet.findUnique({ where: { id: sellerWallet.id } })
+          if (updatedWallet) {
+            await tx.walletMutation.create({
+              data: {
+                walletId: sellerWallet.id,
+                type: 'debit',
+                amount: decrementAmount,
+                balance: Number(updatedWallet.balance),
+                description: `Pembatalan dana dari pesanan ${order.orderNumber}`,
+                refType: 'order_cancel',
+                refId: order.id,
+              },
+            })
+          }
         }
       }
 

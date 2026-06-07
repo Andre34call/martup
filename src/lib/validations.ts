@@ -244,6 +244,166 @@ export const sellerWithdrawSchema = z.object({
   bankHolder: z.string().optional(),
 })
 
+// ==================== Cart ====================
+// Cart item add
+export const cartAddSchema = z.object({
+  productId: z.string().min(1, 'productId wajib diisi'),
+  variantId: z.string().nullable().optional(),
+  quantity: z.number().int().min(1, 'Quantity minimal 1').max(99, 'Quantity maksimal 99'),
+})
+
+// Cart item merge
+export const cartMergeSchema = z.object({
+  items: z.array(z.object({
+    productId: z.string().min(1),
+    variantId: z.string().nullable().optional(),
+    quantity: z.number().int().min(1).max(99),
+  })).min(1, 'Items tidak boleh kosong'),
+})
+
+// Cart item update
+export const cartUpdateSchema = z.object({
+  cartItemId: z.string().min(1, 'cartItemId wajib diisi'),
+  quantity: z.number().int().min(1).max(99).optional(),
+  isChecked: z.boolean().optional(),
+}).refine(data => data.quantity !== undefined || data.isChecked !== undefined, {
+  message: 'Minimal quantity atau isChecked harus diisi',
+})
+
+// Cart item delete
+export const cartDeleteSchema = z.object({
+  cartItemId: z.union([
+    z.string().min(1, 'cartItemId wajib diisi'),
+    z.array(z.string().min(1)).min(1, 'Minimal 1 cartItemId'),
+  ]),
+})
+
+// ==================== Review ====================
+// Review create
+export const reviewCreateSchema = z.object({
+  productId: z.string().min(1, 'productId wajib diisi'),
+  orderItemId: z.string().min(1, 'orderItemId wajib diisi'),
+  rating: z.number().int().min(1, 'Rating minimal 1').max(5, 'Rating maksimal 5'),
+  content: z.string().max(1000, 'Ulasan maksimal 1000 karakter').optional(),
+  images: z.array(z.string().url()).max(5, 'Maksimal 5 gambar').optional(),
+})
+
+// Review update
+export const reviewUpdateSchema = z.object({
+  reviewId: z.string().min(1, 'reviewId wajib diisi'),
+  rating: z.number().int().min(1).max(5).optional(),
+  content: z.string().max(1000).optional(),
+  images: z.array(z.string().url()).max(5).optional(),
+})
+
+// Review delete
+export const reviewDeleteSchema = z.object({
+  reviewId: z.string().min(1, 'reviewId wajib diisi'),
+})
+
+// ==================== Wishlist ====================
+export const wishlistAddSchema = z.object({
+  productId: z.string().min(1, 'productId wajib diisi'),
+})
+
+export const wishlistDeleteSchema = z.object({
+  productId: z.string().optional(),
+  wishlistId: z.string().optional(),
+}).refine(data => data.productId || data.wishlistId, {
+  message: 'productId atau wishlistId wajib diisi',
+})
+
+// ==================== Notification ====================
+export const notificationMarkReadSchema = z.object({
+  notificationId: z.string().min(1, 'notificationId wajib diisi').optional(),
+  markAll: z.boolean().optional(),
+  userId: z.string().optional(),
+}).refine(data => data.notificationId || (data.markAll && data.userId), {
+  message: 'notificationId atau (markAll + userId) wajib diisi',
+})
+
+// ==================== Product (Seller) ====================
+export const productCreateSchema = z.object({
+  name: z.string().min(1, 'Nama produk wajib diisi').max(70, 'Nama produk maksimal 70 karakter'),
+  description: z.string().max(2000, 'Deskripsi maksimal 2000 karakter').optional(),
+  price: z.number().min(0, 'Harga tidak boleh negatif'),
+  discountPrice: z.number().min(0).nullable().optional(),
+  stock: z.number().int().min(0, 'Stok tidak boleh negatif'),
+  categoryId: z.string().min(1, 'Kategori wajib diisi'),
+  images: z.array(z.string()).min(1, 'Minimal 1 gambar').max(8, 'Maksimal 8 gambar'),
+  video: z.string().nullable().optional(),
+  weight: z.number().min(0, 'Berat tidak boleh negatif').optional(),
+  minOrder: z.number().int().min(1).optional(),
+  condition: z.enum(['new', 'used']).optional(),
+  productType: z.enum(['barang', 'jasa']).optional(),
+  variants: z.array(z.object({
+    name: z.string().min(1).max(50),
+    stock: z.number().int().min(0),
+    price: z.number().min(0),
+  })).optional(),
+}).refine(data => {
+  if (data.discountPrice !== undefined && data.discountPrice !== null && data.discountPrice >= data.price) {
+    return false
+  }
+  return true
+}, { message: 'Harga diskon harus lebih kecil dari harga normal', path: ['discountPrice'] })
+
+export const productUpdateSchema = z.object({
+  name: z.string().min(1).max(70).optional(),
+  description: z.string().max(2000).optional(),
+  price: z.number().min(0).optional(),
+  discountPrice: z.number().min(0).nullable().optional(),
+  stock: z.number().int().min(0).optional(),
+  categoryId: z.string().min(1).optional(),
+  images: z.array(z.string()).min(1).max(8).optional(),
+  video: z.string().nullable().optional(),
+  weight: z.number().min(0).optional(),
+  minOrder: z.number().int().min(1).optional(),
+  condition: z.enum(['new', 'used']).optional(),
+  productType: z.enum(['barang', 'jasa']).optional(),
+  status: z.enum(['active', 'draft', 'blocked']).optional(),
+  variants: z.array(z.object({
+    id: z.string().optional(),
+    name: z.string().min(1).max(50),
+    stock: z.number().int().min(0),
+    price: z.number().min(0),
+  })).optional(),
+}).refine(data => {
+  if (data.discountPrice !== undefined && data.discountPrice !== null && data.price !== undefined && data.discountPrice >= data.price) {
+    return false
+  }
+  return true
+}, { message: 'Harga diskon harus lebih kecil dari harga normal', path: ['discountPrice'] })
+
+// ==================== Chat ====================
+export const chatMessageSchema = z.object({
+  roomId: z.string().min(1, 'roomId wajib diisi'),
+  content: z.string().min(1, 'Pesan tidak boleh kosong').max(2000, 'Pesan maksimal 2000 karakter'),
+  image: z.string().url().optional(),
+})
+
+// ==================== Complaint / Refund ====================
+export const complaintCreateSchema = z.object({
+  orderId: z.string().min(1, 'orderId wajib diisi'),
+  reason: z.string().min(1, 'Alasan wajib diisi').max(500, 'Alasan maksimal 500 karakter'),
+  description: z.string().max(2000).optional(),
+  images: z.array(z.string().url()).max(5).optional(),
+})
+
+// ==================== OTP ====================
+export const otpSendSchema = z.object({
+  phone: z.string().min(1, 'Nomor telepon wajib diisi'),
+  userId: z.string().optional(),
+})
+
+export const otpVerifySchema = z.object({
+  phone: z.string().optional(),
+  userId: z.string().optional(),
+  code: z.string().length(6, 'Kode OTP harus 6 digit'),
+}).refine(data => data.phone || data.userId, {
+  message: 'Nomor telepon atau userId wajib diisi',
+})
+
 // Helper to validate request body with Zod
 export function validateBody<T>(schema: z.ZodSchema<T>, data: unknown): { success: true; data: T } | { success: false; error: string } {
   const result = schema.safeParse(data)

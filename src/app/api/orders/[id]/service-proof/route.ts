@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
 import { createRateLimiter } from '@/lib/rate-limit'
+import { sanitizeInput } from '@/lib/sanitize'
 import { serializeDecimal } from '@/lib/decimal-utils'
 import { logger } from '@/lib/logger'
 
@@ -17,11 +18,18 @@ const serviceProofLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 5
 
 const DANGEROUS_PROTOCOLS = ['blob:', 'data:', 'javascript:', 'vbscript:', 'file:']
 
+// P2-6 FIX: Supabase host for URL validation
+const SUPABASE_HOST = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace('https://', '') || 'rzrfouzuxcxdbhadbppi.supabase.co'
+
 function isValidUrl(urlString: string): boolean {
   try {
     const url = new URL(urlString)
-    // Only allow http: and https: protocols
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    // Only allow https: protocol (not http: for production security)
+    if (url.protocol !== 'https:') {
+      return false
+    }
+    // P2-6 FIX: Only allow Supabase storage URLs
+    if (!url.hostname.endsWith(SUPABASE_HOST)) {
       return false
     }
     return true
@@ -99,6 +107,8 @@ export async function POST(
     }
 
     // Step 5: Validate note (optional, max 500 chars)
+    // P2-7 FIX: Sanitize note to prevent XSS
+    let sanitizedNote: string | undefined
     if (note !== undefined && note !== null) {
       if (typeof note !== 'string') {
         return NextResponse.json(
@@ -112,6 +122,7 @@ export async function POST(
           { status: 400 }
         )
       }
+      sanitizedNote = sanitizeInput(note)
     }
 
     // Step 6: Find the order and verify ownership

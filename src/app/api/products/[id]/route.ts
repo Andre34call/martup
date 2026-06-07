@@ -199,7 +199,7 @@ export async function PUT(
     const sanitizedCondition = condition !== undefined ? sanitizeInput(condition) : undefined
 
     // Validate price if provided
-    if (price !== undefined && (typeof price !== 'number' || price < 0)) {
+    if (price !== undefined && (typeof price !== 'number' || price <= 0)) {
       return NextResponse.json(
         { success: false, error: 'Price must be a positive number' },
         { status: 400 }
@@ -207,7 +207,15 @@ export async function PUT(
     }
     if (discountPrice !== undefined && discountPrice !== null && (typeof discountPrice !== 'number' || discountPrice < 0)) {
       return NextResponse.json(
-        { success: false, error: 'Discount price must be a positive number or null' },
+        { success: false, error: 'Discount price must be a non-negative number or null' },
+        { status: 400 }
+      )
+    }
+    // P1-4 FIX: Validate discountPrice < price
+    const effectivePrice = price !== undefined ? price : Number(existing.price)
+    if (discountPrice !== undefined && discountPrice !== null && typeof discountPrice === 'number' && discountPrice >= effectivePrice) {
+      return NextResponse.json(
+        { success: false, error: 'Harga diskon harus lebih kecil dari harga normal' },
         { status: 400 }
       )
     }
@@ -219,11 +227,59 @@ export async function PUT(
     }
 
     // Validate images array if provided
-    if (images !== undefined && !Array.isArray(images)) {
-      return NextResponse.json(
-        { success: false, error: 'Images must be an array' },
-        { status: 400 }
-      )
+    if (images !== undefined) {
+      if (!Array.isArray(images)) {
+        return NextResponse.json(
+          { success: false, error: 'Images must be an array' },
+          { status: 400 }
+        )
+      }
+      // P1-5 FIX: Validate image URLs — only allow Supabase storage URLs
+      const supabaseHost = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace('https://', '') || 'rzrfouzuxcxdbhadbppi.supabase.co'
+      const maxImages = 8
+      if (images.length > maxImages) {
+        return NextResponse.json(
+          { success: false, error: `Maksimal ${maxImages} gambar` },
+          { status: 400 }
+        )
+      }
+      for (const imgUrl of images) {
+        if (typeof imgUrl !== 'string') {
+          return NextResponse.json(
+            { success: false, error: 'Setiap URL gambar harus berupa string' },
+            { status: 400 }
+          )
+        }
+        const lowerUrl = imgUrl.trim().toLowerCase()
+        // Block blob:, data:, javascript: URLs
+        if (lowerUrl.startsWith('blob:') || lowerUrl.startsWith('data:') || lowerUrl.startsWith('javascript:')) {
+          return NextResponse.json(
+            { success: false, error: 'URL blob:, data:, javascript: tidak diizinkan' },
+            { status: 400 }
+          )
+        }
+        // Only allow https: URLs from Supabase storage
+        try {
+          const url = new URL(imgUrl)
+          if (url.protocol !== 'https:') {
+            return NextResponse.json(
+              { success: false, error: 'Hanya URL https yang diizinkan untuk gambar' },
+              { status: 400 }
+            )
+          }
+          if (!url.hostname.endsWith(supabaseHost)) {
+            return NextResponse.json(
+              { success: false, error: 'Gambar harus berasal dari storage MartUp' },
+              { status: 400 }
+            )
+          }
+        } catch {
+          return NextResponse.json(
+            { success: false, error: 'URL gambar tidak valid' },
+            { status: 400 }
+          )
+        }
+      }
     }
 
     // If name is being updated, regenerate slug
@@ -348,10 +404,10 @@ export async function DELETE(
       )
     }
 
-    // Soft delete - set status to draft
+    // Soft delete - set status to blocked (P2-4 FIX: consistent with seller/products)
     await db.product.update({
       where: { id },
-      data: { status: 'draft' },
+      data: { status: 'blocked' },
     })
 
     // Decrement seller totalProducts
