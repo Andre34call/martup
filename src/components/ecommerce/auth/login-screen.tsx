@@ -108,8 +108,14 @@ export function LoginScreen() {
       }
 
       // 2FA check — if user has 2FA enabled, redirect to OTP verification
+      // SECURITY: Pass userId (not phone) to prevent phone number enumeration.
+      // The OTP send endpoint looks up the phone server-side from the userId.
       if (data.success && data.requires2FA) {
-        useAppStore.setState({ otpPhoneNumber: data.phone || '' })
+        useAppStore.setState({ 
+          otpPhoneNumber: '', 
+          otpUserId: data.userId || '',
+          otpMaskedPhone: data.maskedPhone || '',
+        })
         navigate('otp')
         showToast(data.message || 'Verifikasi 2FA diperlukan', 'info')
         setIsLoading(false)

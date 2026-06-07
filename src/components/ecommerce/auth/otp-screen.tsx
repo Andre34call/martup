@@ -15,13 +15,16 @@ import { setAuthFlagCookie } from '@/lib/session-cookie'
 import { pageVariants, pageTransition, isValidPhone, type OtpSendResponse, type OtpVerifyResponse } from './shared'
 
 // ==================== OTP SCREEN ====================
+// SECURITY: Supports two modes:
+// 1. Phone-based: User enters phone number (phone login flow)
+// 2. UserId-based: From 2FA flow — phone is looked up server-side to prevent phone enumeration
+
 function maskPhone(phone: string): string {
   const digits = phone.replace(/\D/g, '')
   if (digits.length < 8) return phone
   const visibleStart = digits.slice(0, 4)
   const visibleEnd = digits.slice(-3)
   const maskedMiddle = '*'.repeat(Math.min(digits.length - 7, 4))
-  // Format: +62 812****789
   if (digits.startsWith('62')) {
     return `+62 ${digits.slice(2, 4)}${maskedMiddle}${visibleEnd}`
   }
@@ -34,8 +37,18 @@ function maskPhone(phone: string): string {
 export function OTPScreen() {
   const { navigate, login, goBack, showToast } = useAppStore()
   const passedPhone = useAppStore((s) => s.otpPhoneNumber) || ""
+  const passedUserId = useAppStore((s) => s.otpUserId) || ""
+  const passedMaskedPhone = useAppStore((s) => s.otpMaskedPhone) || ""
+
+  // SECURITY: If we have a userId from 2FA flow, use userId-based OTP (no phone needed).
+  // The server looks up the phone from the userId to prevent phone number enumeration.
+  const is2FAFlow = !!passedUserId
+  const displayPhone = is2FAFlow ? passedMaskedPhone : passedPhone
+
   const [phone, setPhone] = useState(passedPhone)
-  const [step, setStep] = useState<'phone' | 'otp'>(passedPhone && isValidPhone(passedPhone) ? 'otp' : 'phone')
+  const [step, setStep] = useState<'phone' | 'otp'>(
+    is2FAFlow ? 'otp' : (passedPhone && isValidPhone(passedPhone) ? 'otp' : 'phone')
+  )
   const [otp, setOtp] = useState("")
   const [countdown, setCountdown] = useState(0)
   const [isSending, setIsSending] = useState(false)
@@ -59,19 +72,31 @@ export function OTPScreen() {
   }, [countdown])
 
   const handleResend = async () => {
-    if (countdown > 0 || !phone || !isValidPhone(phone)) return
-    await handlePhoneSubmit()
+    if (countdown > 0) return
+    if (!is2FAFlow && (!phone || !isValidPhone(phone))) return
+    await handleSendOTP()
   }
 
   const handlePhoneSubmit = async () => {
     setTouchedPhone(true)
     if (!phone || !isValidPhone(phone)) return
+    await handleSendOTP()
+  }
+
+  const handleSendOTP = async () => {
     setIsSending(true)
 
     try {
-      const formattedPhone = phone.startsWith('+') ? phone : phone.startsWith('0') ? '+62' + phone.substring(1) : '+62' + phone
+      let data: OtpSendResponse
 
-      const data = await apiClient.post<OtpSendResponse>('/api/auth/otp/send', { phone: formattedPhone })
+      if (is2FAFlow) {
+        // SECURITY: Send userId instead of phone for 2FA flow
+        // Server looks up the phone from userId to prevent phone enumeration
+        data = await apiClient.post<OtpSendResponse>('/api/auth/otp/send', { userId: passedUserId })
+      } else {
+        const formattedPhone = phone.startsWith('+') ? phone : phone.startsWith('0') ? '+62' + phone.substring(1) : '+62' + phone
+        data = await apiClient.post<OtpSendResponse>('/api/auth/otp/send', { phone: formattedPhone })
+      }
 
       // Store requestId for verification — it binds the OTP send and verify steps
       if (data.requestId) {
@@ -97,25 +122,39 @@ export function OTPScreen() {
     setIsSending(false)
   }
 
+  // Auto-send OTP on mount for 2FA flow
+  useEffect(() => {
+    if (is2FAFlow && step === 'otp' && !requestId) {
+      handleSendOTP()
+    }
+  }, [is2FAFlow])
+
   const handleVerify = async () => {
     if (otp.length !== 6) return
-    if (!phone) {
+    if (!is2FAFlow && !phone) {
       showToast('Masukkan nomor HP terlebih dahulu', 'error')
       return
     }
     setIsVerifying(true)
 
     try {
-      const formattedPhone = phone.startsWith('+') ? phone : phone.startsWith('0') ? '+62' + phone.substring(1) : '+62' + phone
+      let data: OtpVerifyResponse
 
-      const data = await apiClient.post<OtpVerifyResponse>('/api/auth/otp/verify', { phone: formattedPhone, otpCode: otp, requestId: requestId || undefined })
+      if (is2FAFlow) {
+        // SECURITY: Verify using userId for 2FA flow
+        data = await apiClient.post<OtpVerifyResponse>('/api/auth/otp/verify', { userId: passedUserId, otpCode: otp, requestId: requestId || undefined })
+      } else {
+        const formattedPhone = phone.startsWith('+') ? phone : phone.startsWith('0') ? '+62' + phone.substring(1) : '+62' + phone
+        data = await apiClient.post<OtpVerifyResponse>('/api/auth/otp/verify', { phone: formattedPhone, otpCode: otp, requestId: requestId || undefined })
+      }
+
       if (data.user) {
         // Token is in httpOnly session cookie set by server
         setAuthFlagCookie()
         const user: User & { isSuperAdmin?: boolean } = {
           id: data.user.id,
           email: data.user.email || '',
-          phone: data.user.phone || formattedPhone,
+          phone: data.user.phone || phone,
           name: data.user.name,
           avatar: data.user.avatar || undefined,
           role: (data.user.role || 'buyer') as UserRole,
@@ -148,6 +187,11 @@ export function OTPScreen() {
     setIsVerifying(false)
   }
 
+  // Display text for the phone number (masked for 2FA, actual for phone login)
+  const displayPhoneText = is2FAFlow
+    ? displayPhone
+    : maskPhone(phone)
+
   return (
     <motion.div
       variants={pageVariants}
@@ -158,7 +202,7 @@ export function OTPScreen() {
       className="min-h-screen flex flex-col bg-background"
     >
       {/* Header */}
-      <PageHeader title="Login OTP" onBack={step === 'otp' ? () => setStep('phone') : goBack} />
+      <PageHeader title={is2FAFlow ? "Verifikasi 2FA" : "Login OTP"} onBack={step === 'otp' && !is2FAFlow ? () => setStep('phone') : goBack} />
 
       {/* Content */}
       <div className="flex-1 flex flex-col px-6 pb-8">
@@ -172,7 +216,7 @@ export function OTPScreen() {
           <Smartphone className="w-10 h-10 text-emerald-500" />
         </motion.div>
 
-        {step === 'phone' ? (
+        {step === 'phone' && !is2FAFlow ? (
           <>
             <h1 className="text-2xl font-bold text-foreground text-center mb-2">
               Masukkan Nomor HP
@@ -225,10 +269,10 @@ export function OTPScreen() {
         ) : (
           <>
             <h1 className="text-2xl font-bold text-foreground text-center mb-2">
-              Masukkan kode OTP
+              {is2FAFlow ? 'Verifikasi 2FA' : 'Masukkan kode OTP'}
             </h1>
             <p className="text-sm text-muted-foreground text-center mb-8">
-              Kode telah dikirim ke <span className="font-medium text-foreground">{maskPhone(phone)}</span>
+              Kode telah dikirim ke <span className="font-medium text-foreground">{displayPhoneText}</span>
             </p>
 
             {/* OTP Input */}

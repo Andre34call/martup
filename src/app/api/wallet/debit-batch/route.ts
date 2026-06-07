@@ -179,26 +179,48 @@ export async function POST(request: NextRequest) {
     // ==================== ATOMIC TRANSACTION ====================
     // All debits happen in a single transaction — either all succeed or all fail
     const result = await db.$transaction(async (tx) => {
-      // SECURITY: Re-fetch wallet inside transaction to prevent race conditions (double-spend)
-      const currentWallet = await tx.wallet.findUnique({
-        where: { id: wallet.id },
-      })
-
-      if (!currentWallet || Number(currentWallet.balance) < totalDebitAmount) {
-        throw new Error(`Saldo tidak mencukupi. Saldo: Rp ${Number(currentWallet?.balance ?? 0).toLocaleString('id-ID')}, Dibutuhkan: Rp ${totalDebitAmount.toLocaleString('id-ID')}`)
-      }
-
-      // 1. Deduct wallet balance (single decrement for total)
-      const updatedWallet = await tx.wallet.update({
-        where: { id: wallet.id },
+      // SECURITY: Use updateMany with balance >= totalDebitAmount to prevent balance going negative
+      // This is atomic — if two concurrent requests try to decrement, only one will match
+      // the balance condition. The other will get count=0 and fail.
+      const updateResult = await tx.wallet.updateMany({
+        where: { id: wallet.id, balance: { gte: totalDebitAmount } },
         data: { balance: { decrement: totalDebitAmount } },
       })
+
+      if (updateResult.count === 0) {
+        throw new Error('Saldo tidak mencukupi. Silakan top up terlebih dahulu.')
+      }
+
+      // Re-fetch wallet to get the updated balance for mutation records
+      const updatedWallet = await tx.wallet.findUnique({
+        where: { id: wallet.id },
+      })
+
+      if (!updatedWallet) {
+        throw new Error('Wallet not found after update — data integrity issue')
+      }
 
       // 2. Process each order
       const paidOrders: { orderId: string; orderNumber: string; amount: number }[] = []
 
       for (const debit of orders) {
         const order = orderMap.get(debit.orderId)!
+
+        // IDEMPOTENCY: Check if this order was already debited (INSIDE transaction)
+        const existingDebit = await tx.walletMutation.findFirst({
+          where: {
+            walletId: wallet.id,
+            type: 'debit',
+            refType: 'order',
+            refId: debit.orderId,
+          },
+        })
+
+        if (existingDebit) {
+          // Skip this order — already paid via a separate debit request
+          logger.warn({ orderId: debit.orderId }, 'Skipping already-debited order in batch payment')
+          continue
+        }
 
         // Create wallet mutation (debit) for this order
         await tx.walletMutation.create({

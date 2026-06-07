@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
+import { verifyAuth, authErrorResponse, ELEVATED_ROLES } from '@/lib/auth-middleware'
 import { createRateLimiter } from '@/lib/rate-limit'
 import { generateSignedUrl, PRIVATE_BUCKETS } from '@/lib/signed-url'
+import { db } from '@/lib/db'
 import { logger } from '@/lib/logger'
 
 // Rate limiter: 30 signed URL requests per minute per user
@@ -94,6 +95,49 @@ export async function POST(request: NextRequest) {
         { success: false, error: 'Path tidak valid. Gunakan format path yang benar.' },
         { status: 400 }
       )
+    }
+
+    // 7.5 SECURITY: Authorization check — verify the user has access to this file
+    // Private buckets contain sensitive documents; users should only access their own files
+    const isAdmin = (ELEVATED_ROLES as readonly string[]).includes(authResult.user.role)
+    if (!isAdmin) {
+      const userId = authResult.user.id
+      const folder = sanitizedPath.split('/')[0]
+
+      if (bucket === 'payments') {
+        // Payment proofs: check if user owns an order that references this file
+        const orderWithPayment = await db.order.findFirst({
+          where: {
+            OR: [
+              { userId },  // Buyer's order
+              { seller: { userId } },  // Seller's order
+            ],
+            paymentReference: { contains: sanitizedPath },
+          },
+          select: { id: true },
+        })
+        if (!orderWithPayment) {
+          return NextResponse.json(
+            { success: false, error: 'Anda tidak memiliki akses ke file ini.' },
+            { status: 403 }
+          )
+        }
+      } else if (bucket === 'deposits') {
+        // Deposit receipts: check if user owns the deposit
+        const deposit = await db.deposit.findFirst({
+          where: {
+            userId,
+            proofUrl: { contains: sanitizedPath },
+          },
+          select: { id: true },
+        })
+        if (!deposit) {
+          return NextResponse.json(
+            { success: false, error: 'Anda tidak memiliki akses ke file ini.' },
+            { status: 403 }
+          )
+        }
+      }
     }
 
     // 8. Generate signed URL

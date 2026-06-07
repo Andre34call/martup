@@ -67,8 +67,13 @@ export async function getEffectiveCommissionRate(
   const platformRate = await getPlatformCommissionRate()
   if (platformRate !== null) return platformRate
 
-  const sellerRate = Number(sellerCommissionRate)
-  if (sellerRate > 0 && sellerRate < 1) return sellerRate
+  const sellerRate = sellerCommissionRate
+  // SECURITY (Fix 7): Distinguish between null/undefined (not set → use default)
+  // and 0 (explicitly set to 0% → no commission).
+  // Previously `sellerRate > 0` treated 0 as "not set", causing 0% sellers to get 5%.
+  if (sellerRate !== null && sellerRate !== undefined && sellerRate >= 0 && sellerRate < 1) {
+    return Number(sellerRate)
+  }
 
   return defaultRate
 }

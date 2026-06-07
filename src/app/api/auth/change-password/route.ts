@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAuth } from '@/lib/auth-middleware'
+import { createRateLimiter } from '@/lib/rate-limit'
 import { logger } from '@/lib/logger'
 import bcrypt from 'bcryptjs'
 import { validateBody, updatePasswordSchema } from '@/lib/validations'
+
+// Rate limiter: max 5 password change attempts per user per minute
+const changePasswordLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 5, keyPrefix: 'rl:auth:change-pw:' })
 
 /**
  * POST /api/auth/change-password - Change password for authenticated email/password users.
@@ -25,6 +29,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: authResult.error },
         { status: authResult.status }
+      )
+    }
+
+    // SECURITY: Per-user rate limiting to prevent brute-force attacks
+    // on the current password field (even though the user is authenticated)
+    const rateLimit = await changePasswordLimiter.check(authResult.user.id)
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { success: false, error: 'Terlalu banyak percobaan. Coba lagi dalam beberapa menit.' },
+        { status: 429 }
       )
     }
 

@@ -9,8 +9,9 @@ import { setSessionCookies } from '@/lib/session-cookie'
 import { verifyOtpHash } from '@/lib/token-hash'
 import { verifyTokenHash } from '@/lib/token-hash'
 
-// Rate limiter: 10 OTP verification attempts per minute per IP
+// Rate limiters: per-IP and per-user for OTP verification
 const otpVerifyLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 10, keyPrefix: 'rl:auth:otp-verify:' })
+const otpVerifyUserLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 10, keyPrefix: 'rl:auth:otp-verify-user:' })
 
 // Maximum failed OTP attempts before requiring a new OTP code
 const MAX_OTP_ATTEMPTS = 5
@@ -30,12 +31,13 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { phone, otpCode, requestId } = body
+    const { phone, otpCode, requestId, userId: bodyUserId } = body
 
-    // Validate required fields
-    if (!phone || typeof phone !== 'string') {
+    // SECURITY: Support both phone-based and userId-based OTP verification.
+    // At least one of phone or userId must be provided.
+    if ((!phone || typeof phone !== 'string') && (!bodyUserId || typeof bodyUserId !== 'string')) {
       return NextResponse.json(
-        { success: false, error: 'Nomor HP wajib diisi' },
+        { success: false, error: 'Nomor HP atau User ID wajib diisi' },
         { status: 400 }
       )
     }
@@ -57,37 +59,72 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Normalize phone: convert all formats (+62..., 62..., 0...) to a canonical form
-    // This handles the mismatch where client sends "+62812..." but DB stores "0812..."
-    const strippedPhone = phone.replace(/[\s-]/g, '')
-    let normalizedPhone = strippedPhone
-    if (strippedPhone.startsWith('+62')) {
-      normalizedPhone = '0' + strippedPhone.slice(3)
-    } else if (strippedPhone.startsWith('62') && !strippedPhone.startsWith('0')) {
-      normalizedPhone = '0' + strippedPhone.slice(2)
-    }
+    // Find user by phone or userId
+    let user: any = null
 
-    // Find user by phone — try both canonical forms (+62 and 0 prefix)
-    // to match regardless of how the phone was stored in the DB
-    const phoneVariants = [
-      normalizedPhone,         // 08123456789
-      strippedPhone,           // +628123456789 or as-is
-    ]
-    // Also add +62 variant if we have 0-prefix
-    if (normalizedPhone.startsWith('0')) {
-      phoneVariants.push('+62' + normalizedPhone.slice(1))  // +628123456789
-      phoneVariants.push('62' + normalizedPhone.slice(1))   // 628123456789
-    }
+    if (bodyUserId && !phone) {
+      // ========== UserId-based flow (2FA) ==========
+      // Look up user by userId instead of phone
+      // SECURITY: Apply per-user rate limiting to prevent brute-force with rotating IPs
+      const userRateLimit = await otpVerifyUserLimiter.check(bodyUserId)
+      if (!userRateLimit.allowed) {
+        const retrySeconds = Math.ceil((userRateLimit.resetAt - Date.now()) / 1000)
+        return NextResponse.json(
+          { success: false, error: `Terlalu banyak percobaan verifikasi. Coba lagi dalam ${retrySeconds > 60 ? Math.ceil(retrySeconds / 60) + ' menit' : retrySeconds + ' detik'}.` },
+          { status: 429 }
+        )
+      }
 
-    const user = await db.user.findFirst({
-      where: {
-        phone: { in: phoneVariants.filter((v, i, a) => a.indexOf(v) === i) } // unique variants
-      },
-      include: {
-        seller: true,
-        wallet: true,
-      },
-    })
+      user = await db.user.findUnique({
+        where: { id: bodyUserId },
+        include: { seller: true, wallet: true },
+      })
+    } else if (phone) {
+      // ========== Phone-based flow ==========
+      // Normalize phone: convert all formats (+62..., 62..., 0...) to a canonical form
+      // This handles the mismatch where client sends "+62812..." but DB stores "0812..."
+      const strippedPhone = phone.replace(/[\s-]/g, '')
+      let _normalizedPhone = strippedPhone
+      if (strippedPhone.startsWith('+62')) {
+        _normalizedPhone = '0' + strippedPhone.slice(3)
+      } else if (strippedPhone.startsWith('62') && !strippedPhone.startsWith('0')) {
+        _normalizedPhone = '0' + strippedPhone.slice(2)
+      }
+
+      // Find user by phone — try both canonical forms (+62 and 0 prefix)
+      // to match regardless of how the phone was stored in the DB
+      const phoneVariants = [
+        _normalizedPhone,         // 08123456789
+        strippedPhone,           // +628123456789 or as-is
+      ]
+      // Also add +62 variant if we have 0-prefix
+      if (_normalizedPhone.startsWith('0')) {
+        phoneVariants.push('+62' + _normalizedPhone.slice(1))  // +628123456789
+        phoneVariants.push('62' + _normalizedPhone.slice(1))   // 628123456789
+      }
+
+      user = await db.user.findFirst({
+        where: {
+          phone: { in: phoneVariants.filter((v, i, a) => a.indexOf(v) === i) } // unique variants
+        },
+        include: {
+          seller: true,
+          wallet: true,
+        },
+      })
+
+      // Also apply per-user rate limiting if we found the user
+      if (user) {
+        const userRateLimit = await otpVerifyUserLimiter.check(user.id)
+        if (!userRateLimit.allowed) {
+          const retrySeconds = Math.ceil((userRateLimit.resetAt - Date.now()) / 1000)
+          return NextResponse.json(
+            { success: false, error: `Terlalu banyak percobaan verifikasi. Coba lagi dalam ${retrySeconds > 60 ? Math.ceil(retrySeconds / 60) + ' menit' : retrySeconds + ' detik'}.` },
+            { status: 429 }
+          )
+        }
+      }
+    }
 
     if (!user) {
       // Don't reveal whether phone exists
@@ -133,7 +170,7 @@ export async function POST(request: NextRequest) {
       const decoded = Buffer.from(requestId, 'base64url').toString()
       const parts = decoded.split(':')
       if (parts.length < 3) {
-        logger.warn({ component: 'otp', phone: normalizedPhone }, 'OTP verify: requestId has invalid format')
+        logger.warn({ component: 'otp', userId: user.id }, 'OTP verify: requestId has invalid format')
         return NextResponse.json(
           { success: false, error: 'Request ID tidak valid. Silakan request OTP ulang.' },
           { status: 401 }
@@ -142,7 +179,7 @@ export async function POST(request: NextRequest) {
       const [requestUserId, timestamp, hmac] = parts
       // Verify the userId matches the user
       if (requestUserId !== user.id) {
-        logger.warn({ component: 'otp', phone: normalizedPhone, requestUserId }, 'OTP verify: requestId userId mismatch')
+        logger.warn({ component: 'otp', userId: user.id, requestUserId }, 'OTP verify: requestId userId mismatch')
         return NextResponse.json(
           { success: false, error: 'Kode OTP salah atau sudah kadaluarsa' },
           { status: 401 }
@@ -161,7 +198,7 @@ export async function POST(request: NextRequest) {
         .update(`${requestUserId}:${otpCode}`)
         .digest('hex').slice(0, 16)
       if (!crypto.timingSafeEqual(Buffer.from(hmac), Buffer.from(expectedHmac))) {
-        logger.warn({ component: 'otp', phone: normalizedPhone }, 'OTP verify: requestId HMAC mismatch')
+        logger.warn({ component: 'otp', userId: user.id }, 'OTP verify: requestId HMAC mismatch')
         return NextResponse.json(
           { success: false, error: 'Kode OTP salah atau sudah kadaluarsa' },
           { status: 401 }

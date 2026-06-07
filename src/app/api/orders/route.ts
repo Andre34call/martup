@@ -480,11 +480,23 @@ export async function POST(request: NextRequest) {
       } catch (shippingErr) {
         logger.warn(
           { component: 'orders', err: shippingErr },
-          'Server-side shipping calculation failed, using client value with bounds check'
+          'Server-side shipping calculation failed, validating client value'
         )
+        // SECURITY: When server-side calculation fails, do NOT blindly accept client-provided shipping cost.
+        // An attacker could set shippingCost: 0 for what should be a paid delivery.
+        // For non-service orders, reject if the client cost is suspiciously low (below minimum domestic rate).
+        const MIN_REASONABLE_SHIPPING = 5000 // Rp 5,000 — lowest domestic rate in Indonesia
         if (clientShippingCost < 0 || clientShippingCost > 500_000) {
           return NextResponse.json(
             { success: false, error: 'Biaya pengiriman tidak valid (harus antara 0 - 500.000)' },
+            { status: 400 }
+          )
+        }
+        if (!isServiceOrderPreCheck && clientShippingCost < MIN_REASONABLE_SHIPPING) {
+          // Server calculation failed AND client cost is suspiciously low for a physical product order.
+          // Reject instead of accepting a potentially manipulated cost.
+          return NextResponse.json(
+            { success: false, error: 'Gagal menghitung biaya pengiriman. Silakan coba lagi.' },
             { status: 400 }
           )
         }

@@ -174,9 +174,9 @@ export async function PUT(
       }
     }
 
-    // Add new evidence images
+    // Add new evidence images — validate URLs (HTTPS only, max 2000 chars each)
     if (Array.isArray(images) && images.length > 0) {
-      const newImages = images.filter((url: string) => typeof url === 'string' && url.startsWith('http')).slice(0, 4)
+      const newImages = images.filter((url: string) => typeof url === 'string' && url.startsWith('https://') && url.length <= 2000).slice(0, 4)
       if (newImages.length > 0) {
         const existingImages: string[] = complaint.images ? JSON.parse(complaint.images) : []
         const combinedImages = [...existingImages, ...newImages].slice(0, 8) // Max 8 total

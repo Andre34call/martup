@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAuth } from '@/lib/auth-middleware'
+import { createRateLimiter } from '@/lib/rate-limit'
 import { logger } from '@/lib/logger'
 import { clearSessionCookies } from '@/lib/session-cookie'
 import bcrypt from 'bcryptjs'
+
+// Rate limiter: 3 account deletion attempts per hour per user
+const accountDeleteLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, maxRequests: 3, keyPrefix: 'rl:user:delete:' })
 
 // DELETE /api/user/delete - Delete the authenticated user's account
 export async function DELETE(request: NextRequest) {
@@ -14,6 +18,15 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: authResult.error },
         { status: authResult.status }
+      )
+    }
+
+    // Rate limit: 3 attempts per hour
+    const rateLimit = await accountDeleteLimiter.check(authResult.user.id)
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { success: false, error: 'Terlalu banyak percobaan hapus akun. Coba lagi dalam 1 jam.' },
+        { status: 429 }
       )
     }
 

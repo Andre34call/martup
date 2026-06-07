@@ -5,6 +5,8 @@ export const createNavigationSlice: StateCreator<AppStore, [], [], NavigationSli
   currentScreen: 'splash',
   previousScreens: [],
   otpPhoneNumber: '',
+  otpUserId: '',
+  otpMaskedPhone: '',
   pendingVerificationEmail: '',
   resetPasswordToken: '',
   navigate: (screen) => set((state) => ({

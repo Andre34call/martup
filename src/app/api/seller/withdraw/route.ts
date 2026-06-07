@@ -138,30 +138,30 @@ export async function POST(request: NextRequest) {
         throw new Error('Wallet not found for this seller')
       }
 
-      // BUG 17 FIX: Available balance calculation
-      // After a withdrawal of X: balance = original - X (already reduced)
-      // and holdBalance = original_hold + X (amount moved to hold).
-      // Since balance already has the withdrawal deducted, the available
-      // amount is just `balance` (NOT balance - holdBalance, which would
-      // double-count the withdrawal).
-      // If holdBalance represents amounts held WITHIN balance, then
-      // available = balance - holdBalance. But in our model, the withdrawal
-      // is moved FROM balance TO holdBalance atomically, so balance already
-      // excludes the held amount. Therefore: available = balance.
-      const availableBalance = Number(wallet.balance)
-
-      if (amount > availableBalance) {
-        throw new Error(`Insufficient balance. Available: Rp ${availableBalance.toLocaleString('id-ID')}, Requested: Rp ${amount.toLocaleString('id-ID')}`)
-      }
-
-      // Atomically move amount from balance to holdBalance
-      const updatedWallet = await tx.wallet.update({
-        where: { id: wallet.id },
+      // SECURITY: Use atomic updateMany with balance >= amount check to prevent
+      // double-withdrawal race condition. Two concurrent withdrawals could both
+      // pass the separate balance check before either decrements, causing negative balance.
+      // With updateMany, only one concurrent request will match the balance condition.
+      const updateResult = await tx.wallet.updateMany({
+        where: { id: wallet.id, balance: { gte: amount } },
         data: {
           balance: { decrement: amount },
           holdBalance: { increment: amount },
         },
       })
+
+      if (updateResult.count === 0) {
+        throw new Error('Insufficient balance')
+      }
+
+      // Re-fetch wallet to get updated balance for the mutation record
+      const updatedWallet = await tx.wallet.findUnique({
+        where: { id: wallet.id },
+      })
+
+      if (!updatedWallet) {
+        throw new Error('Wallet not found after update — data integrity issue')
+      }
 
       // Create the withdrawal record
       const newWithdrawal = await tx.withdrawal.create({

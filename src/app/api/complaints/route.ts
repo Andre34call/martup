@@ -187,10 +187,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Stringify images array if provided
-    const imagesData = images && Array.isArray(images) && images.length > 0
-      ? JSON.stringify(images)
-      : null
+    // SECURITY: Validate and filter images array — only HTTPS URLs allowed, max 8
+    const validatedImages: string[] = []
+    if (images && Array.isArray(images) && images.length > 0) {
+      for (const url of images.slice(0, 8)) {
+        if (typeof url === 'string' && url.startsWith('https://') && url.length <= 2000) {
+          validatedImages.push(url)
+        }
+      }
+    }
+    const imagesData = validatedImages.length > 0 ? JSON.stringify(validatedImages) : null
 
     // Create the complaint
     const complaint = await db.complaint.create({

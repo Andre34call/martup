@@ -92,7 +92,7 @@ export async function GET(request: NextRequest) {
           id: msg.id,
           roomId: msg.roomId,
           senderId: msg.senderId,
-          content: msg.content,
+          content: msg.type === 'text' ? sanitizeInput(msg.content) : msg.content,
           type: msg.type,
           isRead: msg.isRead,
           createdAt: msg.createdAt,

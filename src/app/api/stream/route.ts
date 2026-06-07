@@ -243,6 +243,47 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // SECURITY: Validate mediaUrl and thumbnailUrl — must be HTTPS URLs to our storage
+    const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
+    if (mediaUrl) {
+      if (typeof mediaUrl !== 'string' || !mediaUrl.startsWith('https://')) {
+        return NextResponse.json(
+          { success: false, error: 'mediaUrl must be a valid HTTPS URL' },
+          { status: 400 }
+        )
+      }
+      // Optionally verify it points to our Supabase instance
+      if (SUPABASE_URL && !mediaUrl.startsWith(SUPABASE_URL)) {
+        return NextResponse.json(
+          { success: false, error: 'mediaUrl must point to the platform storage' },
+          { status: 400 }
+        )
+      }
+    }
+    if (thumbnailUrl) {
+      if (typeof thumbnailUrl !== 'string' || !thumbnailUrl.startsWith('https://')) {
+        return NextResponse.json(
+          { success: false, error: 'thumbnailUrl must be a valid HTTPS URL' },
+          { status: 400 }
+        )
+      }
+      if (SUPABASE_URL && !thumbnailUrl.startsWith(SUPABASE_URL)) {
+        return NextResponse.json(
+          { success: false, error: 'thumbnailUrl must point to the platform storage' },
+          { status: 400 }
+        )
+      }
+    }
+
+    // SECURITY: Validate mediaType if provided
+    const validMediaTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/webm']
+    if (mediaType && !validMediaTypes.includes(mediaType)) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid mediaType' },
+        { status: 400 }
+      )
+    }
+
     // If productId is provided, verify it exists
     if (productId) {
       const product = await db.product.findUnique({ where: { id: productId } })

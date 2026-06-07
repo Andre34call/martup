@@ -289,13 +289,13 @@ export async function POST(request: NextRequest) {
     const itemDetails = [
       ...order.items.map((item) => ({
         id: item.productId,
-        price: Math.round(Number(item.price)), // Ensure integer for IDR
+        price: Math.floor(Number(item.price)), // Ensure integer for IDR (floor for consistency with order creation)
         quantity: item.quantity,
         name: item.productName.substring(0, 50),
       })),
       {
         id: 'shipping',
-        price: Math.round(Number(order.shippingCost)),
+        price: Math.floor(Number(order.shippingCost)),
         quantity: 1,
         name: 'Ongkos Kirim',
       },
@@ -303,7 +303,11 @@ export async function POST(request: NextRequest) {
         ? [
             {
               id: 'discount',
-              price: -Math.round(Number(order.discountAmount)), // Negative for discount
+              // BUG FIX: Use Math.floor (not Math.round) for discount to match order creation logic.
+              // Order creation uses Math.floor for discountAmount — Math.round could cause a
+              // 1-rupiah discrepancy that makes the computed gross_amount differ from order.totalAmount,
+              // causing Midtrans to reject the payment.
+              price: -Math.floor(Number(order.discountAmount)), // Negative for discount
               quantity: 1,
               name: 'Diskon',
             },
@@ -313,7 +317,7 @@ export async function POST(request: NextRequest) {
         ? [
             {
               id: 'tax',
-              price: Math.round(Number(order.taxAmount)),
+              price: Math.floor(Number(order.taxAmount)),
               quantity: 1,
               name: 'Pajak',
             },
@@ -323,7 +327,7 @@ export async function POST(request: NextRequest) {
         ? [
             {
               id: 'platform-fee',
-              price: Math.round(Number(order.platformFee)),
+              price: Math.floor(Number(order.platformFee)),
               quantity: 1,
               name: 'Biaya Platform',
             },

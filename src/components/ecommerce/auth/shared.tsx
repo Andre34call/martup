@@ -3,7 +3,7 @@
 import { loginSchema } from '@/lib/validations'
 
 // ==================== TYPE ALIASES ====================
-export type LoginResponse = { success: boolean; requiresVerification?: boolean; requires2FA?: boolean; email?: string; phone?: string; userId?: string; message?: string; token?: string; isSuperAdmin?: boolean; user?: { id: string; email: string; phone?: string; name: string; avatar?: string; role?: string; isVerified?: boolean; loyaltyPoints?: number; coins?: number; twoFactorEnabled?: boolean }; devOtp?: string; error?: string }
+export type LoginResponse = { success: boolean; requiresVerification?: boolean; requires2FA?: boolean; email?: string; phone?: string; maskedPhone?: string; userId?: string; message?: string; token?: string; isSuperAdmin?: boolean; user?: { id: string; email: string; phone?: string; name: string; avatar?: string; role?: string; isVerified?: boolean; loyaltyPoints?: number; coins?: number; twoFactorEnabled?: boolean }; devOtp?: string; error?: string }
 export type RegisterResponse = { success: boolean; requiresVerification?: boolean; message?: string; token?: string; isSuperAdmin?: boolean; user?: { id: string; email: string; phone?: string; name: string; avatar?: string; role?: string; isVerified?: boolean; loyaltyPoints?: number; coins?: number; twoFactorEnabled?: boolean }; devVerifyUrl?: string; error?: string }
 export type ResendVerificationResponse = { success: boolean; alreadyVerified?: boolean; message?: string; devVerifyUrl?: string; error?: string }
 export type OtpSendResponse = { success: boolean; message?: string; requestId?: string; devOtp?: string; error?: string }

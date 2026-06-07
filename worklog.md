@@ -1080,3 +1080,299 @@ Fixes Applied:
 Verification:
 - bun run lint: passes with no errors
 - Dev server running correctly on port 3000
+
+---
+
+Task ID: 24
+Agent: wallet-payment-auditor
+Task: Comprehensive audit of wallet & payment system
+
+Work Log:
+- Read all 23 wallet/payment files thoroughly
+- Cross-referenced Prisma schema for data model (Wallet, Deposit, Withdrawal, Transaction, WalletMutation)
+- Verified escrow release mechanisms exist (order-status.ts, auto-complete cron, auto-confirm-service cron)
+- Identified 4 P0, 7 P1, 5 P2, 3 P3 findings across the codebase
+- Applied fixes for all P0 and P1 issues found
+
+Fixes Applied:
+
+1. P0-1: Wallet Debit Race Condition — Balance Can Go Negative (wallet/debit/route.ts)
+   - Replaced `tx.wallet.update()` with `tx.wallet.updateMany({ where: { id, balance: { gte: amount } } })`
+   - The old code used findUnique + manual balance check + update, which had a TOCTOU race window
+   - Two concurrent debit requests could both pass the balance check, then both decrement, causing negative balance
+   - The updateMany approach is atomic — the WHERE clause ensures balance can't go below 0
+   - Added null guard for re-fetched wallet after update
+   - Added `getEffectiveCommissionRate` import for commission consistency
+
+2. P0-2: Wallet Debit-Batch Race Condition — Balance Can Go Negative (wallet/debit-batch/route.ts)
+   - Same fix as P0-1: replaced findUnique+update with atomic updateMany
+   - Added null guard for re-fetched wallet
+   - Added INSIDE-transaction idempotency check per order (existingDebit check)
+   - Previously only had OUTSIDE-transaction idempotency check — two concurrent batch requests could process the same orders
+
+3. P0-3: Admin Deposit Double-Credit with Concurrent Webhook (admin/deposits/route.ts)
+   - Added wallet mutation idempotency check inside the transaction
+   - Before: if admin approved a deposit at the same time as the Midtrans webhook processed it, both could credit the wallet
+   - The status check (pending/proof_uploaded) was insufficient — with READ COMMITTED isolation, both transactions could read the same status concurrently
+   - Now checks `tx.walletMutation.findFirst({ where: { refType: 'deposit', refId: deposit.id, type: 'credit' } })` before crediting
+   - This matches the pattern used in handleDepositNotification which already had this check
+
+4. P0-4: Commission Rate Inconsistency Between Payment Methods (debit/route.ts, notification/route.ts)
+   - wallet/debit used `Number(order.seller.commissionRate)` (raw seller rate)
+   - debit-batch used `await getEffectiveCommissionRate(...)` (platform rate first, then seller rate)
+   - payment/notification used `Number(order.seller.commissionRate)` (raw seller rate)
+   - This meant different commission amounts depending on payment method, causing financial inconsistency
+   - Fixed: all routes now use `await getEffectiveCommissionRate(Number(order.seller.commissionRate))`
+   - This ensures platform-wide commission settings take priority over individual seller rates consistently
+
+5. P1-1: Wallet Mutations Missing serializeDecimal (wallet/mutations/route.ts)
+   - Added `serializeDecimal()` wrapper to response — Decimal fields were being serialized as objects like `{ d: [...], e: 0, s: 1 }` instead of numbers
+   - Added missing import for `serializeDecimal`
+
+6. P1-2: Withdrawal Rate Limiter Broken in Serverless (wallet/withdraw/route.ts)
+   - Replaced `globalThis.__withdrawRateLimit` Map with `createRateLimiter()` from shared rate-limit module
+   - globalThis is not shared between serverless function invocations on Vercel — rate limiting was completely ineffective in production
+   - Added CSRF protection (was missing — all other financial endpoints have it)
+   - Added missing imports for createRateLimiter and validateCsrfRequest
+
+7. P1-3: Webhook gross_amount String() Comparison Fails with Decimal Suffix (payment/notification/route.ts)
+   - Replaced `String(gross_amount) !== String(order.totalAmount)` with `Math.round(Number()) !== Math.round(Number())`
+   - String() on Prisma Decimal can return "50000.00" while Midtrans sends "50000", causing false mismatches
+   - Math.round(Number()) safely handles both cases and is precise for IDR integers (max 10,000,000)
+   - Applied fix to both order notification and deposit notification handlers
+
+Verification:
+- bun run lint: passes with no errors (only pre-existing errors in unrelated files remain)
+- Type check: no new errors from our changes
+
+---
+
+AUDIT REPORT SUMMARY
+====================
+
+P0 (Critical — Financial Loss Risk) — ALL FIXED
+-------------------------------------------------
+1. [FIXED] wallet/debit: Race condition — balance can go negative with concurrent requests
+   - File: src/app/api/wallet/debit/route.ts, lines 141-154
+   - Used findUnique+manual check+update pattern; concurrent requests could both pass balance check
+   - Fix: Atomic updateMany with balance >= amount condition
+
+2. [FIXED] wallet/debit-batch: Same race condition as above
+   - File: src/app/api/wallet/debit-batch/route.ts, lines 181-197
+   - Same findUnique+update pattern, same concurrent decrement vulnerability
+   - Fix: Atomic updateMany + added per-order idempotency check inside transaction
+
+3. [FIXED] admin/deposits: Double-credit with concurrent Midtrans webhook
+   - File: src/app/api/admin/deposits/route.ts, lines 141-197
+   - Missing wallet mutation idempotency check; status check alone insufficient against race conditions
+   - Fix: Added tx.walletMutation.findFirst() check before crediting
+
+4. [FIXED] Commission rate inconsistency between payment methods
+   - Files: wallet/debit, payment/notification vs wallet/debit-batch
+   - Different commission rates applied depending on payment method (wallet vs Midtrans)
+   - Fix: All routes now use getEffectiveCommissionRate()
+
+P1 (High — Security/Correctness) — ALL FIXED
+----------------------------------------------
+5. [FIXED] wallet/mutations: Decimal values serialized as objects
+   - File: src/app/api/wallet/mutations/route.ts, line 69
+   - Missing serializeDecimal() — client receives `{ d: [...], e: 0, s: 1 }` instead of numbers
+   - Fix: Added serializeDecimal wrapper + import
+
+6. [FIXED] wallet/withdraw: Rate limiter broken in serverless + missing CSRF
+   - File: src/app/api/wallet/withdraw/route.ts, lines 30-47
+   - Used globalThis Map (not shared across Vercel serverless invocations)
+   - No CSRF protection (all other financial endpoints have it)
+   - Fix: Replaced with createRateLimiter() + added CSRF validation
+
+7. [FIXED] payment/notification: gross_amount String() comparison may fail
+   - File: src/app/api/payment/notification/route.ts, lines 112-125 + 548-561
+   - String(Decimal("50000.00")) = "50000.00" but String(50000) = "50000" → false mismatch
+   - Fix: Changed to Math.round(Number()) comparison
+
+8. [NOTED, not blocking] debit-batch: Outside-transaction idempotency check (line 159-177)
+   - Pre-transaction check for existing debits is TOCTOU-vulnerable
+   - Mitigated: Added inside-transaction idempotency check per order (fix #2)
+
+P2 (Medium — Reliability/Maintenance)
+--------------------------------------
+9. Top-up and deposit routes are nearly identical (code duplication)
+   - src/app/api/wallet/topup/route.ts ≈ src/app/api/wallet/deposit/route.ts
+   - Risk: divergent behavior if only one is updated
+
+10. Midtrans API call inside db.$transaction in deposit/midtrans/create
+    - File: src/app/api/deposit/midtrans/create/route.ts, lines 126-241
+    - External HTTP call inside transaction can cause timeout (same bug fixed in orders route)
+    - Lower severity than orders case (no stock involved) but can cause failed deposits
+
+11. No explicit wallet payment refund endpoint
+    - No API to reverse a MartUp Pay payment (credit buyer, debit seller pendingBalance)
+    - For Midtrans payments, refunds go through Midtrans dashboard
+    - For wallet payments, there's no way to process a refund
+
+12. process-seller-payout.ts created but not adopted by debit/notification routes
+    - The shared utility was extracted but inline logic remains in 3 routes
+    - Risk: future changes to payout logic may not be applied consistently
+
+13. Notification webhook refund handling is incomplete
+    - payment/notification route sets status='refunded' and creates notification
+    - Does NOT credit buyer's wallet or reverse seller's pendingBalance for wallet payments
+    - Only handles Midtrans refund notifications (money flows through Midtrans)
+
+P3 (Low — Code Quality)
+------------------------
+14. Deposit amount is Decimal in Prisma but validated as integer in JS
+    - Schema allows fractional amounts; JS validation catches them
+    - Could use @db.Integer or CHECK constraint for defense in depth
+
+15. Wallet mutation type filter not validated
+    - mutations/route.ts accepts any string for `type` query parameter
+    - Invalid types just return empty results (safe but not user-friendly)
+
+16. Partial server key logged in midtrans-config.ts startup
+    - Line 91: logs first 12 chars of server key
+    - Acceptable for debugging but should be noted in security review
+
+REMAINING RECOMMENDATIONS (not applied — require larger changes):
+-----------------------------------------------------------------
+- Move Midtrans API call OUTSIDE db.$transaction in deposit/midtrans/create (same pattern as orders fix)
+- Add explicit refund endpoint for wallet payments
+- Adopt process-seller-payout.ts in wallet/debit and payment/notification routes
+- Add database-level CHECK constraints for wallet balance >= 0
+- Add database-level @db.Integer for deposit amount column
+- Consider storing commissionRate on the Order row at payment time for consistent escrow release
+
+---
+
+Task ID: 27
+Agent: admin-csrf-fix
+Task: Fix P1 security issues — CSRF protection on admin endpoints, XSS sanitization, commission bug, status validation, webhook 404
+
+Work Log:
+- Read worklog.md for previous context (Tasks 1-16)
+- Read all target files: admin/banners, admin/categories, admin/bank-accounts, admin/complaints, admin/users, lib/commission, seller/products, payment/notification
+- Read supporting files: lib/csrf.ts, lib/sanitize.ts
+- Applied all 10 security fixes systematically
+
+Fixes Applied:
+
+1. Fix 1 (P0) — Add CSRF to Admin Banner Endpoints (src/app/api/admin/banners/route.ts):
+   - Added `import { validateCsrfRequest } from '@/lib/csrf'`
+   - Added CSRF validation to POST, PUT, DELETE handlers
+   - Returns 403 with message on CSRF failure
+
+2. Fix 2 (P0) — Add CSRF to Admin Category Endpoints (src/app/api/admin/categories/route.ts):
+   - Added `import { validateCsrfRequest } from '@/lib/csrf'`
+   - Added CSRF validation to POST, PUT, DELETE handlers
+   - Returns 403 with message on CSRF failure
+
+3. Fix 3 (P0) — Add CSRF to Admin Bank Account Endpoints (src/app/api/admin/bank-accounts/route.ts):
+   - Added `import { validateCsrfRequest } from '@/lib/csrf'`
+   - Added CSRF validation to POST handler (only mutating handler present)
+   - Returns 403 with message on CSRF failure
+
+4. Fix 4 (P2) — Add CSRF to Admin Complaint PUT (src/app/api/admin/complaints/route.ts):
+   - Added `import { validateCsrfRequest } from '@/lib/csrf'`
+   - Added CSRF validation to PUT handler
+   - Returns 403 with message on CSRF failure
+
+5. Fix 5 (P2) — Add CSRF to Admin User DELETE (src/app/api/admin/users/route.ts):
+   - Added CSRF validation to DELETE handler
+   - Note: PUT and PATCH already had CSRF protection from previous agent work
+   - Returns 403 with message on CSRF failure
+
+6. Fix 6 (P1) — Banner Title/Link XSS (src/app/api/admin/banners/route.ts):
+   - Added `import { sanitizeInput } from '@/lib/sanitize'`
+   - POST: Sanitized `title` with `sanitizeInput()` instead of using raw value
+   - POST: Added validation that `link` doesn't start with `javascript:`, `data:`, or `vbscript:` schemes
+   - POST: Added validation that `link` must start with `https://`, `http://`, or `/`
+   - POST: Added validation that `image` URL doesn't use dangerous schemes
+   - POST: Added validation that `image` URL must be from Supabase domain or start with `https://`
+   - PUT: Same link and image URL validation as POST
+   - PUT: Sanitized `title` with `sanitizeInput()`
+
+7. Fix 7 (P1) — Commission Rate=0 Treated as Default 5% (src/lib/commission.ts):
+   - Changed `const sellerRate = Number(sellerCommissionRate)` + `sellerRate > 0 && sellerRate < 1`
+   - To: `sellerRate !== null && sellerRate !== undefined && sellerRate >= 0 && sellerRate < 1`
+   - This correctly distinguishes null/undefined (not set → use default 5%) from 0 (explicitly set to 0% → no commission)
+   - Previously: seller with commissionRate=0 would fall through to default 5% because `0 > 0` is false
+
+8. Fix 8 (P1) — Seller Product POST Status Not Validated (src/app/api/seller/products/route.ts):
+   - Added validation after `isJasa` check: `const validStatuses = ['active', 'draft']`
+   - If `status` is provided and not in validStatuses, returns 400 error
+   - Prevents sellers from setting status to 'blocked' or other admin-only values on create
+
+9. Fix 9 (P1) — Admin Complaint Status/RefundAmount Not Validated (src/app/api/admin/complaints/route.ts):
+   - Added status validation: must be one of `['open', 'processing', 'resolved', 'rejected']`
+   - Added refundAmount validation: must be a non-negative number if provided
+   - Both return 400 with descriptive error message
+
+10. Fix 10 (P1) — Webhook Returns 200 for "Order Not Found" (src/app/api/payment/notification/route.ts):
+    - Changed from HTTP 200 to HTTP 404 when order is not found
+    - This allows Midtrans to retry the notification (200 = "processed OK, don't retry")
+    - Previously: 200 response meant Midtrans never retried, causing permanently missed payment confirmations
+    - Note: Deposit "not found" still returns 200 — deposits may not exist yet when notification arrives
+
+Files Modified:
+- src/app/api/admin/banners/route.ts (CSRF + XSS + URL validation)
+- src/app/api/admin/categories/route.ts (CSRF)
+- src/app/api/admin/bank-accounts/route.ts (CSRF)
+- src/app/api/admin/complaints/route.ts (CSRF + status/refundAmount validation)
+- src/app/api/admin/users/route.ts (CSRF on DELETE)
+- src/lib/commission.ts (commission rate=0 bug fix)
+- src/app/api/seller/products/route.ts (status validation on POST)
+- src/app/api/payment/notification/route.ts (404 for order not found)
+
+Verification:
+- `bun run lint` passes with no errors
+- No changes to protected files: auth.ts, proxy.ts, auth-middleware.ts, prisma/schema.prisma
+
+---
+Task ID: 26
+Agent: p0-financial-fix
+Task: Fix CRITICAL P0 financial bugs — money-losing bugs found during comprehensive audit
+
+Work Log:
+- Read worklog.md for previous context (all prior tasks)
+- Read all 7 target files: order-status.ts, seller/withdraw/route.ts, payment/create/route.ts, orders/route.ts, wallet/debit/route.ts, wallet/debit-batch/route.ts, payment/notification/route.ts
+- Verified Fixes 5, 6, 7 were already implemented by prior agents
+- Applied 4 remaining fixes
+
+Fixes Applied:
+
+1. Fix 1 (P0) - Escrow Release Over-Credit Bug (src/lib/order-status.ts):
+   - Bug: When releasing escrow, `pendingBalance` was decremented by `Math.min(sellerEarnings, pendingBalance)` but `balance` was incremented by the FULL `sellerEarnings`. If `pendingBalance < sellerEarnings`, the seller received more money than was held in escrow.
+   - Fix: Introduced `releaseAmount = Math.min(sellerEarnings, Number(sellerWallet.pendingBalance))` and used it for BOTH the pendingBalance decrement and the balance increment.
+   - Also updated walletMutation amount to use `releaseAmount` instead of `sellerEarnings` so the mutation record matches the actual wallet credit.
+
+2. Fix 2 (P0) - Double-Withdrawal Race Condition (src/app/api/seller/withdraw/route.ts):
+   - Bug: Balance check and wallet update were not atomic. Two concurrent withdrawals could both pass the `availableBalance` check before either decremented, causing negative balance.
+   - Fix: Replaced `findUnique` + separate balance check + `update` with atomic `updateMany` using `where: { id: wallet.id, balance: { gte: amount } }`. If `updateResult.count === 0`, throws 'Insufficient balance' error.
+   - Re-fetches wallet after atomic update for the mutation record balance.
+   - The entire withdrawal was already wrapped in `db.$transaction()`, so the atomic updateMany ensures only one concurrent request succeeds.
+
+3. Fix 3 (P0) - gross_amount Rounding Mismatch (src/app/api/payment/create/route.ts):
+   - Bug: Item prices used `Math.round()` for Midtrans payload, but order creation uses `Math.floor()` for discount amounts. A 1-rupiah discrepancy could cause Midtrans to reject the payment or the webhook to fail amount validation.
+   - Fix: Changed ALL `Math.round()` calls in the Midtrans item_details construction to `Math.floor()` for consistency with order creation logic. Specifically:
+     - `Math.round(Number(item.price))` → `Math.floor(Number(item.price))`
+     - `Math.round(Number(order.shippingCost))` → `Math.floor(Number(order.shippingCost))`
+     - `Math.round(Number(order.discountAmount))` → `Math.floor(Number(order.discountAmount))` (most critical — order creation floors this)
+     - `Math.round(Number(order.taxAmount))` → `Math.floor(Number(order.taxAmount))`
+     - `Math.round(Number(order.platformFee))` → `Math.floor(Number(order.platformFee))`
+
+4. Fix 4 (P0) - Shipping Cost Manipulation When RajaOngkir Down (src/app/api/orders/route.ts):
+   - Bug: When server-side shipping calculation failed (exception), the code fell back to client-provided `shippingCost` with only a bounds check (0-500,000). An attacker could set `shippingCost: 0` for what should be a paid delivery.
+   - Fix: Added `MIN_REASONABLE_SHIPPING = 5000` constant. When the server calculation fails AND this is not a service order AND `clientShippingCost < MIN_REASONABLE_SHIPPING`, the order is rejected with error "Gagal menghitung biaya pengiriman. Silakan coba lagi." instead of accepting the suspiciously low client value.
+
+5. Fix 5 (P0) - Wallet Debit Race Condition (src/app/api/wallet/debit/route.ts):
+   - VERIFIED ALREADY FIXED: The code already uses atomic `updateMany` with `where: { id: wallet.id, balance: { gte: amount } }` and checks `updateResult.count === 0`. Idempotency check is inside the transaction. No changes needed.
+
+6. Fix 6 (P0) - Wallet Debit-Batch Race Condition (src/app/api/wallet/debit-batch/route.ts):
+   - VERIFIED ALREADY FIXED: Same atomic `updateMany` pattern with `where: { id: wallet.id, balance: { gte: totalDebitAmount } }`. Pre-flight check is just for nicer error message. No changes needed.
+
+7. Fix 7 (P1→P0) - Webhook Decimal Comparison (src/app/api/payment/notification/route.ts):
+   - VERIFIED ALREADY FIXED: Line 115 uses `Math.round(Number(gross_amount)) !== Math.round(Number(order.totalAmount))` for comparison instead of string comparison. Same fix applied for deposit notification (line 550). No changes needed.
+
+Verification:
+- `bun run lint` passes with no errors
+- Dev server running correctly on port 3000

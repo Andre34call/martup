@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
+import { validateCsrfRequest } from '@/lib/csrf'
 import { sanitizeInput } from '@/lib/sanitize'
 import { serializeDecimal } from '@/lib/decimal-utils'
 import { createWorkItemFromEntity } from '@/lib/workflow'
@@ -67,6 +68,15 @@ export async function PUT(request: NextRequest) {
   const authResult = await verifyAdmin(request)
   if (!authResult.success) return authErrorResponse(authResult)
 
+  // SECURITY: CSRF protection
+  const csrfResult = await validateCsrfRequest(request)
+  if (!csrfResult.valid) {
+    return NextResponse.json(
+      { success: false, error: 'CSRF validation failed. Silakan refresh halaman dan coba lagi.' },
+      { status: 403 }
+    )
+  }
+
   try {
     const body = await request.json()
     const { complaintId, status, refundAmount } = body
@@ -79,6 +89,25 @@ export async function PUT(request: NextRequest) {
         { success: false, error: 'complaintId and status are required' },
         { status: 400 }
       )
+    }
+
+    // SECURITY (Fix 9): Validate status is one of the allowed values
+    const validComplaintStatuses = ['open', 'processing', 'resolved', 'rejected']
+    if (!validComplaintStatuses.includes(status)) {
+      return NextResponse.json(
+        { success: false, error: `Invalid status. Must be one of: ${validComplaintStatuses.join(', ')}` },
+        { status: 400 }
+      )
+    }
+
+    // SECURITY (Fix 9): Validate refundAmount is a positive number if provided
+    if (refundAmount !== undefined && refundAmount !== null) {
+      if (typeof refundAmount !== 'number' || refundAmount < 0) {
+        return NextResponse.json(
+          { success: false, error: 'refundAmount must be a non-negative number' },
+          { status: 400 }
+        )
+      }
     }
 
     const updateData: Record<string, unknown> = { status }

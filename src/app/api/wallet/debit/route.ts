@@ -6,6 +6,7 @@ import { serializeDecimal } from '@/lib/decimal-utils'
 import { logger, logBusinessEvent } from '@/lib/logger'
 import { validateBody, walletDebitSchema } from '@/lib/validations'
 import { validateCsrfRequest } from '@/lib/csrf'
+import { getEffectiveCommissionRate } from '@/lib/commission'
 
 // ==================== WALLET DEBIT (Payment) ====================
 // Deducts balance from the user's wallet for order payment.
@@ -138,20 +139,26 @@ export async function POST(request: NextRequest) {
         throw new Error('ALREADY_PAID')
       }
 
-      // SECURITY: Re-fetch wallet inside transaction to prevent race conditions (double-spend)
-      const currentWallet = await tx.wallet.findUnique({
-        where: { id: wallet.id },
-      })
-
-      if (!currentWallet || Number(currentWallet.balance) < amount) {
-        throw new Error(`INSUFFICIENT_BALANCE:${Number(currentWallet?.balance ?? 0)}`)
-      }
-
-      // 1. Deduct wallet balance
-      const updatedWallet = await tx.wallet.update({
-        where: { id: wallet.id },
+      // SECURITY: Use updateMany with balance >= amount to prevent balance going negative
+      // This is atomic — if two concurrent requests try to decrement, only one will match
+      // the balance condition. The other will get count=0 and fail.
+      const updateResult = await tx.wallet.updateMany({
+        where: { id: wallet.id, balance: { gte: amount } },
         data: { balance: { decrement: amount } },
       })
+
+      if (updateResult.count === 0) {
+        throw new Error('INSUFFICIENT_BALANCE')
+      }
+
+      // Re-fetch wallet to get the updated balance for the mutation record
+      const updatedWallet = await tx.wallet.findUnique({
+        where: { id: wallet.id },
+      })
+
+      if (!updatedWallet) {
+        throw new Error('Wallet not found after update — data integrity issue')
+      }
 
       // 2. Create wallet mutation (debit)
       await tx.walletMutation.create({
@@ -194,7 +201,7 @@ export async function POST(request: NextRequest) {
 
       // 5. Process seller payout (same logic as Midtrans notification)
       const subtotal = Number(order.subtotal)
-      const commissionRate = Number(order.seller.commissionRate)
+      const commissionRate = await getEffectiveCommissionRate(Number(order.seller.commissionRate))
       const commissionAmount = Math.round(subtotal * commissionRate)
       const sellerEarnings = subtotal - commissionAmount
 
@@ -312,11 +319,9 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         )
       }
-      if (error.message.startsWith('INSUFFICIENT_BALANCE:')) {
-        const balance = error.message.split(':')[1] || '0'
-        const needed = error.message.split(':')[2] || '0'
+      if (error.message === 'INSUFFICIENT_BALANCE' || error.message.startsWith('INSUFFICIENT_BALANCE:')) {
         return NextResponse.json(
-          { success: false, error: `Saldo tidak mencukupi. Saldo: Rp ${Number(balance).toLocaleString('id-ID')}, Dibutuhkan: Rp ${Number(needed).toLocaleString('id-ID')}` },
+          { success: false, error: 'Saldo tidak mencukupi. Silakan top up terlebih dahulu.' },
           { status: 400 }
         )
       }

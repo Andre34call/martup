@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
 import { paymentLimiter, rateLimitHeaders } from '@/lib/rate-limit'
+import { serializeDecimal } from '@/lib/decimal-utils'
 import { logger } from '@/lib/logger'
 
 // GET /api/wallet/mutations — Get wallet mutation history
@@ -66,13 +67,13 @@ export async function GET(request: NextRequest) {
       db.walletMutation.count({ where }),
     ])
 
-    return NextResponse.json({
+    return NextResponse.json(serializeDecimal({
       items: mutations,
       total,
       page,
       limit,
       totalPages: Math.ceil(total / limit),
-    })
+    }))
   } catch (error: unknown) {
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })

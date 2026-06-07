@@ -258,10 +258,15 @@ export async function POST(request: NextRequest) {
       // Return requires2FA flag — client should redirect to OTP screen
       // The OTP screen will call /api/auth/otp/send which generates the OTP,
       // sends SMS, and returns a requestId needed for verification.
+      //
+      // SECURITY: Only return the MASKED phone number, not the actual phone.
+      // The actual phone is looked up server-side by /api/auth/otp/send using userId.
+      // Returning the full phone here enables phone number enumeration by attackers
+      // who know the email+password.
       return NextResponse.json({
         success: true,
         requires2FA: true,
-        phone: user.phone, // Pass actual phone so OTP screen can send OTP
+        maskedPhone: maskPhone(user.phone),
         userId: user.id,
         message: `Verifikasi 2FA diperlukan. Kode OTP akan dikirim ke ${maskPhone(user.phone)}`,
       })

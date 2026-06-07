@@ -4,7 +4,12 @@ import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
 import { serializeDecimal } from '@/lib/decimal-utils'
 import { logger, logBusinessEvent } from '@/lib/logger'
 import { createWorkItemFromEntity } from '@/lib/workflow'
+import { createRateLimiter } from '@/lib/rate-limit'
 import { z } from 'zod'
+import { validateCsrfRequest } from '@/lib/csrf'
+
+// Rate limiter: 3 withdrawal requests per minute per user
+const withdrawLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 3, keyPrefix: 'rl:wallet:withdraw:' })
 
 // ==================== WALLET WITHDRAW ====================
 // SECURITY: Requires authentication + seller verification
@@ -27,23 +32,19 @@ export async function POST(request: NextRequest) {
       return authErrorResponse(authResult)
     }
 
-    // SECURITY: Simple rate limit — 3 withdrawal requests per minute per user
-    const rateLimitKey = `withdraw:${authResult.user.id}`
-    const now = Date.now()
-    const rateLimitMap = (globalThis as Record<string, unknown>).__withdrawRateLimit as Map<string, { count: number; resetAt: number }> | undefined
-    const rlMap = rateLimitMap || new Map<string, { count: number; resetAt: number }>()
-    ;(globalThis as Record<string, unknown>).__withdrawRateLimit = rlMap
-    const rlEntry = rlMap.get(rateLimitKey)
-    if (rlEntry && rlEntry.resetAt > now) {
-      if (rlEntry.count >= 3) {
-        return NextResponse.json(
-          { success: false, error: 'Terlalu banyak request. Coba lagi dalam 1 menit.' },
-          { status: 429 }
-        )
-      }
-      rlEntry.count++
-    } else {
-      rlMap.set(rateLimitKey, { count: 1, resetAt: now + 60_000 })
+    // SECURITY: Rate limit — 3 withdrawal requests per minute per user (works in serverless)
+    const rlResult = await withdrawLimiter.check(authResult.user.id)
+    if (!rlResult.allowed) {
+      return NextResponse.json(
+        { success: false, error: 'Terlalu banyak request. Coba lagi dalam 1 menit.' },
+        { status: 429 }
+      )
+    }
+
+    // SECURITY: CSRF protection
+    const csrfResult = await validateCsrfRequest(request)
+    if (!csrfResult.valid) {
+      return NextResponse.json({ success: false, error: 'Keamanan request tidak valid. Refresh halaman dan coba lagi.' }, { status: 403 })
     }
 
     // Verify seller account

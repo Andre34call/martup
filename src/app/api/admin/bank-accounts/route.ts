@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/admin-auth'
 import { db } from '@/lib/db'
+import { validateCsrfRequest } from '@/lib/csrf'
 import { logger } from '@/lib/logger'
 
 // GET /api/admin/bank-accounts — List all platform bank accounts (including inactive), sorted by sortOrder
@@ -36,6 +37,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized. Admin access required.' },
         { status: 401 }
+      )
+    }
+
+    // SECURITY: CSRF protection
+    const csrfResult = await validateCsrfRequest(request)
+    if (!csrfResult.valid) {
+      return NextResponse.json(
+        { success: false, error: 'CSRF validation failed. Silakan refresh halaman dan coba lagi.' },
+        { status: 403 }
       )
     }
 

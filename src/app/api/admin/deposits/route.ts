@@ -140,46 +140,60 @@ export async function PUT(request: NextRequest) {
 
       // If approving, credit the user's wallet atomically
       if (status === 'success') {
-        const wallet = await tx.wallet.findUnique({
-          where: { userId: deposit.userId },
+        // IDEMPOTENCY: Check if wallet already credited for this deposit (prevents double-credit
+        // if Midtrans webhook processes the same deposit concurrently)
+        const existingCredit = await tx.walletMutation.findFirst({
+          where: {
+            refType: 'deposit',
+            refId: deposit.id,
+            type: 'credit',
+          },
         })
 
-        if (wallet) {
-          const updatedWallet = await tx.wallet.update({
-            where: { id: wallet.id },
-            data: { balance: { increment: deposit.amount } },
-          })
-
-          await tx.walletMutation.create({
-            data: {
-              walletId: wallet.id,
-              type: 'credit',
-              amount: deposit.amount,
-              balance: updatedWallet.balance,
-              description: `Top up disetujui - ${deposit.method}`,
-              refType: 'deposit',
-              refId: deposit.id,
-            },
-          })
+        if (existingCredit) {
+          logger.info({ depositId: deposit.id }, 'Wallet already credited for deposit, skipping credit')
         } else {
-          const newWallet = await tx.wallet.create({
-            data: {
-              userId: deposit.userId,
-              balance: deposit.amount,
-            },
+          const wallet = await tx.wallet.findUnique({
+            where: { userId: deposit.userId },
           })
 
-          await tx.walletMutation.create({
-            data: {
-              walletId: newWallet.id,
-              type: 'credit',
-              amount: deposit.amount,
-              balance: newWallet.balance,
-              description: `Top up disetujui - ${deposit.method}`,
-              refType: 'deposit',
-              refId: deposit.id,
-            },
-          })
+          if (wallet) {
+            const updatedWallet = await tx.wallet.update({
+              where: { id: wallet.id },
+              data: { balance: { increment: deposit.amount } },
+            })
+
+            await tx.walletMutation.create({
+              data: {
+                walletId: wallet.id,
+                type: 'credit',
+                amount: deposit.amount,
+                balance: updatedWallet.balance,
+                description: `Top up disetujui - ${deposit.method}`,
+                refType: 'deposit',
+                refId: deposit.id,
+              },
+            })
+          } else {
+            const newWallet = await tx.wallet.create({
+              data: {
+                userId: deposit.userId,
+                balance: deposit.amount,
+              },
+            })
+
+            await tx.walletMutation.create({
+              data: {
+                walletId: newWallet.id,
+                type: 'credit',
+                amount: deposit.amount,
+                balance: newWallet.balance,
+                description: `Top up disetujui - ${deposit.method}`,
+                refType: 'deposit',
+                refId: deposit.id,
+              },
+            })
+          }
         }
 
         // Update corresponding transaction record to 'success'

@@ -125,6 +125,15 @@ export async function POST(request: NextRequest) {
 
     const isJasa = productType === 'jasa'
 
+    // SECURITY (Fix 8): Validate status — sellers can only set 'active' or 'draft'
+    const validStatuses = ['active', 'draft']
+    if (status && !validStatuses.includes(status)) {
+      return NextResponse.json(
+        { success: false, error: 'status must be "active" or "draft"' },
+        { status: 400 }
+      )
+    }
+
     // SECURITY: Sanitize user-generated text fields
     const name = sanitizeInput(body.name || '')
     const description = sanitizeInput(body.description || '')

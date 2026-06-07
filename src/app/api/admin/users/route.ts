@@ -469,6 +469,15 @@ export async function DELETE(request: NextRequest) {
   const authResult = await verifyAdmin(request)
   if (!authResult.success) return authErrorResponse(authResult)
 
+  // SECURITY: CSRF protection
+  const csrfResult = await validateCsrfRequest(request)
+  if (!csrfResult.valid) {
+    return NextResponse.json(
+      { success: false, error: 'CSRF validation failed. Silakan refresh halaman dan coba lagi.' },
+      { status: 403 }
+    )
+  }
+
   try {
     let userId: string | null = null
 

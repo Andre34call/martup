@@ -4,6 +4,7 @@ import crypto from 'crypto'
 
 import { logger } from '@/lib/logger'
 import { MIDTRANS_SERVER_KEY } from '@/lib/midtrans-config'
+import { getEffectiveCommissionRate } from '@/lib/commission'
 
 /** Timing-safe string comparison to prevent timing attacks */
 function safeCompare(a: string, b: string): boolean {
@@ -104,18 +105,24 @@ export async function POST(request: NextRequest) {
 
     if (!order) {
       logger.error({ err: order_id }, 'Midtrans notification: Order not found for orderNumber')
-      // Return 200 so Midtrans doesn't retry indefinitely
-      return NextResponse.json({ success: false, error: 'Order not found' })
+      // SECURITY (Fix 10): Return 404 so Midtrans retries the notification.
+      // Previously returned 200 which told Midtrans "processed successfully",
+      // so it never retried — causing permanently missed payment confirmations.
+      return NextResponse.json(
+        { success: false, error: 'Order not found' },
+        { status: 404 }
+      )
     }
 
     // SEC-15: Verify the gross_amount matches the order's totalAmount to prevent amount manipulation
-    // SECURITY: Use string comparison to avoid floating-point precision loss with Number()
-    if (String(gross_amount) !== String(order.totalAmount)) {
+    // SECURITY: Use Math.round(Number()) comparison — String() can fail when Decimal has trailing zeros
+    // (e.g., String(Decimal("50000.00")) = "50000.00" but String(50000) = "50000")
+    if (Math.round(Number(gross_amount)) !== Math.round(Number(order.totalAmount))) {
       logger.error({
         orderId: order.id,
         orderNumber: order.orderNumber,
-        expectedAmount: String(order.totalAmount),
-        receivedAmount: String(gross_amount),
+        expectedAmount: Math.round(Number(order.totalAmount)),
+        receivedAmount: Math.round(Number(gross_amount)),
       }, 'Midtrans notification: gross_amount does not match order totalAmount')
       return NextResponse.json(
         { success: false, error: 'Amount mismatch' },
@@ -323,7 +330,7 @@ export async function POST(request: NextRequest) {
         }
 
         const subtotal = Number(order.subtotal)
-        const commissionRate = Number(order.seller.commissionRate)
+        const commissionRate = await getEffectiveCommissionRate(Number(order.seller.commissionRate))
         const commissionAmount = Math.round(subtotal * commissionRate)
         const sellerEarnings = subtotal - commissionAmount
 
@@ -432,7 +439,7 @@ export async function POST(request: NextRequest) {
 
           if (sellerWallet) {
             const subtotal = Number(order.subtotal)
-            const commissionRate = Number(order.seller.commissionRate)
+            const commissionRate = await getEffectiveCommissionRate(Number(order.seller.commissionRate))
             const commissionAmount = Math.round(subtotal * commissionRate)
             const sellerHoldAmount = subtotal - commissionAmount
 
@@ -544,13 +551,13 @@ async function handleDepositNotification({
   }
 
   // SECURITY: Verify gross_amount matches deposit amount
-  // Use string comparison to avoid floating-point precision loss with Number()
-  if (String(gross_amount) !== String(deposit.amount)) {
+  // Use Math.round(Number()) comparison — String() can fail when Decimal has trailing zeros
+  if (Math.round(Number(gross_amount)) !== Math.round(Number(deposit.amount))) {
     logger.error({
       depositId: deposit.id,
       midtransOrderId: order_id,
-      expectedAmount: String(deposit.amount),
-      receivedAmount: String(gross_amount),
+      expectedAmount: Math.round(Number(deposit.amount)),
+      receivedAmount: Math.round(Number(gross_amount)),
     }, 'Midtrans deposit notification: gross_amount does not match deposit amount')
     return NextResponse.json(
       { success: false, error: 'Amount mismatch' },

@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuth, successResponse, errorResponse, parseRequestBody, withErrorHandler, type RouteContext } from '@/lib/api-utils'
+import { sanitizeInput } from '@/lib/sanitize'
+import { createRateLimiter } from '@/lib/rate-limit'
 
 const VALID_REASONS = ['spam', 'harassment', 'inappropriate_content', 'scam', 'other'] as const
+
+// Rate limiter: 5 reports per minute per user
+const reportLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 5, keyPrefix: 'rl:stream:report:' })
 
 type ReportReason = (typeof VALID_REASONS)[number]
 
@@ -16,15 +21,29 @@ export const POST = withErrorHandler(async (request: NextRequest, context?: Rout
   const auth = await requireAuth(request)
   if (auth instanceof NextResponse) return auth
 
-  // 2. Get postId from context params (dynamic segment is [id])
+  // 2. Rate limit report creation
+  const clientIp = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
+  const rateLimit = await reportLimiter.check(`${auth.userId}:${clientIp}`)
+  if (!rateLimit.allowed) {
+    const retrySeconds = Math.ceil((rateLimit.resetAt - Date.now()) / 1000)
+    return errorResponse(
+      `Terlalu banyak permintaan. Coba lagi dalam ${retrySeconds > 60 ? Math.ceil(retrySeconds / 60) + ' menit' : retrySeconds + ' detik'}.`,
+      429,
+    )
+  }
+
+  // 3. Get postId from context params (dynamic segment is [id])
   if (!context) return errorResponse('Missing route context', 500)
   const { id: postId } = await context.params
 
-  // 3. Parse request body
+  // 4. Parse request body
   const body = await parseRequestBody<ReportBody>(request)
   if (body instanceof NextResponse) return body
 
   const { reason, description } = body
+
+  // SECURITY: Sanitize description to prevent XSS
+  const sanitizedDescription = description ? sanitizeInput(description.trim()) : null
 
   // 4. Validate reason
   if (!reason || !VALID_REASONS.includes(reason as ReportReason)) {
@@ -66,16 +85,18 @@ export const POST = withErrorHandler(async (request: NextRequest, context?: Rout
         postId,
         userId: auth.userId,
         reason,
-        description: description || null,
+        description: sanitizedDescription ? sanitizedDescription.slice(0, 500) : null, // Cap description length
       },
     })
 
-    // 8. If this is the 3rd+ report on the same post, auto-hide it
+    // 8. If this is the 5th+ report on the same post, auto-hide it
+    // NOTE: Threshold is 5 (not 3) to reduce abuse potential.
+    // Admin review should still be done for borderline cases.
     const reportCount = await tx.streamPostReport.count({
       where: { postId },
     })
 
-    if (reportCount >= 3 && !post.isHidden) {
+    if (reportCount >= 5 && !post.isHidden) {
       await tx.streamPost.update({
         where: { id: postId },
         data: { isHidden: true },

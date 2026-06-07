@@ -147,7 +147,7 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      // Rate limit OTP verification attempts
+      // Rate limit OTP verification attempts (10/min per user)
       const verifyRateLimit = await tfaVerifyLimiter.check(user.id)
       if (!verifyRateLimit.allowed) {
         const retrySeconds = Math.ceil((verifyRateLimit.resetAt - Date.now()) / 1000)

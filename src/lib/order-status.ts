@@ -329,21 +329,27 @@ export async function updateOrderStatus(params: {
         }
 
         // Move from pendingBalance to balance (escrow release)
+        // BUG FIX: Use the SAME releaseAmount for BOTH operations to prevent over-credit.
+        // Previously, pendingBalance was decremented by Math.min(sellerEarnings, pendingBalance)
+        // but balance was incremented by the FULL sellerEarnings. If pendingBalance < sellerEarnings,
+        // the seller would receive more money than was held in escrow.
+        const releaseAmount = Math.min(sellerEarnings, Number(sellerWallet.pendingBalance))
         const updatedWallet = await tx.wallet.update({
           where: { id: sellerWallet.id },
           data: {
-            pendingBalance: { decrement: Math.min(sellerEarnings, Number(sellerWallet.pendingBalance)) },
-            balance: { increment: sellerEarnings },
+            pendingBalance: { decrement: releaseAmount },
+            balance: { increment: releaseAmount },
           },
         })
 
         // Record wallet mutation for seller (credit)
         // BUG FIX: Use refType 'order_release' for consistency with auto-complete cron
+        // BUG FIX: Use releaseAmount (not sellerEarnings) to match actual wallet credit
         await tx.walletMutation.create({
           data: {
             walletId: sellerWallet.id,
             type: 'credit',
-            amount: new Prisma.Decimal(sellerEarnings),
+            amount: new Prisma.Decimal(releaseAmount),
             balance: new Prisma.Decimal(Number(updatedWallet.balance)),
             description: `Pencairan dana pesanan ${order.orderNumber} - ${order.seller.storeName}`,
             refType: 'order_release',
