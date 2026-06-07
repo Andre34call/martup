@@ -5,6 +5,7 @@ import { createRateLimiter } from '@/lib/rate-limit'
 import { parseJsonField } from '@/lib/api-utils'
 import { sanitizeInput } from '@/lib/sanitize'
 import { serializeDecimal } from '@/lib/decimal-utils'
+import { UPLOAD_LIMITS } from '@/lib/upload-limits'
 
 import { logger } from '@/lib/logger'
 
@@ -113,9 +114,11 @@ export async function POST(request: NextRequest) {
       serviceDuration,
       serviceLocation,
       status = 'active',
-      isFeatured = false,
-      isFlashSale = false,
-      flashSaleEnd,
+      // SECURITY (Fix 2): isFeatured, isFlashSale, flashSaleEnd are admin-only fields.
+      // We destructure them to remove from body but ignore the values.
+      isFeatured: _isFeatured,
+      isFlashSale: _isFlashSale,
+      flashSaleEnd: _flashSaleEnd,
       tags,
       variants = [],
     } = body
@@ -152,6 +155,16 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
+
+    // SECURITY (Fix 8): Validate that the category exists in the database
+    const categoryExists = await db.category.findUnique({ where: { id: categoryId } })
+    if (!categoryExists) {
+      return NextResponse.json(
+        { success: false, error: 'Kategori tidak ditemukan' },
+        { status: 400 }
+      )
+    }
+
     if (!name) {
       return NextResponse.json(
         { success: false, error: 'name is required' },
@@ -170,10 +183,46 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
+    // SECURITY (Fix 4): Validate price is a positive number
+    if (typeof price !== 'number' || price <= 0) {
+      return NextResponse.json(
+        { success: false, error: 'price harus berupa angka lebih dari 0' },
+        { status: 400 }
+      )
+    }
+    // SECURITY (Fix 4): Validate stock is >= 0
+    if (stock !== undefined && stock !== null && (typeof stock !== 'number' || stock < 0)) {
+      return NextResponse.json(
+        { success: false, error: 'stock harus >= 0' },
+        { status: 400 }
+      )
+    }
+    // SECURITY (Fix 4): Validate weight is >= 0
+    if (weight !== undefined && weight !== null && (typeof weight !== 'number' || weight < 0)) {
+      return NextResponse.json(
+        { success: false, error: 'weight harus >= 0' },
+        { status: 400 }
+      )
+    }
+    // SECURITY (Fix 4): Validate minOrder is >= 1
+    if (minOrder !== undefined && minOrder !== null && (typeof minOrder !== 'number' || minOrder < 1)) {
+      return NextResponse.json(
+        { success: false, error: 'minOrder harus >= 1' },
+        { status: 400 }
+      )
+    }
     // Weight is required for physical products, optional for jasa (service) products
     if (!isJasa && (weight === undefined || weight === null)) {
       return NextResponse.json(
         { success: false, error: 'Berat produk wajib diisi untuk produk barang' },
+        { status: 400 }
+      )
+    }
+
+    // SECURITY (Fix 5): Validate discountPrice < price
+    if (discountPrice !== undefined && discountPrice !== null && discountPrice !== '' && typeof discountPrice === 'number' && discountPrice >= price) {
+      return NextResponse.json(
+        { success: false, error: 'Harga diskon harus lebih rendah dari harga jual' },
         { status: 400 }
       )
     }
@@ -192,13 +241,87 @@ export async function POST(request: NextRequest) {
 
     // Stringify JSON fields for storage
     // SECURITY: Filter out blob: URLs that can never be served to other users
-    const safeImages = Array.isArray(images)
+    let safeImages = Array.isArray(images)
       ? images.filter((url: string) => typeof url === 'string' && !url.startsWith('blob:'))
       : images
+
+    // SECURITY (Fix 6): Validate image URLs and max count
+    if (Array.isArray(safeImages)) {
+      const supabaseHost = process.env.NEXT_PUBLIC_SUPABASE_URL ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname : null
+      const validatedImages: string[] = []
+      for (const url of safeImages) {
+        try {
+          const parsed = new URL(url)
+          // Allow only https URLs from Supabase domain or valid https URLs
+          if (parsed.protocol === 'https:') {
+            validatedImages.push(url)
+          } else if (supabaseHost && parsed.hostname === supabaseHost) {
+            validatedImages.push(url)
+          }
+          // Reject http:, ftp:, etc.
+        } catch {
+          // Invalid URL, skip
+        }
+      }
+      safeImages = validatedImages
+
+      if (safeImages.length > UPLOAD_LIMITS.MAX_PRODUCT_IMAGES) {
+        return NextResponse.json(
+          { success: false, error: `Maksimal ${UPLOAD_LIMITS.MAX_PRODUCT_IMAGES} gambar per produk` },
+          { status: 400 }
+        )
+      }
+    }
+
     const imagesStr = typeof safeImages === 'string' ? safeImages : JSON.stringify(safeImages || [])
     const tagsStr = typeof tags === 'string' ? tags : (tags ? JSON.stringify(tags) : null)
     // SECURITY: Block blob: video URLs
     const safeVideoUrl = (typeof videoUrl === 'string' && !videoUrl.startsWith('blob:')) ? videoUrl : null
+
+    // SECURITY (Fix 7): Sanitize and validate variant fields
+    const supabaseHost = process.env.NEXT_PUBLIC_SUPABASE_URL ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname : null
+    const sanitizedVariants = variants.map((v: {
+      name: string
+      value: string
+      sku?: string | null
+      price?: number | null
+      stock?: number
+      image?: string | null
+    }) => {
+      // Sanitize variant name and value
+      const sanitizedName = sanitizeInput(v.name || '')
+      const sanitizedValue = sanitizeInput(v.value || '')
+
+      // Validate variant stock
+      if (v.stock !== undefined && v.stock !== null && (typeof v.stock !== 'number' || v.stock < 0)) {
+        throw new Error('Variant stock harus >= 0')
+      }
+
+      // Validate variant image URL (same rules as product images)
+      let validatedImage: string | null = null
+      if (v.image && typeof v.image === 'string' && !v.image.startsWith('blob:')) {
+        try {
+          const parsed = new URL(v.image)
+          if (parsed.protocol === 'https:') {
+            validatedImage = v.image
+          } else if (supabaseHost && parsed.hostname === supabaseHost) {
+            validatedImage = v.image
+          }
+        } catch {
+          // Invalid URL, skip
+        }
+      }
+
+      return {
+        name: sanitizedName,
+        value: sanitizedValue,
+        sku: v.sku || null,
+        // Fix v.price || null to properly handle price=0
+        price: v.price !== undefined && v.price !== null ? v.price : null,
+        stock: v.stock ?? 0,
+        image: validatedImage,
+      }
+    })
 
     const product = await db.product.create({
       data: {
@@ -219,26 +342,13 @@ export async function POST(request: NextRequest) {
         serviceDuration: isJasa ? (serviceDuration || null) : null,
         serviceLocation: isJasa ? (serviceLocation || null) : null,
         status,
-        isFeatured,
-        isFlashSale,
-        flashSaleEnd: flashSaleEnd ? new Date(flashSaleEnd) : null,
+        // SECURITY (Fix 2): Force admin-only fields to false/null regardless of client input
+        isFeatured: false,
+        isFlashSale: false,
+        flashSaleEnd: null,
         tags: tagsStr,
         variants: {
-          create: variants.map((v: {
-            name: string
-            value: string
-            sku?: string | null
-            price?: number | null
-            stock?: number
-            image?: string | null
-          }) => ({
-            name: v.name,
-            value: v.value,
-            sku: v.sku || null,
-            price: v.price || null,
-            stock: v.stock || 0,
-            image: v.image || null,
-          })),
+          create: sanitizedVariants,
         },
       },
       include: {
@@ -310,9 +420,11 @@ export async function PUT(request: NextRequest) {
       serviceDuration,
       serviceLocation,
       status,
-      isFeatured,
-      isFlashSale,
-      flashSaleEnd,
+      // SECURITY (Fix 2): isFeatured, isFlashSale, flashSaleEnd are admin-only fields.
+      // We destructure them to remove from body but ignore the values.
+      isFeatured: _isFeatured,
+      isFlashSale: _isFlashSale,
+      flashSaleEnd: _flashSaleEnd,
       tags,
       variants,
     } = body
@@ -330,9 +442,9 @@ export async function PUT(request: NextRequest) {
     }
 
     // Validate numeric fields if provided
-    if (price !== undefined && price !== null && price < 0) {
+    if (price !== undefined && price !== null && (typeof price !== 'number' || price <= 0)) {
       return NextResponse.json(
-        { success: false, error: 'price must be >= 0' },
+        { success: false, error: 'price harus berupa angka lebih dari 0' },
         { status: 400 }
       )
     }
@@ -342,24 +454,25 @@ export async function PUT(request: NextRequest) {
         { status: 400 }
       )
     }
-    if (stock !== undefined && stock !== null && stock < 0) {
+    if (stock !== undefined && stock !== null && (typeof stock !== 'number' || stock < 0)) {
       return NextResponse.json(
         { success: false, error: 'stock must be >= 0' },
         { status: 400 }
       )
     }
-    if (minOrder !== undefined && minOrder !== null && minOrder < 1) {
+    if (minOrder !== undefined && minOrder !== null && (typeof minOrder !== 'number' || minOrder < 1)) {
       return NextResponse.json(
         { success: false, error: 'minOrder must be >= 1' },
         { status: 400 }
       )
     }
-    if (weight !== undefined && weight !== null && weight < 0) {
+    if (weight !== undefined && weight !== null && (typeof weight !== 'number' || weight < 0)) {
       return NextResponse.json(
         { success: false, error: 'weight must be >= 0' },
         { status: 400 }
       )
     }
+
     // Validate productType if provided
     if (productType !== undefined && !['product', 'jasa'].includes(productType)) {
       return NextResponse.json(
@@ -409,6 +522,16 @@ export async function PUT(request: NextRequest) {
       )
     }
 
+    // SECURITY (Fix 5): Validate discountPrice < price
+    // Use the provided price, or fall back to the existing product's price for comparison
+    const effectivePrice = price ?? existingProduct.price
+    if (discountPrice !== undefined && discountPrice !== null && discountPrice !== '' && typeof discountPrice === 'number' && discountPrice >= Number(effectivePrice)) {
+      return NextResponse.json(
+        { success: false, error: 'Harga diskon harus lebih rendah dari harga jual' },
+        { status: 400 }
+      )
+    }
+
     // If slug is being updated, check uniqueness
     if (slug && slug !== existingProduct.slug) {
       const existingSlug = await db.product.findUnique({ where: { slug } })
@@ -438,16 +561,45 @@ export async function PUT(request: NextRequest) {
     if (productType !== undefined) updateData.productType = productType
     if (serviceDuration !== undefined) updateData.serviceDuration = serviceDuration || null
     if (serviceLocation !== undefined) updateData.serviceLocation = serviceLocation || null
-    if (isFeatured !== undefined) updateData.isFeatured = isFeatured
-    if (isFlashSale !== undefined) updateData.isFlashSale = isFlashSale
-    if (flashSaleEnd !== undefined) updateData.flashSaleEnd = flashSaleEnd ? new Date(flashSaleEnd) : null
+    // SECURITY (Fix 2): Do NOT allow seller to change isFeatured or isFlashSale — admin-only fields
+    // These fields are intentionally omitted from updateData
+    // if (isFeatured !== undefined) updateData.isFeatured = isFeatured
+    // if (isFlashSale !== undefined) updateData.isFlashSale = isFlashSale
+    // if (flashSaleEnd !== undefined) updateData.flashSaleEnd = flashSaleEnd ? new Date(flashSaleEnd) : null
 
     // Stringify JSON fields for storage
-    // SECURITY: Filter out blob: URLs that can never be served to other users
+    // SECURITY: Filter out blob: URLs and validate image URLs (Fix 6)
     if (images !== undefined) {
-      const safeImages = Array.isArray(images)
+      let safeImages = Array.isArray(images)
         ? images.filter((url: string) => typeof url === 'string' && !url.startsWith('blob:'))
         : images
+
+      // SECURITY (Fix 6): Validate image URLs and max count
+      if (Array.isArray(safeImages)) {
+        const supabaseHost = process.env.NEXT_PUBLIC_SUPABASE_URL ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname : null
+        const validatedImages: string[] = []
+        for (const url of safeImages) {
+          try {
+            const parsed = new URL(url)
+            if (parsed.protocol === 'https:') {
+              validatedImages.push(url)
+            } else if (supabaseHost && parsed.hostname === supabaseHost) {
+              validatedImages.push(url)
+            }
+          } catch {
+            // Invalid URL, skip
+          }
+        }
+        safeImages = validatedImages
+
+        if (safeImages.length > UPLOAD_LIMITS.MAX_PRODUCT_IMAGES) {
+          return NextResponse.json(
+            { success: false, error: `Maksimal ${UPLOAD_LIMITS.MAX_PRODUCT_IMAGES} gambar per produk` },
+            { status: 400 }
+          )
+        }
+      }
+
       updateData.images = typeof safeImages === 'string' ? safeImages : JSON.stringify(safeImages || [])
     }
     if (tags !== undefined) {
@@ -462,6 +614,50 @@ export async function PUT(request: NextRequest) {
 
     // Handle variants update: delete existing and create new ones
     if (variants !== undefined) {
+      // SECURITY (Fix 7): Sanitize and validate variant fields
+      const supabaseHost = process.env.NEXT_PUBLIC_SUPABASE_URL ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname : null
+      const sanitizedVariants = variants.map((v: {
+        name: string
+        value: string
+        sku?: string | null
+        price?: number | null
+        stock?: number
+        image?: string | null
+      }) => {
+        // Sanitize variant name and value
+        const sanitizedName = sanitizeInput(v.name || '')
+        const sanitizedValue = sanitizeInput(v.value || '')
+
+        // Validate variant stock
+        if (v.stock !== undefined && v.stock !== null && (typeof v.stock !== 'number' || v.stock < 0)) {
+          throw new Error('Variant stock harus >= 0')
+        }
+
+        // Validate variant image URL
+        let validatedImage: string | null = null
+        if (v.image && typeof v.image === 'string' && !v.image.startsWith('blob:')) {
+          try {
+            const parsed = new URL(v.image)
+            if (parsed.protocol === 'https:') {
+              validatedImage = v.image
+            } else if (supabaseHost && parsed.hostname === supabaseHost) {
+              validatedImage = v.image
+            }
+          } catch {
+            // Invalid URL, skip
+          }
+        }
+
+        return {
+          name: sanitizedName,
+          value: sanitizedValue,
+          sku: v.sku || null,
+          price: v.price !== undefined && v.price !== null ? v.price : null,
+          stock: v.stock ?? 0,
+          image: validatedImage,
+        }
+      })
+
       // Use a transaction to ensure atomicity
       const updatedProduct = await db.$transaction(async (tx) => {
         // Delete existing variants
@@ -476,21 +672,7 @@ export async function PUT(request: NextRequest) {
             ...updateData,
             status: status !== undefined ? status : undefined,
             variants: {
-              create: variants.map((v: {
-                name: string
-                value: string
-                sku?: string | null
-                price?: number | null
-                stock?: number
-                image?: string | null
-              }) => ({
-                name: v.name,
-                value: v.value,
-                sku: v.sku || null,
-                price: v.price || null,
-                stock: v.stock || 0,
-                image: v.image || null,
-              })),
+              create: sanitizedVariants,
             },
           },
           include: {

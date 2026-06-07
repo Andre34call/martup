@@ -666,3 +666,212 @@ Stage Summary:
 - order-screen.tsx (1392 lines) → order/ folder (7 files, largest 647 lines)
 - New shared files: payment-utils.ts, process-seller-payout.ts, db-includes.ts, updated constants.ts
 - All lint checks pass, dev server running, browser verification successful
+
+---
+Task ID: 7
+Agent: seller-api-security-fix
+Task: Fix P0/P1 security vulnerabilities in seller products API
+
+Work Log:
+- Read worklog.md for previous context (Tasks 1-6, 2-a, 2-b, 3-a, 3-b)
+- Read all 3 target files: seller/products/route.ts, products/[id]/route.ts, setup/storage/route.ts
+- Read supporting files: auth-middleware.ts (verifyAdmin), upload-limits.ts, sanitize.ts, image-utils.ts, supabase.ts
+- Applied all 8 security fixes across 3 files
+
+Fixes Applied:
+
+1. Fix 1 (P0) - Blocked products visible to public (products/[id]/route.ts):
+   - Changed GET handler from `if (!product || product.status === 'draft')` to separate null check + `if (product.status !== 'active')` with auth-based access control
+   - Non-active products (draft/blocked/archived) now require auth + ownership/admin role to view
+   - Returns 404 for unauthenticated/unauthorized requests (doesn't leak existence)
+   - Changed `_request` to `request` since parameter is now used
+
+2. Fix 2 (P0) - Seller can set isFeatured/isFlashSale (seller/products/route.ts):
+   - POST: Destructures isFeatured/isFlashSale/flashSaleEnd with underscore-prefixed aliases (ignored), forces `isFeatured: false`, `isFlashSale: false`, `flashSaleEnd: null` in create data
+   - PUT: Removed isFeatured, isFlashSale, flashSaleEnd from updateData — commented out with explanation, these admin-only fields cannot be changed by sellers
+
+3. Fix 3 (P0) - Storage setup endpoint accessible by non-admin (setup/storage/route.ts):
+   - Changed import from `verifyAuth` to `verifyAdmin` from `@/lib/auth-middleware`
+   - Changed both POST and GET handlers from `verifyAuth(request)` to `verifyAdmin(request)`
+   - Now requires admin/manager/division role — regular authenticated users get 403
+
+4. Fix 4 (P1) - No price/stock/weight validation on POST (seller/products/route.ts):
+   - Added `typeof price !== 'number' || price <= 0` validation (was only checking existence)
+   - Added `typeof stock !== 'number' || stock < 0` validation if provided
+   - Added `typeof weight !== 'number' || weight < 0` validation if provided
+   - Added `typeof minOrder !== 'number' || minOrder < 1` validation if provided
+   - PUT handler: Changed `price < 0` to `typeof price !== 'number' || price <= 0` for consistency
+   - PUT handler: Added type checks for stock, minOrder, weight
+
+5. Fix 5 (P1) - discountPrice > price not prevented (seller/products/route.ts):
+   - POST: Added validation after price check: `discountPrice >= price` returns 400 with "Harga diskon harus lebih rendah dari harga jual"
+   - PUT: Added validation after ownership check using `effectivePrice = price ?? existingProduct.price`
+   - Both: Checks `discountPrice !== undefined && discountPrice !== null && discountPrice !== '' && typeof discountPrice === 'number'`
+
+6. Fix 6 (P1) - Image URL not validated (seller/products/route.ts):
+   - POST and PUT: After filtering blob: URLs, validates remaining URLs are https or from Supabase domain
+   - Uses `process.env.NEXT_PUBLIC_SUPABASE_URL` to extract Supabase hostname
+   - Invalid URLs are silently filtered out (not rejected, since images may come from other valid sources)
+   - Added max image count: `safeImages.length > UPLOAD_LIMITS.MAX_PRODUCT_IMAGES` returns 400 with "Maksimal 8 gambar per produk"
+   - Imported `UPLOAD_LIMITS` from `@/lib/upload-limits`
+
+7. Fix 7 (P1) - Variant fields not sanitized (seller/products/route.ts):
+   - POST and PUT: Applied `sanitizeInput()` to variant `name` and `value` fields
+   - Added `typeof v.stock !== 'number' || v.stock < 0` validation (throws Error)
+   - Fixed `v.price || null` to `v.price !== undefined && v.price !== null ? v.price : null` (handles price=0 correctly)
+   - Validated variant image URLs with same rules as product images (https or Supabase domain)
+   - Extracted sanitized variants into `sanitizedVariants` array before passing to Prisma create
+
+8. Fix 8 (P2) - Category ID not validated against database (seller/products/route.ts):
+   - POST: After checking `categoryId` exists, added `db.category.findUnique({ where: { id: categoryId } })` check
+   - Returns 400 with "Kategori tidak ditemukan" if category doesn't exist
+
+Stage Summary:
+- 8 security fixes applied across 3 files
+- All lint checks pass
+- Dev server running correctly
+
+---
+Task ID: 5
+Agent: upload-route-creator
+Task: Create missing /api/upload route
+
+Work Log:
+- Read worklog.md for previous agent context (Tasks 1-7, 2-a, 2-b, 3-a, 3-b, 15, 16)
+- Read avatar route template at src/app/api/user/avatar/route.ts for security patterns
+- Read src/lib/upload-limits.ts, src/lib/ensure-bucket.ts, src/lib/auth-middleware.ts, src/lib/rate-limit.ts, src/lib/logger.ts
+- Read src/lib/upload.ts and src/hooks/api/use-upload.ts to understand the client-side contract
+- Created directory src/app/api/upload/
+- Created src/app/api/upload/route.ts with full security validation
+- Ran bun run lint: passes with no errors
+- Checked dev server log: running correctly (pre-existing DB URL issue unrelated to this change)
+
+Features Implemented:
+1. Accepts FormData with: file (File), bucket (string, optional, default 'products'), folder (string, optional, default 'images')
+2. Auth required via verifyAuth + authErrorResponse
+3. Rate limiting: 20 uploads per minute per user (createRateLimiter with key prefix 'rl:user:upload:')
+4. File type validation using UPLOAD_LIMITS.ALLOWED_IMAGE_TYPES and UPLOAD_LIMITS.ALLOWED_VIDEO_TYPES
+5. File size validation using UPLOAD_LIMITS constants based on bucket type (per-bucket size limits)
+6. Magic byte validation for images (JPEG, PNG, GIF, WebP) AND videos (MP4 ftyp, WebM EBML, MOV moov/mdat)
+7. Sanitized file extension — only allows safe extensions (jpg, jpeg, png, webp, gif, mp4, webm, mov)
+8. Auto-create bucket if not found (using ensureBucket from src/lib/ensure-bucket.ts)
+9. Unique filename: Date.now() + crypto.randomUUID() segment (first UUID group)
+10. Upload to Supabase Storage via REST API with service role key
+11. Returns { success: true, data: { url, path, type } } where url is public URL, path is storage path, type is 'image' or 'video'
+12. Error handling — no internal details leaked to client (generic messages + specific known cases)
+13. Bucket whitelist: products, avatars, banners, streams, reviews, deposits, payments
+14. payments/deposits buckets restricted to image-only uploads
+
+Stage Summary:
+- /api/upload route now handles all generic file uploads
+- Security: auth, rate limiting, file type validation, magic bytes (images + videos), bucket whitelist, image-only restriction for payments/deposits
+- Compatible with existing client-side: uploadFile() from src/lib/upload.ts and useUpload() hook from src/hooks/api/use-upload.ts
+- Lint passes with no errors
+
+---
+Task ID: 6
+Agent: product-edit-fix
+Task: Fix existing images/video lost on product edit
+
+Work Log:
+- Read worklog.md for previous agent context
+- Read seller-add-product-screen.tsx entirely to understand state initialization and submit logic
+- Analyzed how editingProduct.images and editingProduct.videoUrl are used
+- Checked how other components parse product images (product store uses Array.isArray/typeof checks)
+
+Fixes Applied (src/components/ecommerce/seller-add-product-screen.tsx):
+
+1. Fixed productImages initialization:
+   - Changed from `useState<{ id: string; url: string; file?: File }[]>([])` to use an initializer function
+   - When editingProduct exists, parses its images (handles both string[] and JSON string) into `{ id, url }` objects
+   - Existing images get IDs like `existing_img_0`, `existing_img_1`, etc.
+   - Images display in the grid when editing a product
+
+2. Fixed productVideo initialization:
+   - Changed type from `{ file: File; url: string } | null` to `{ file?: File; url: string } | null` (file is now optional)
+   - When editingProduct has videoUrl, initializes state with `{ url: editingProduct.videoUrl }`
+   - Video displays in the preview player when editing a product
+
+3. Added videoDeleted state tracking:
+   - New `videoDeleted` boolean state (initially false)
+   - Set to true when user clicks X to remove video (explicit deletion)
+   - Reset to false when user uploads a new video
+   - Distinguishes "user explicitly deleted video" from "no video was loaded"
+
+4. Fixed submit logic for images:
+   - Removed fallback to `editingProduct?.images` — since existing images are now in productImages state, the fallback is unnecessary
+   - Changed `productImages2` computation to always map URLs from productImages and filter blob: URLs
+   - Simplified validation from `productImages.length === 0 && !editingProduct?.images?.length` to just `productImages.length === 0`
+
+5. Fixed submit logic for video (update case):
+   - API payload: uses productVideo URL if valid (not blob:), else uses null if videoDeleted, else preserves editingProduct.videoUrl
+   - Local store update: same logic — uses productVideo URL if valid, else omits videoUrl if deleted, else preserves existing
+
+6. Fixed draft handler:
+   - Same image computation fix as submit handler
+   - Same video preservation logic as submit handler
+
+7. Fixed video remove button:
+   - Sets both `setProductVideo(null)` and `setVideoDeleted(true)` on click
+
+Stage Summary:
+- Existing product images now load in editor when editing
+- Existing product video now loads when editing
+- Submit preserves existing media when adding new files
+- Explicit video deletion is tracked separately from "no video loaded"
+- Lint passes with no errors
+
+---
+
+Task ID: 9
+Agent: ui-p1-fix
+Task: Fix multiple P1 UI bugs in seller product upload screen
+
+Work Log:
+- Read worklog.md for previous context (Tasks 1-7, 2-a, 2-b, 3-a, 3-b)
+- Read target files: seller-add-product-screen.tsx, seller/seller-products.tsx, upload-limits.ts
+- Applied all 7 fixes systematically
+
+Fixes Applied:
+
+1. Fix 1 (P1) - SVG XSS via image type validation (seller-add-product-screen.tsx):
+   - Replaced `!file.type.startsWith("image/")` with explicit check against `UPLOAD_LIMITS.ALLOWED_IMAGE_TYPES`
+   - Now uses: `!UPLOAD_LIMITS.ALLOWED_IMAGE_TYPES.includes(file.type as typeof UPLOAD_LIMITS.ALLOWED_IMAGE_TYPES[number])`
+   - Changed error message from `"...bukan file gambar"` to `"Format tidak didukung. Gunakan JPG, PNG, WebP, atau GIF."`
+   - Prevents SVG files containing JavaScript from being uploaded
+
+2. Fix 2 (P1) - No maxLength on product name/description (seller-add-product-screen.tsx):
+   - Added `maxLength={70}` to the product name `<Input>` element
+   - Added `maxLength={2000}` to the description `<textarea>` element
+   - Character counters already existed in the UI, now the actual enforcement matches
+
+3. Fix 3 (P1→P1) - Discount price higher than regular price not blocked (seller-add-product-screen.tsx):
+   - Added validation in `handleSubmit`: `if (discountPriceNumber > 0 && discountPriceNumber >= priceNumber)`
+   - Shows error toast: "Harga diskon harus lebih rendah dari harga jual"
+   - Returns early before any async operations
+
+4. Fix 4 (P1) - No double-submit protection (seller-add-product-screen.tsx):
+   - Added `isSubmitting` state variable
+   - Set `isSubmitting = true` at the very start of `handleSubmit`, before any validation
+   - Both "Publikasikan Produk" and "Simpan sebagai Draft" buttons now disabled when `isSubmitting || isUploading`
+   - `isSubmitting` reset to `false` in `finally` block (always runs, even on early returns)
+   - Button text changes to "Menyimpan..." when submitting (previously "Mengupload...")
+   - Restructured handleSubmit: single outer try/catch/finally wrapping all validation + API calls
+
+5. Fix 5 (P2) - Image delete button invisible on mobile (seller-add-product-screen.tsx):
+   - Changed delete button from `opacity-0 group-hover:opacity-100` to `sm:opacity-0 sm:group-hover:opacity-100 opacity-50 group-hover:opacity-100`
+   - On mobile (touch devices): button always visible at 50% opacity, becomes fully opaque on hover/tap
+   - On desktop: hidden by default, appears on hover (original behavior)
+
+6. Fix 6 (P2) - No delete confirmation for products (seller/seller-products.tsx):
+   - Added `window.confirm('Apakah Anda yakin ingin menghapus produk ini?')` before delete API call
+   - Returns early if user cancels — no API call made, no product removed from local store
+
+7. Fix 7 (P1) - Video size limit text mismatch (seller-add-product-screen.tsx):
+   - Changed hardcoded "Max 30MB" in paragraph text to `Max {MAX_VIDEO_SIZE_MB}MB` (dynamic)
+   - Changed hardcoded "Max 30MB" in upload button text to `{`MP4, WebM, MOV · Max ${MAX_VIDEO_SIZE_MB}MB`}`
+   - UPLOAD_LIMITS.MAX_VIDEO_SIZE_MB is 50MB — text now correctly shows "Max 50MB"
+
+Verification:
+- `bun run lint` passes with no errors
+- Dev server compiling correctly

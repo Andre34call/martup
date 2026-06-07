@@ -12,7 +12,7 @@ const productPutLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 15,
 
 // GET /api/products/[id] - Get product detail (PUBLIC, no auth required)
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -60,11 +60,36 @@ export async function GET(
       },
     })
 
-    if (!product || product.status === 'draft') {
+    if (!product) {
       return NextResponse.json(
         { success: false, error: 'Product not found' },
         { status: 404 }
       )
+    }
+
+    // SECURITY: Only show active products to the public.
+    // Blocked/draft products should only be visible to the product owner (seller) or admins.
+    if (product.status !== 'active') {
+      const authResult = await verifyAuth(request)
+      if (!authResult.success) {
+        return NextResponse.json(
+          { success: false, error: 'Product not found' },
+          { status: 404 }
+        )
+      }
+      // Check if the requester is the product's seller or an admin
+      const seller = await db.seller.findFirst({
+        where: { userId: authResult.user.id },
+        select: { id: true },
+      })
+      const isOwner = seller?.id === product.sellerId
+      const isAdmin = ['admin', 'manager'].includes(authResult.user.role)
+      if (!isOwner && !isAdmin) {
+        return NextResponse.json(
+          { success: false, error: 'Product not found' },
+          { status: 404 }
+        )
+      }
     }
 
     // Parse JSON fields safely (no more try/catch crash risk)

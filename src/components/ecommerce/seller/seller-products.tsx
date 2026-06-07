@@ -96,6 +96,7 @@ export function SellerProducts() {
                       <Edit className="w-3 h-3 mr-1" /> Edit
                     </Button>
                     <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20" onClick={async () => {
+                      if (!window.confirm('Apakah Anda yakin ingin menghapus produk ini?')) return
                       try {
                         const res = await apiClient.rawDelete('/api/seller/products', { productId: product.id })
                         const data = await res.json()

@@ -91,11 +91,24 @@ export function SellerAddProductScreen() {
   const [tags, setTags] = useState<string[]>(editingProduct?.tags || [])
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false)
   const [variantInputValues, setVariantInputValues] = useState<Record<string, { name: string; value: string }>>({})
-  const [productImages, setProductImages] = useState<{ id: string; url: string; file?: File }[]>([])
+  const [productImages, setProductImages] = useState<{ id: string; url: string; file?: File }[]>(() => {
+    if (!editingProduct?.images) return []
+    const imgs = Array.isArray(editingProduct.images)
+      ? editingProduct.images
+      : (typeof editingProduct.images === 'string' ? JSON.parse(editingProduct.images) : [])
+    return imgs.map((url: string, idx: number) => ({
+      id: `existing_img_${idx}`,
+      url,
+    }))
+  })
   const [previewImage, setPreviewImage] = useState<string | null>(null)
   const productImageInputRef = useRef<HTMLInputElement>(null)
-  const [productVideo, setProductVideo] = useState<{ file: File; url: string } | null>(null)
+  const [productVideo, setProductVideo] = useState<{ file?: File; url: string } | null>(
+    editingProduct?.videoUrl ? { url: editingProduct.videoUrl } : null
+  )
   const [isUploading, setIsUploading] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [videoDeleted, setVideoDeleted] = useState(false)
   const videoInputRef = useRef<HTMLInputElement>(null)
 
   // Derived
@@ -220,8 +233,8 @@ export function SellerAddProductScreen() {
         showToast(`Foto "${file.name}" melebihi ${MAX_PRODUCT_IMAGE_SIZE_MB}MB`, "error")
         continue
       }
-      if (!file.type.startsWith("image/")) {
-        showToast(`"${file.name}" bukan file gambar`, "error")
+      if (!UPLOAD_LIMITS.ALLOWED_IMAGE_TYPES.includes(file.type as typeof UPLOAD_LIMITS.ALLOWED_IMAGE_TYPES[number])) {
+        showToast(`Format tidak didukung. Gunakan JPG, PNG, WebP, atau GIF.`, "error")
         continue
       }
 
@@ -266,10 +279,12 @@ export function SellerAddProductScreen() {
     try {
       const result = await uploadFile(file, 'products', 'videos')
       setProductVideo({ file, url: result.url })
+      setVideoDeleted(false)
       showToast('Video berhasil diupload', 'success')
     } catch (error) {
       logger.warn({ component: 'seller-product', err: error }, 'Video upload failed')
       setProductVideo({ file, url: URL.createObjectURL(file) })
+      setVideoDeleted(false)
       showToast('Gagal upload video ke server, menggunakan preview sementara', 'error')
     }
     setIsUploading(false)
@@ -370,78 +385,87 @@ export function SellerAddProductScreen() {
 
   // Submit handler
   const handleSubmit = async () => {
-    // Validate form first, then auto-register seller if needed
-    // This way user sees form validation errors before the registration attempt
-    if (productImages.length === 0 && !editingProduct?.images?.length) {
-      showToast("Upload minimal 1 foto produk", "error")
-      return
-    }
-    if (!productName.trim()) {
-      showToast("Nama produk harus diisi", "error")
-      return
-    }
-    if (!description.trim()) {
-      showToast("Deskripsi produk harus diisi", "error")
-      return
-    }
-    if (!category) {
-      showToast("Kategori harus dipilih", "error")
-      return
-    }
-    if (!priceNumber || priceNumber <= 0) {
-      showToast("Harga harus diisi", "error")
-      return
-    }
-    if (!stock || parseInt(stock) <= 0) {
-      if (productType === 'product') {
-        showToast("Stok harus diisi", "error")
-        return
-      }
-    }
-    if (productType === 'product' && (!weight || parseInt(weight) <= 0)) {
-      showToast("Berat produk harus diisi", "error")
-      return
-    }
-    if (productType === 'jasa' && !serviceDuration.trim()) {
-      showToast("Durasi layanan harus diisi", "error")
-      return
-    }
-
-    // Auto-register as seller if needed (after form validation)
-    if (!seller?.id) {
-      const registered = await ensureSellerRegistered()
-      if (!registered) return
-    }
-    // Re-read seller from store (might have been set by ensureSellerRegistered)
-    const currentSeller = useAppStore.getState().seller
-    const currentSellerId = currentSeller?.id || sellerId
-    const selectedCategoryObj = categories.find(c => c.id === category)
-    const productImages2 = productImages.length > 0
-      ? productImages.map(img => img.url).filter(url => !url.startsWith('blob:'))
-      : (editingProduct?.images || [])
-
-    // SECURITY: Block submission if any images are blob: URLs (not properly uploaded)
-    if (productImages.length > 0 && productImages2.length === 0) {
-      showToast("Gambar gagal diupload ke server. Silakan hapus dan upload ulang.", "error")
-      setIsUploading(false)
-      return
-    }
-    if (productImages.length > 0 && productImages2.length < productImages.length) {
-      showToast(`${productImages.length - productImages2.length} gambar gagal upload dan dilewati. Gunakan gambar yang berhasil.`, "warning")
-    }
-
-    // Build variant data for API
-    const apiVariants = variants.flatMap(v =>
-      v.values.map(val => ({
-        name: v.name,
-        value: val,
-        stock: Math.floor(parseInt(stock) / (v.values.length || 1)),
-      }))
-    )
-
-    setIsUploading(true)
+    // Prevent double-submit
+    if (isSubmitting || isUploading) return
+    setIsSubmitting(true)
 
     try {
+      // Validate form first, then auto-register seller if needed
+      // This way user sees form validation errors before the registration attempt
+      if (productImages.length === 0) {
+        showToast("Upload minimal 1 foto produk", "error")
+        return
+      }
+      if (!productName.trim()) {
+        showToast("Nama produk harus diisi", "error")
+        return
+      }
+      if (!description.trim()) {
+        showToast("Deskripsi produk harus diisi", "error")
+        return
+      }
+      if (!category) {
+        showToast("Kategori harus dipilih", "error")
+        return
+      }
+      if (!priceNumber || priceNumber <= 0) {
+        showToast("Harga harus diisi", "error")
+        return
+      }
+      if (!stock || parseInt(stock) <= 0) {
+        if (productType === 'product') {
+          showToast("Stok harus diisi", "error")
+          return
+        }
+      }
+      if (productType === 'product' && (!weight || parseInt(weight) <= 0)) {
+        showToast("Berat produk harus diisi", "error")
+        return
+      }
+      if (productType === 'jasa' && !serviceDuration.trim()) {
+        showToast("Durasi layanan harus diisi", "error")
+        return
+      }
+
+      // Validate discount price
+      if (discountPriceNumber > 0 && discountPriceNumber >= priceNumber) {
+        showToast("Harga diskon harus lebih rendah dari harga jual", "error")
+        return
+      }
+
+      // Auto-register as seller if needed (after form validation)
+      if (!seller?.id) {
+        const registered = await ensureSellerRegistered()
+        if (!registered) return
+      }
+      // Re-read seller from store (might have been set by ensureSellerRegistered)
+      const currentSeller = useAppStore.getState().seller
+      const currentSellerId = currentSeller?.id || sellerId
+      const selectedCategoryObj = categories.find(c => c.id === category)
+      const productImages2 = productImages
+        .map(img => img.url)
+        .filter(url => !url.startsWith('blob:'))
+
+      // SECURITY: Block submission if any images are blob: URLs (not properly uploaded)
+      if (productImages.length > 0 && productImages2.length === 0) {
+        showToast("Gambar gagal diupload ke server. Silakan hapus dan upload ulang.", "error")
+        return
+      }
+      if (productImages.length > 0 && productImages2.length < productImages.length) {
+        showToast(`${productImages.length - productImages2.length} gambar gagal upload dan dilewati. Gunakan gambar yang berhasil.`, "warning")
+      }
+
+      // Build variant data for API
+      const apiVariants = variants.flatMap(v =>
+        v.values.map(val => ({
+          name: v.name,
+          value: val,
+          stock: Math.floor(parseInt(stock) / (v.values.length || 1)),
+        }))
+      )
+
+      setIsUploading(true)
+
       if (editingProduct) {
         // Update existing product via API
         const res = await apiClient.rawPut('/api/seller/products', {
@@ -462,13 +486,14 @@ export function SellerAddProductScreen() {
             status: 'active',
             categoryId: category,
             tags: tags.length > 0 ? tags : null,
-            videoUrl: (productVideo?.url && !productVideo.url.startsWith('blob:')) ? productVideo.url : null,
+            videoUrl: (productVideo?.url && !productVideo.url.startsWith('blob:'))
+              ? productVideo.url
+              : (videoDeleted ? null : (editingProduct?.videoUrl || null)),
             variants: apiVariants.length > 0 ? apiVariants : undefined,
           })
         const data = await res.json()
         if (!data.success) {
           showToast(data.error || "Gagal memperbarui produk", "error")
-          setIsUploading(false)
           return
         }
         // Also update local store
@@ -497,7 +522,10 @@ export function SellerAddProductScreen() {
           categoryId: category,
           variants: productVariants,
           ...(tags.length > 0 ? { tags } : {}),
-          ...(productVideo ? { videoUrl: productVideo.url.startsWith('blob:') ? undefined : productVideo.url } : {}),
+          ...((productVideo?.url && !productVideo.url.startsWith('blob:'))
+            ? { videoUrl: productVideo.url }
+            : (videoDeleted ? {} : (editingProduct?.videoUrl ? { videoUrl: editingProduct.videoUrl } : {}))
+          ),
         })
       } else {
         // Create new product via API
@@ -525,7 +553,6 @@ export function SellerAddProductScreen() {
         const data = await res.json()
         if (!data.success) {
           showToast(data.error || "Gagal membuat produk", "error")
-          setIsUploading(false)
           return
         }
         // Add to local store from API response
@@ -581,8 +608,10 @@ export function SellerAddProductScreen() {
     } catch (error) {
       logger.warn({ component: 'seller-product', err: error }, 'Product save failed')
       showToast("Terjadi kesalahan saat menyimpan produk", "error")
+    } finally {
+      setIsUploading(false)
+      setIsSubmitting(false)
     }
-    setIsUploading(false)
   }
 
   const handleDraft = () => {
@@ -592,9 +621,7 @@ export function SellerAddProductScreen() {
     }
 
     const selectedCategoryObj = categories.find(c => c.id === category)
-    const productImages2 = productImages.length > 0
-      ? productImages.map(img => img.url)
-      : (editingProduct?.images || [])
+    const productImages2 = productImages.map(img => img.url).filter(url => !url.startsWith('blob:'))
 
     const productVariants = variants.flatMap(v =>
       v.values.map(val => ({
@@ -633,7 +660,10 @@ export function SellerAddProductScreen() {
       seller: sellerInfo,
       category: selectedCategoryObj ? { id: selectedCategoryObj.id, name: selectedCategoryObj.name, slug: selectedCategoryObj.slug } : (editingProduct?.category || { id: category || '', name: category || '', slug: category || '' }),
       ...(tags.length > 0 ? { tags } : {}),
-      ...(productVideo ? { videoUrl: productVideo.url.startsWith('blob:') ? undefined : productVideo.url } : {}),
+      ...((productVideo?.url && !productVideo.url.startsWith('blob:'))
+        ? { videoUrl: productVideo.url }
+        : (videoDeleted ? {} : (editingProduct?.videoUrl ? { videoUrl: editingProduct.videoUrl } : {}))
+      ),
     }
 
     if (editingProduct) {
@@ -692,7 +722,7 @@ export function SellerAddProductScreen() {
                   )}
                   <button
                     onClick={() => handleRemoveProductImage(img.id)}
-                    className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center shadow-sm sm:opacity-0 sm:group-hover:opacity-100 opacity-50 group-hover:opacity-100 transition-opacity"
                   >
                     <X className="w-3 h-3" />
                   </button>
@@ -741,7 +771,7 @@ export function SellerAddProductScreen() {
               <h3 className="text-sm font-semibold text-foreground">Video Produk</h3>
               <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 font-medium">Opsional</span>
             </div>
-            <p className="text-xs text-muted-foreground">Tambahkan video untuk menarik lebih banyak pembeli. Max 30MB.</p>
+            <p className="text-xs text-muted-foreground">Tambahkan video untuk menarik lebih banyak pembeli. Max {MAX_VIDEO_SIZE_MB}MB.</p>
 
             <input
               ref={videoInputRef}
@@ -762,7 +792,7 @@ export function SellerAddProductScreen() {
                   />
                 </div>
                 <button
-                  onClick={() => setProductVideo(null)}
+                  onClick={() => { setProductVideo(null); setVideoDeleted(true) }}
                   className="absolute -top-1.5 -right-1.5 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center shadow-sm"
                 >
                   <X className="w-3.5 h-3.5" />
@@ -776,7 +806,7 @@ export function SellerAddProductScreen() {
               >
                 <Video className="w-6 h-6 text-purple-400" />
                 <span className="text-xs text-purple-600 dark:text-purple-400 font-medium">Upload Video</span>
-                <span className="text-[10px] text-muted-foreground">MP4, WebM, MOV · Max 30MB</span>
+                <span className="text-[10px] text-muted-foreground">{`MP4, WebM, MOV · Max ${MAX_VIDEO_SIZE_MB}MB`}</span>
               </motion.button>
             )}
           </div>
@@ -790,6 +820,7 @@ export function SellerAddProductScreen() {
               value={productName}
               onChange={(e) => setProductName(e.target.value)}
               placeholder="Contoh: iPhone 15 Pro Max 256GB"
+              maxLength={70}
               className="rounded-xl h-10 focus:border-emerald-500 focus:ring-emerald-500/20"
             />
             <p className="text-[10px] text-muted-foreground text-right">{productName.length}/70 karakter</p>
@@ -850,6 +881,7 @@ export function SellerAddProductScreen() {
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Jelaskan produk kamu secara detail..."
               rows={4}
+              maxLength={2000}
               className="w-full rounded-xl border border-input bg-transparent px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 resize-none"
             />
             <p className="text-[10px] text-muted-foreground text-right">{description.length}/2000 karakter</p>
@@ -1261,7 +1293,7 @@ export function SellerAddProductScreen() {
           )}
           <PrimaryButton
             onClick={handleSubmit}
-            disabled={isUploading || isRegisteringSeller}
+            disabled={isSubmitting || isUploading || isRegisteringSeller}
             className="w-full h-12 rounded-xl text-sm font-bold shadow-lg shadow-emerald-500/25 disabled:cursor-not-allowed"
           >
             {isRegisteringSeller ? (
@@ -1269,10 +1301,10 @@ export function SellerAddProductScreen() {
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                 Mendaftar sebagai Seller...
               </>
-            ) : isUploading ? (
+            ) : isSubmitting || isUploading ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Mengupload...
+                Menyimpan...
               </>
             ) : (
               <>
@@ -1286,6 +1318,7 @@ export function SellerAddProductScreen() {
             variant="outline"
             className="w-full h-10 rounded-xl text-sm"
             onClick={handleDraft}
+            disabled={isSubmitting || isUploading}
           >
             Simpan sebagai Draft
           </Button>

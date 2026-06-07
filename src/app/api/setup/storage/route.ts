@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { verifyAuth, authErrorResponse } from '@/lib/auth-middleware'
+import { verifyAdmin, authErrorResponse } from '@/lib/auth-middleware'
 import { logger } from '@/lib/logger'
 
 // ==================== CONFIG ====================
@@ -93,8 +93,8 @@ async function createPublicReadPolicy(bucketId: string): Promise<void> {
 
 export async function POST(request: NextRequest) {
   try {
-    // Require authentication
-    const authResult = await verifyAuth(request)
+    // SECURITY: Require admin authentication (Fix 3)
+    const authResult = await verifyAdmin(request)
     if (!authResult.success) {
       return authErrorResponse(authResult)
     }
@@ -154,8 +154,8 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    // Require authentication
-    const authResult = await verifyAuth(request)
+    // SECURITY: Require admin authentication (Fix 3)
+    const authResult = await verifyAdmin(request)
     if (!authResult.success) {
       return authErrorResponse(authResult)
     }
