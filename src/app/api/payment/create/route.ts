@@ -10,7 +10,9 @@ import { logger } from '@/lib/logger'
 // ==================== Midtrans Configuration ====================
 
 const MIDTRANS_SERVER_KEY = process.env.MIDTRANS_SERVER_KEY || ''
-const MIDTRANS_IS_PRODUCTION = process.env.MIDTRANS_IS_PRODUCTION === 'true'
+// Check both server-side (MIDTRANS_IS_PRODUCTION) and client-side (NEXT_PUBLIC_MIDTRANS_IS_PRODUCTION) env vars
+// The client-side var is more commonly set in Vercel deployments
+const MIDTRANS_IS_PRODUCTION = process.env.MIDTRANS_IS_PRODUCTION === 'true' || process.env.NEXT_PUBLIC_MIDTRANS_IS_PRODUCTION === 'true'
 const SNAP_URL = MIDTRANS_IS_PRODUCTION
   ? 'https://app.midtrans.com/snap/v1/transactions'
   : 'https://app.sandbox.midtrans.com/snap/v1/transactions'

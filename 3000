@@ -1,0 +1,14 @@
+▲ Next.js 16.1.3 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://21.0.10.184:3000
+- Environments: .env
+
+✓ Starting...
+✓ Ready in 583ms
+[WARN] Missing recommended environment variables: TOKEN_SECRET, CSRF_SECRET, CSRF_ENFORCE, CRON_SECRET, ADMIN_SETUP_SECRET, SUPER_ADMIN_EMAIL, INTERNAL_API_SECRET, SUPABASE_SERVICE_ROLE_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, RESEND_API_KEY, MIDTRANS_SERVER_KEY, NEXT_PUBLIC_MIDTRANS_CLIENT_KEY, NEXT_PUBLIC_MIDTRANS_IS_PRODUCTION, RAJAONGKIR_API_KEY, RAJAONGKIR_PACKAGE. Some features may not work correctly.
+[WARN] TOKEN_SECRET not set — falling back to NEXTAUTH_SECRET in development mode. Set TOKEN_SECRET in production!
+[WARN] CSRF_SECRET not set — falling back to NEXTAUTH_SECRET in development mode. Set CSRF_SECRET in production!
+[WARN] ADMIN_SETUP_SECRET not set — falling back to NEXTAUTH_SECRET in development mode. Set ADMIN_SETUP_SECRET in production!
+[WARN] INTERNAL_API_SECRET not set — falling back to NEXTAUTH_SECRET in development mode. Set INTERNAL_API_SECRET in production!
+○ Compiling / ...
+ GET / 200 in 9.8s (compile: 9.3s, proxy.ts: 110ms, render: 365ms)

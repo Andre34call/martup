@@ -91,10 +91,26 @@ export function SellerAddProductScreen() {
   const [tags, setTags] = useState<string[]>(editingProduct?.tags || [])
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false)
   const [variantInputValues, setVariantInputValues] = useState<Record<string, { name: string; value: string }>>({})
-  const [productImages, setProductImages] = useState<{ id: string; url: string; file?: File }[]>([])
+  // Pre-populate images from existing product when editing
+  const [productImages, setProductImages] = useState<{ id: string; url: string; file?: File }[]>(() => {
+    if (editingProduct?.images && editingProduct.images.length > 0) {
+      return editingProduct.images
+        .filter((url): url is string => typeof url === 'string' && url.length > 0 && !url.startsWith('blob:'))
+        .map((url, idx) => ({
+          id: `pimg-existing-${idx}`,
+          url,
+        }))
+    }
+    return []
+  })
   const [previewImage, setPreviewImage] = useState<string | null>(null)
   const productImageInputRef = useRef<HTMLInputElement>(null)
-  const [productVideo, setProductVideo] = useState<{ file: File; url: string } | null>(null)
+  const [productVideo, setProductVideo] = useState<{ file: File; url: string } | null>(() => {
+    if (editingProduct?.videoUrl && typeof editingProduct.videoUrl === 'string' && !editingProduct.videoUrl.startsWith('blob:')) {
+      return { file: null as unknown as File, url: editingProduct.videoUrl }
+    }
+    return null
+  })
   const [isUploading, setIsUploading] = useState(false)
   const videoInputRef = useRef<HTMLInputElement>(null)
 
