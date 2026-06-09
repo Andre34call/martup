@@ -11,11 +11,29 @@ import { validateCsrfRequest } from '@/lib/csrf'
 // Supports VA (BCA, Mandiri, BNI, BRI, Permata) and e-wallets (GoPay, ShopeePay, QRIS).
 // Payment is verified automatically via Midtrans webhook — no admin verification needed.
 
-const MIDTRANS_SERVER_KEY = process.env.MIDTRANS_SERVER_KEY || ''
-const MIDTRANS_IS_PRODUCTION = process.env.MIDTRANS_IS_PRODUCTION === 'true'
-const SNAP_URL = MIDTRANS_IS_PRODUCTION
-  ? 'https://app.midtrans.com/snap/v1/transactions'
-  : 'https://app.sandbox.midtrans.com/snap/v1/transactions'
+// IMPORTANT: Read env vars at request time (not module level) to avoid stale values
+// in Vercel serverless cold starts. Also auto-detect sandbox from key prefix.
+
+function getMidtransServerKey(): string {
+  return process.env.MIDTRANS_SERVER_KEY || ''
+}
+
+function isMidtransProduction(): boolean {
+  if (process.env.MIDTRANS_IS_PRODUCTION === 'true' || process.env.NEXT_PUBLIC_MIDTRANS_IS_PRODUCTION === 'true') {
+    return true
+  }
+  const key = getMidtransServerKey()
+  if (key.startsWith('SB-')) {
+    return false // Sandbox key detected
+  }
+  return !!key
+}
+
+function getSnapUrl(): string {
+  return isMidtransProduction()
+    ? 'https://app.midtrans.com/snap/v1/transactions'
+    : 'https://app.sandbox.midtrans.com/snap/v1/transactions'
+}
 
 // Amount limits
 const MIN_AMOUNT = 10_000
@@ -65,13 +83,16 @@ export async function POST(request: NextRequest) {
     }
 
     // Check Midtrans is configured
+    const MIDTRANS_SERVER_KEY = getMidtransServerKey()
     if (!MIDTRANS_SERVER_KEY) {
       logger.error('MIDTRANS_SERVER_KEY not configured — cannot create Midtrans deposit')
       return NextResponse.json(
-        { success: false, error: 'Pembayaran Midtrans belum dikonfigurasi. Hubungi admin.' },
+        { success: false, error: 'Pembayaran Midtrans belum dikonfigurasi. Set MIDTRANS_SERVER_KEY di Vercel Dashboard.' },
         { status: 503 }
       )
     }
+
+    const SNAP_URL = getSnapUrl()
 
     const body = await request.json()
     const { amount, method } = body as { amount?: number; method?: string }
@@ -168,11 +189,13 @@ export async function POST(request: NextRequest) {
           phone: user.phone || undefined,
         },
         enabled_payments: enabledPayments,
-        callbacks: {
-          finish: `${getBaseUrl()}/?screen=deposit-detail&id=${deposit.id}`,
-          error: `${getBaseUrl()}/?screen=deposit-detail&id=${deposit.id}`,
-          pending: `${getBaseUrl()}/?screen=deposit-detail&id=${deposit.id}`,
-        },
+        callbacks: !getBaseUrl().includes('localhost')
+          ? {
+              finish: `${getBaseUrl()}/?screen=deposit-detail&id=${deposit.id}`,
+              error: `${getBaseUrl()}/?screen=deposit-detail&id=${deposit.id}`,
+              pending: `${getBaseUrl()}/?screen=deposit-detail&id=${deposit.id}`,
+            }
+          : undefined,
         expiry: {
           start_time: new Date().toISOString().replace(/\.\d{3}Z$/, '+07:00'),
           unit: 'hours',

@@ -14,8 +14,12 @@ function safeCompare(a: string, b: string): boolean {
   }
 }
 // ==================== Midtrans Configuration ====================
+// IMPORTANT: Read env vars at request time (not module level) to avoid stale values
+// in Vercel serverless cold starts.
 
-const MIDTRANS_SERVER_KEY = process.env.MIDTRANS_SERVER_KEY || ''
+function getMidtransServerKey(): string {
+  return process.env.MIDTRANS_SERVER_KEY || ''
+}
 
 // ==================== POST /api/payment/notification ====================
 // Midtrans webhook callback — called by Midtrans servers when payment status changes.
@@ -42,6 +46,16 @@ export async function POST(request: NextRequest) {
       fraud_status,
       currency,
     } = body
+
+    // Step 0: Check if Midtrans is configured
+    const MIDTRANS_SERVER_KEY = getMidtransServerKey()
+    if (!MIDTRANS_SERVER_KEY) {
+      logger.error('MIDTRANS_SERVER_KEY not configured — cannot verify notification signature')
+      return NextResponse.json(
+        { success: false, error: 'Midtrans not configured' },
+        { status: 500 }
+      )
+    }
 
     // Step 1: Verify the notification signature to ensure it's from Midtrans
     // Signature = SHA512(order_id + status_code + gross_amount + SERVER_KEY)

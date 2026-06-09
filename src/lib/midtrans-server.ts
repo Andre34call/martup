@@ -1,11 +1,28 @@
 import { logger } from '@/lib/logger'
 
-const MIDTRANS_SERVER_KEY = process.env.MIDTRANS_SERVER_KEY || ''
-const MIDTRANS_IS_PRODUCTION = process.env.MIDTRANS_IS_PRODUCTION === 'true'
+// IMPORTANT: Read env vars at request time (not module level) to avoid stale values
+// in Vercel serverless cold starts. Also auto-detect sandbox from key prefix.
 
-const BASE_URL = MIDTRANS_IS_PRODUCTION
-  ? 'https://api.midtrans.com'
-  : 'https://api.sandbox.midtrans.com'
+function getMidtransServerKey(): string {
+  return process.env.MIDTRANS_SERVER_KEY || ''
+}
+
+function isMidtransProduction(): boolean {
+  if (process.env.MIDTRANS_IS_PRODUCTION === 'true' || process.env.NEXT_PUBLIC_MIDTRANS_IS_PRODUCTION === 'true') {
+    return true
+  }
+  const key = getMidtransServerKey()
+  if (key.startsWith('SB-')) {
+    return false // Sandbox key detected
+  }
+  return !!key
+}
+
+function getBaseUrl(): string {
+  return isMidtransProduction()
+    ? 'https://api.midtrans.com'
+    : 'https://api.sandbox.midtrans.com'
+}
 
 /**
  * Request a refund from Midtrans for a given order.
@@ -16,10 +33,13 @@ export async function requestMidtransRefund(
   amount?: number,
   reason?: string
 ): Promise<{ success: boolean; message?: string }> {
+  const MIDTRANS_SERVER_KEY = getMidtransServerKey()
   if (!MIDTRANS_SERVER_KEY) {
     logger.warn('MIDTRANS_SERVER_KEY not configured — skipping Midtrans refund request')
     return { success: false, message: 'Midtrans not configured' }
   }
+
+  const BASE_URL = getBaseUrl()
 
   try {
     const url = `${BASE_URL}/v2/${orderId}/refund`

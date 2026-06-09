@@ -8,14 +8,40 @@ import { validateCsrfRequest } from '@/lib/csrf'
 
 import { logger } from '@/lib/logger'
 // ==================== Midtrans Configuration ====================
+// IMPORTANT: Read env vars at request time (not module level) to avoid stale values
+// in Vercel serverless cold starts. We use getter functions instead.
 
-const MIDTRANS_SERVER_KEY = process.env.MIDTRANS_SERVER_KEY || ''
-// Check both server-side (MIDTRANS_IS_PRODUCTION) and client-side (NEXT_PUBLIC_MIDTRANS_IS_PRODUCTION) env vars
-// The client-side var is more commonly set in Vercel deployments
-const MIDTRANS_IS_PRODUCTION = process.env.MIDTRANS_IS_PRODUCTION === 'true' || process.env.NEXT_PUBLIC_MIDTRANS_IS_PRODUCTION === 'true'
-const SNAP_URL = MIDTRANS_IS_PRODUCTION
-  ? 'https://app.midtrans.com/snap/v1/transactions'
-  : 'https://app.sandbox.midtrans.com/snap/v1/transactions'
+function getMidtransServerKey(): string {
+  return process.env.MIDTRANS_SERVER_KEY || ''
+}
+
+function isMidtransProduction(): boolean {
+  // Priority 1: Explicit env var flags
+  if (process.env.MIDTRANS_IS_PRODUCTION === 'true' || process.env.NEXT_PUBLIC_MIDTRANS_IS_PRODUCTION === 'true') {
+    return true
+  }
+  // Priority 2: Auto-detect from server key prefix
+  // Sandbox keys start with 'SB-' — if the key has this prefix, force sandbox mode
+  const key = getMidtransServerKey()
+  if (key.startsWith('SB-')) {
+    return false // Sandbox key detected
+  }
+  // Default: production mode if key exists but no SB- prefix
+  // (This is a safe default — production keys don't have a specific prefix)
+  return !!key // If key exists without SB- prefix, assume production
+}
+
+function getSnapUrl(): string {
+  return isMidtransProduction()
+    ? 'https://app.midtrans.com/snap/v1/transactions'
+    : 'https://app.sandbox.midtrans.com/snap/v1/transactions'
+}
+
+function getMidtransApiBaseUrl(): string {
+  return isMidtransProduction()
+    ? 'https://api.midtrans.com'
+    : 'https://api.sandbox.midtrans.com'
+}
 
 // Orders expire after 24 hours if unpaid
 const ORDER_EXPIRY_HOURS = 24
@@ -33,13 +59,21 @@ function getBaseUrl(): string {
 export async function POST(request: NextRequest) {
   try {
     // Step 0: Check if Midtrans is configured
+    const MIDTRANS_SERVER_KEY = getMidtransServerKey()
     if (!MIDTRANS_SERVER_KEY) {
       logger.error('MIDTRANS_SERVER_KEY not configured — cannot create payment')
       return NextResponse.json(
-        { success: false, error: 'Pembayaran Midtrans belum dikonfigurasi. Silakan hubungi admin.' },
+        {
+          success: false,
+          error: 'Pembayaran Midtrans belum dikonfigurasi. Set MIDTRANS_SERVER_KEY dan NEXT_PUBLIC_MIDTRANS_CLIENT_KEY di Vercel Dashboard → Settings → Environment Variables.',
+        },
         { status: 503 }
       )
     }
+
+    // Log Midtrans mode for debugging
+    const isProduction = isMidtransProduction()
+    logger.info({ isProduction, keyPrefix: MIDTRANS_SERVER_KEY.substring(0, 3) }, 'Midtrans payment mode')
 
     // Step 1: Verify authentication
     const authResult = await verifyAuth(request)
@@ -189,6 +223,8 @@ export async function POST(request: NextRequest) {
     // Step 9: Call Midtrans Snap API to create a transaction token
     // Note: authString is defined early so it can also be used in Step 8.5 for token reuse check
     const authString = Buffer.from(MIDTRANS_SERVER_KEY + ':').toString('base64')
+    const SNAP_URL = getSnapUrl()
+    const midtransApiBaseUrl = getMidtransApiBaseUrl()
 
     // Step 8: Check if a pending transaction already exists for this order
     const existingTransaction = await db.transaction.findFirst({
@@ -209,9 +245,7 @@ export async function POST(request: NextRequest) {
       if (tokenAge < maxSnapTokenAge) {
         // Try to get the existing Snap token from Midtrans
         // Use the Midtrans transaction status API to check if token is still valid
-        const statusUrl = MIDTRANS_IS_PRODUCTION
-          ? `https://api.midtrans.com/v2/${order.orderNumber}/status`
-          : `https://api.sandbox.midtrans.com/v2/${order.orderNumber}/status`
+        const statusUrl = `${midtransApiBaseUrl}/v2/${order.orderNumber}/status`
 
         try {
           const statusResponse = await fetch(statusUrl, {
@@ -254,7 +288,18 @@ export async function POST(request: NextRequest) {
     }
 
     // Step 10: Build Midtrans Snap payload
-    const midtransPayload = {
+    // IMPORTANT: gross_amount MUST exactly equal sum(item_details.price × quantity)
+    // Otherwise Midtrans rejects the transaction
+    const baseUrl = getBaseUrl()
+
+    // Warn if notification_url uses localhost (Midtrans can't reach localhost)
+    if (baseUrl.includes('localhost')) {
+      logger.warn(
+        'Midtrans notification_url uses localhost — payment callbacks will NOT work in development. Deploy to Vercel for full payment flow.'
+      )
+    }
+
+    const midtransPayload: Record<string, unknown> = {
       transaction_details: {
         order_id: order.orderNumber,
         gross_amount: Number(order.totalAmount),
@@ -308,14 +353,20 @@ export async function POST(request: NextRequest) {
         email: order.user.email,
         phone: order.user.phone || undefined,
       },
-      callbacks: {
-        // Use VERCEL_URL in production, NEXTAUTH_URL as fallback, localhost for dev
-        finish: `${getBaseUrl()}/orders?payment=finish`,
-        error: `${getBaseUrl()}/orders?payment=error`,
-        pending: `${getBaseUrl()}/orders?payment=pending`,
-        notification_url: `${getBaseUrl()}/api/payment/notification`,
-      },
     }
+
+    // Only include callbacks with a publicly accessible URL
+    // Midtrans can't reach localhost, so omit callback URLs in development
+    if (!baseUrl.includes('localhost')) {
+      midtransPayload.callbacks = {
+        finish: `${baseUrl}/orders?payment=finish`,
+        error: `${baseUrl}/orders?payment=error`,
+        pending: `${baseUrl}/orders?payment=pending`,
+      }
+    }
+    // notification_url is set via Midtrans dashboard settings, not in the Snap payload
+    // This ensures it's always correct regardless of the request origin
+    // Set it in: Midtrans Dashboard → Settings → Payment → Payment Notification URL
 
     const snapResponse = await fetch(SNAP_URL, {
       method: 'POST',
@@ -342,7 +393,7 @@ export async function POST(request: NextRequest) {
 
     const { token, redirect_url } = snapData
 
-    // Step 10: Create or update a Transaction record
+    // Step 12: Create or update a Transaction record
     if (existingTransaction) {
       // Update existing pending transaction with new token reference
       await db.transaction.update({
