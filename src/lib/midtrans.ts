@@ -80,10 +80,16 @@ export function loadSnapScript(): Promise<void> {
 export async function openSnapPayment(
   snapToken: string,
 ): Promise<{ status: 'success' | 'pending' | 'error' | 'closed'; result?: SnapResult }> {
+  // Check client key before loading — if missing, Snap.js will fail silently
+  const clientKey = process.env.NEXT_PUBLIC_MIDTRANS_CLIENT_KEY
+  if (!clientKey) {
+    throw new Error('NEXT_PUBLIC_MIDTRANS_CLIENT_KEY not configured. Set it in Vercel Dashboard → Environment Variables.')
+  }
+
   await loadSnapScript()
 
   if (!window.snap) {
-    throw new Error('Midtrans Snap is not loaded')
+    throw new Error('Midtrans Snap is not loaded. Pastikan koneksi internet stabil dan coba lagi.')
   }
 
   return new Promise((resolve) => {

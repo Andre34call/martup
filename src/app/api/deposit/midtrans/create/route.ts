@@ -144,149 +144,143 @@ export async function POST(request: NextRequest) {
     const expiredAt = new Date()
     expiredAt.setHours(expiredAt.getHours() + 24)
 
-    // SECURITY: Create deposit + call Midtrans atomically
-    const result = await db.$transaction(async (tx) => {
-      // Step 1: Create deposit record with midtrans method
-      const deposit = await tx.deposit.create({
-        data: {
-          userId: authResult.user.id,
-          amount,
-          method: 'midtrans',
-          status: 'pending',
-          expiredAt,
+    // ==================== STEP 1: Create deposit record (DB only, no external calls) ====================
+    // IMPORTANT: Do NOT call Midtrans API inside db.$transaction().
+    // Vercel serverless has ~5s timeout, and Prisma transactions have a default 5s timeout.
+    // External API calls (Midtrans Snap) can take 2-3s, causing transaction timeouts.
+    // This matches the pattern used in /api/payment/create/route.ts
+
+    const deposit = await db.deposit.create({
+      data: {
+        userId: authResult.user.id,
+        amount,
+        method: 'midtrans',
+        status: 'pending',
+        expiredAt,
+      },
+    })
+
+    const midtransOrderId = `DEPOSIT-${deposit.id}`
+
+    // Update deposit with midtransOrderId
+    await db.deposit.update({
+      where: { id: deposit.id },
+      data: { midtransOrderId },
+    })
+
+    // Create a PENDING transaction record
+    await db.transaction.create({
+      data: {
+        userId: authResult.user.id,
+        type: 'deposit',
+        amount,
+        fee: 0,
+        netAmount: amount,
+        method: 'midtrans',
+        status: 'pending',
+        description: `Top Up via Midtrans (${METHOD_LABELS[method] || method}) — menunggu pembayaran`,
+        refId: deposit.id,
+      },
+    })
+
+    // ==================== STEP 2: Call Midtrans Snap API (OUTSIDE transaction) ====================
+    const enabledPayments = getEnabledPayments(method)
+
+    const midtransPayload = {
+      transaction_details: {
+        order_id: midtransOrderId,
+        gross_amount: amount,
+      },
+      item_details: [
+        {
+          id: 'top-up',
+          price: amount,
+          quantity: 1,
+          name: 'Top Up Saldo MartUp',
         },
-      })
+      ],
+      customer_details: {
+        first_name: user.name,
+        email: user.email,
+        phone: user.phone || undefined,
+      },
+      enabled_payments: enabledPayments,
+      callbacks: !getBaseUrl().includes('localhost')
+        ? {
+            finish: `${getBaseUrl()}/?screen=deposit-detail&id=${deposit.id}`,
+            error: `${getBaseUrl()}/?screen=deposit-detail&id=${deposit.id}`,
+            pending: `${getBaseUrl()}/?screen=deposit-detail&id=${deposit.id}`,
+          }
+        : undefined,
+      expiry: {
+        start_time: new Date().toISOString().replace(/\.\d{3}Z$/, '+07:00'),
+        unit: 'hours',
+        duration: 24,
+      },
+    }
 
-      // Step 2: Generate Midtrans order_id using deposit ID for uniqueness
-      const midtransOrderId = `DEPOSIT-${deposit.id}`
+    const authString = Buffer.from(MIDTRANS_SERVER_KEY + ':').toString('base64')
 
-      // Update deposit with midtransOrderId
-      await tx.deposit.update({
+    const snapResponse = await fetch(SNAP_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        Authorization: `Basic ${authString}`,
+      },
+      body: JSON.stringify(midtransPayload),
+    })
+
+    const snapData = await snapResponse.json()
+
+    if (!snapResponse.ok) {
+      logger.error({ err: snapData, midtransOrderId }, 'Midtrans Snap API error for deposit')
+      // Update deposit status to failed
+      await db.deposit.update({
         where: { id: deposit.id },
-        data: { midtransOrderId },
+        data: { status: 'failed' },
       })
+      return NextResponse.json(
+        { success: false, error: snapData.error_messages?.[0] || 'Gagal membuat transaksi Midtrans. Coba lagi nanti.' },
+        { status: 502 }
+      )
+    }
 
-      // Step 3: Build Midtrans Snap payload
-      // Enabled payments based on selected method
-      const enabledPayments = getEnabledPayments(method)
+    const { token, redirect_url } = snapData
 
-      const midtransPayload = {
-        transaction_details: {
-          order_id: midtransOrderId,
-          gross_amount: amount,
-        },
-        item_details: [
-          {
-            id: 'top-up',
-            price: amount,
-            quantity: 1,
-            name: 'Top Up Saldo MartUp',
-          },
-        ],
-        customer_details: {
-          first_name: user.name,
-          email: user.email,
-          phone: user.phone || undefined,
-        },
-        enabled_payments: enabledPayments,
-        callbacks: !getBaseUrl().includes('localhost')
-          ? {
-              finish: `${getBaseUrl()}/?screen=deposit-detail&id=${deposit.id}`,
-              error: `${getBaseUrl()}/?screen=deposit-detail&id=${deposit.id}`,
-              pending: `${getBaseUrl()}/?screen=deposit-detail&id=${deposit.id}`,
-            }
-          : undefined,
-        expiry: {
-          start_time: new Date().toISOString().replace(/\.\d{3}Z$/, '+07:00'),
-          unit: 'hours',
-          duration: 24,
-        },
-      }
-
-      // Step 4: Call Midtrans Snap API
-      const authString = Buffer.from(MIDTRANS_SERVER_KEY + ':').toString('base64')
-
-      const snapResponse = await fetch(SNAP_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-          Authorization: `Basic ${authString}`,
-        },
-        body: JSON.stringify(midtransPayload),
-      })
-
-      const snapData = await snapResponse.json()
-
-      if (!snapResponse.ok) {
-        logger.error({ err: snapData, midtransOrderId }, 'Midtrans Snap API error for deposit')
-        // Update deposit status to failed
-        await tx.deposit.update({
-          where: { id: deposit.id },
-          data: { status: 'failed' },
-        })
-        throw new Error(snapData.error_messages?.[0] || 'Failed to create Midtrans transaction')
-      }
-
-      const { token, redirect_url } = snapData
-
-      // Step 5: Update deposit with snap token
-      await tx.deposit.update({
-        where: { id: deposit.id },
-        data: { snapToken: token },
-      })
-
-      // Step 6: Create a PENDING transaction record
-      await tx.transaction.create({
-        data: {
-          userId: authResult.user.id,
-          type: 'deposit',
-          amount,
-          fee: 0,
-          netAmount: amount,
-          method: 'midtrans',
-          status: 'pending',
-          description: `Top Up via Midtrans (${METHOD_LABELS[method] || method}) — menunggu pembayaran`,
-          refId: deposit.id,
-        },
-      })
-
-      return { deposit, token, redirectUrl: redirect_url, midtransOrderId }
+    // Step 3: Update deposit with snap token
+    await db.deposit.update({
+      where: { id: deposit.id },
+      data: { snapToken: token },
     })
 
     logBusinessEvent({
       event: 'DEPOSIT_MIDTRANS_CREATED',
       userId: authResult.user.id,
       details: {
-        depositId: result.deposit.id,
+        depositId: deposit.id,
         amount,
         method,
-        midtransOrderId: result.midtransOrderId,
+        midtransOrderId,
       },
     })
 
     return NextResponse.json(serializeDecimal({
       success: true,
       data: {
-        depositId: result.deposit.id,
+        depositId: deposit.id,
         amount,
         method,
         methodLabel: METHOD_LABELS[method] || method,
         status: 'pending',
-        snapToken: result.token,
-        redirectUrl: result.redirectUrl,
-        midtransOrderId: result.midtransOrderId,
+        snapToken: token,
+        redirectUrl: redirect_url,
+        midtransOrderId,
         expiredAt: expiredAt.toISOString(),
         message: 'Deposit Midtrans dibuat. Selesaikan pembayaran melalui popup Snap.',
       },
     }), { status: 201 })
   } catch (error: unknown) {
-    if (error instanceof Error && error.message.includes('Failed to create Midtrans')) {
-      return NextResponse.json(
-        { success: false, error: 'Gagal membuat transaksi Midtrans. Coba lagi nanti.' },
-        { status: 502 }
-      )
-    }
     logger.error({ err: error }, 'Midtrans Deposit Create POST error')
     return NextResponse.json(
       { success: false, error: 'Terjadi kesalahan server' },
