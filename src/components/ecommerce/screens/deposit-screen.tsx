@@ -6,16 +6,24 @@ import { formatPrice } from "@/lib/utils"
 import { fadeIn } from '@/lib/animations'
 import { PageHeader, SectionHeader, WalletBalanceCard } from "../shared"
 import { useState } from "react"
-import { CreditCard, Wallet, Check } from "lucide-react"
+import { CreditCard, Wallet, Check, Zap, Landmark } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { apiClient } from '@/lib/api-client'
+
+type DepositCreateResponse = {
+  success: boolean
+  data?: { depositId: string; paymentUrl: string; reference?: string }
+  error?: string
+}
 
 export function DepositScreen() {
   const { currentUser, walletBalance, topUpWallet, showToast, goBack } = useAppStore()
   const [selectedAmount, setSelectedAmount] = useState<number | null>(null)
   const [customAmount, setCustomAmount] = useState("")
-  const [paymentMethod, setPaymentMethod] = useState("gopay")
+  const [paymentMethod, setPaymentMethod] = useState("duitku")
+  const [isProcessing, setIsProcessing] = useState(false)
 
   const quickAmounts = [
     { label: "50K", value: 50000 },
@@ -26,10 +34,8 @@ export function DepositScreen() {
   ]
 
   const paymentMethods = [
-    { key: "gopay", label: "GoPay", color: "bg-green-500" },
-    { key: "ovo", label: "OVO", color: "bg-purple-500" },
-    { key: "dana", label: "DANA", color: "bg-blue-500" },
-    { key: "bank", label: "Bank Transfer", color: "bg-cyan-600" },
+    { key: "duitku", label: "Duitku — VA, QRIS, E-Wallet, Kartu", desc: "Konfirmasi otomatis & instan", color: "bg-emerald-600", instant: true },
+    { key: "bank", label: "Transfer Bank Manual", desc: "Diverifikasi admin (1x24 jam)", color: "bg-cyan-600", instant: false },
   ]
 
   const handleTopUp = async () => {
@@ -38,12 +44,39 @@ export function DepositScreen() {
       showToast("Pilih nominal top up terlebih dahulu", "error")
       return
     }
+    if (amount < 10000) {
+      showToast("Top up minimal Rp 10.000", "error")
+      return
+    }
+
+    if (paymentMethod === "duitku") {
+      // Instant top-up via Duitku payment gateway
+      setIsProcessing(true)
+      try {
+        const res = await apiClient.rawPost('/api/deposit/duitku/create', { amount })
+        const data: DepositCreateResponse = await res.json()
+
+        if (data.success && data.data?.paymentUrl) {
+          showToast("Invoice dibuat. Anda akan diarahkan ke halaman pembayaran...", "success")
+          // Redirect to the Duitku payment page — user picks VA / QRIS / e-wallet there
+          setTimeout(() => {
+            window.location.href = data.data!.paymentUrl
+          }, 600)
+          return
+        }
+        showToast(data.error || "Gagal membuat invoice top up. Coba lagi.", "error")
+      } catch {
+        showToast("Terjadi kesalahan. Silakan coba lagi.", "error")
+      } finally {
+        setIsProcessing(false)
+      }
+      return
+    }
+
+    // Manual bank transfer — pending deposit verified by admin
     try {
-      // topUpWallet now calls the API internally — creates PENDING deposit
-      // Map UI method key to API method name
-      const methodMap: Record<string, string> = { gopay: 'gopay', ovo: 'ovo', dana: 'dana', bank: 'bank_transfer' }
-      await topUpWallet(amount, methodMap[paymentMethod] || 'bank_transfer')
-      showToast(`Top up ${formatPrice(amount)} berhasil diajukan! Menunggu pembayaran.`, "success")
+      await topUpWallet(amount, 'bank_transfer')
+      showToast(`Top up ${formatPrice(amount)} berhasil diajukan! Silakan lakukan transfer.`, "success")
       goBack()
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Top up gagal'
@@ -113,12 +146,15 @@ export function DepositScreen() {
                 onClick={() => setPaymentMethod(method.key)}
               >
                 <div className="flex items-center gap-3">
-                  <div className={`w-9 h-9 rounded-xl ${method.color} flex items-center justify-center text-white text-xs font-bold`}>
-                    {method.label.charAt(0)}
+                  <div className={`w-9 h-9 rounded-xl ${method.color} flex items-center justify-center text-white`}>
+                    {method.instant ? <Zap className="w-4 h-4" /> : <Landmark className="w-4 h-4" />}
                   </div>
-                  <span className="text-sm font-medium text-foreground">{method.label}</span>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm font-medium text-foreground block truncate">{method.label}</span>
+                    <span className="text-[11px] text-muted-foreground">{method.desc}</span>
+                  </div>
                   {paymentMethod === method.key && (
-                    <Check className="w-4 h-4 text-emerald-600 ml-auto" />
+                    <Check className="w-4 h-4 text-emerald-600" />
                   )}
                 </div>
               </Card>
@@ -129,11 +165,16 @@ export function DepositScreen() {
         {/* Deposit Button */}
         <motion.div {...fadeIn}>
           <Button
-            disabled={!selectedAmount && !customAmount}
+            disabled={(!selectedAmount && !customAmount) || isProcessing}
             onClick={handleTopUp}
             className="w-full bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl h-11 disabled:opacity-40"
           >
-            <Wallet className="w-4 h-4 mr-2" /> Top Up Sekarang
+            {isProcessing ? (
+              <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
+            ) : (
+              <Wallet className="w-4 h-4 mr-2" />
+            )}
+            {isProcessing ? "Memproses..." : "Top Up Sekarang"}
           </Button>
         </motion.div>
       </div>

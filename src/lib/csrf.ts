@@ -20,7 +20,8 @@ const PROTECTED_METHODS = new Set(['POST', 'PUT', 'DELETE', 'PATCH'])
 
 // Paths exempt from CSRF (external webhooks, auth routes, etc.)
 const CSRF_EXEMPT_PATHS = new Set([
-  '/api/payment/notification', // Midtrans webhook (server-to-server, no browser)
+  '/api/payment/callback',     // Duitku webhook (server-to-server, no browser) — HMAC signature verified in-route
+  '/api/payment/return',       // Duitku return URL redirect (GET only, informational)
   '/api/setup/storage',        // Initial setup
   '/api/seed',                  // Seed data
   '/api/admin/setup',           // Admin initial setup

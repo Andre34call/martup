@@ -28,7 +28,6 @@ import {
 } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { openSnapPayment } from '@/lib/midtrans'
 
 // ==================== Types ====================
 
@@ -44,7 +43,8 @@ interface DepositDetail {
   expiredAt: string | null
   createdAt: string
   updatedAt: string
-  // Midtrans fields
+  // Duitku / legacy provider fields (snapToken stores the Duitku paymentUrl for gateway deposits)
+  merchantOrderId?: string | null
   midtransOrderId?: string | null
   midtransTransactionId?: string | null
   snapToken?: string | null
@@ -74,15 +74,36 @@ const methodConfig: Record<string, { label: string; icon: string; color: string 
   gopay: { label: 'GoPay', icon: '💳', color: 'bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400' },
   shopeepay: { label: 'ShopeePay', icon: '🧡', color: 'bg-orange-50 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400' },
   qris: { label: 'QRIS', icon: '📱', color: 'bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400' },
-  midtrans: { label: 'Midtrans', icon: '💳', color: 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' },
+  duitku: { label: 'Duitku (Transfer & E-Wallet)', icon: '💳', color: 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' },
   // Legacy methods (for old deposits)
+  midtrans: { label: 'Midtrans', icon: '💳', color: 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' },
   ovo: { label: 'OVO', icon: '💜', color: 'bg-purple-50 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400' },
   dana: { label: 'DANA', icon: '🔵', color: 'bg-sky-50 text-sky-600 dark:bg-sky-900/30 dark:text-sky-400' },
   linkaja: { label: 'LinkAja', icon: '🔴', color: 'bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400' },
 }
 
-// Midtrans payment type labels (for displaying what specific VA/e-wallet was used)
-const midtransPaymentTypeLabels: Record<string, string> = {
+// Duitku payment code labels (for displaying what specific VA/e-wallet was used)
+const duitkuPaymentCodeLabels: Record<string, string> = {
+  VC: 'Kartu Kredit/Debit',
+  BC: 'BCA Virtual Account',
+  M2: 'Mandiri Virtual Account',
+  VA: 'Maybank Virtual Account',
+  I1: 'BNI Virtual Account',
+  B1: 'CIMB Niaga Virtual Account',
+  BT: 'Permata Virtual Account',
+  BR: 'BRI Virtual Account',
+  NC: 'Bank Neo Commerce',
+  DM: 'Danamon Virtual Account',
+  BV: 'BSI Virtual Account',
+  FT: 'Pegadaian/ALFA/Pos',
+  IR: 'Indomaret',
+  OV: 'OVO',
+  SA: 'ShopeePay',
+  LA: 'LinkAja',
+  DA: 'DANA',
+  SP: 'ShopeePay QRIS',
+  JP: 'Jenius Pay',
+  // Legacy Midtrans types (for old deposits)
   bca_va: 'BCA Virtual Account',
   bni_va: 'BNI Virtual Account',
   bri_va: 'BRI Virtual Account',
@@ -371,26 +392,12 @@ export function DepositDetailScreen() {
   const method = methodConfig[deposit.method] || methodConfig.bank_transfer
   const destInfo = getDestinationInfo(deposit.destinationAccount)
   const isActive = deposit.status === 'pending' || deposit.status === 'proof_uploaded'
-  const isMidtrans = !!deposit.midtransOrderId || !!deposit.snapToken
+  const isGateway = deposit.method === 'duitku' || !!deposit.midtransOrderId || !!deposit.snapToken
 
-  // Reopen Midtrans Snap for pending deposits
-  const handleReopenSnap = async () => {
+  // Continue Duitku payment — redirect to the stored Duitku payment page
+  const handleContinuePayment = () => {
     if (!deposit?.snapToken) return
-    try {
-      const result = await openSnapPayment(deposit.snapToken)
-      if (result.status === 'success') {
-        showToast('Pembayaran berhasil!', 'success')
-        fetchDepositDetail() // Refresh status
-      } else if (result.status === 'pending') {
-        showToast('Pembayaran menunggu konfirmasi', 'info')
-        fetchDepositDetail()
-      } else if (result.status === 'error') {
-        showToast('Pembayaran gagal', 'error')
-        fetchDepositDetail()
-      }
-    } catch {
-      showToast('Gagal membuka popup pembayaran', 'error')
-    }
+    window.location.href = deposit.snapToken
   }
 
   return (
@@ -506,10 +513,10 @@ export function DepositDetailScreen() {
           </Card>
         </motion.div>
 
-        {/* Midtrans Info (for Midtrans deposits) */}
-        {isMidtrans && (
+        {/* Gateway Info (for Duitku / legacy gateway deposits) */}
+        {isGateway && (
           <motion.div {...fadeIn}>
-            <SectionHeader title="Informasi Midtrans" icon={<CreditCard className="w-4 h-4" />} />
+            <SectionHeader title="Informasi Pembayaran" icon={<CreditCard className="w-4 h-4" />} />
             <Card className="mt-3 p-4 space-y-3">
               {deposit.midtransOrderId && (
                 <>
@@ -528,7 +535,7 @@ export function DepositDetailScreen() {
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-muted-foreground">Tipe Pembayaran</span>
                     <span className="text-sm font-medium text-foreground">
-                      {midtransPaymentTypeLabels[deposit.paymentType] || deposit.paymentType}
+                      {duitkuPaymentCodeLabels[deposit.paymentType] || deposit.paymentType}
                     </span>
                   </div>
                   <div className="h-px bg-border" />
@@ -537,7 +544,7 @@ export function DepositDetailScreen() {
               {deposit.midtransTransactionId && (
                 <>
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">Transaction ID</span>
+                    <span className="text-xs text-muted-foreground">Reference</span>
                     <span className="text-xs font-mono text-muted-foreground">{deposit.midtransTransactionId}</span>
                   </div>
                 </>
@@ -546,11 +553,11 @@ export function DepositDetailScreen() {
                 <>
                   <div className="h-px bg-border" />
                   <PrimaryButton
-                    onClick={handleReopenSnap}
+                    onClick={handleContinuePayment}
                     className="w-full rounded-xl h-11"
                   >
-                    <RefreshCw className="w-4 h-4 mr-2" />
-                    Buka Kembali Pembayaran
+                    <CreditCard className="w-4 h-4 mr-2" />
+                    Lanjutkan Pembayaran
                   </PrimaryButton>
                 </>
               )}
@@ -558,7 +565,7 @@ export function DepositDetailScreen() {
                 <div className="flex gap-2 p-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
                   <Info className="w-3.5 h-3.5 text-blue-500 flex-shrink-0 mt-0.5" />
                   <p className="text-[11px] text-blue-700 dark:text-blue-300 leading-relaxed">
-                    Pembayaran diproses otomatis via Midtrans. Saldo akan langsung masuk setelah pembayaran berhasil.
+                    Pembayaran diproses otomatis via Duitku. Saldo akan langsung masuk setelah pembayaran berhasil.
                   </p>
                 </div>
               )}
@@ -567,7 +574,7 @@ export function DepositDetailScreen() {
         )}
 
         {/* Destination Account (for manual deposits only — pending & proof_uploaded) */}
-        {!isMidtrans && (deposit.status === 'pending' || deposit.status === 'proof_uploaded') && (
+        {!isGateway && (deposit.status === 'pending' || deposit.status === 'proof_uploaded') && (
           destInfo ? (
             <motion.div {...fadeIn}>
               <SectionHeader
@@ -667,7 +674,7 @@ export function DepositDetailScreen() {
         )}
 
         {/* Upload Proof Section (for manual deposits only — pending) */}
-        {!isMidtrans && deposit.status === 'pending' && !uploadSuccess && (
+        {!isGateway && deposit.status === 'pending' && !uploadSuccess && (
           <motion.div {...fadeIn}>
             <SectionHeader title="Upload Bukti Pembayaran" icon={<ImagePlus className="w-4 h-4" />} />
             <Card className="mt-3 p-4 space-y-4">

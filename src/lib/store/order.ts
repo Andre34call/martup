@@ -213,29 +213,29 @@ export const createOrderSlice: StateCreator<AppStore, [], [], OrderSlice> = (set
         return
       }
 
-      // Midtrans / card / other payment: create payment token
+      // Duitku / other payment: create payment invoice (returns paymentUrl)
       const res = await apiClient.rawPost('/api/payment/create', { orderId })
       const data = await res.json()
 
       if (!res.ok || !data.success) {
         // Rollback optimistic update — payment wasn't actually completed yet
         set(restoreOrders(preSnapshot))
-        return { token: undefined, redirectUrl: undefined, error: data.error || 'Gagal memproses pembayaran' }
+        return { paymentUrl: undefined, redirectUrl: undefined, error: data.error || 'Gagal memproses pembayaran' }
       }
 
-      // For Midtrans payments, the order stays 'pending' until webhook confirms
+      // For Duitku payments, the order stays 'pending' until webhook confirms
       // Rollback the optimistic "paid" status since payment is not yet confirmed
       set(restoreOrders(preSnapshot))
 
-      // Return the payment token for the UI to use (open Midtrans Snap popup)
+      // Return the paymentUrl for the UI to redirect to the Duitku payment page
       return {
-        token: data.data?.token,
-        redirectUrl: data.data?.redirectUrl,
+        paymentUrl: data.data?.paymentUrl,
+        redirectUrl: data.data?.paymentUrl, // alias for backward compatibility
       }
     } catch {
       // Rollback on network error
       set(restoreOrders(preSnapshot))
-      return { token: undefined, redirectUrl: undefined, error: 'Kesalahan jaringan. Silakan coba lagi.' }
+      return { paymentUrl: undefined, redirectUrl: undefined, error: 'Kesalahan jaringan. Silakan coba lagi.' }
     }
   },
 

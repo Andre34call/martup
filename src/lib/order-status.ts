@@ -562,23 +562,13 @@ export async function updateOrderStatus(params: {
       return result
     })
 
-    // SECURITY (SG-5): If order was cancelled and paid via Midtrans (not wallet), request refund from Midtrans
+    // If order was cancelled and paid via Duitku (not wallet), the refund must be
+    // issued manually via Duitku Merchant Portal — Duitku POP has no automatic refund API.
     if (status === 'cancelled' && order.paymentStatus === 'paid' && order.paymentMethod && order.paymentMethod !== 'wallet') {
-      try {
-        const { requestMidtransRefund } = await import('@/lib/midtrans-server')
-        const refundResult = await requestMidtransRefund(
-          order.orderNumber,
-          Number(order.totalAmount),
-          cancelReason || 'Order cancelled'
-        )
-        if (refundResult.success) {
-          logger.info({ orderId: order.id, orderNumber: order.orderNumber }, 'Midtrans refund requested')
-        } else {
-          logger.warn({ orderId: order.id, orderNumber: order.orderNumber, error: refundResult.message }, 'Midtrans refund failed — manual refund may be needed')
-        }
-      } catch (refundError) {
-        logger.error({ err: refundError, orderId: order.id }, 'Midtrans refund exception')
-      }
+      logger.warn(
+        { orderId: order.id, orderNumber: order.orderNumber, paymentMethod: order.paymentMethod },
+        'Order cancelled after Duitku payment — MANUAL REFUND required via Duitku Merchant Portal'
+      )
     }
 
     // Log the successful status change

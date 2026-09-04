@@ -133,6 +133,33 @@ export default function Home() {
     }
   }, [navigate, isAuthenticated])
 
+  // Handle payment gateway return (Duitku redirect back from payment page)
+  // URL format: /?screen=orders&payment=finish|pending|error
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const payment = params.get('payment')
+    if (!payment) return
+
+    // Clean the URL so refresh/back doesn't replay the toast
+    window.history.replaceState({}, '', window.location.pathname)
+
+    // Payment status is confirmed via server callback — these are informational hints.
+    // The orders screen re-fetches fresh status from the API on mount.
+    if (payment === 'finish') {
+      useAppStore.getState().showToast('Terima kasih! Status pembayaran sedang diperbarui.', 'success')
+    } else if (payment === 'pending') {
+      useAppStore.getState().showToast('Pembayaran belum selesai. Silakan selesaikan pembayaran Anda.', 'warning')
+    } else if (payment === 'error') {
+      useAppStore.getState().showToast('Pembayaran tidak selesai. Anda dapat mencoba lagi dari halaman pesanan.', 'error')
+    }
+    // Navigate to orders screen if that's where we came from
+    const screen = params.get('screen')
+    if (screen === 'orders') {
+      navigate('orders')
+    }
+  }, [])
+
   const getBottomNav = () => {
     if (isAuthScreen || isSubScreen) return null
     if (isAdminScreen) return <AdminBottomNav />

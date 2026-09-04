@@ -5,75 +5,50 @@ import { paymentLimiter } from '@/lib/rate-limit'
 import { serializeDecimal } from '@/lib/decimal-utils'
 import { validateBody, paymentCreateSchema } from '@/lib/validations'
 import { validateCsrfRequest } from '@/lib/csrf'
+import {
+  isDuitkuConfigured,
+  isDuitkuProduction,
+  createDuitkuInvoice,
+  getDuitkuMerchantCode,
+} from '@/lib/duitku'
 
 import { logger } from '@/lib/logger'
-// ==================== Midtrans Configuration ====================
-// IMPORTANT: Read env vars at request time (not module level) to avoid stale values
-// in Vercel serverless cold starts. We use getter functions instead.
 
-function getMidtransServerKey(): string {
-  return process.env.MIDTRANS_SERVER_KEY || ''
-}
-
-function isMidtransProduction(): boolean {
-  // Priority 1: Explicit env var flags
-  if (process.env.MIDTRANS_IS_PRODUCTION === 'true' || process.env.NEXT_PUBLIC_MIDTRANS_IS_PRODUCTION === 'true') {
-    return true
-  }
-  // Priority 2: Auto-detect from server key prefix
-  // Sandbox keys start with 'SB-' — if the key has this prefix, force sandbox mode
-  const key = getMidtransServerKey()
-  if (key.startsWith('SB-')) {
-    return false // Sandbox key detected
-  }
-  // Default: production mode if key exists but no SB- prefix
-  // (This is a safe default — production keys don't have a specific prefix)
-  return !!key // If key exists without SB- prefix, assume production
-}
-
-function getSnapUrl(): string {
-  return isMidtransProduction()
-    ? 'https://app.midtrans.com/snap/v1/transactions'
-    : 'https://app.sandbox.midtrans.com/snap/v1/transactions'
-}
-
-function getMidtransApiBaseUrl(): string {
-  return isMidtransProduction()
-    ? 'https://api.midtrans.com'
-    : 'https://api.sandbox.midtrans.com'
-}
+// ==================== Duitku Configuration ====================
+// Payment gateway: Duitku POP (window redirection flow).
+// This route creates a Duitku invoice for an order and returns the paymentUrl.
+// The frontend redirects the user to paymentUrl (Duitku payment page).
 
 // Orders expire after 24 hours if unpaid
 const ORDER_EXPIRY_HOURS = 24
+// Reuse a stored invoice paymentUrl for up to 55 minutes (invoice expiry is 60 min)
+const INVOICE_REUSE_MS = 55 * 60 * 1000
 
-// Get base URL for Midtrans callbacks (VERCEL_URL in production, localhost for dev)
-function getBaseUrl(): string {
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`
-  if (process.env.NEXTAUTH_URL && process.env.NEXTAUTH_URL !== 'http://localhost:3000') return process.env.NEXTAUTH_URL
-  return process.env.NEXTAUTH_URL || 'http://localhost:3000'
+interface StoredInvoiceRef {
+  merchantOrderId: string
+  reference: string
+  paymentUrl: string
+  createdAt: string
 }
-
-// ==================== POST /api/payment/create ====================
-// Create a Midtrans Snap transaction token for an order
 
 export async function POST(request: NextRequest) {
   try {
-    // Step 0: Check if Midtrans is configured
-    const MIDTRANS_SERVER_KEY = getMidtransServerKey()
-    if (!MIDTRANS_SERVER_KEY) {
-      logger.error('MIDTRANS_SERVER_KEY not configured — cannot create payment')
+    // Step 0: Check if Duitku is configured
+    if (!isDuitkuConfigured()) {
+      logger.error('DUITKU_MERCHANT_CODE / DUITKU_API_KEY not configured — cannot create payment')
       return NextResponse.json(
         {
           success: false,
-          error: 'Pembayaran Midtrans belum dikonfigurasi. Set MIDTRANS_SERVER_KEY dan NEXT_PUBLIC_MIDTRANS_CLIENT_KEY di Vercel Dashboard → Settings → Environment Variables.',
+          error: 'Pembayaran Duitku belum dikonfigurasi. Set DUITKU_MERCHANT_CODE dan DUITKU_API_KEY di Vercel Dashboard → Settings → Environment Variables.',
         },
         { status: 503 }
       )
     }
 
-    // Log Midtrans mode for debugging
-    const isProduction = isMidtransProduction()
-    logger.info({ isProduction, keyPrefix: MIDTRANS_SERVER_KEY.substring(0, 3) }, 'Midtrans payment mode')
+    logger.info(
+      { isProduction: isDuitkuProduction(), merchantCode: getDuitkuMerchantCode().substring(0, 2) + '***' },
+      'Duitku payment mode'
+    )
 
     // Step 1: Verify authentication
     const authResult = await verifyAuth(request)
@@ -101,7 +76,6 @@ export async function POST(request: NextRequest) {
     // Step 3: Parse and validate request body
     const body = await request.json()
 
-    // Zod validation
     const validation = validateBody(paymentCreateSchema, body)
     if (!validation.success) {
       return NextResponse.json(
@@ -150,9 +124,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Allow both 'unpaid' and 'pending' — Midtrans may send a 'pending' notification
-    // when a Snap transaction is created, changing paymentStatus from 'unpaid' to 'pending'.
-    // The user should still be able to re-attempt payment in this state.
+    // Allow 'unpaid' and 'pending' — user may retry payment while pending
     if (order.paymentStatus !== 'unpaid' && order.paymentStatus !== 'pending') {
       return NextResponse.json(
         { success: false, error: `Order payment status is already: ${order.paymentStatus}` },
@@ -166,7 +138,6 @@ export async function POST(request: NextRequest) {
     if (orderAge > expiryMs) {
       // Auto-cancel the expired order and restore stock
       await db.$transaction(async (tx) => {
-        // Update order status
         await tx.order.update({
           where: { id: orderId },
           data: {
@@ -177,16 +148,13 @@ export async function POST(request: NextRequest) {
           },
         })
 
-        // Restore product stock for all order items
         for (const item of order.items) {
-          // Restore variant stock if variantId exists
           if (item.variantId) {
             await tx.productVariant.update({
               where: { id: item.variantId },
               data: { stock: { increment: item.quantity } },
             })
           }
-          // Restore product stock and decrement sold count
           await tx.product.update({
             where: { id: item.productId },
             data: {
@@ -196,7 +164,6 @@ export async function POST(request: NextRequest) {
           })
         }
 
-        // Create notification for buyer
         await tx.notification.create({
           data: {
             userId: order.userId,
@@ -220,224 +187,197 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Step 9: Call Midtrans Snap API to create a transaction token
-    // Note: authString is defined early so it can also be used in Step 8.5 for token reuse check
-    const authString = Buffer.from(MIDTRANS_SERVER_KEY + ':').toString('base64')
-    const SNAP_URL = getSnapUrl()
-    const midtransApiBaseUrl = getMidtransApiBaseUrl()
-
-    // Step 8: Check if a pending transaction already exists for this order
-    const existingTransaction = await db.transaction.findFirst({
-      where: {
-        userId: authResult.user.id,
-        type: 'payment',
-        refId: order.orderNumber,
-        status: 'pending',
-      },
-    })
-
-    // Step 8.5: Reuse existing Snap token if there's a valid pending transaction
-    // and the order was created recently (within 2 hours — Snap token validity)
-    // This prevents creating a new VA number each time the user clicks "Bayar"
-    if (existingTransaction && existingTransaction.createdAt) {
-      const tokenAge = Date.now() - new Date(existingTransaction.createdAt).getTime()
-      const maxSnapTokenAge = 2 * 60 * 60 * 1000 // 2 hours
-      if (tokenAge < maxSnapTokenAge) {
-        // Try to get the existing Snap token from Midtrans
-        // Use the Midtrans transaction status API to check if token is still valid
-        const statusUrl = `${midtransApiBaseUrl}/v2/${order.orderNumber}/status`
-
-        try {
-          const statusResponse = await fetch(statusUrl, {
-            method: 'GET',
-            headers: {
-              Accept: 'application/json',
-              Authorization: `Basic ${authString}`,
-            },
-          })
-
-          if (statusResponse.ok) {
-            const statusData = await statusResponse.json()
-            // If the transaction is still pending and has a token, reuse it
-            if (statusData.transaction_status === 'pending' && statusData.token) {
-              logger.info({
-                orderId: order.id,
-                orderNumber: order.orderNumber,
-              }, 'Reusing existing Snap token for order')
-
-              return NextResponse.json(
-                serializeDecimal({
-                  success: true,
-                  data: {
-                    token: statusData.token,
-                    redirectUrl: statusData.redirect_url,
-                    orderId: order.id,
-                    orderNumber: order.orderNumber,
-                    totalAmount: order.totalAmount,
-                    reused: true,
-                  },
-                })
-              )
-            }
+    // Step 8: Reuse a recently-created Duitku invoice if available (paymentUrl still valid)
+    let storedInvoice: StoredInvoiceRef | null = null
+    try {
+      if (order.paymentReference) {
+        const parsed = JSON.parse(order.paymentReference) as Partial<StoredInvoiceRef>
+        if (parsed.paymentUrl && parsed.merchantOrderId && parsed.createdAt) {
+          const age = Date.now() - new Date(parsed.createdAt).getTime()
+          if (age >= 0 && age < INVOICE_REUSE_MS) {
+            storedInvoice = parsed as StoredInvoiceRef
           }
-        } catch (statusErr) {
-          // If status check fails, proceed to create a new token
-          logger.warn({ err: statusErr, orderId: order.id }, 'Failed to check existing Snap token status, creating new one')
         }
       }
+    } catch {
+      // paymentReference is not a stored invoice JSON — ignore
     }
 
-    // Step 10: Build Midtrans Snap payload
-    // IMPORTANT: gross_amount MUST exactly equal sum(item_details.price × quantity)
-    // Otherwise Midtrans rejects the transaction
-    const baseUrl = getBaseUrl()
-
-    // Warn if notification_url uses localhost (Midtrans can't reach localhost)
-    if (baseUrl.includes('localhost')) {
-      logger.warn(
-        'Midtrans notification_url uses localhost — payment callbacks will NOT work in development. Deploy to Vercel for full payment flow.'
+    if (storedInvoice) {
+      logger.info({ orderId: order.id, orderNumber: order.orderNumber }, 'Reusing existing Duitku invoice paymentUrl')
+      return NextResponse.json(
+        serializeDecimal({
+          success: true,
+          data: {
+            paymentUrl: storedInvoice.paymentUrl,
+            reference: storedInvoice.reference,
+            merchantOrderId: storedInvoice.merchantOrderId,
+            orderId: order.id,
+            orderNumber: order.orderNumber,
+            totalAmount: order.totalAmount,
+            reused: true,
+          },
+        })
       )
     }
 
-    const midtransPayload: Record<string, unknown> = {
-      transaction_details: {
-        order_id: order.orderNumber,
-        gross_amount: Number(order.totalAmount),
-      },
-      item_details: [
-        ...order.items.map((item) => ({
-          id: item.productId,
-          price: Number(item.price),
-          quantity: item.quantity,
-          name: item.productName.substring(0, 50),
-        })),
-        {
-          id: 'shipping',
-          price: Number(order.shippingCost),
-          quantity: 1,
-          name: 'Ongkos Kirim',
-        },
-        ...(Number(order.discountAmount) > 0
-          ? [
-              {
-                id: 'discount',
-                price: -Number(order.discountAmount),
-                quantity: 1,
-                name: 'Diskon',
-              },
-            ]
-          : []),
-        ...(Number(order.taxAmount) > 0
-          ? [
-              {
-                id: 'tax',
-                price: Number(order.taxAmount),
-                quantity: 1,
-                name: 'Pajak',
-              },
-            ]
-          : []),
-        ...(Number(order.platformFee) > 0
-          ? [
-              {
-                id: 'platform-fee',
-                price: Number(order.platformFee),
-                quantity: 1,
-                name: 'Biaya Platform',
-              },
-            ]
-          : []),
-      ],
-      customer_details: {
-        first_name: order.user.name,
+    // Step 9: Build a unique merchantOrderId for this payment attempt.
+    // Format: {orderNumber} for the first attempt, {orderNumber}-R2, -R3 ... for retries.
+    // This avoids Duitku's same-orderId idempotency conflicts on re-payment attempts.
+    const previousAttempts = await db.transaction.count({
+      where: { type: 'payment', refId: order.orderNumber },
+    })
+    const merchantOrderId =
+      previousAttempts === 0 ? order.orderNumber : `${order.orderNumber}-R${previousAttempts + 1}`
+
+    const paymentAmount = Number(order.totalAmount)
+
+    // Step 10: Build itemDetails — only when they sum EXACTLY to paymentAmount
+    // (Duitku requires sum(itemDetails.price × qty) === paymentAmount)
+    const adjustments =
+      Number(order.discountAmount) + Number(order.taxAmount) + Number(order.platformFee)
+    const itemDetails =
+      adjustments === 0
+        ? [
+            ...order.items.map((item) => ({
+              name: item.productName.slice(0, 50),
+              price: Number(item.price),
+              quantity: item.quantity,
+            })),
+            ...(Number(order.shippingCost) > 0
+              ? [
+                  {
+                    name: 'Ongkos Kirim',
+                    price: Number(order.shippingCost),
+                    quantity: 1,
+                  },
+                ]
+              : []),
+          ]
+        : undefined
+
+    // Step 11: Create the Duitku invoice (OUTSIDE any db transaction — external API call)
+    const invoice = await createDuitkuInvoice({
+      paymentAmount,
+      merchantOrderId,
+      productDetails: `Pembayaran pesanan ${order.orderNumber} - MartUp`,
+      email: order.user.email,
+      customerVaName: order.user.name,
+      phoneNumber: order.user.phone || undefined,
+      itemDetails,
+      customerDetail: {
+        firstName: order.user.name.slice(0, 50),
         email: order.user.email,
-        phone: order.user.phone || undefined,
+        phoneNumber: order.user.phone || undefined,
       },
-    }
-
-    // Only include callbacks with a publicly accessible URL
-    // Midtrans can't reach localhost, so omit callback URLs in development
-    if (!baseUrl.includes('localhost')) {
-      midtransPayload.callbacks = {
-        finish: `${baseUrl}/orders?payment=finish`,
-        error: `${baseUrl}/orders?payment=error`,
-        pending: `${baseUrl}/orders?payment=pending`,
-      }
-    }
-    // notification_url is set via Midtrans dashboard settings, not in the Snap payload
-    // This ensures it's always correct regardless of the request origin
-    // Set it in: Midtrans Dashboard → Settings → Payment → Payment Notification URL
-
-    const snapResponse = await fetch(SNAP_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-        Authorization: `Basic ${authString}`,
-      },
-      body: JSON.stringify(midtransPayload),
+      expiryPeriod: 60, // minutes
     })
 
-    const snapData = await snapResponse.json()
-
-    if (!snapResponse.ok) {
-      logger.error({ err: snapData }, 'Midtrans Snap API error')
+    if (!invoice.success || !invoice.paymentUrl) {
+      logger.error(
+        { err: invoice, orderId: order.id, orderNumber: order.orderNumber },
+        'Duitku invoice creation failed'
+      )
       return NextResponse.json(
         {
           success: false,
-          error: snapData.error_messages?.[0] || 'Failed to create payment transaction with Midtrans',
+          error: invoice.statusMessage || 'Gagal membuat transaksi pembayaran di Duitku. Silakan coba lagi.',
         },
         { status: 502 }
       )
     }
 
-    const { token, redirect_url } = snapData
-
-    // Step 12: Create or update a Transaction record
-    if (existingTransaction) {
-      // Update existing pending transaction with new token reference
-      await db.transaction.update({
-        where: { id: existingTransaction.id },
-        data: {
-          status: 'pending',
-          description: `Payment for order ${order.orderNumber} - Midtrans Snap token created`,
-        },
-      })
-    } else {
-      await db.transaction.create({
-        data: {
-          userId: authResult.user.id,
-          type: 'payment',
-          amount: order.totalAmount,
-          fee: order.platformFee,
-          netAmount: order.totalAmount,
-          method: 'midtrans',
-          status: 'pending',
-          description: `Payment for order ${order.orderNumber}`,
-          refId: order.orderNumber,
-        },
-      })
+    // Step 12: Persist invoice info on the order + create/update Transaction record
+    const invoiceRef: StoredInvoiceRef = {
+      merchantOrderId,
+      reference: invoice.reference || '',
+      paymentUrl: invoice.paymentUrl,
+      createdAt: new Date().toISOString(),
     }
 
-    // Step 11: Return the Snap token and redirect URL
+    await db.$transaction(async (tx) => {
+      await tx.order.update({
+        where: { id: order.id },
+        data: {
+          paymentMethod: 'duitku',
+          paymentStatus: 'pending',
+          paymentReference: JSON.stringify(invoiceRef),
+        },
+      })
+
+      const existingTransaction = await tx.transaction.findFirst({
+        where: {
+          userId: authResult.user.id,
+          type: 'payment',
+          refId: order.orderNumber,
+          status: 'pending',
+        },
+      })
+
+      if (existingTransaction) {
+        await tx.transaction.update({
+          where: { id: existingTransaction.id },
+          data: {
+            status: 'pending',
+            method: 'duitku',
+            description: `Payment for order ${order.orderNumber} via Duitku (${merchantOrderId})`,
+          },
+        })
+      } else {
+        await tx.transaction.create({
+          data: {
+            userId: authResult.user.id,
+            type: 'payment',
+            amount: order.totalAmount,
+            fee: order.platformFee,
+            netAmount: order.totalAmount,
+            method: 'duitku',
+            status: 'pending',
+            description: `Payment for order ${order.orderNumber} via Duitku (${merchantOrderId})`,
+            refId: order.orderNumber,
+          },
+        })
+      }
+    })
+
+    logPaymentCreated(order, merchantOrderId)
+
+    // Step 13: Return paymentUrl for the frontend to redirect to
     return NextResponse.json(
       serializeDecimal({
         success: true,
         data: {
-          token,
-          redirectUrl: redirect_url,
+          paymentUrl: invoice.paymentUrl,
+          reference: invoice.reference,
+          merchantOrderId,
           orderId: order.id,
           orderNumber: order.orderNumber,
           totalAmount: order.totalAmount,
+          reused: false,
         },
       })
     )
   } catch (error: unknown) {
-    // Error logged above — generic message returned to client
     logger.error({ err: error }, 'Payment Create POST error')
     return NextResponse.json(
       { success: false, error: 'Terjadi kesalahan server' },
       { status: 500 }
     )
   }
+}
+
+function logPaymentCreated(
+  order: { id: string; orderNumber: string; totalAmount: unknown },
+  merchantOrderId: string
+) {
+  logger.info(
+    {
+      event: 'PAYMENT_DUITKU_INVOICE_CREATED',
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      merchantOrderId,
+      amount: Number(order.totalAmount),
+    },
+    'Duitku invoice created for order'
+  )
 }

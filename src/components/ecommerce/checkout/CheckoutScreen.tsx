@@ -15,7 +15,6 @@ import {
 import type { CartItem, ShippingOption } from "@/lib/types"
 import { logger } from '@/lib/logger'
 import { useState, useMemo, useEffect, useCallback, useRef } from "react"
-import { openSnapPayment } from '@/lib/midtrans'
 import { apiClient } from '@/lib/api-client'
 import { extractPaymentReference } from '@/lib/payment-utils'
 import { CheckoutStepIndicator } from './CheckoutStepIndicator'
@@ -30,7 +29,7 @@ type ShippingResponse = { success: boolean; data?: { rates?: ShippingOption[] };
 type VoucherValidateResponse = { success: boolean; data?: { valid: boolean; message?: string; discountAmount: number }; error?: string }
 type OrderCreateResponse = { success: boolean; data?: { id: string; orderNumber: string }; error?: string }
 type WalletDebitResponse = { success: boolean; error?: string }
-type PaymentCreateResponse = { success: boolean; data?: { token: string }; error?: string }
+type PaymentCreateResponse = { success: boolean; data?: { paymentUrl: string; reference?: string }; error?: string }
 
 // ==================== MAIN COMPONENT ====================
 export function CheckoutScreen() {
@@ -482,95 +481,39 @@ export function CheckoutScreen() {
           navigate('orders')
         }
 
-      } else if (selectedPayment === 'midtrans' || selectedPayment === 'card') {
-        // Midtrans / Card payment: open Snap popup for each seller order
+      } else if (selectedPayment === 'duitku') {
+        // Duitku payment: create an invoice per seller order, then redirect to Duitku
         if (selectedVoucher) markVoucherUsed(selectedVoucher.id)
 
         if (createdOrders.length > 0) {
           try {
-            let allSuccess = true
-            let anyPending = false
-            let cartRemoved = false
+            let firstPaymentUrl: string | null = null
 
-            // Process each order's payment sequentially
-            // (Each seller gets their own Midtrans transaction)
             for (let i = 0; i < createdOrders.length; i++) {
               const paymentRes = await apiClient.rawPost('/api/payment/create', { orderId: createdOrders[i].id })
               const paymentData: PaymentCreateResponse = await paymentRes.json()
 
-              if (paymentData.success && paymentData.data?.status === 'paid') {
-                // Dev mock mode: API auto-confirmed the order as paid (no Midtrans key in development)
-                if (!cartRemoved) {
-                  itemIdsToRemove.forEach(id => removeItem(id))
-                  cartRemoved = true
-                }
-                showToast(`Pembayaran berhasil! (Mode Dev)`, 'success')
-              } else if (paymentData.success && paymentData.data?.token) {
-                // Show progress for multi-seller
-                if (createdOrders.length > 1) {
-                  showToast(`Pembayaran ${i + 1} dari ${createdOrders.length} toko...`, 'info')
-                }
-
-                // Open Midtrans Snap popup
-                const snapResult = await openSnapPayment(paymentData.data.token)
-
-                if (snapResult.status === 'success') {
-                  // Remove cart items after first successful payment
-                  if (!cartRemoved) {
-                    itemIdsToRemove.forEach(id => removeItem(id))
-                    cartRemoved = true
-                  }
-                } else if (snapResult.status === 'pending') {
-                  anyPending = true
-                  allSuccess = false
-                  // Remove cart items after pending payment (order committed, user will pay later)
-                  if (!cartRemoved) {
-                    itemIdsToRemove.forEach(id => removeItem(id))
-                    cartRemoved = true
-                  }
-                  // Save payment reference from Snap result so buyer can see VA number / payment code later
-                  try {
-                    const ref = extractPaymentReference(snapResult.result)
-                    if (ref && createdOrders[i]) {
-                      await apiClient.rawPost('/api/payment/save-reference', {
-                        orderId: createdOrders[i].id,
-                        paymentReference: JSON.stringify(ref),
-                      })
-                    }
-                  } catch { /* non-critical — best effort */ }
-                } else if (snapResult.status === 'closed') {
-                  allSuccess = false
-                  // User closed popup — orders are already created in DB, so remove cart items
-                  // User can pay for unpaid orders from the order screen later
-                  if (!cartRemoved) {
-                    itemIdsToRemove.forEach(id => removeItem(id))
-                    cartRemoved = true
-                  }
-                  showToast('Pembayaran dibatalkan. Anda bisa membayar nanti dari halaman pesanan.', 'warning')
-                  break
-                } else {
-                  allSuccess = false
-                }
+              if (paymentData.success && paymentData.data?.paymentUrl) {
+                if (!firstPaymentUrl) firstPaymentUrl = paymentData.data.paymentUrl
               } else {
-                // Snap token creation failed for this order
-                logger.warn({ component: 'checkout', orderId: createdOrders[i].id, err: paymentData.error }, 'Snap token creation failed')
-                // Show specific error from API (e.g., Midtrans not configured)
-                showToast(paymentData.error || 'Gagal membuat token pembayaran. Pesanan tersimpan sebagai "Belum Bayar".', 'error')
-                allSuccess = false
-                break // Stop processing remaining orders on failure
+                logger.warn({ component: 'checkout', orderId: createdOrders[i].id, err: paymentData.error }, 'Duitku invoice creation failed')
+                showToast(paymentData.error || 'Gagal membuat invoice pembayaran. Pesanan tersimpan sebagai "Belum Bayar".', 'error')
+                break
               }
             }
 
-            setIsProcessing(false)
-
-            if (allSuccess) {
-              showToast('Pembayaran berhasil!', 'success')
-            } else if (anyPending) {
-              showToast('Pembayaran tertunda. Silakan selesaikan pembayaran Anda.', 'warning')
+            if (firstPaymentUrl) {
+              itemIdsToRemove.forEach(id => removeItem(id))
+              setIsProcessing(false)
+              // Redirect the whole window — Duitku brings the user back via returnUrl
+              window.location.href = firstPaymentUrl
+              return
             }
+
+            setIsProcessing(false)
             navigate('orders')
           } catch (error) {
-            logger.warn({ component: 'checkout', err: error }, 'Midtrans payment failed')
+            logger.warn({ component: 'checkout', err: error }, 'Duitku payment failed')
             showToast('Terjadi kesalahan saat memproses pembayaran. Pesanan Anda tersimpan sebagai "Belum Bayar".', 'error')
             setIsProcessing(false)
             navigate('orders')

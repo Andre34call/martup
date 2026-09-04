@@ -15,17 +15,25 @@ export function isCodOrder(order: Order): boolean {
 }
 
 /**
- * Check if an order uses Midtrans for payment (transfer, e-wallet, card).
+ * Check if an order uses an online payment gateway (Duitku) for payment.
  * Used in: order-screen.tsx for payment retry logic
  */
-export function isMidtransPayment(order: Order): boolean {
+export function isDuitkuPayment(order: Order): boolean {
   const pm = order.paymentMethod?.toLowerCase() || ''
-  return pm === 'midtrans' || pm === 'card' ||
-    pm.includes('transfer') || pm.includes('ewallet') || pm.includes('e-wallet') ||
-    pm.includes('gopay') || pm.includes('ovo') || pm.includes('dana') ||
-    pm.includes('shopeepay') || pm.includes('qris') || pm.includes('credit card') ||
-    pm.includes('debit') || pm.includes('bank') || pm.includes('cstore')
+  if (pm === 'duitku') return true
+  // Duitku webhook stores the resolved method label (e.g. "BCA Virtual Account")
+  return [
+    'virtual account', 'briva', 'qris', 'ovo', 'dana', 'shopeepay', 'linkaja',
+    'indomaret', 'alfamart', 'jenius', 'kartu kredit', 'kartu debit',
+    'bca', 'mandiri', 'bni', 'bri', 'permata', 'bsi', 'danamon', 'cimb',
+    'transfer & e-wallet', 'duitku',
+  ].some((keyword) => pm.includes(keyword))
 }
+
+/**
+ * Legacy alias — kept for backward compatibility with older code paths.
+ */
+export const isMidtransPayment = isDuitkuPayment
 
 /**
  * Extracts payment reference data (VA number, payment code, etc.) from Midtrans Snap result.
@@ -105,47 +113,86 @@ export function getPaymentMethodLabel(paymentMethod?: string): string {
   if (!paymentMethod) return 'COD'
   const pm = paymentMethod.toLowerCase()
   if (pm === 'wallet' || pm === 'martup pay') return 'MartUp Pay'
-  if (pm === 'midtrans') return 'Transfer & E-Wallet'
+  if (pm === 'duitku') return 'Transfer & E-Wallet (Duitku)'
+  if (pm === 'midtrans') return 'Transfer & E-Wallet (Duitku)' // legacy orders
   if (pm === 'card') return 'Kartu Kredit/Debit'
   if (pm === 'cod' || pm.includes('bayar di tempat')) return 'Bayar di Tempat (COD)'
-  // Midtrans webhook may overwrite with specific types
+  // Duitku payment codes / resolved method labels (set by webhook)
+  if (pm.includes('bca')) return 'BCA Virtual Account'
+  if (pm.includes('mandiri')) return 'Mandiri Virtual Account'
+  if (pm.includes('bni')) return 'BNI Virtual Account'
+  if (pm.includes('bri') || pm.includes('briva')) return 'BRI Virtual Account'
+  if (pm.includes('permata')) return 'Permata Virtual Account'
+  if (pm.includes('bsi')) return 'BSI Virtual Account'
+  if (pm.includes('danamon')) return 'Danamon Virtual Account'
+  if (pm.includes('cimb')) return 'CIMB Niaga Virtual Account'
+  if (pm.includes('maybank')) return 'Maybank Virtual Account'
+  if (pm.includes('neo commerce') || pm === 'bnc') return 'Bank Neo Commerce'
+  if (pm.includes('indomaret')) return 'Indomaret'
+  if (pm.includes('alfamart') || pm.includes('pegadaian') || pm.includes('pos')) return 'Retail (ALFA/Pos/Pegadaian)'
   if (pm.includes('gopay')) return 'GoPay'
   if (pm.includes('ovo')) return 'OVO'
   if (pm.includes('dana')) return 'DANA'
   if (pm.includes('shopeepay')) return 'ShopeePay'
+  if (pm.includes('linkaja')) return 'LinkAja'
   if (pm.includes('qris')) return 'QRIS'
-  if (pm.includes('bank_transfer') || pm.includes('va')) return 'Transfer Bank (VA)'
-  if (pm.includes('credit_card') || pm.includes('card')) return 'Kartu Kredit/Debit'
-  if (pm.includes('cstore') || pm.includes('indomaret') || pm.includes('alfamart')) return 'Convenience Store'
-  if (pm.includes('echannel') || pm.includes('mandiri')) return 'Mandiri Bill Payment'
-  if (pm.includes('transfer') || pm.includes('e-wallet') || pm.includes('ewallet')) return 'Transfer & E-Wallet'
+  if (pm.includes('jenius')) return 'Jenius Pay'
+  if (pm.includes('atome')) return 'ATOME'
+  if (pm.includes('indodana')) return 'Indodana Paylater'
+  if (pm.includes('kartu kredit') || pm.includes('credit card') || pm.includes('visa') || pm.includes('master')) return 'Kartu Kredit/Debit'
+  if (pm.includes('virtual account') || pm.includes('va')) return 'Virtual Account'
+  if (pm.includes('transfer') || pm.includes('e-wallet') || pm.includes('ewallet')) return 'Transfer & E-Wallet (Duitku)'
   // Fallback: capitalize first letter
   return paymentMethod.charAt(0).toUpperCase() + paymentMethod.slice(1)
 }
 
 /**
- * Get a display label for payment type (e.g., from Midtrans payment_type field).
+ * Get a display label for a payment type (e.g., from Duitku paymentCode).
  * Used in: order-screen.tsx for payment detail display
  */
 export function getPaymentTypeLabel(paymentType?: string): string {
   if (!paymentType) return 'Transfer / E-Wallet'
   const labels: Record<string, string> = {
+    // Duitku payment method codes
+    'VC': 'Kartu Kredit/Debit',
+    'BC': 'BCA Virtual Account',
+    'M2': 'Mandiri Virtual Account',
+    'VA': 'Maybank Virtual Account',
+    'I1': 'BNI Virtual Account',
+    'B1': 'CIMB Niaga Virtual Account',
+    'BT': 'Permata Virtual Account',
+    'BR': 'BRI Virtual Account (BRIVA)',
+    'NC': 'Bank Neo Commerce',
+    'DM': 'Danamon Virtual Account',
+    'BV': 'BSI Virtual Account',
+    'FT': 'Pegadaian/ALFA/Pos',
+    'IR': 'Indomaret',
+    'OV': 'OVO',
+    'SA': 'ShopeePay Apps',
+    'SL': 'ShopeePay Account Link',
+    'LA': 'LinkAja',
+    'LF': 'LinkAja',
+    'DA': 'DANA',
+    'OL': 'OVO Account Link',
+    'SP': 'ShopeePay QRIS',
+    'NQ': 'Nobu QRIS',
+    'SQ': 'Nusapay QRIS',
+    'GQ': 'Gudang Voucher',
+    'DN': 'Indodana Paylater',
+    'AT': 'ATOME',
+    'JP': 'Jenius Pay',
+    // Legacy Midtrans types (for historical orders)
     'bank_transfer': 'Transfer Bank',
     'gopay': 'GoPay',
-    'ovo': 'OVO',
-    'dana': 'DANA',
     'shopeepay': 'ShopeePay',
     'qris': 'QRIS',
     'credit_card': 'Kartu Kredit',
     'cstore': 'Gerai (Indomaret/Alfamart)',
     'echannel': 'Mandiri Bill',
-    'danamon_online': 'Danamon Online',
     'bca_klikpay': 'BCA KlikPay',
-    'bca_klikbca': 'KlikBCA',
-    'mandiri_clickpay': 'Mandiri ClickPay',
     'bri_epay': 'BRI Epay',
-    'cimb_clicks': 'CIMB Clicks',
     'card': 'Kartu Kredit/Debit',
+    'duitku': 'Transfer & E-Wallet (Duitku)',
   }
   return labels[paymentType] || paymentType
 }

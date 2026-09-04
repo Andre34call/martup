@@ -19,9 +19,9 @@ const recommendedVars = [
   'GOOGLE_CLIENT_ID',
   'GOOGLE_CLIENT_SECRET',
   'RESEND_API_KEY',
-  'MIDTRANS_SERVER_KEY',
-  'NEXT_PUBLIC_MIDTRANS_CLIENT_KEY',
-  'NEXT_PUBLIC_MIDTRANS_IS_PRODUCTION',
+  'DUITKU_MERCHANT_CODE',
+  'DUITKU_API_KEY',
+  'DUITKU_IS_PRODUCTION',
   'RAJAONGKIR_API_KEY',
   'RAJAONGKIR_PACKAGE',
 ] as const
@@ -120,9 +120,10 @@ export const env = {
   // In production, unconfigured providers should cause visible errors, not silent degradation.
   // Set SMS_PROVIDER=resend|twilio|mock and EMAIL_PROVIDER=resend|mock explicitly.
   SMS_PROVIDER: process.env.SMS_PROVIDER || (process.env.NODE_ENV === 'development' ? 'mock' : ''),
-  MIDTRANS_SERVER_KEY: process.env.MIDTRANS_SERVER_KEY || '',
-  // Check both server-only and public env vars — Vercel deployments often only set NEXT_PUBLIC_ prefixed vars
-  MIDTRANS_IS_PRODUCTION: process.env.MIDTRANS_IS_PRODUCTION === 'true' || process.env.NEXT_PUBLIC_MIDTRANS_IS_PRODUCTION === 'true',
+  // Duitku payment gateway
+  DUITKU_MERCHANT_CODE: process.env.DUITKU_MERCHANT_CODE || '',
+  DUITKU_API_KEY: process.env.DUITKU_API_KEY || '',
+  DUITKU_IS_PRODUCTION: process.env.DUITKU_IS_PRODUCTION === 'true',
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || '',
   GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET || '',
   EMAIL_PROVIDER: process.env.EMAIL_PROVIDER || (process.env.NODE_ENV === 'development' ? 'mock' : ''),

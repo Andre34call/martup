@@ -115,39 +115,13 @@ export function OrderDetail({ order, onBack }: { order: Order; onBack: () => voi
   // Payment reference "Bayar Sekarang" handler
   const handlePayNow = useCallback(async () => {
     const result = await payForOrder(order.id)
-    if (result?.status === 'paid') {
-      // Dev mock mode: order was auto-confirmed as paid
-      showToast('Pembayaran berhasil! (Mode Dev)', 'success')
-    } else if (result?.token) {
-      try {
-        const { openSnapPayment } = await import('@/lib/midtrans')
-        const snapResult = await openSnapPayment(result.token)
-        if (snapResult.status === 'success') {
-          showToast('Pembayaran berhasil!', 'success')
-        } else if (snapResult.status === 'pending') {
-          showToast('Pembayaran tertunda. Selesaikan pembayaran Anda.', 'warning')
-          // Save updated payment reference
-          try {
-            const ref = extractPaymentReference(snapResult.result as Record<string, unknown>)
-            if (ref) {
-              await apiClient.rawPost('/api/payment/save-reference', {
-                orderId: order.id,
-                paymentReference: JSON.stringify(ref),
-              })
-            }
-          } catch { /* non-critical */ }
-        } else if (snapResult.status === 'closed') {
-          showToast('Pembayaran dibatalkan. Anda bisa membayar nanti.', 'warning')
-        } else {
-          showToast('Pembayaran gagal. Silakan coba lagi.', 'error')
-        }
-      } catch {
-        showToast('Gagal membuka halaman pembayaran.', 'error')
-      }
-    } else if (result?.redirectUrl) {
-      window.open(result.redirectUrl, '_blank')
+    if (result?.paymentUrl || result?.redirectUrl) {
+      // Duitku payment — redirect to the Duitku payment page
+      window.location.href = result.paymentUrl || result.redirectUrl!
+    } else if (result?.error) {
+      showToast(result.error, 'error')
     } else {
-      showToast(result?.error || 'Gagal memproses pembayaran. Silakan coba lagi nanti.', 'error')
+      showToast('Gagal memproses pembayaran. Silakan coba lagi nanti.', 'error')
     }
   }, [order.id, payForOrder, showToast])
 
@@ -526,29 +500,13 @@ export function OrderDetail({ order, onBack }: { order: Order; onBack: () => voi
                 className="w-full h-12 rounded-xl text-sm font-semibold"
                 onClick={async () => {
                   const result = await payForOrder(order.id)
-                  if (result?.status === 'paid') {
-                    // Dev mock mode: order was auto-confirmed as paid
-                    showToast('Pembayaran berhasil! (Mode Dev)', 'success')
-                  } else if (result?.token) {
-                    try {
-                      const { openSnapPayment } = await import('@/lib/midtrans')
-                      const snapResult = await openSnapPayment(result.token)
-                      if (snapResult.status === 'success') {
-                        showToast('Pembayaran berhasil!', 'success')
-                      } else if (snapResult.status === 'pending') {
-                        showToast('Pembayaran tertunda. Selesaikan pembayaran Anda.', 'warning')
-                      } else if (snapResult.status === 'closed') {
-                        showToast('Pembayaran dibatalkan. Anda bisa membayar nanti.', 'warning')
-                      } else {
-                        showToast('Pembayaran gagal. Silakan coba lagi.', 'error')
-                      }
-                    } catch {
-                      showToast('Gagal membuka halaman pembayaran.', 'error')
-                    }
-                  } else if (result?.redirectUrl) {
-                    window.open(result.redirectUrl, '_blank')
+                  if (result?.paymentUrl || result?.redirectUrl) {
+                    // Duitku payment — redirect to the Duitku payment page
+                    window.location.href = result.paymentUrl || result.redirectUrl!
+                  } else if (result?.error) {
+                    showToast(result.error, 'error')
                   } else {
-                    // No token and no redirect — payment method not supported or API error
+                    // No payment URL — payment method not supported or API error
                     showToast(result?.error || "Gagal memproses pembayaran. Silakan coba lagi nanti.", "error")
                   }
                 }}

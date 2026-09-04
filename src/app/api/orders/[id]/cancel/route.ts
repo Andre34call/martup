@@ -152,23 +152,24 @@ export async function POST(
       return updatedOrder
     })
 
-    // SECURITY (SG-5): If order was paid via Midtrans (not wallet), request refund from Midtrans
-    // BUG 9 FIX: This only runs for non-wallet payment methods — wallet refunds are handled above
+    // If order was paid via Duitku (not wallet), the refund must be issued manually
+    // from the Duitku Merchant Portal (Dashboard → Report → Refund) — Duitku POP
+    // has no automatic refund API. Notify admins so the refund is not forgotten.
     if (updated.paymentStatus === 'refunded' && updated.paymentMethod && updated.paymentMethod !== 'wallet') {
       try {
-        const { requestMidtransRefund } = await import('@/lib/midtrans-server')
-        const refundResult = await requestMidtransRefund(
-          updated.orderNumber,
-          Number(updated.totalAmount),
-          reason || 'Cancelled by buyer'
-        )
-        if (refundResult.success) {
-          logger.info({ orderId: updated.id, orderNumber: updated.orderNumber }, 'Midtrans refund requested')
-        } else {
-          logger.warn({ orderId: updated.id, orderNumber: updated.orderNumber, error: refundResult.message }, 'Midtrans refund failed — manual refund may be needed')
-        }
+        await db.notification.create({
+          data: {
+            userId: updated.userId,
+            title: 'Refund Diproses Manual',
+            content: `Refund untuk pesanan ${updated.orderNumber} akan diproses manual melalui Duitku Merchant Portal oleh tim kami.`,
+            type: 'order',
+            refType: 'order',
+            refId: updated.id,
+          },
+        })
+        logger.info({ orderId: updated.id, orderNumber: updated.orderNumber, paymentMethod: updated.paymentMethod }, 'Duitku manual refund noted — process via Duitku Merchant Portal')
       } catch (refundError) {
-        logger.error({ err: refundError, orderId: updated.id }, 'Midtrans refund exception')
+        logger.error({ err: refundError, orderId: updated.id }, 'Failed to create manual refund notification')
       }
     }
 
