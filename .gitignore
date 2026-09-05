@@ -58,3 +58,27 @@ server.log
 /examples/
 # Upload directory (screenshots, temp files)
 /upload/
+
+# Local databases (NEVER commit runtime DB state)
+/data/
+/db/
+*.db
+*.db-journal
+
+# Backups
+*.bak
+
+# Verification / audit / test scripts and screenshots (dev only)
+/verify-*
+/test-*
+/test-screenshots/
+/audit_*
+/3000
+/sentry.*.config.ts
+
+# Public uploads (user-generated content lives in Supabase Storage, not git)
+/public/uploads/
+
+# Internal agent worklog (not for production repo)
+/worklog.md
+/download/
