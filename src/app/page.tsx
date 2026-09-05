@@ -72,23 +72,26 @@ function ScreenRenderer() {
   const screenVariants = {
     initial: { opacity: 0, x: 20 },
     animate: { opacity: 1, x: 0 },
-    exit: { opacity: 0, x: -20 },
   }
 
+  // NOTE: intentionally NOT wrapped in <AnimatePresence mode="wait">.
+  // With mode="wait", a navigation fired while the previous screen is still
+  // mid-enter/exit (e.g. the payment-return effect navigating during the
+  // splash's enter animation) can deadlock the transition — the old screen
+  // stays mounted at opacity 0 and the new screen never mounts, rendering a
+  // blank white content area. Without AnimatePresence, a key change remounts
+  // the wrapper immediately and the enter animation always plays.
   return (
-    <AnimatePresence mode="wait">
-      <motion.div
-        key={currentScreen}
-        variants={screenVariants}
-        initial="initial"
-        animate="animate"
-        exit="exit"
-        transition={{ duration: 0.2, ease: 'easeInOut' }}
-        className="flex-1 overflow-y-auto no-scrollbar"
-      >
-        <LazyScreenRenderer screen={currentScreen} navigate={navigate} />
-      </motion.div>
-    </AnimatePresence>
+    <motion.div
+      key={currentScreen}
+      variants={screenVariants}
+      initial="initial"
+      animate="animate"
+      transition={{ duration: 0.2, ease: 'easeInOut' }}
+      className="flex-1 overflow-y-auto no-scrollbar"
+    >
+      <LazyScreenRenderer screen={currentScreen} navigate={navigate} />
+    </motion.div>
   )
 }
 

@@ -16,6 +16,12 @@ export function SplashScreen() {
     }, 500)
 
     const navTimer = setTimeout(() => {
+      // GUARD: only navigate if we are STILL the active screen.
+      // If the user was deep-linked (e.g. payment return ?screen=orders), an
+      // effect may already have navigated away — a stale timer firing later
+      // would override that navigation (or even re-enter during an in-flight
+      // transition) and wedge the screen switcher on a blank/invisible state.
+      if (useAppStore.getState().currentScreen !== 'splash') return
       if (isAuthenticated) {
         navigate("home")
       } else {
