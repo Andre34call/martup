@@ -82,3 +82,4 @@ server.log
 # Internal agent worklog (not for production repo)
 /worklog.md
 /download/
+tool-results/

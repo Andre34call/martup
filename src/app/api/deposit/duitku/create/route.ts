@@ -25,6 +25,18 @@ const MAX_AMOUNT = 10_000_000
 // Invoice expiry in minutes (Duitku common values: 5/10/60)
 const EXPIRY_MINUTES = 60
 
+/** Translate raw gateway errors into buyer-friendly Indonesian messages. */
+function friendlyGatewayError(message?: string): string {
+  const msg = (message || '').toLowerCase()
+  if (msg.includes('exceeded') || msg.includes('limit')) {
+    return 'Melebihi limit transaksi channel ini. Coba nominal lebih kecil atau gunakan Virtual Account.'
+  }
+  if (msg.includes('payment method') || msg.includes('invalid method') || msg.includes('not available')) {
+    return 'Channel pembayaran tidak tersedia untuk nominal ini. Silakan pilih channel lain.'
+  }
+  return message || 'Gagal membuat transaksi pembayaran. Coba lagi nanti.'
+}
+
 export async function POST(request: NextRequest) {
   try {
     // SECURITY: Require authentication
@@ -61,7 +73,16 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { amount } = body as { amount?: number; method?: string }
+    const { amount, paymentMethod: rawPaymentMethod } = body as {
+      amount?: number
+      method?: string
+      paymentMethod?: string
+    }
+    // Channel code chosen in the in-app picker (e.g. 'SP', 'OV', 'BC') — optional.
+    const selectedMethod =
+      typeof rawPaymentMethod === 'string' && /^[A-Za-z0-9]{1,5}$/.test(rawPaymentMethod.trim())
+        ? rawPaymentMethod.trim().toUpperCase()
+        : undefined
 
     // Validate amount
     if (!amount || typeof amount !== 'number' || amount <= 0 || !Number.isInteger(amount)) {
@@ -152,6 +173,9 @@ export async function POST(request: NextRequest) {
         phoneNumber: user.phone || undefined,
       },
       expiryPeriod: EXPIRY_MINUTES,
+      // In-app channel selection: when set, the gateway skips its own
+      // channel list and opens the chosen channel directly.
+      paymentMethod: selectedMethod,
     })
 
     if (!invoice.success || !invoice.paymentUrl) {
@@ -162,7 +186,7 @@ export async function POST(request: NextRequest) {
         data: { status: 'failed' },
       })
       return NextResponse.json(
-        { success: false, error: invoice.statusMessage || 'Gagal membuat transaksi pembayaran. Coba lagi nanti.' },
+        { success: false, error: friendlyGatewayError(invoice.statusMessage) },
         { status: 502 }
       )
     }
@@ -181,6 +205,7 @@ export async function POST(request: NextRequest) {
         amount,
         merchantOrderId,
         isProduction: isDuitkuProduction(),
+        paymentMethod: selectedMethod || '(gateway-side selection)',
       },
     })
 

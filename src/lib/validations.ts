@@ -142,6 +142,15 @@ export const walletDebitBatchSchema = z.object({
 // ==================== Payment ====================
 export const paymentCreateSchema = z.object({
   orderId: z.string().min(1, 'orderId wajib diisi'),
+  // Optional: channel code chosen in the in-app picker (e.g. 'SP', 'OV', 'BC').
+  // Empty/absent = let the user pick on the payment gateway page instead.
+  paymentMethod: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^[A-Z0-9]{1,5}$/, 'Kode channel pembayaran tidak valid')
+    .optional()
+    .or(z.literal('')),
 })
 
 // ==================== Orders ====================

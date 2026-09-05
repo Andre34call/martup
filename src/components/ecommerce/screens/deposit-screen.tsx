@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { apiClient } from '@/lib/api-client'
+import { PaymentChannelPicker } from "../payment-channel-picker"
 
 type DepositCreateResponse = {
   success: boolean
@@ -23,7 +24,11 @@ export function DepositScreen() {
   const [selectedAmount, setSelectedAmount] = useState<number | null>(null)
   const [customAmount, setCustomAmount] = useState("")
   const [paymentMethod, setPaymentMethod] = useState("duitku")
+  // In-app payment channel selection for the Duitku flow ('' = pick on gateway page)
+  const [selectedChannel, setSelectedChannel] = useState("")
   const [isProcessing, setIsProcessing] = useState(false)
+
+  const topUpAmount = selectedAmount || (customAmount ? Number(customAmount) : 0)
 
   const quickAmounts = [
     { label: "50K", value: 50000 },
@@ -53,7 +58,10 @@ export function DepositScreen() {
       // Instant top-up via Duitku payment gateway
       setIsProcessing(true)
       try {
-        const res = await apiClient.rawPost('/api/deposit/duitku/create', { amount })
+        const res = await apiClient.rawPost('/api/deposit/duitku/create', {
+          amount,
+          paymentMethod: selectedChannel || undefined,
+        })
         const data: DepositCreateResponse = await res.json()
 
         if (data.success && data.data?.paymentUrl) {
@@ -160,6 +168,15 @@ export function DepositScreen() {
               </Card>
             ))}
           </div>
+
+          {/* In-app channel picker — instant (Duitku) method only */}
+          {paymentMethod === "duitku" && (
+            <PaymentChannelPicker
+              amount={topUpAmount}
+              value={selectedChannel}
+              onChange={setSelectedChannel}
+            />
+          )}
         </motion.div>
 
         {/* Deposit Button */}

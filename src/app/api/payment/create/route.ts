@@ -29,6 +29,19 @@ interface StoredInvoiceRef {
   reference: string
   paymentUrl: string
   createdAt: string
+  paymentMethod?: string // channel code chosen in-app ('' = gateway-side selection)
+}
+
+/** Translate raw gateway errors into buyer-friendly Indonesian messages. */
+function friendlyGatewayError(message?: string): string {
+  const msg = (message || '').toLowerCase()
+  if (msg.includes('exceeded') || msg.includes('limit')) {
+    return 'Melebihi limit transaksi channel ini. Coba nominal lebih kecil atau gunakan Virtual Account.'
+  }
+  if (msg.includes('payment method') || msg.includes('invalid method') || msg.includes('not available')) {
+    return 'Channel pembayaran tidak tersedia untuk nominal ini. Silakan pilih channel lain.'
+  }
+  return message || 'Gagal membuat transaksi pembayaran. Silakan coba lagi.'
 }
 
 export async function POST(request: NextRequest) {
@@ -83,7 +96,8 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-    const { orderId } = validation.data
+    const { orderId, paymentMethod: requestedMethodRaw } = validation.data
+    const requestedMethod = (requestedMethodRaw || '').trim().toUpperCase()
 
     // Step 4: Find the order with items and user details
     const order = await db.order.findUnique({
@@ -194,7 +208,10 @@ export async function POST(request: NextRequest) {
         const parsed = JSON.parse(order.paymentReference) as Partial<StoredInvoiceRef>
         if (parsed.paymentUrl && parsed.merchantOrderId && parsed.createdAt) {
           const age = Date.now() - new Date(parsed.createdAt).getTime()
-          if (age >= 0 && age < INVOICE_REUSE_MS) {
+          const storedMethod = (parsed.paymentMethod || '').trim().toUpperCase()
+          // Only reuse when the stored invoice targets the SAME channel the user
+          // just picked — a different selection needs a fresh invoice.
+          if (age >= 0 && age < INVOICE_REUSE_MS && storedMethod === requestedMethod) {
             storedInvoice = parsed as StoredInvoiceRef
           }
         }
@@ -271,6 +288,9 @@ export async function POST(request: NextRequest) {
         phoneNumber: order.user.phone || undefined,
       },
       expiryPeriod: 60, // minutes
+      // In-app channel selection: when set, the gateway skips its own
+      // channel list and opens the chosen channel directly.
+      paymentMethod: requestedMethod || undefined,
     })
 
     if (!invoice.success || !invoice.paymentUrl) {
@@ -281,7 +301,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: invoice.statusMessage || 'Gagal membuat transaksi pembayaran. Silakan coba lagi.',
+          error: friendlyGatewayError(invoice.statusMessage),
         },
         { status: 502 }
       )
@@ -293,6 +313,7 @@ export async function POST(request: NextRequest) {
       reference: invoice.reference || '',
       paymentUrl: invoice.paymentUrl,
       createdAt: new Date().toISOString(),
+      paymentMethod: requestedMethod,
     }
 
     await db.$transaction(async (tx) => {

@@ -20,6 +20,7 @@ import type { CartItem, ShippingOption, Address } from "@/lib/types"
 import { logger } from '@/lib/logger'
 import { useState, useMemo, useEffect, useCallback, useRef } from "react"
 import { apiClient } from '@/lib/api-client'
+import { PaymentChannelPicker } from './payment-channel-picker'
 
 // ==================== API RESPONSE TYPES ====================
 type ShippingResponse = { success: boolean; data?: { rates?: ShippingOption[] }; error?: string }
@@ -293,6 +294,8 @@ export function CheckoutScreen() {
   const { items, getCheckedItems, getCheckedTotal, getCheckedCount, clearCart, removeItem, updateQuantity } = useCartStore()
 
   const [selectedPayment, setSelectedPayment] = useState<string | null>(null)
+  // In-app payment channel selection for the Duitku redirect flow ('' = pick on gateway page)
+  const [selectedChannel, setSelectedChannel] = useState('')
   const [shippingBySeller, setShippingBySeller] = useState<Record<string, ShippingOption>>({})
   const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [orderNumber, setOrderNumber] = useState('')
@@ -728,9 +731,13 @@ export function CheckoutScreen() {
             let firstPaymentUrl: string | null = null
             let anySuccess = false
 
-            // Create a Duitku invoice for each seller order
+            // Create a Duitku invoice for each seller order — pass the in-app
+            // selected channel so the gateway skips its own channel list
             for (let i = 0; i < createdOrders.length; i++) {
-              const paymentRes = await apiClient.rawPost('/api/payment/create', { orderId: createdOrders[i].id })
+              const paymentRes = await apiClient.rawPost('/api/payment/create', {
+                orderId: createdOrders[i].id,
+                paymentMethod: selectedChannel || undefined,
+              })
               const paymentData: PaymentCreateResponse = await paymentRes.json()
 
               if (paymentData.success && paymentData.data?.paymentUrl) {
@@ -1123,6 +1130,15 @@ export function CheckoutScreen() {
               )
             })}
           </div>
+
+          {/* In-app channel picker — only for the Transfer & E-Wallet (redirect) method */}
+          {selectedPayment === 'duitku' && (
+            <PaymentChannelPicker
+              amount={totalAmount}
+              value={selectedChannel}
+              onChange={setSelectedChannel}
+            />
+          )}
 
         </motion.div>
 

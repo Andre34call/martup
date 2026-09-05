@@ -364,6 +364,80 @@ export async function getDuitkuPaymentMethods(amount: number): Promise<DuitkuPay
   }
 }
 
+// ==================== PAYMENT METHOD GROUPING (for in-app channel picker) ====================
+
+export type DuitkuMethodCategory = 'qris' | 'ewallet' | 'va' | 'card' | 'retail' | 'other'
+
+export interface DuitkuMethodGroup {
+  key: DuitkuMethodCategory
+  label: string
+  methods: DuitkuPaymentMethod[]
+}
+
+/** Well-known Duitku POP payment method codes by category (docs.duitku.com/pop) */
+const QRIS_CODES = new Set(['SP', 'NQ', 'SQ'])
+const VA_CODES = new Set(['BC', 'M2', 'VA', 'I1', 'B1', 'BT', 'A1', 'AG', 'NC', 'BR', 'S1', 'DM', 'BV'])
+const EWALLET_CODES = new Set(['OV', 'SA', 'LF', 'LA', 'DA', 'SL', 'OL', 'DN', 'AT', 'JP', 'T2'])
+const CARD_CODES = new Set(['VC', 'T1'])
+const RETAIL_CODES = new Set(['IR', 'FT', 'GQ'])
+
+const CATEGORY_LABELS: Record<DuitkuMethodCategory, string> = {
+  qris: 'QRIS',
+  ewallet: 'E-Wallet & Paylater',
+  va: 'Virtual Account',
+  card: 'Kartu Kredit/Debit',
+  retail: 'Retail (Gerai)',
+  other: 'Lainnya',
+}
+
+const GROUP_ORDER: DuitkuMethodCategory[] = ['qris', 'ewallet', 'va', 'card', 'retail', 'other']
+
+/** Categorize a payment channel by its name first (robust across environments), then by known code. */
+export function categorizeDuitkuMethod(method: DuitkuPaymentMethod): DuitkuMethodCategory {
+  const name = method.name.toLowerCase()
+  const code = method.code.toUpperCase()
+
+  if (name.includes('qris') || name.includes(' qr ') || name.startsWith('qr')) return 'qris'
+  if (name.includes('virtual account') || name.includes('va ')) return 'va'
+  if (name.includes('credit') || name.includes('kartu kredit') || name.includes('debit')) return 'card'
+  if (
+    name.includes('indomaret') || name.includes('alfamart') || name.includes('alfamidi') ||
+    name.includes('pegadaian') || name.includes('gerai') || name.includes('pos ')
+  ) return 'retail'
+  if (
+    name.includes('ovo') || name.includes('gopay') || name.includes('shopeepay') ||
+    name.includes('dana') || name.includes('linkaja') || name.includes('sakuku') ||
+    name.includes('jenius') || name.includes('astrapay') || name.includes('paylater') ||
+    name.includes('atome') || name.includes('e-wallet') || name.includes('ewallet')
+  ) return 'ewallet'
+
+  if (QRIS_CODES.has(code)) return 'qris'
+  if (VA_CODES.has(code)) return 'va'
+  if (CARD_CODES.has(code)) return 'card'
+  if (EWALLET_CODES.has(code)) return 'ewallet'
+  if (RETAIL_CODES.has(code)) return 'retail'
+
+  return 'other'
+}
+
+/** Group flat payment methods into ordered, labeled categories (empty groups omitted). */
+export function groupDuitkuMethods(methods: DuitkuPaymentMethod[]): DuitkuMethodGroup[] {
+  const buckets = new Map<DuitkuMethodCategory, DuitkuPaymentMethod[]>()
+
+  for (const method of methods) {
+    const category = categorizeDuitkuMethod(method)
+    const bucket = buckets.get(category)
+    if (bucket) bucket.push(method)
+    else buckets.set(category, [method])
+  }
+
+  return GROUP_ORDER.filter((key) => buckets.has(key)).map((key) => ({
+    key,
+    label: CATEGORY_LABELS[key],
+    methods: buckets.get(key)!,
+  }))
+}
+
 // ==================== STATIC PAYMENT METHOD LABELS ====================
 // Codes from https://docs.duitku.com/pop/id/ — Payment Method table
 
