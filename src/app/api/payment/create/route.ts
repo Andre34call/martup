@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: 'Pembayaran Duitku belum dikonfigurasi. Set DUITKU_MERCHANT_CODE dan DUITKU_API_KEY di Vercel Dashboard → Settings → Environment Variables.',
+          error: 'Sistem pembayaran belum terpasang. Silakan coba lagi nanti atau hubungi admin.',
         },
         { status: 503 }
       )
@@ -281,7 +281,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: invoice.statusMessage || 'Gagal membuat transaksi pembayaran di Duitku. Silakan coba lagi.',
+          error: invoice.statusMessage || 'Gagal membuat transaksi pembayaran. Silakan coba lagi.',
         },
         { status: 502 }
       )
@@ -320,7 +320,7 @@ export async function POST(request: NextRequest) {
           data: {
             status: 'pending',
             method: 'duitku',
-            description: `Payment for order ${order.orderNumber} via Duitku (${merchantOrderId})`,
+            description: `Pembayaran pesanan ${order.orderNumber} (${merchantOrderId})`,
           },
         })
       } else {
@@ -333,7 +333,7 @@ export async function POST(request: NextRequest) {
             netAmount: order.totalAmount,
             method: 'duitku',
             status: 'pending',
-            description: `Payment for order ${order.orderNumber} via Duitku (${merchantOrderId})`,
+            description: `Pembayaran pesanan ${order.orderNumber} (${merchantOrderId})`,
             refId: order.orderNumber,
           },
         })

@@ -168,7 +168,7 @@ export async function createDuitkuInvoice(params: CreateInvoiceParams): Promise<
   const apiKey = getDuitkuApiKey()
 
   if (!merchantCode || !apiKey) {
-    return { success: false, statusMessage: 'Duitku not configured' }
+    return { success: false, statusMessage: 'Payment gateway not configured' }
   }
 
   const timestamp = Date.now().toString()
@@ -246,7 +246,7 @@ export async function createDuitkuInvoice(params: CreateInvoiceParams): Promise<
     }
   } catch (error: unknown) {
     logger.error({ err: error, merchantOrderId: params.merchantOrderId }, 'Duitku createInvoice exception')
-    return { success: false, statusMessage: 'Gagal menghubungi Duitku' }
+    return { success: false, statusMessage: 'Gagal menghubungi payment gateway' }
   }
 }
 
@@ -272,7 +272,7 @@ export async function checkDuitkuTransactionStatus(merchantOrderId: string): Pro
   const apiKey = getDuitkuApiKey()
 
   if (!merchantCode || !apiKey) {
-    return { success: false, statusMessage: 'Duitku not configured' }
+    return { success: false, statusMessage: 'Payment gateway not configured' }
   }
 
   const signature = transactionStatusSignature(merchantCode, merchantOrderId, apiKey)
@@ -305,7 +305,7 @@ export async function checkDuitkuTransactionStatus(merchantOrderId: string): Pro
     }
   } catch (error: unknown) {
     logger.error({ err: error, merchantOrderId }, 'Duitku transactionStatus exception')
-    return { success: false, statusMessage: 'Gagal menghubungi Duitku' }
+    return { success: false, statusMessage: 'Gagal menghubungi payment gateway' }
   }
 }
 

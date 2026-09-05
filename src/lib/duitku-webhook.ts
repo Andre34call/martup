@@ -102,7 +102,7 @@ export async function processOrderPaymentResult(
           status: 'cancelled',
           paymentStatus: 'cancelled',
           cancelledAt: new Date(),
-          cancelReason: 'Pembayaran gagal atau dibatalkan (Duitku)',
+          cancelReason: 'Pembayaran gagal atau dibatalkan',
           paymentMethod: methodLabel,
           paymentReference,
         },
@@ -174,7 +174,7 @@ export async function processOrderPaymentResult(
         data: {
           status: 'success',
           method: methodLabel,
-          description: `Payment for order ${order.orderNumber} via Duitku (${methodLabel})`,
+          description: `Pembayaran pesanan ${order.orderNumber} (${methodLabel})`,
         },
       })
     }
@@ -367,7 +367,7 @@ export async function processDepositPaymentResult(
         data: {
           status: 'success',
           method: methodLabel,
-          description: `Top Up via Duitku (${methodLabel}) — berhasil`,
+          description: `Top Up (${methodLabel}) — berhasil`,
         },
       })
     }
@@ -399,7 +399,7 @@ export async function processDepositPaymentResult(
         type: 'credit',
         amount: Number(deposit.amount),
         balance: Number(updatedWallet.balance),
-        description: `Top Up saldo via Duitku (${methodLabel}) — Rp ${Number(deposit.amount).toLocaleString('id-ID')}`,
+        description: `Top Up saldo (${methodLabel}) — Rp ${Number(deposit.amount).toLocaleString('id-ID')}`,
         refType: 'deposit',
         refId: deposit.id,
       },
@@ -409,7 +409,7 @@ export async function processDepositPaymentResult(
       data: {
         userId: deposit.user.id,
         title: 'Top Up Berhasil!',
-        content: `Top up sebesar Rp ${Number(deposit.amount).toLocaleString('id-ID')} via Duitku berhasil. Saldo Anda telah ditambahkan.`,
+        content: `Top up sebesar Rp ${Number(deposit.amount).toLocaleString('id-ID')} berhasil. Saldo Anda telah ditambahkan.`,
         type: 'system',
         refType: 'deposit',
         refId: deposit.id,

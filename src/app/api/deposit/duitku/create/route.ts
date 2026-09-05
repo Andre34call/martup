@@ -162,7 +162,7 @@ export async function POST(request: NextRequest) {
         data: { status: 'failed' },
       })
       return NextResponse.json(
-        { success: false, error: invoice.statusMessage || 'Gagal membuat transaksi Duitku. Coba lagi nanti.' },
+        { success: false, error: invoice.statusMessage || 'Gagal membuat transaksi pembayaran. Coba lagi nanti.' },
         { status: 502 }
       )
     }

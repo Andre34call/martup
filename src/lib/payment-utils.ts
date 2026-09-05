@@ -113,8 +113,8 @@ export function getPaymentMethodLabel(paymentMethod?: string): string {
   if (!paymentMethod) return 'COD'
   const pm = paymentMethod.toLowerCase()
   if (pm === 'wallet' || pm === 'martup pay') return 'MartUp Pay'
-  if (pm === 'duitku') return 'Transfer & E-Wallet (Duitku)'
-  if (pm === 'midtrans') return 'Transfer & E-Wallet (Duitku)' // legacy orders
+  if (pm === 'duitku') return 'Transfer & E-Wallet'
+  if (pm === 'midtrans') return 'Transfer & E-Wallet' // legacy orders
   if (pm === 'card') return 'Kartu Kredit/Debit'
   if (pm === 'cod' || pm.includes('bayar di tempat')) return 'Bayar di Tempat (COD)'
   // Duitku payment codes / resolved method labels (set by webhook)
@@ -141,7 +141,7 @@ export function getPaymentMethodLabel(paymentMethod?: string): string {
   if (pm.includes('indodana')) return 'Indodana Paylater'
   if (pm.includes('kartu kredit') || pm.includes('credit card') || pm.includes('visa') || pm.includes('master')) return 'Kartu Kredit/Debit'
   if (pm.includes('virtual account') || pm.includes('va')) return 'Virtual Account'
-  if (pm.includes('transfer') || pm.includes('e-wallet') || pm.includes('ewallet')) return 'Transfer & E-Wallet (Duitku)'
+  if (pm.includes('transfer') || pm.includes('e-wallet') || pm.includes('ewallet')) return 'Transfer & E-Wallet'
   // Fallback: capitalize first letter
   return paymentMethod.charAt(0).toUpperCase() + paymentMethod.slice(1)
 }
@@ -192,7 +192,7 @@ export function getPaymentTypeLabel(paymentType?: string): string {
     'bca_klikpay': 'BCA KlikPay',
     'bri_epay': 'BRI Epay',
     'card': 'Kartu Kredit/Debit',
-    'duitku': 'Transfer & E-Wallet (Duitku)',
+    'duitku': 'Transfer & E-Wallet',
   }
   return labels[paymentType] || paymentType
 }
