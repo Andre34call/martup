@@ -17,6 +17,17 @@ const nextConfig: NextConfig = {
     // shouldn't block the build, exclude those directories in tsconfig.json instead.
     ignoreBuildErrors: false,
   },
+  images: {
+    // Payment channel logos come from the gateway's CDN. They are rendered via
+    // next/image, which proxies them through same-origin /_next/image — so the
+    // app CSP (img-src 'self' ...) does NOT need to whitelist the CDN domain.
+    remotePatterns: [
+      { protocol: 'https', hostname: 'images.duitku.com' },
+      { protocol: 'https', hostname: 'sandbox.duitku.com' },
+      { protocol: 'https', hostname: 'app-sandbox.duitku.com' },
+      { protocol: 'https', hostname: 'app-prod.duitku.com' },
+    ],
+  },
   async headers() {
     return [
       {

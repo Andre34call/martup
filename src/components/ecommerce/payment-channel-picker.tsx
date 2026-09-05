@@ -18,6 +18,7 @@ import {
   Loader2, AlertTriangle, Info, RefreshCw, ChevronDown,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import Image from "next/image"
 import { apiClient } from "@/lib/api-client"
 import { formatPrice } from "@/lib/utils"
 import { logger } from '@/lib/logger'
@@ -248,9 +249,11 @@ export function PaymentChannelPicker({
                               </div>
 
                               {channel.image ? (
-                                <img
+                                <Image
                                   src={channel.image}
                                   alt={channel.name}
+                                  width={32}
+                                  height={32}
                                   className="w-8 h-8 rounded-lg object-contain bg-white flex-shrink-0"
                                   loading="lazy"
                                 />
