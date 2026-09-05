@@ -64,8 +64,14 @@ export function getDuitkuWebApiBaseUrl(): string {
     : 'https://sandbox.duitku.com'
 }
 
-/** Public base URL of THIS app for callback/return URLs */
+/** Public base URL of THIS app for callback/return URLs.
+ *  Priority: NEXT_PUBLIC_SITE_URL (canonical prod domain) > VERCEL_PROJECT_PRODUCTION_URL > VERCEL_URL (preview) > NEXTAUTH_URL > localhost.
+ *  Using VERCEL_URL alone causes Duitku callback/return URLs to point to ephemeral preview deployments instead of martup-seven.vercel.app.
+ */
 export function getBaseUrl(): string {
+  if (process.env.NEXT_PUBLIC_SITE_URL) return process.env.NEXT_PUBLIC_SITE_URL.replace(/\/$/, '')
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+  // For preview deployments, fall back to the deployment URL (better than localhost for testing webhook reachability)
   if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`
   if (process.env.NEXTAUTH_URL && process.env.NEXTAUTH_URL !== 'http://localhost:3000') {
     return process.env.NEXTAUTH_URL
