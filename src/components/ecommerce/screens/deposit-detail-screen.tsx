@@ -74,7 +74,7 @@ const methodConfig: Record<string, { label: string; icon: string; color: string 
   gopay: { label: 'GoPay', icon: '💳', color: 'bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400' },
   shopeepay: { label: 'ShopeePay', icon: '🧡', color: 'bg-orange-50 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400' },
   qris: { label: 'QRIS', icon: '📱', color: 'bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400' },
-  duitku: { label: 'Duitku (Transfer & E-Wallet)', icon: '💳', color: 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' },
+  duitku: { label: 'Transfer & E-Wallet', icon: '💳', color: 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' },
   // Legacy methods (for old deposits)
   midtrans: { label: 'Midtrans', icon: '💳', color: 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' },
   ovo: { label: 'OVO', icon: '💜', color: 'bg-purple-50 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400' },
@@ -565,7 +565,7 @@ export function DepositDetailScreen() {
                 <div className="flex gap-2 p-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
                   <Info className="w-3.5 h-3.5 text-blue-500 flex-shrink-0 mt-0.5" />
                   <p className="text-[11px] text-blue-700 dark:text-blue-300 leading-relaxed">
-                    Pembayaran diproses otomatis via Duitku. Saldo akan langsung masuk setelah pembayaran berhasil.
+                    Pembayaran diproses otomatis. Saldo akan langsung masuk setelah pembayaran berhasil.
                   </p>
                 </div>
               )}

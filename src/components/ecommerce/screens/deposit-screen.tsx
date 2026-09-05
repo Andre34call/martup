@@ -34,7 +34,7 @@ export function DepositScreen() {
   ]
 
   const paymentMethods = [
-    { key: "duitku", label: "Duitku — VA, QRIS, E-Wallet, Kartu", desc: "Konfirmasi otomatis & instan", color: "bg-emerald-600", instant: true },
+    { key: "duitku", label: "VA, QRIS, E-Wallet, Kartu", desc: "Konfirmasi otomatis & instan", color: "bg-emerald-600", instant: true },
     { key: "bank", label: "Transfer Bank Manual", desc: "Diverifikasi admin (1x24 jam)", color: "bg-cyan-600", instant: false },
   ]
 

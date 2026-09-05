@@ -362,10 +362,15 @@ export async function POST(request: NextRequest) {
     }
 
     // SECURITY: Validate stock before entering transaction
+    // Also accumulate total item weight for the server-side shipping calculation below.
+    // (RajaOngkir is an EXTERNAL API — it must NOT be called inside db.$transaction(),
+    //  otherwise a slow response exceeds Prisma's 5s interactive transaction timeout
+    //  (P2028) and the whole order creation fails.)
+    let totalWeightGrams = 0
     for (const item of items as Array<{ productId: string; quantity: number; variantId?: string | null }>) {
       const product = await db.product.findUnique({
         where: { id: item.productId },
-        select: { id: true, name: true, stock: true, productType: true },
+        select: { id: true, name: true, stock: true, productType: true, weight: true },
       })
       if (!product) {
         return NextResponse.json(
@@ -373,12 +378,15 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         )
       }
-      // Skip stock check for jasa (service) products — unlimited availability
-      if (product.productType !== 'jasa' && product.stock < item.quantity) {
-        return NextResponse.json(
-          { success: false, error: `Stok tidak mencukupi untuk "${product.name}". Tersedia: ${product.stock}, Diminta: ${item.quantity}` },
-          { status: 400 }
-        )
+      // Skip stock check & weight for jasa (service) products — unlimited availability, no shipping
+      if (product.productType !== 'jasa') {
+        if (product.stock < item.quantity) {
+          return NextResponse.json(
+            { success: false, error: `Stok tidak mencukupi untuk "${product.name}". Tersedia: ${product.stock}, Diminta: ${item.quantity}` },
+            { status: 400 }
+          )
+        }
+        totalWeightGrams += (product.weight || 500) * item.quantity
       }
       if (item.variantId) {
         const variant = await db.productVariant.findUnique({
@@ -394,11 +402,114 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // =====================================================
+    // SECURITY: Server-side shipping cost verification — OUTSIDE the transaction!
+    // Client-submitted shippingCost is NOT trusted. We re-calculate using the
+    // seller's city, buyer's address, item weight, and the selected courier.
+    //
+    // BUG FIX: This used to run INSIDE db.$transaction(), but RajaOngkir Starter
+    // tier can take 2-10+ seconds (rate limit 1 req/sec). That exceeded Prisma's
+    // 5-second interactive transaction timeout → P2028 "Transaction API timed out"
+    // → frontend shows "Gagal membuat pesanan". Same bug pattern as the old
+    // Midtrans create-in-transaction issue.
+    // =====================================================
+    const isServiceOrder = isServiceOrderPreCheck
+    let serverShippingCost = 0
+
+    if (!isServiceOrder) {
+      const clientShippingCost = validatedData.shippingCost ?? 0
+      serverShippingCost = clientShippingCost // default to client value, overridden below
+
+      try {
+        // Fetch seller's store city for origin
+        const sellerRecord = await db.seller.findUnique({
+          where: { id: sellerId },
+          select: { storeCity: true, storeProvince: true },
+        })
+        const originCity = sellerRecord?.storeCity || 'Jakarta'
+        const destinationCity = address?.city || 'Jakarta'
+
+        // Determine courier from shipping data
+        const selectedCourier = shipping?.provider?.toLowerCase()
+
+        // Re-calculate shipping rates server-side (EXTERNAL API — RajaOngkir)
+        const rates = await calculateShippingRates({
+          originCity,
+          destinationCity,
+          weight: totalWeightGrams,
+          courier: selectedCourier,
+        })
+
+        // Find the rate matching the selected provider + service
+        const selectedService = shipping?.service?.toUpperCase()
+        const matchingRate = rates.find(r =>
+          r.provider.toLowerCase() === (shipping?.provider || 'jne').toLowerCase() &&
+          r.service.toUpperCase() === selectedService
+        )
+
+        if (matchingRate) {
+          serverShippingCost = matchingRate.price
+          logger.info(
+            { component: 'orders', clientShippingCost, serverShippingCost, provider: shipping?.provider, service: shipping?.service },
+            'Shipping cost verified server-side'
+          )
+        } else if (rates.length > 0) {
+          // No exact match found — use the cheapest rate from the selected courier as fallback
+          const courierRates = selectedCourier
+            ? rates.filter(r => r.provider.toLowerCase() === selectedCourier)
+            : rates
+          if (courierRates.length > 0) {
+            const fallbackRate = courierRates.sort((a, b) => a.price - b.price)[0]
+            serverShippingCost = fallbackRate.price
+            logger.warn(
+              { component: 'orders', clientShippingCost, serverShippingCost, requestedService: selectedService, fallbackService: fallbackRate.service },
+              'Shipping service not found, using cheapest rate from courier'
+            )
+          }
+        }
+
+        // Sanity check: if client cost is wildly different from server cost, something's wrong
+        // Allow ±10% tolerance for RajaOngkir rate fluctuations and rounding
+        if (serverShippingCost > 0 && clientShippingCost > 0) {
+          const tolerance = Math.max(serverShippingCost * 0.1, 500) // 10% or min 500 IDR
+          if (Math.abs(clientShippingCost - serverShippingCost) > tolerance) {
+            logger.warn(
+              { component: 'orders', clientShippingCost, serverShippingCost, difference: Math.abs(clientShippingCost - serverShippingCost) },
+              'Shipping cost mismatch — using server-calculated value'
+            )
+          }
+        }
+      } catch (shippingErr) {
+        // If server-side calculation fails, fall back to client value with bounds check
+        logger.warn(
+          { component: 'orders', err: shippingErr },
+          'Server-side shipping calculation failed, using client value with bounds check'
+        )
+        if (clientShippingCost < 0 || clientShippingCost > 500_000) {
+          return NextResponse.json(
+            { success: false, error: 'Biaya pengiriman tidak valid (harus antara 0 - 500.000)' },
+            { status: 400 }
+          )
+        }
+        serverShippingCost = clientShippingCost
+      }
+
+      // Final bounds check on server-verified cost
+      if (serverShippingCost < 0 || serverShippingCost > 500_000) {
+        return NextResponse.json(
+          { success: false, error: 'Biaya pengiriman tidak valid (harus antara 0 - 500.000)' },
+          { status: 400 }
+        )
+      }
+    }
+    // For jasa-only orders: serverShippingCost stays 0 (no physical shipping)
+
     // Generate order number
     const orderCount = await db.order.count()
     const orderNumber = `ORD-${Date.now()}-${String(orderCount + 1).padStart(5, '0')}`
 
     // Create order with items and shipping in a transaction
+    // (NOTE: shipping verification is done ABOVE — no external API calls inside!)
     const order = await db.$transaction(async (tx) => {
       // =====================================================
       // SECURITY (SEC-1): Compute ALL monetary values server-side
@@ -540,111 +651,10 @@ export async function POST(request: NextRequest) {
       }
 
       // =====================================================
-      // SECURITY: Server-side shipping cost verification
-      // Client-submitted shippingCost is NOT trusted. We re-calculate
-      // using the seller's city, buyer's address, item weight, and
-      // the selected courier/service. Only the server-verified cost is used.
+      // NOTE: isServiceOrder & serverShippingCost are computed BEFORE the
+      // transaction (RajaOngkir external API must never run inside
+      // db.$transaction — it exceeds the 5s transaction timeout).
       // =====================================================
-
-      // Determine if this is a jasa-only (service) order
-      const isServiceOrder = serverItems.every(si => si.productType === 'jasa')
-
-      let serverShippingCost = 0
-
-      if (!isServiceOrder) {
-        // Physical products need shipping — verify cost server-side
-        const clientShippingCost = validatedData.shippingCost ?? 0
-        serverShippingCost = clientShippingCost // default to client value, overridden below
-
-        try {
-          // Fetch seller's store city for origin
-          const sellerRecord = await tx.seller.findUnique({
-            where: { id: sellerId },
-            select: { storeCity: true, storeProvince: true },
-          })
-          const originCity = sellerRecord?.storeCity || 'Jakarta'
-          const destinationCity = address?.city || 'Jakarta'
-
-          // Calculate total weight from items (skip jasa products — they have no weight)
-          let totalWeightGrams = 0
-          for (const si of serverItems) {
-            // Skip weight for jasa (service) products — they don't ship
-            if (si.productType === 'jasa') continue
-            const product = await tx.product.findUnique({
-              where: { id: si.productId },
-              select: { weight: true },
-            })
-            totalWeightGrams += (product?.weight || 500) * si.quantity
-          }
-
-          // Determine courier from shipping data
-          const selectedCourier = shipping?.provider?.toLowerCase()
-
-          // Re-calculate shipping rates server-side
-          const rates = await calculateShippingRates({
-            originCity,
-            destinationCity,
-            weight: totalWeightGrams,
-            courier: selectedCourier,
-          })
-
-          // Find the rate matching the selected provider + service
-          const selectedService = shipping?.service?.toUpperCase()
-          const matchingRate = rates.find(r =>
-            r.provider.toLowerCase() === (shipping?.provider || 'jne').toLowerCase() &&
-            r.service.toUpperCase() === selectedService
-          )
-
-          if (matchingRate) {
-            serverShippingCost = matchingRate.price
-            logger.info(
-              { component: 'orders', clientShippingCost, serverShippingCost, provider: shipping?.provider, service: shipping?.service },
-              'Shipping cost verified server-side'
-            )
-          } else if (rates.length > 0) {
-            // No exact match found — use the cheapest rate from the selected courier as fallback
-            const courierRates = selectedCourier
-              ? rates.filter(r => r.provider.toLowerCase() === selectedCourier)
-              : rates
-            if (courierRates.length > 0) {
-              const fallbackRate = courierRates.sort((a, b) => a.price - b.price)[0]
-              serverShippingCost = fallbackRate.price
-              logger.warn(
-                { component: 'orders', clientShippingCost, serverShippingCost, requestedService: selectedService, fallbackService: fallbackRate.service },
-                'Shipping service not found, using cheapest rate from courier'
-              )
-            }
-          }
-
-          // Sanity check: if client cost is wildly different from server cost, something's wrong
-          // Allow ±10% tolerance for RajaOngkir rate fluctuations and rounding
-          if (serverShippingCost > 0 && clientShippingCost > 0) {
-            const tolerance = Math.max(serverShippingCost * 0.1, 500) // 10% or min 500 IDR
-            if (Math.abs(clientShippingCost - serverShippingCost) > tolerance) {
-              logger.warn(
-                { component: 'orders', clientShippingCost, serverShippingCost, difference: Math.abs(clientShippingCost - serverShippingCost) },
-                'Shipping cost mismatch — using server-calculated value'
-              )
-            }
-          }
-        } catch (shippingErr) {
-          // If server-side calculation fails, fall back to client value with bounds check
-          logger.warn(
-            { component: 'orders', err: shippingErr },
-            'Server-side shipping calculation failed, using client value with bounds check'
-          )
-          if (clientShippingCost < 0 || clientShippingCost > 500_000) {
-            throw new Error('Biaya pengiriman tidak valid (harus antara 0 - 500.000)')
-          }
-          serverShippingCost = clientShippingCost
-        }
-
-        // Final bounds check on server-verified cost
-        if (serverShippingCost < 0 || serverShippingCost > 500_000) {
-          throw new Error('Biaya pengiriman tidak valid (harus antara 0 - 500.000)')
-        }
-      }
-      // For jasa-only orders: serverShippingCost stays 0 (no physical shipping)
 
       // Calculate tax server-side instead of trusting client input
       const TAX_RATE = 0 // Tax rate from server config (0 if not configured)

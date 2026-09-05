@@ -88,7 +88,7 @@ function CheckoutStepIndicator({ currentStep }: { currentStep: number }) {
 // ==================== PAYMENT METHODS ====================
 const PAYMENT_METHODS = [
   { id: "wallet", name: "MartUp Pay", icon: Wallet, description: "Bayar cepat dari saldo", color: "emerald" },
-  { id: "duitku", name: "Transfer & E-Wallet (Duitku)", icon: Smartphone, description: "VA, QRIS, GoPay, OVO, DANA, ShopeePay, Kartu", color: "blue" },
+  { id: "duitku", name: "Transfer & E-Wallet", icon: Smartphone, description: "VA, QRIS, GoPay, OVO, DANA, ShopeePay, Kartu", color: "blue" },
   { id: "cod", name: "Bayar di Tempat (COD)", icon: Banknote, description: "Bayar saat barang diterima", color: "orange" },
 ]
 
